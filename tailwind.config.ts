@@ -1,0 +1,52 @@
+import type { Config } from 'tailwindcss'
+
+export default {
+  content: [
+    './index.html',
+    './src/**/*.{vue,js,ts,jsx,tsx}',
+  ],
+  theme: {
+    extend: {
+      fontFamily: {
+        primary: ['Roboto', 'sans-serif'],
+        mono: ['Roboto Mono', 'monospace'],
+      },
+      colors: {
+        background: '#F5F5F5',
+        foreground: '#333333',
+        'muted': '#F2F3F0',
+        'muted-foreground': '#5B5F66',
+        card: '#FFFFFF',
+        'card-foreground': '#111111',
+        primary: '#0F5FFE',
+        'primary-foreground': '#FFFFFF',
+        secondary: '#333333',
+        'secondary-foreground': '#FFFFFF',
+        destructive: '#A62911',
+        'destructive-foreground': '#FFFFFF',
+        border: '#E1E2E5',
+        input: '#9DA4B3',
+        ring: '#E1E2E5',
+        accent: '#F2F3F0',
+        'accent-foreground': '#111111',
+        sidebar: '#FFFFFF',
+        'sidebar-foreground': '#5B5F66',
+        'sidebar-accent': '#333333',
+        'sidebar-accent-foreground': '#F5F5F5',
+        'sidebar-border': '#E1E2E5',
+        'sidebar-primary': '#0F5FFE',
+        popover: '#FFFFFF',
+        'popover-foreground': '#111111',
+        'color-success': '#DDF0C9',
+        'color-success-foreground': '#1A3300',
+        'color-warning': '#F5E6D7',
+        'color-warning-foreground': '#663300',
+        'color-error': '#F5D7F3',
+        'color-error-foreground': '#66005E',
+        'color-info': '#C9D6F0',
+        'color-info-foreground': '#001133',
+      },
+    },
+  },
+  plugins: [],
+} satisfies Config

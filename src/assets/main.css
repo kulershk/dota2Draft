@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: 'Roboto', sans-serif;
+  background-color: #F5F5F5;
+  color: #333333;
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-1.5 rounded bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-1.5 rounded bg-secondary px-4 py-2.5 text-sm font-medium text-secondary-foreground hover:bg-secondary/90 transition-colors;
+  }
+  .btn-destructive {
+    @apply inline-flex items-center justify-center gap-1.5 rounded bg-destructive px-4 py-2.5 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 transition-colors;
+  }
+  .btn-outline {
+    @apply inline-flex items-center justify-center gap-1.5 rounded border border-border bg-white px-4 py-2.5 text-sm font-medium text-foreground hover:bg-accent transition-colors;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-1.5 rounded px-4 py-2.5 text-sm font-medium text-foreground hover:bg-accent transition-colors;
+  }
+  .card {
+    @apply rounded border border-border bg-card overflow-hidden;
+  }
+  .input-field {
+    @apply w-full h-10 rounded border border-input bg-white px-4 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors;
+  }
+  .textarea-field {
+    @apply w-full rounded border border-input bg-white px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors resize-none;
+  }
+  .label-text {
+    @apply text-sm font-medium text-foreground;
+  }
+  .badge-ready {
+    @apply inline-flex items-center rounded-full bg-color-success px-2.5 py-0.5 text-xs font-medium text-color-success-foreground;
+  }
+  .badge-waiting {
+    @apply inline-flex items-center rounded-full bg-color-warning px-2.5 py-0.5 text-xs font-medium text-color-warning-foreground;
+  }
+  .badge-bidding {
+    @apply inline-flex items-center rounded-full bg-color-error px-2.5 py-0.5 text-xs font-medium text-color-error-foreground;
+  }
+  .badge-info {
+    @apply inline-flex items-center rounded-full bg-color-info px-2.5 py-0.5 text-xs font-medium text-color-info-foreground;
+  }
+}

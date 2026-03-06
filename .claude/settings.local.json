@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(python3:*)",
+      "Bash(npm install:*)",
+      "Bash(rm:*)",
+      "Bash(npx nuxt:*)",
+      "Bash(taskkill:*)",
+      "Bash(npx vite:*)",
+      "Bash(curl:*)"
+    ]
+  }
+}
