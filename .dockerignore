@@ -1,0 +1,7 @@
+node_modules
+dist
+server/draft.db
+server/draft.db-shm
+server/draft.db-wal
+docker
+.git

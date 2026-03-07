@@ -1,0 +1,38 @@
+version: '3.5'
+services:
+  draft:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=frontend"
+      # HTTP router
+      - "traefik.http.routers.draft-http.rule=Host(`dota2.lv`)"
+      - "traefik.http.routers.draft-http.entrypoints=http"
+      - "traefik.http.routers.draft-http.service=draft"
+      # HTTPS router
+      - "traefik.http.routers.draft.rule=Host(`dota2.lv`)"
+      - "traefik.http.routers.draft.entrypoints=https"
+      - "traefik.http.routers.draft.tls=true"
+      - "traefik.http.routers.draft.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.draft.service=draft"
+      # Service
+      - "traefik.http.services.draft.loadbalancer.server.port=3001"
+    container_name: draft
+    build:
+      context: ../../
+      dockerfile: docker/prod/Dockerfile
+    image: draft_image
+    restart: always
+    volumes:
+      - draft_data:/app/data
+    environment:
+      - NODE_ENV=production
+    networks:
+      frontend:
+
+volumes:
+  draft_data:
+
+networks:
+  frontend:
+    name: frontend
+    external: true

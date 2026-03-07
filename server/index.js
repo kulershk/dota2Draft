@@ -2,7 +2,11 @@ import express from 'express'
 import { createServer } from 'http'
 import { Server } from 'socket.io'
 import cors from 'cors'
+import { fileURLToPath } from 'url'
+import { dirname, join } from 'path'
 import db from './db.js'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const app = express()
 const server = createServer(app)
@@ -12,6 +16,10 @@ const io = new Server(server, {
 
 app.use(cors())
 app.use(express.json())
+
+// Serve static files in production
+const staticPath = join(__dirname, '..', 'dist')
+app.use(express.static(staticPath))
 
 // ─── Helpers ──────────────────────────────────────────────
 
@@ -68,6 +76,15 @@ function getBidHistory(round) {
     return db.prepare('SELECT * FROM bid_history WHERE round = ? ORDER BY id DESC').all(round)
   }
   return db.prepare('SELECT * FROM bid_history ORDER BY id DESC LIMIT 50').all()
+}
+
+function saveAuctionLog(type, message) {
+  db.prepare('INSERT INTO auction_log (type, message) VALUES (?, ?)').run(type, message)
+}
+
+function getAuctionLog() {
+  return db.prepare('SELECT type, message, created_at as time FROM auction_log ORDER BY id DESC LIMIT 200').all()
+    .map(r => ({ type: r.type, message: r.message, time: new Date(r.time + 'Z').getTime() }))
 }
 
 // ─── REST API: Auth ───────────────────────────────────────
@@ -349,6 +366,7 @@ function finalizeBid() {
       captainName: winner.name,
       amount: bidAmount,
     })
+    saveAuctionLog('sold', `${player.name} sold to ${winner.name} for ${bidAmount}g`)
     io.emit('auction:log', { type: 'sold', message: `${player.name} sold to ${winner.name} for ${bidAmount}g` })
   }
 
@@ -367,6 +385,7 @@ function finalizeBid() {
     setAuctionState('nominatedPlayerId', '')
     setAuctionState('currentBid', '0')
     setAuctionState('currentBidderId', '')
+    saveAuctionLog('end', 'Draft complete! All players drafted.')
     io.emit('auction:log', { type: 'end', message: 'Draft complete! All players drafted.' })
     io.emit('auction:finished', { results: 'Draft complete!' })
     io.emit('auction:stateChanged', getFullAuctionState())
@@ -423,6 +442,7 @@ io.on('connection', (socket) => {
   socket.emit('auction:stateChanged', getFullAuctionState())
   socket.emit('captains:online', getOnlineCaptainIds())
   socket.emit('captains:ready', getReadyCaptainIds())
+  socket.emit('auction:logHistory', getAuctionLog())
 
   // Time sync
   socket.on('server:ping', () => {
@@ -520,8 +540,9 @@ io.on('connection', (socket) => {
     db.prepare('UPDATE captains SET status = ?').run('Ready')
     // Reset drafted players
     db.prepare('UPDATE players SET drafted = 0, drafted_by = NULL, draft_price = NULL, draft_round = NULL').run()
-    // Clear bid history
+    // Clear bid history and auction log
     db.prepare('DELETE FROM bid_history').run()
+    db.prepare('DELETE FROM auction_log').run()
 
     setAuctionState('status', 'nominating')
     setAuctionState('currentRound', '1')
@@ -535,6 +556,7 @@ io.on('connection', (socket) => {
 
     readyCaptains.clear()
     io.emit('captains:ready', getReadyCaptainIds())
+    saveAuctionLog('start', `Draft started with ${captains.length} captains`)
     io.emit('auction:log', { type: 'start', message: `Draft started with ${captains.length} captains` })
     io.emit('auction:started')
     io.emit('auction:stateChanged', getFullAuctionState())
@@ -603,6 +625,7 @@ io.on('connection', (socket) => {
         bid)
 
     const nominatorName = db.prepare('SELECT name FROM captains WHERE id = ?').get(state.nominatorId)?.name
+    saveAuctionLog('nomination', `${nominatorName} nominated ${player.name} for ${bid}g`)
     io.emit('auction:log', { type: 'nomination', message: `${nominatorName} nominated ${player.name} for ${bid}g` })
     startBidTimer()
     io.emit('auction:stateChanged', getFullAuctionState())
@@ -670,6 +693,7 @@ io.on('connection', (socket) => {
       .run(Number(state.currentRound), Number(state.nominatedPlayerId), captainId, captain.name, amount)
 
     const bidPlayer = db.prepare('SELECT name FROM players WHERE id = ?').get(state.nominatedPlayerId)
+    saveAuctionLog('bid', `${captain.name} bid ${amount}g on ${bidPlayer?.name}`)
     io.emit('auction:log', { type: 'bid', message: `${captain.name} bid ${amount}g on ${bidPlayer?.name}` })
 
     // Reset timer
@@ -686,6 +710,7 @@ io.on('connection', (socket) => {
     clearBidTimer()
     setAuctionState('bidTimerEnd', '0')
     setAuctionState('status', 'paused')
+    saveAuctionLog('pause', 'Auction paused by admin')
     io.emit('auction:log', { type: 'pause', message: 'Auction paused by admin' })
     io.emit('auction:stateChanged', getFullAuctionState())
   })
@@ -703,6 +728,7 @@ io.on('connection', (socket) => {
     } else {
       setAuctionState('status', 'nominating')
     }
+    saveAuctionLog('resume', 'Auction resumed by admin')
     io.emit('auction:log', { type: 'resume', message: 'Auction resumed by admin' })
     io.emit('auction:stateChanged', getFullAuctionState())
   })
@@ -718,6 +744,7 @@ io.on('connection', (socket) => {
     setAuctionState('nominatedPlayerId', '')
     setAuctionState('currentBid', '0')
     setAuctionState('currentBidderId', '')
+    saveAuctionLog('end', 'Draft ended by admin')
     io.emit('auction:log', { type: 'end', message: 'Draft ended by admin' })
     io.emit('auction:finished', { results: 'Draft ended by admin' })
     io.emit('auction:stateChanged', getFullAuctionState())
@@ -743,6 +770,7 @@ io.on('connection', (socket) => {
       setAuctionState('currentBidderId', '')
       setAuctionState('bidTimerEnd', '0')
       io.emit('auction:undone', { message: `Nomination of ${nominatedPlayer?.name || 'player'} was cancelled` })
+      saveAuctionLog('undo', `Undo: nomination of ${nominatedPlayer?.name || 'player'} cancelled`)
       io.emit('auction:log', { type: 'undo', message: `Undo: nomination of ${nominatedPlayer?.name || 'player'} cancelled` })
       io.emit('auction:stateChanged', getFullAuctionState())
       return
@@ -793,6 +821,7 @@ io.on('connection', (socket) => {
       setAuctionState('bidTimerEnd', '0')
 
       io.emit('auction:undone', { message: undoMsg })
+      saveAuctionLog('undo', `Undo: ${undoMsg}`)
       io.emit('auction:log', { type: 'undo', message: `Undo: ${undoMsg}` })
       io.emit('auction:stateChanged', getFullAuctionState())
       io.emit('captains:updated', getCaptains())
@@ -815,6 +844,7 @@ io.on('connection', (socket) => {
     db.prepare('UPDATE captains SET budget = ?, status = ?').run(settings.startingBudget, 'Waiting')
     db.prepare('UPDATE players SET drafted = 0, drafted_by = NULL, draft_price = NULL, draft_round = NULL').run()
     db.prepare('DELETE FROM bid_history').run()
+    db.prepare('DELETE FROM auction_log').run()
     setAuctionState('status', 'idle')
     setAuctionState('currentRound', '0')
     setAuctionState('nominatorId', '')
@@ -839,6 +869,11 @@ io.on('connection', (socket) => {
     io.emit('captains:online', getOnlineCaptainIds())
     console.log(`Client disconnected: ${socket.id}`)
   })
+})
+
+// SPA fallback - serve index.html for all non-API routes
+app.get('*', (req, res) => {
+  res.sendFile(join(staticPath, 'index.html'))
 })
 
 const PORT = process.env.PORT || 3001

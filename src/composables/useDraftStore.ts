@@ -173,6 +173,10 @@ export function useDraftStore() {
       activityLog.value.unshift({ time: Date.now(), ...entry })
     })
 
+    socket.on('auction:logHistory', (entries: LogEntry[]) => {
+      activityLog.value = entries
+    })
+
     socket.on('auction:error', (data: { message: string }) => {
       error.value = data.message
       setTimeout(() => { error.value = '' }, 4000)

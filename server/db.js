@@ -3,7 +3,10 @@ import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const db = new Database(join(__dirname, 'draft.db'))
+const dbPath = process.env.NODE_ENV === 'production'
+  ? join(__dirname, '..', 'data', 'draft.db')
+  : join(__dirname, 'draft.db')
+const db = new Database(dbPath)
 
 db.pragma('journal_mode = WAL')
 db.pragma('foreign_keys = ON')
@@ -41,6 +44,13 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS auction_state (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS auction_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    type TEXT NOT NULL,
+    message TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
   CREATE TABLE IF NOT EXISTS bid_history (
