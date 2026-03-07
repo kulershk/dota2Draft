@@ -130,29 +130,6 @@ export async function initDb() {
     }
   }
 
-  // Seed default players if empty
-  const playerCount = await queryOne('SELECT COUNT(*) as count FROM players')
-  if (parseInt(playerCount.count) === 0) {
-    const defaultPlayers = [
-      ['Miracle-', '["Carry","Mid"]', 11400, 'TI winner, versatile carry player'],
-      ['Topson', '["Mid"]', 10800, '2x TI champion, aggressive mid'],
-      ['Collapse', '["Offlane"]', 11100, 'TI winner, Mars specialist'],
-      ['Yatoro', '["Carry"]', 11500, 'TI champion, ultra versatile'],
-      ['Nisha', '["Mid"]', 10900, 'Consistent mid, Ember Spirit player'],
-      ['Arteezy', '["Carry","Mid"]', 11200, 'Fan favorite, farming machine'],
-      ['Faith_bian', '["Offlane"]', 10600, 'TI champion, clutch player'],
-      ['Saksa', '["Support"]', 10200, 'Versatile pos 4 support'],
-      ['Miposhka', '["Support"]', 10400, 'TI winner, pos 5 captain'],
-      ['Ame', '["Carry"]', 11300, 'Top-tier carry, Spectre legend'],
-    ]
-    for (const [name, roles, mmr, info] of defaultPlayers) {
-      await execute(
-        'INSERT INTO players (name, roles, mmr, info) VALUES ($1, $2, $3, $4)',
-        [name, roles, mmr, info]
-      )
-    }
-  }
-
   // Seed auction state if empty
   const auctionCount = await queryOne('SELECT COUNT(*) as count FROM auction_state')
   if (parseInt(auctionCount.count) === 0) {
