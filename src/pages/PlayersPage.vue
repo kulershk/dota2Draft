@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Users, UserPlus, Search, Pencil, Trash2, Upload, LogIn } from 'lucide-vue-next'
+import { Users, UserPlus, Search, Pencil, Trash2, Upload, LogIn, ExternalLink } from 'lucide-vue-next'
 import { ref, computed, nextTick, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDraftStore } from '@/composables/useDraftStore'
@@ -322,7 +322,17 @@ async function handleImport() {
                   <div v-else class="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-xs font-semibold text-secondary-foreground">
                     {{ player.name.charAt(0) }}
                   </div>
-                  <span class="font-medium text-foreground">{{ player.name }}</span>
+                  <div class="flex flex-col">
+                    <span class="font-medium text-foreground">{{ player.name }}</span>
+                    <div v-if="player.steam_id" class="flex items-center gap-2 mt-0.5">
+                      <a :href="`https://steamcommunity.com/profiles/${player.steam_id}`" target="_blank" rel="noopener" class="text-[10px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-0.5">
+                        Steam <ExternalLink class="w-2.5 h-2.5" />
+                      </a>
+                      <a :href="`https://www.dotabuff.com/players/${BigInt(player.steam_id) - BigInt('76561197960265728')}`" target="_blank" rel="noopener" class="text-[10px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-0.5">
+                        Dotabuff <ExternalLink class="w-2.5 h-2.5" />
+                      </a>
+                    </div>
+                  </div>
                 </div>
               </td>
               <td class="px-4 py-3">
@@ -364,7 +374,10 @@ async function handleImport() {
           </div>
         </div>
         <InputGroup label="MMR" :model-value="newPlayer.mmr" placeholder="e.g. 11000" @update:model-value="newPlayer.mmr = $event" />
-        <TextareaGroup label="Player Info" :model-value="newPlayer.info" placeholder="Brief description, achievements, playstyle notes..." :rows="3" @update:model-value="newPlayer.info = $event" />
+        <div class="flex flex-col gap-1.5">
+          <label class="label-text">Player Info</label>
+          <textarea :value="newPlayer.info" maxlength="200" placeholder="Brief description, achievements, playstyle notes..." rows="3" class="textarea-field" @input="newPlayer.info = ($event.target as HTMLTextAreaElement).value" />
+        </div>
       </div>
       <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
         <button class="btn-primary w-full justify-center" @click="addPlayer">
@@ -477,7 +490,11 @@ async function handleImport() {
             </div>
           </div>
           <InputGroup label="MMR" :model-value="registerMmr" placeholder="e.g. 11000" @update:model-value="registerMmr = $event" />
-          <TextareaGroup label="About You" :model-value="registerInfo" placeholder="Brief description, achievements, playstyle notes..." :rows="3" @update:model-value="registerInfo = $event" />
+          <div class="flex flex-col gap-1.5">
+            <label class="label-text">About You</label>
+            <textarea :value="registerInfo" maxlength="200" placeholder="Brief description, achievements, playstyle notes..." rows="3" class="textarea-field" @input="registerInfo = ($event.target as HTMLTextAreaElement).value" />
+            <p class="text-xs text-muted-foreground text-right">{{ registerInfo.length }}/200</p>
+          </div>
         </template>
       </div>
       <div v-if="steamProfile" class="px-7 py-5 flex flex-col gap-3 border-t border-border">
@@ -514,7 +531,10 @@ async function handleImport() {
           </div>
         </div>
         <InputGroup label="MMR" :model-value="editPlayer.mmr" placeholder="e.g. 11000" @update:model-value="editPlayer.mmr = $event" />
-        <TextareaGroup label="Player Info" :model-value="editPlayer.info" placeholder="Brief description, achievements, playstyle notes..." :rows="3" @update:model-value="editPlayer.info = $event" />
+        <div class="flex flex-col gap-1.5">
+          <label class="label-text">Player Info</label>
+          <textarea :value="editPlayer.info" maxlength="200" placeholder="Brief description, achievements, playstyle notes..." rows="3" class="textarea-field" @input="editPlayer.info = ($event.target as HTMLTextAreaElement).value" />
+        </div>
       </div>
       <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
         <button class="btn-primary w-full justify-center" @click="savePlayer">
