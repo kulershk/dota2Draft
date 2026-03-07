@@ -10,7 +10,8 @@
       "Bash(npx vite:*)",
       "Bash(curl:*)",
       "Bash(mv:*)",
-      "Bash(npx vue-tsc:*)"
+      "Bash(npx vue-tsc:*)",
+      "Bash(npm:*)"
     ]
   }
 }

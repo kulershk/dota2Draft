@@ -18,8 +18,6 @@ RUN npm ci --omit=dev
 COPY server/ ./server/
 COPY --from=builder /app/dist ./dist
 
-RUN mkdir -p /app/data
-
 EXPOSE 3001
 
 ENV NODE_ENV=production
