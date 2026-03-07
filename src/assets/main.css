@@ -2,10 +2,82 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --background: 245 245 245;
+  --foreground: 51 51 51;
+  --muted: 242 243 240;
+  --muted-foreground: 91 95 102;
+  --card: 255 255 255;
+  --card-foreground: 17 17 17;
+  --primary: 15 95 254;
+  --primary-foreground: 255 255 255;
+  --secondary: 51 51 51;
+  --secondary-foreground: 255 255 255;
+  --destructive: 166 41 17;
+  --destructive-foreground: 255 255 255;
+  --border: 225 226 229;
+  --input: 157 164 179;
+  --ring: 225 226 229;
+  --accent: 242 243 240;
+  --accent-foreground: 17 17 17;
+  --sidebar: 255 255 255;
+  --sidebar-foreground: 91 95 102;
+  --sidebar-accent: 51 51 51;
+  --sidebar-accent-foreground: 245 245 245;
+  --sidebar-border: 225 226 229;
+  --sidebar-primary: 15 95 254;
+  --popover: 255 255 255;
+  --popover-foreground: 17 17 17;
+  --color-success: 221 240 201;
+  --color-success-foreground: 26 51 0;
+  --color-warning: 245 230 215;
+  --color-warning-foreground: 102 51 0;
+  --color-error: 245 215 243;
+  --color-error-foreground: 102 0 94;
+  --color-info: 201 214 240;
+  --color-info-foreground: 0 17 51;
+}
+
+.dark {
+  --background: 15 17 23;
+  --foreground: 228 228 231;
+  --muted: 28 30 38;
+  --muted-foreground: 156 163 175;
+  --card: 24 26 32;
+  --card-foreground: 244 244 245;
+  --primary: 59 130 246;
+  --primary-foreground: 255 255 255;
+  --secondary: 228 228 231;
+  --secondary-foreground: 24 24 27;
+  --destructive: 220 38 38;
+  --destructive-foreground: 255 255 255;
+  --border: 45 47 54;
+  --input: 75 85 99;
+  --ring: 45 47 54;
+  --accent: 28 30 38;
+  --accent-foreground: 244 244 245;
+  --sidebar: 20 21 25;
+  --sidebar-foreground: 156 163 175;
+  --sidebar-accent: 228 228 231;
+  --sidebar-accent-foreground: 24 24 27;
+  --sidebar-border: 45 47 54;
+  --sidebar-primary: 59 130 246;
+  --popover: 24 26 32;
+  --popover-foreground: 244 244 245;
+  --color-success: 20 83 45;
+  --color-success-foreground: 187 247 208;
+  --color-warning: 120 53 15;
+  --color-warning-foreground: 253 230 138;
+  --color-error: 127 29 29;
+  --color-error-foreground: 254 202 202;
+  --color-info: 30 58 95;
+  --color-info-foreground: 191 219 254;
+}
+
 body {
   font-family: 'Roboto', sans-serif;
-  background-color: #F5F5F5;
-  color: #333333;
+  background-color: var(--background);
+  color: var(--foreground);
 }
 
 @layer components {
@@ -19,7 +91,7 @@ body {
     @apply inline-flex items-center justify-center gap-1.5 rounded bg-destructive px-4 py-2.5 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 transition-colors;
   }
   .btn-outline {
-    @apply inline-flex items-center justify-center gap-1.5 rounded border border-border bg-white px-4 py-2.5 text-sm font-medium text-foreground hover:bg-accent transition-colors;
+    @apply inline-flex items-center justify-center gap-1.5 rounded border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground hover:bg-accent transition-colors;
   }
   .btn-ghost {
     @apply inline-flex items-center justify-center gap-1.5 rounded px-4 py-2.5 text-sm font-medium text-foreground hover:bg-accent transition-colors;
@@ -28,10 +100,10 @@ body {
     @apply rounded border border-border bg-card overflow-hidden;
   }
   .input-field {
-    @apply w-full h-10 rounded border border-input bg-white px-4 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors;
+    @apply w-full h-10 rounded border border-input bg-card px-4 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors;
   }
   .textarea-field {
-    @apply w-full rounded border border-input bg-white px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors resize-none;
+    @apply w-full rounded border border-input bg-card px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors resize-none;
   }
   .label-text {
     @apply text-sm font-medium text-foreground;

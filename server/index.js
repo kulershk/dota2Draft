@@ -20,7 +20,6 @@ function getSettings() {
   const obj = {}
   for (const r of rows) obj[r.key] = r.value
   return {
-    numberOfTeams: Number(obj.numberOfTeams) || 8,
     playersPerTeam: Number(obj.playersPerTeam) || 5,
     nominationTime: Number(obj.nominationTime) || 180,
     bidTimer: Number(obj.bidTimer) || 30,
@@ -28,6 +27,8 @@ function getSettings() {
     minimumBid: Number(obj.minimumBid) || 10,
     bidIncrement: Number(obj.bidIncrement) || 5,
     maxBid: Number(obj.maxBid) || 0,
+    nominationOrder: obj.nominationOrder || 'normal',
+    requireAllOnline: obj.requireAllOnline === 'false' ? false : true,
   }
 }
 
@@ -43,7 +44,15 @@ function setAuctionState(key, value) {
 }
 
 function getCaptains() {
-  return db.prepare('SELECT id, name, team, budget, status FROM captains ORDER BY id').all()
+  return db.prepare('SELECT id, name, team, budget, status, mmr, is_admin FROM captains ORDER BY id').all()
+}
+
+function isAdminSocket(socketId) {
+  if (adminSockets.has(socketId)) return true
+  const captainId = onlineCaptains.get(socketId)
+  if (!captainId) return false
+  const captain = db.prepare('SELECT is_admin FROM captains WHERE id = ?').get(captainId)
+  return captain?.is_admin === 1
 }
 
 function getPlayers() {
@@ -82,7 +91,7 @@ app.post('/api/auth/token', (req, res) => {
     if (sep === -1) return res.status(401).json({ error: 'Invalid token' })
     const id = Number(decoded.slice(0, sep))
     const password = decoded.slice(sep + 1)
-    const captain = db.prepare('SELECT id, name, team, budget, status FROM captains WHERE id = ? AND password = ?').get(id, password)
+    const captain = db.prepare('SELECT id, name, team, budget, status, mmr, is_admin FROM captains WHERE id = ? AND password = ?').get(id, password)
     if (!captain) return res.status(401).json({ error: 'Invalid token' })
     res.json(captain)
   } catch {
@@ -100,7 +109,7 @@ app.get('/api/captains/:id/login-token', (req, res) => {
 app.post('/api/auth/captain', (req, res) => {
   const { name, password } = req.body
   if (!name || !password) return res.status(400).json({ error: 'Name and password required' })
-  const captain = db.prepare('SELECT id, name, team, budget, status FROM captains WHERE name = ? AND password = ?').get(name, password)
+  const captain = db.prepare('SELECT id, name, team, budget, status, mmr, is_admin FROM captains WHERE name = ? AND password = ?').get(name, password)
   if (!captain) return res.status(401).json({ error: 'Invalid captain name or password' })
   res.json(captain)
 })
@@ -128,24 +137,24 @@ app.get('/api/captains', (req, res) => {
 })
 
 app.post('/api/captains', (req, res) => {
-  const { name, team, budget, password } = req.body
+  const { name, team, budget, password, mmr, is_admin } = req.body
   if (!name || !team) return res.status(400).json({ error: 'Name and team required' })
   const settings = getSettings()
-  const result = db.prepare('INSERT INTO captains (name, team, budget, status, password) VALUES (?, ?, ?, ?, ?)')
-    .run(name, team, budget || settings.startingBudget, 'Waiting', password || '')
-  const captain = db.prepare('SELECT id, name, team, budget, status FROM captains WHERE id = ?').get(result.lastInsertRowid)
+  const result = db.prepare('INSERT INTO captains (name, team, budget, status, password, mmr, is_admin) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(name, team, budget || settings.startingBudget, 'Waiting', password || '', mmr || 0, is_admin ? 1 : 0)
+  const captain = db.prepare('SELECT id, name, team, budget, status, mmr, is_admin FROM captains WHERE id = ?').get(result.lastInsertRowid)
   io.emit('captains:updated', getCaptains())
   res.status(201).json(captain)
 })
 
 app.put('/api/captains/:id', (req, res) => {
-  const { name, team, budget, status, password } = req.body
+  const { name, team, budget, status, password, mmr, is_admin } = req.body
   const captain = db.prepare('SELECT * FROM captains WHERE id = ?').get(req.params.id)
   if (!captain) return res.status(404).json({ error: 'Captain not found' })
-  db.prepare('UPDATE captains SET name = ?, team = ?, budget = ?, status = ?, password = ? WHERE id = ?')
-    .run(name ?? captain.name, team ?? captain.team, budget ?? captain.budget, status ?? captain.status, password ?? captain.password, req.params.id)
+  db.prepare('UPDATE captains SET name = ?, team = ?, budget = ?, status = ?, password = ?, mmr = ?, is_admin = ? WHERE id = ?')
+    .run(name ?? captain.name, team ?? captain.team, budget ?? captain.budget, status ?? captain.status, password ?? captain.password, mmr ?? captain.mmr, is_admin !== undefined ? (is_admin ? 1 : 0) : captain.is_admin, req.params.id)
   io.emit('captains:updated', getCaptains())
-  res.json(db.prepare('SELECT id, name, team, budget, status FROM captains WHERE id = ?').get(req.params.id))
+  res.json(db.prepare('SELECT id, name, team, budget, status, mmr, is_admin FROM captains WHERE id = ?').get(req.params.id))
 })
 
 app.delete('/api/captains/:id', (req, res) => {
@@ -162,7 +171,7 @@ app.get('/api/players', (req, res) => {
 
 app.post('/api/players', (req, res) => {
   const { name, roles, mmr, info } = req.body
-  if (!name || !roles?.length) return res.status(400).json({ error: 'Name and roles required' })
+  if (!name) return res.status(400).json({ error: 'Name is required' })
   const result = db.prepare('INSERT INTO players (name, roles, mmr, info) VALUES (?, ?, ?, ?)')
     .run(name, JSON.stringify(roles), mmr || 0, info || '')
   const player = db.prepare('SELECT * FROM players WHERE id = ?').get(result.lastInsertRowid)
@@ -251,9 +260,51 @@ function getCaptainPlayerCount(captainId) {
   return db.prepare('SELECT COUNT(*) as count FROM players WHERE drafted = 1 AND drafted_by = ?').get(captainId).count
 }
 
+function getCaptainAvgMmr(captain) {
+  const players = db.prepare('SELECT mmr FROM players WHERE drafted = 1 AND drafted_by = ?').all(captain.id)
+  const totalMmr = captain.mmr + players.reduce((s, p) => s + p.mmr, 0)
+  return totalMmr / (1 + players.length)
+}
+
+function getNextNominator(round, captains, settings) {
+  const active = captains.filter(c => getCaptainPlayerCount(c.id) < settings.playersPerTeam)
+  if (active.length === 0) return captains[0]
+
+  if (settings.nominationOrder === 'lowest_avg') {
+    return active.reduce((lowest, c) => getCaptainAvgMmr(c) < getCaptainAvgMmr(lowest) ? c : lowest, active[0])
+  }
+
+  if (settings.nominationOrder === 'fewest_then_lowest') {
+    let best = active[0]
+    let bestCount = getCaptainPlayerCount(best.id)
+    let bestAvg = getCaptainAvgMmr(best)
+    for (let i = 1; i < active.length; i++) {
+      const c = active[i]
+      const count = getCaptainPlayerCount(c.id)
+      const avg = getCaptainAvgMmr(c)
+      if (count < bestCount || (count === bestCount && avg < bestAvg)) {
+        best = c
+        bestCount = count
+        bestAvg = avg
+      }
+    }
+    return best
+  }
+
+  // Normal: round-robin, skip full teams
+  const nominatorIndex = (round - 1) % captains.length
+  for (let i = 0; i < captains.length; i++) {
+    const candidate = captains[(nominatorIndex + i) % captains.length]
+    if (getCaptainPlayerCount(candidate.id) < settings.playersPerTeam) {
+      return candidate
+    }
+  }
+  return captains[nominatorIndex]
+}
+
 let bidTimer = null
 let lastBidTime = 0
-const BID_COOLDOWN_MS = 2000
+const BID_COOLDOWN_MS = 300
 
 function clearBidTimer() {
   if (bidTimer) {
@@ -281,10 +332,11 @@ function finalizeBid() {
   const bidderId = Number(state.currentBidderId)
   const bidAmount = Number(state.currentBid)
 
-  if (playerId && bidderId && bidAmount > 0) {
+  if (playerId && bidderId && bidAmount >= 0) {
     // Mark player as drafted
-    db.prepare('UPDATE players SET drafted = 1, drafted_by = ?, draft_price = ? WHERE id = ?')
-      .run(bidderId, bidAmount, playerId)
+    const draftRound = Number(state.currentRound)
+    db.prepare('UPDATE players SET drafted = 1, drafted_by = ?, draft_price = ?, draft_round = ? WHERE id = ?')
+      .run(bidderId, bidAmount, draftRound, playerId)
     // Deduct budget
     db.prepare('UPDATE captains SET budget = budget - ? WHERE id = ?')
       .run(bidAmount, bidderId)
@@ -297,6 +349,7 @@ function finalizeBid() {
       captainName: winner.name,
       amount: bidAmount,
     })
+    io.emit('auction:log', { type: 'sold', message: `${player.name} sold to ${winner.name} for ${bidAmount}g` })
   }
 
   // Move to next nomination or end
@@ -314,20 +367,13 @@ function finalizeBid() {
     setAuctionState('nominatedPlayerId', '')
     setAuctionState('currentBid', '0')
     setAuctionState('currentBidderId', '')
+    io.emit('auction:log', { type: 'end', message: 'Draft complete! All players drafted.' })
     io.emit('auction:finished', { results: 'Draft complete!' })
     io.emit('auction:stateChanged', getFullAuctionState())
   } else {
-    // Next round: pick next nominator (skip captains with full teams)
+    // Next round: pick next nominator
     const nextRound = currentRound + 1
-    let nominatorIndex = (nextRound - 1) % captains.length
-    let nextNominator = captains[nominatorIndex]
-    for (let i = 0; i < captains.length; i++) {
-      const candidate = captains[(nominatorIndex + i) % captains.length]
-      if (getCaptainPlayerCount(candidate.id) < settings.playersPerTeam) {
-        nextNominator = candidate
-        break
-      }
-    }
+    const nextNominator = getNextNominator(nextRound, captains, settings)
 
     setAuctionState('status', 'nominating')
     setAuctionState('currentRound', nextRound)
@@ -373,9 +419,15 @@ io.on('connection', (socket) => {
   console.log(`Client connected: ${socket.id}`)
 
   // Send current state on connect
+  socket.emit('server:time', Date.now())
   socket.emit('auction:stateChanged', getFullAuctionState())
   socket.emit('captains:online', getOnlineCaptainIds())
   socket.emit('captains:ready', getReadyCaptainIds())
+
+  // Time sync
+  socket.on('server:ping', () => {
+    socket.emit('server:time', Date.now())
+  })
 
   // Authenticate as admin via socket
   socket.on('auth:admin', (password) => {
@@ -392,7 +444,7 @@ io.on('connection', (socket) => {
   // Captain identifies themselves (with password verification)
   socket.on('captain:login', ({ captainId, password }) => {
     // Support legacy format (just captainId number) for backwards compat during transition
-    const id = typeof captainId === 'object' ? captainId : captainId
+    const id = Number(captainId)
     if (password) {
       const captain = db.prepare('SELECT id FROM captains WHERE id = ? AND password = ?').get(id, password)
       if (!captain) {
@@ -443,7 +495,7 @@ io.on('connection', (socket) => {
 
   // Start draft (admin only)
   socket.on('auction:start', () => {
-    if (!adminSockets.has(socket.id)) {
+    if (!isAdminSocket(socket.id)) {
       socket.emit('auction:error', { message: 'Admin access required' })
       return
     }
@@ -453,26 +505,29 @@ io.on('connection', (socket) => {
       return
     }
 
-    const allReady = captains.every(c => readyCaptains.has(c.id))
-    if (!allReady) {
-      socket.emit('auction:error', { message: 'All captains must be ready before starting' })
-      return
-    }
-
     const settings = getSettings()
+
+    if (settings.requireAllOnline) {
+      const allReady = captains.every(c => readyCaptains.has(c.id))
+      if (!allReady) {
+        socket.emit('auction:error', { message: 'All captains must be ready before starting' })
+        return
+      }
+    }
     const totalRounds = settings.playersPerTeam * captains.length
 
-    // Reset all captains budgets
-    db.prepare('UPDATE captains SET budget = ?, status = ?').run(settings.startingBudget, 'Ready')
-    // Reset all players
-    db.prepare('UPDATE players SET drafted = 0, drafted_by = NULL, draft_price = NULL').run()
+    // Set captains status to Ready (keep their current budgets)
+    db.prepare('UPDATE captains SET status = ?').run('Ready')
+    // Reset drafted players
+    db.prepare('UPDATE players SET drafted = 0, drafted_by = NULL, draft_price = NULL, draft_round = NULL').run()
     // Clear bid history
     db.prepare('DELETE FROM bid_history').run()
 
     setAuctionState('status', 'nominating')
     setAuctionState('currentRound', '1')
     setAuctionState('totalRounds', String(totalRounds))
-    setAuctionState('nominatorId', String(captains[0].id))
+    const firstNominator = getNextNominator(1, getCaptains(), settings)
+    setAuctionState('nominatorId', String(firstNominator.id))
     setAuctionState('nominatedPlayerId', '')
     setAuctionState('currentBid', '0')
     setAuctionState('currentBidderId', '')
@@ -480,6 +535,7 @@ io.on('connection', (socket) => {
 
     readyCaptains.clear()
     io.emit('captains:ready', getReadyCaptainIds())
+    io.emit('auction:log', { type: 'start', message: `Draft started with ${captains.length} captains` })
     io.emit('auction:started')
     io.emit('auction:stateChanged', getFullAuctionState())
     io.emit('captains:updated', getCaptains())
@@ -489,7 +545,7 @@ io.on('connection', (socket) => {
   // Nominate a player (must be the nominator or admin)
   socket.on('auction:nominate', ({ playerId, startingBid }) => {
     const socketCaptainId = onlineCaptains.get(socket.id)
-    const isAdmin = adminSockets.has(socket.id)
+    const isAdmin = isAdminSocket(socket.id)
     const currentState = getAuctionState()
     if (!isAdmin && socketCaptainId !== Number(currentState.nominatorId)) {
       socket.emit('auction:error', { message: 'Not your turn to nominate' })
@@ -501,17 +557,29 @@ io.on('connection', (socket) => {
       return
     }
 
+    const onlineIds = getOnlineCaptainIds()
+    const allCaptains = getCaptains()
+    const settings = getSettings()
+    const activeCaptains = allCaptains.filter(c => getCaptainPlayerCount(c.id) < settings.playersPerTeam)
+    if (settings.requireAllOnline) {
+      const allOnline = activeCaptains.every(c => onlineIds.includes(c.id))
+      if (!allOnline) {
+        const offlineNames = activeCaptains.filter(c => !onlineIds.includes(c.id)).map(c => c.name)
+        socket.emit('auction:error', { message: `Waiting for: ${offlineNames.join(', ')}` })
+        return
+      }
+    }
+
     const player = db.prepare('SELECT * FROM players WHERE id = ? AND drafted = 0').get(playerId)
     if (!player) {
       socket.emit('auction:error', { message: 'Player not available' })
       return
     }
 
-    const settings = getSettings()
-    const bid = Math.max(settings.minimumBid, Number(startingBid) || settings.minimumBid)
+    const nominator = db.prepare('SELECT * FROM captains WHERE id = ?').get(state.nominatorId)
+    const bid = nominator && nominator.budget === 0 ? 0 : Math.max(settings.minimumBid, Number(startingBid) || settings.minimumBid)
 
     // Check nominator can afford the starting bid
-    const nominator = db.prepare('SELECT * FROM captains WHERE id = ?').get(state.nominatorId)
     if (nominator && bid > nominator.budget) {
       socket.emit('auction:error', { message: `Starting bid ${bid}g exceeds your budget of ${nominator.budget}g` })
       return
@@ -534,6 +602,8 @@ io.on('connection', (socket) => {
         db.prepare('SELECT name FROM captains WHERE id = ?').get(state.nominatorId).name,
         bid)
 
+    const nominatorName = db.prepare('SELECT name FROM captains WHERE id = ?').get(state.nominatorId)?.name
+    io.emit('auction:log', { type: 'nomination', message: `${nominatorName} nominated ${player.name} for ${bid}g` })
     startBidTimer()
     io.emit('auction:stateChanged', getFullAuctionState())
   })
@@ -599,6 +669,9 @@ io.on('connection', (socket) => {
     db.prepare('INSERT INTO bid_history (round, player_id, captain_id, captain_name, amount) VALUES (?, ?, ?, ?, ?)')
       .run(Number(state.currentRound), Number(state.nominatedPlayerId), captainId, captain.name, amount)
 
+    const bidPlayer = db.prepare('SELECT name FROM players WHERE id = ?').get(state.nominatedPlayerId)
+    io.emit('auction:log', { type: 'bid', message: `${captain.name} bid ${amount}g on ${bidPlayer?.name}` })
+
     // Reset timer
     startBidTimer()
     io.emit('auction:stateChanged', getFullAuctionState())
@@ -606,18 +679,20 @@ io.on('connection', (socket) => {
 
   // Pause auction (admin only)
   socket.on('auction:pause', () => {
-    if (!adminSockets.has(socket.id)) {
+    if (!isAdminSocket(socket.id)) {
       socket.emit('auction:error', { message: 'Admin access required' })
       return
     }
     clearBidTimer()
+    setAuctionState('bidTimerEnd', '0')
     setAuctionState('status', 'paused')
+    io.emit('auction:log', { type: 'pause', message: 'Auction paused by admin' })
     io.emit('auction:stateChanged', getFullAuctionState())
   })
 
   // Resume auction (admin only)
   socket.on('auction:resume', () => {
-    if (!adminSockets.has(socket.id)) {
+    if (!isAdminSocket(socket.id)) {
       socket.emit('auction:error', { message: 'Admin access required' })
       return
     }
@@ -628,12 +703,13 @@ io.on('connection', (socket) => {
     } else {
       setAuctionState('status', 'nominating')
     }
+    io.emit('auction:log', { type: 'resume', message: 'Auction resumed by admin' })
     io.emit('auction:stateChanged', getFullAuctionState())
   })
 
   // End draft early (admin only)
   socket.on('auction:end', () => {
-    if (!adminSockets.has(socket.id)) {
+    if (!isAdminSocket(socket.id)) {
       socket.emit('auction:error', { message: 'Admin access required' })
       return
     }
@@ -642,13 +718,94 @@ io.on('connection', (socket) => {
     setAuctionState('nominatedPlayerId', '')
     setAuctionState('currentBid', '0')
     setAuctionState('currentBidderId', '')
+    io.emit('auction:log', { type: 'end', message: 'Draft ended by admin' })
     io.emit('auction:finished', { results: 'Draft ended by admin' })
     io.emit('auction:stateChanged', getFullAuctionState())
   })
 
+  // Undo last action (admin only)
+  socket.on('auction:undo', () => {
+    if (!isAdminSocket(socket.id)) {
+      socket.emit('auction:error', { message: 'Admin access required' })
+      return
+    }
+    const state = getAuctionState()
+
+    // Case 1: Currently in bidding or paused with a nomination — undo the current nomination, go back to nominating
+    if (state.status === 'bidding' || (state.status === 'paused' && state.nominatedPlayerId)) {
+      clearBidTimer()
+      const nominatedPlayer = db.prepare('SELECT name FROM players WHERE id = ?').get(state.nominatedPlayerId)
+      // Remove bid history for this round
+      db.prepare('DELETE FROM bid_history WHERE round = ?').run(Number(state.currentRound))
+      setAuctionState('status', 'nominating')
+      setAuctionState('nominatedPlayerId', '')
+      setAuctionState('currentBid', '0')
+      setAuctionState('currentBidderId', '')
+      setAuctionState('bidTimerEnd', '0')
+      io.emit('auction:undone', { message: `Nomination of ${nominatedPlayer?.name || 'player'} was cancelled` })
+      io.emit('auction:log', { type: 'undo', message: `Undo: nomination of ${nominatedPlayer?.name || 'player'} cancelled` })
+      io.emit('auction:stateChanged', getFullAuctionState())
+      return
+    }
+
+    // Case 2: In nominating phase, paused without nomination, or finished — undo the last sold player
+    if (state.status === 'nominating' || state.status === 'finished' || state.status === 'paused') {
+      const currentRound = Number(state.currentRound)
+      const prevRound = state.status === 'finished' ? currentRound : currentRound - 1
+      if (prevRound < 1) {
+        socket.emit('auction:error', { message: 'Nothing to undo' })
+        return
+      }
+
+      // Find the last drafted player by looking at bid history for prev round
+      const lastBid = db.prepare('SELECT * FROM bid_history WHERE round = ? ORDER BY id DESC LIMIT 1').get(prevRound)
+      if (!lastBid) {
+        socket.emit('auction:error', { message: 'Nothing to undo' })
+        return
+      }
+
+      const player = db.prepare('SELECT * FROM players WHERE id = ?').get(lastBid.player_id)
+      if (!player || !player.drafted) {
+        socket.emit('auction:error', { message: 'Nothing to undo' })
+        return
+      }
+
+      const buyer = db.prepare('SELECT name FROM captains WHERE id = ?').get(player.drafted_by)
+      const undoMsg = `${player.name} (${player.draft_price}g from ${buyer?.name || 'unknown'}) was reversed`
+      // Refund the captain
+      db.prepare('UPDATE captains SET budget = budget + ? WHERE id = ?').run(player.draft_price, player.drafted_by)
+      // Undraft the player
+      db.prepare('UPDATE players SET drafted = 0, drafted_by = NULL, draft_price = NULL, draft_round = NULL WHERE id = ?').run(player.id)
+      // Remove bid history for that round
+      db.prepare('DELETE FROM bid_history WHERE round = ?').run(prevRound)
+
+      // Go back to nominating for that round
+      const captains = getCaptains()
+      const settings = getSettings()
+      const nextNominator = getNextNominator(prevRound, captains, settings)
+
+      setAuctionState('status', 'nominating')
+      setAuctionState('currentRound', String(prevRound))
+      setAuctionState('nominatorId', String(nextNominator.id))
+      setAuctionState('nominatedPlayerId', '')
+      setAuctionState('currentBid', '0')
+      setAuctionState('currentBidderId', '')
+      setAuctionState('bidTimerEnd', '0')
+
+      io.emit('auction:undone', { message: undoMsg })
+      io.emit('auction:log', { type: 'undo', message: `Undo: ${undoMsg}` })
+      io.emit('auction:stateChanged', getFullAuctionState())
+      io.emit('captains:updated', getCaptains())
+      io.emit('players:updated', getPlayers())
+      return
+    }
+
+    socket.emit('auction:error', { message: 'Nothing to undo' })
+  })
+
   // Reset draft (admin only)
   socket.on('auction:reset', () => {
-    if (!adminSockets.has(socket.id)) {
+    if (!isAdminSocket(socket.id)) {
       socket.emit('auction:error', { message: 'Admin access required' })
       return
     }
@@ -656,7 +813,7 @@ io.on('connection', (socket) => {
     readyCaptains.clear()
     const settings = getSettings()
     db.prepare('UPDATE captains SET budget = ?, status = ?').run(settings.startingBudget, 'Waiting')
-    db.prepare('UPDATE players SET drafted = 0, drafted_by = NULL, draft_price = NULL').run()
+    db.prepare('UPDATE players SET drafted = 0, drafted_by = NULL, draft_price = NULL, draft_round = NULL').run()
     db.prepare('DELETE FROM bid_history').run()
     setAuctionState('status', 'idle')
     setAuctionState('currentRound', '0')

@@ -11,8 +11,8 @@ defineEmits<{ close: [] }>()
       enter-from-class="opacity-0"
       leave-to-class="opacity-0"
     >
-      <div v-if="show" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-        <div class="w-[520px] bg-card rounded border border-border shadow-lg">
+      <div v-if="show" class="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40" @click.self="$emit('close')">
+        <div class="w-full md:w-[520px] max-h-[90vh] overflow-y-auto bg-card rounded-t-xl md:rounded border border-border shadow-lg">
           <slot />
         </div>
       </div>

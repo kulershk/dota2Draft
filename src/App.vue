@@ -1,14 +1,27 @@
 <script setup lang="ts">
-import { Gamepad2, Settings, Users, Gavel, Trophy, Lock, LogOut } from 'lucide-vue-next'
+import { Gamepad2, Settings, Users, Gavel, Trophy, Lock, LogOut, Sun, Moon, Menu, X } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { onMounted, ref, computed } from 'vue'
 import { useDraftStore } from '@/composables/useDraftStore'
-import ModalOverlay from '@/components/ModalOverlay.vue'
-import InputGroup from '@/components/InputGroup.vue'
+import ModalOverlay from '@/components/common/ModalOverlay.vue'
+import InputGroup from '@/components/common/InputGroup.vue'
 
 const route = useRoute()
 const router = useRouter()
 const store = useDraftStore()
+
+const isDark = ref(localStorage.getItem('draft_theme') === 'dark')
+
+function toggleTheme() {
+  isDark.value = !isDark.value
+  document.documentElement.classList.toggle('dark', isDark.value)
+  localStorage.setItem('draft_theme', isDark.value ? 'dark' : 'light')
+}
+
+// Apply saved theme on load
+if (isDark.value) {
+  document.documentElement.classList.add('dark')
+}
 
 const showLoginModal = ref(false)
 const loginTab = ref<'captain' | 'admin'>('captain')
@@ -47,17 +60,20 @@ const navItems = computed(() => [
   { label: 'Results', icon: Trophy, path: '/results' },
 ])
 
+const mobileMenuOpen = ref(false)
+
 const isLoggedIn = computed(() => store.isAdmin.value || !!store.currentCaptain.value)
 
 const userRoleLabel = computed(() => {
+  if (store.currentCaptain.value && store.isAdmin.value) return 'Captain (Admin)'
   if (store.isAdmin.value) return 'Admin'
   if (store.currentCaptain.value) return 'Captain'
   return 'Viewer'
 })
 
 const userNameLabel = computed(() => {
-  if (store.isAdmin.value) return 'Lobby Host'
   if (store.currentCaptain.value) return store.currentCaptain.value.name
+  if (store.isAdmin.value) return 'Lobby Host'
   return 'Spectator'
 })
 
@@ -101,55 +117,71 @@ function handleLogout() {
 </script>
 
 <template>
-  <div class="flex h-screen bg-background">
-    <!-- Sidebar -->
-    <aside class="w-[260px] flex-shrink-0 flex flex-col bg-sidebar border-r border-sidebar-border">
-      <!-- Logo -->
-      <div class="flex items-center gap-3 px-5 py-5">
-        <div class="w-9 h-9 rounded bg-primary flex items-center justify-center">
-          <Gamepad2 class="w-5 h-5 text-primary-foreground" />
+  <div class="flex flex-col h-screen bg-background">
+    <!-- Top Navigation Bar -->
+    <header class="bg-sidebar border-b border-sidebar-border">
+      <div class="max-w-[1440px] mx-auto w-full flex items-center justify-between px-4 md:px-6 py-2.5">
+        <!-- Left: Logo + Nav -->
+        <div class="flex items-center gap-6">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded bg-primary flex items-center justify-center">
+              <Gamepad2 class="w-4 h-4 text-primary-foreground" />
+            </div>
+            <span class="text-sm font-semibold text-foreground hidden sm:inline">DOTA2 DRAFT</span>
+          </div>
+          <!-- Desktop Nav Links -->
+          <nav class="hidden md:flex items-center gap-1">
+            <router-link
+              v-for="item in navItems"
+              :key="item.path"
+              :to="item.path"
+              class="flex items-center gap-2 px-3 py-1.5 rounded text-sm transition-colors"
+              :class="route.path === item.path
+                ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+                : 'text-sidebar-foreground hover:bg-accent'"
+            >
+              <component :is="item.icon" class="w-4 h-4" />
+              {{ item.label }}
+            </router-link>
+          </nav>
         </div>
-        <span class="text-base font-semibold text-foreground">DOTA2 DRAFT</span>
-      </div>
-
-      <!-- Nav Section -->
-      <div class="px-3 mt-2">
-        <p class="px-3 mb-2 text-[11px] font-semibold tracking-[2px] text-muted-foreground uppercase">
-          Draft Menu
-        </p>
-        <nav class="flex flex-col gap-1">
-          <router-link
-            v-for="item in navItems"
-            :key="item.path"
-            :to="item.path"
-            class="flex items-center gap-3 px-3 py-2 rounded text-sm transition-colors"
-            :class="route.path === item.path
-              ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
-              : 'text-sidebar-foreground hover:bg-accent'"
-          >
-            <component :is="item.icon" class="w-[18px] h-[18px]" />
-            {{ item.label }}
-          </router-link>
-        </nav>
-      </div>
-
-      <!-- Spacer -->
-      <div class="flex-1" />
-
-      <!-- User section -->
-      <div class="flex items-center justify-between px-5 py-4 border-t border-sidebar-border">
-        <div>
-          <p class="text-xs text-muted-foreground">{{ userRoleLabel }}</p>
-          <p class="text-sm font-medium text-foreground">{{ userNameLabel }}</p>
+        <!-- Right: User info + actions -->
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-muted-foreground hidden sm:inline">{{ userRoleLabel }}: {{ userNameLabel }}</span>
+          <button class="p-1.5 rounded hover:bg-accent" :title="isDark ? 'Light mode' : 'Dark mode'" @click="toggleTheme">
+            <Moon v-if="!isDark" class="w-4 h-4 text-muted-foreground" />
+            <Sun v-else class="w-4 h-4 text-muted-foreground" />
+          </button>
+          <button v-if="!isLoggedIn" class="p-1.5 rounded hover:bg-accent" title="Login" @click="openLoginModal">
+            <Lock class="w-4 h-4 text-muted-foreground" />
+          </button>
+          <button v-else class="p-1.5 rounded hover:bg-accent" title="Logout" @click="handleLogout">
+            <LogOut class="w-4 h-4 text-muted-foreground" />
+          </button>
+          <!-- Mobile hamburger -->
+          <button class="md:hidden p-1.5 rounded hover:bg-accent" @click="mobileMenuOpen = !mobileMenuOpen">
+            <X v-if="mobileMenuOpen" class="w-5 h-5 text-foreground" />
+            <Menu v-else class="w-5 h-5 text-foreground" />
+          </button>
         </div>
-        <button v-if="!isLoggedIn" class="p-1 rounded hover:bg-accent" title="Login" @click="openLoginModal">
-          <Lock class="w-4 h-4 text-muted-foreground" />
-        </button>
-        <button v-else class="p-1 rounded hover:bg-accent" title="Logout" @click="handleLogout">
-          <LogOut class="w-4 h-4 text-muted-foreground" />
-        </button>
       </div>
-    </aside>
+      <!-- Mobile Nav Dropdown -->
+      <nav v-if="mobileMenuOpen" class="md:hidden flex flex-col gap-1 px-3 py-2 border-t border-sidebar-border">
+        <router-link
+          v-for="item in navItems"
+          :key="item.path"
+          :to="item.path"
+          class="flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-colors"
+          :class="route.path === item.path
+            ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+            : 'text-sidebar-foreground hover:bg-accent'"
+          @click="mobileMenuOpen = false"
+        >
+          <component :is="item.icon" class="w-[18px] h-[18px]" />
+          {{ item.label }}
+        </router-link>
+      </nav>
+    </header>
 
     <!-- Main Content -->
     <main class="flex-1 overflow-y-auto">

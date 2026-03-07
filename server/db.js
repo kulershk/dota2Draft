@@ -21,6 +21,7 @@ db.exec(`
     budget INTEGER NOT NULL DEFAULT 1000,
     status TEXT NOT NULL DEFAULT 'Waiting',
     password TEXT DEFAULT '',
+    mmr INTEGER NOT NULL DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -68,6 +69,8 @@ if (settingsCount.count === 0) {
     minimumBid: '10',
     bidIncrement: '5',
     maxBid: '0',
+    nominationOrder: 'normal',
+    requireAllOnline: 'true',
     adminPassword: 'admin',
   }
   for (const [key, value] of Object.entries(defaults)) {
@@ -79,6 +82,37 @@ if (settingsCount.count === 0) {
 const hasAdminPw = db.prepare("SELECT 1 FROM settings WHERE key = 'adminPassword'").get()
 if (!hasAdminPw) {
   db.prepare("INSERT INTO settings (key, value) VALUES ('adminPassword', 'admin')").run()
+}
+
+// Ensure mmr column exists on captains for existing databases
+try {
+  db.prepare('SELECT mmr FROM captains LIMIT 1').get()
+} catch {
+  db.prepare('ALTER TABLE captains ADD COLUMN mmr INTEGER NOT NULL DEFAULT 0').run()
+}
+
+// Ensure draft_round column exists on players for existing databases
+try {
+  db.prepare('SELECT draft_round FROM players LIMIT 1').get()
+} catch {
+  db.prepare('ALTER TABLE players ADD COLUMN draft_round INTEGER DEFAULT NULL').run()
+}
+
+// Backfill draft_round from bid_history for already-drafted players missing it
+db.prepare(`
+  UPDATE players SET draft_round = (
+    SELECT bh.round FROM bid_history bh
+    WHERE bh.player_id = players.id
+    ORDER BY bh.id DESC LIMIT 1
+  )
+  WHERE drafted = 1 AND draft_round IS NULL
+`).run()
+
+// Ensure is_admin column exists on captains for existing databases
+try {
+  db.prepare('SELECT is_admin FROM captains LIMIT 1').get()
+} catch {
+  db.prepare('ALTER TABLE captains ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0').run()
 }
 
 // Seed default captains if empty

@@ -10,7 +10,7 @@ export default defineConfig({
     },
   },
   server: {
-    allowedHosts: ['big-mathematics-thursday-stops.trycloudflare.com'],
+    allowedHosts: ['blocked-ron-membrane-onion.trycloudflare.com'],
     proxy: {
       '/api': 'http://localhost:3001',
       '/socket.io': {

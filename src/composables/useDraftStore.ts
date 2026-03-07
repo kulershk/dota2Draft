@@ -9,6 +9,8 @@ export interface Captain {
   budget: number
   status: string
   password?: string
+  mmr: number
+  is_admin?: boolean
 }
 
 export interface Player {
@@ -20,6 +22,7 @@ export interface Player {
   drafted: boolean
   drafted_by?: number | null
   draft_price?: number | null
+  draft_round?: number | null
 }
 
 export interface BidEntry {
@@ -32,13 +35,14 @@ export interface BidEntry {
 }
 
 export interface Settings {
-  numberOfTeams: number
   playersPerTeam: number
   bidTimer: number
   startingBudget: number
   minimumBid: number
   bidIncrement: number
   maxBid: number
+  nominationOrder: string
+  requireAllOnline: boolean
 }
 
 export interface AuctionState {
@@ -54,13 +58,14 @@ export interface AuctionState {
 }
 
 const settings = reactive<Settings>({
-  numberOfTeams: 8,
   playersPerTeam: 5,
   bidTimer: 30,
   startingBudget: 1000,
   minimumBid: 10,
   bidIncrement: 5,
   maxBid: 0,
+  nominationOrder: 'normal',
+  requireAllOnline: true,
 })
 
 const captains = ref<Captain[]>([])
@@ -84,11 +89,19 @@ const readyCaptainIds = ref<number[]>([])
 const loading = ref(false)
 const error = ref('')
 const lastSoldMessage = ref('')
+const undoMessage = ref('')
+
+export interface LogEntry {
+  time: number
+  type: 'nomination' | 'bid' | 'sold' | 'undo' | 'pause' | 'resume' | 'start' | 'end' | 'info'
+  message: string
+}
+const activityLog = ref<LogEntry[]>([])
 
 const availablePlayers = computed(() => players.value.filter(p => !p.drafted))
 
 const roleCounts = computed(() => {
-  const counts = { Carry: 0, Mid: 0, Offlane: 0, Support: 0 }
+  const counts = { Carry: 0, Mid: 0, Offlane: 0, Pos4: 0, Pos5: 0 }
   players.value.forEach(p => {
     p.roles.forEach(r => {
       if (r in counts) counts[r as keyof typeof counts]++
@@ -151,6 +164,15 @@ export function useDraftStore() {
       setTimeout(() => { lastSoldMessage.value = '' }, 5000)
     })
 
+    socket.on('auction:undone', (data: { message: string }) => {
+      undoMessage.value = data.message
+      setTimeout(() => { undoMessage.value = '' }, 5000)
+    })
+
+    socket.on('auction:log', (entry: { type: LogEntry['type']; message: string }) => {
+      activityLog.value.unshift({ time: Date.now(), ...entry })
+    })
+
     socket.on('auction:error', (data: { message: string }) => {
       error.value = data.message
       setTimeout(() => { error.value = '' }, 4000)
@@ -162,10 +184,10 @@ export function useDraftStore() {
   }
 
   function saveAuthState() {
-    if (isAdmin.value) {
-      localStorage.setItem('draft_auth', JSON.stringify({ type: 'admin' }))
-    } else if (currentCaptain.value) {
+    if (currentCaptain.value) {
       localStorage.setItem('draft_auth', JSON.stringify({ type: 'captain', token: localStorage.getItem('draft_captain_token') }))
+    } else if (isAdmin.value) {
+      localStorage.setItem('draft_auth', JSON.stringify({ type: 'admin' }))
     } else {
       localStorage.removeItem('draft_auth')
       localStorage.removeItem('draft_captain_token')
@@ -180,6 +202,7 @@ export function useDraftStore() {
       if (auth.type === 'captain' && auth.token) {
         const captain = await api.loginWithToken(auth.token)
         currentCaptain.value = captain
+        if (captain.is_admin) isAdmin.value = true
         const decoded = atob(auth.token)
         const sep = decoded.indexOf(':')
         const password = sep !== -1 ? decoded.slice(sep + 1) : ''
@@ -206,6 +229,7 @@ export function useDraftStore() {
   async function loginCaptain(name: string, password: string) {
     const captain = await api.loginCaptain(name, password)
     currentCaptain.value = captain
+    if (captain.is_admin) isAdmin.value = true
     const token = btoa(`${captain.id}:${password}`)
     localStorage.setItem('draft_captain_token', token)
     getSocket().emit('captain:login', { captainId: captain.id, password })
@@ -216,6 +240,7 @@ export function useDraftStore() {
   async function loginWithToken(token: string) {
     const captain = await api.loginWithToken(token)
     currentCaptain.value = captain
+    if (captain.is_admin) isAdmin.value = true
     localStorage.setItem('draft_captain_token', token)
     const decoded = atob(token)
     const sep = decoded.indexOf(':')
@@ -226,6 +251,7 @@ export function useDraftStore() {
   }
 
   function logoutCaptain() {
+    if (currentCaptain.value?.is_admin) isAdmin.value = false
     currentCaptain.value = null
     getSocket().emit('captain:logout')
     localStorage.removeItem('draft_auth')
@@ -299,6 +325,7 @@ export function useDraftStore() {
   function pauseAuction() { getSocket().emit('auction:pause') }
   function resumeAuction() { getSocket().emit('auction:resume') }
   function endDraft() { getSocket().emit('auction:end') }
+  function undoLast() { getSocket().emit('auction:undo') }
   function resetDraft() { getSocket().emit('auction:reset') }
 
   return {
@@ -314,6 +341,8 @@ export function useDraftStore() {
     loading,
     error,
     lastSoldMessage,
+    undoMessage,
+    activityLog,
     availablePlayers,
     roleCounts,
     // Auth
@@ -347,6 +376,7 @@ export function useDraftStore() {
     pauseAuction,
     resumeAuction,
     endDraft,
+    undoLast,
     resetDraft,
     // API
     getResults: api.getResults,

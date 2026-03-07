@@ -4,6 +4,7 @@ defineProps<{
   modelValue: string | number
   placeholder?: string
   type?: string
+  hint?: string
 }>()
 defineEmits<{ 'update:modelValue': [value: string] }>()
 </script>
@@ -18,5 +19,6 @@ defineEmits<{ 'update:modelValue': [value: string] }>()
       class="input-field"
       @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
     />
+    <p v-if="hint" class="text-[11px] text-muted-foreground">{{ hint }}</p>
   </div>
 </template>

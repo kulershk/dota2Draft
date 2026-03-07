@@ -2,6 +2,10 @@
 import { Trophy, Download } from 'lucide-vue-next'
 import { ref, onMounted } from 'vue'
 import { useDraftStore } from '@/composables/useDraftStore'
+import RoleBadge from '@/components/common/RoleBadge.vue'
+import MmrDisplay from '@/components/common/MmrDisplay.vue'
+import CaptainAvatar from '@/components/common/CaptainAvatar.vue'
+import { sortedRoles } from '@/utils/roles'
 
 interface TeamResult {
   id: number
@@ -9,6 +13,7 @@ interface TeamResult {
   team: string
   budget: number
   status: string
+  mmr: number
   players: { id: number; name: string; roles: string[]; mmr: number; draft_price: number }[]
 }
 
@@ -35,16 +40,10 @@ function totalSpent(team: TeamResult) {
   return team.players.reduce((sum, p) => sum + (p.draft_price || 0), 0)
 }
 
-const roleColors: Record<string, string> = {
-  Carry: 'bg-color-success text-color-success-foreground',
-  Mid: 'bg-color-error text-color-error-foreground',
-  Offlane: 'bg-color-info text-color-info-foreground',
-  Support: 'bg-color-warning text-color-warning-foreground',
-}
 </script>
 
 <template>
-  <div class="p-8 px-10 flex flex-col gap-6">
+  <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[1440px] mx-auto w-full">
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-semibold text-foreground">Draft Results</h1>
@@ -54,13 +53,11 @@ const roleColors: Record<string, string> = {
 
     <div v-if="loading" class="text-center py-12 text-muted-foreground">Loading results...</div>
 
-    <div v-else class="grid grid-cols-2 gap-5">
+    <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
       <div v-for="team in results" :key="team.id" class="card">
         <div class="flex items-center justify-between px-4 py-3 border-b border-border">
           <div class="flex items-center gap-2.5">
-            <div class="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-xs font-semibold text-secondary-foreground">
-              {{ team.name.charAt(0) }}
-            </div>
+            <CaptainAvatar :name="team.name" />
             <div>
               <p class="text-sm font-semibold text-foreground">{{ team.team }}</p>
               <p class="text-xs text-muted-foreground">Captain: {{ team.name }}</p>
@@ -80,15 +77,17 @@ const roleColors: Record<string, string> = {
             <div v-for="player in team.players" :key="player.id" class="flex items-center justify-between py-1.5 border-b border-border last:border-0">
               <div class="flex items-center gap-2">
                 <span class="text-sm font-medium text-foreground">{{ player.name }}</span>
-                <span v-for="role in player.roles" :key="role" class="inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium" :class="roleColors[role]">{{ role }}</span>
+                <div class="flex flex-wrap gap-1">
+                  <RoleBadge v-for="role in sortedRoles(player.roles)" :key="role" :role="role" />
+                </div>
               </div>
               <div class="flex items-center gap-3">
-                <span class="text-xs font-mono text-muted-foreground">{{ player.mmr.toLocaleString() }} MMR</span>
+                <MmrDisplay :mmr="player.mmr" />
                 <span class="text-sm font-mono font-semibold text-primary">{{ player.draft_price }}g</span>
               </div>
             </div>
             <div class="flex justify-between pt-2 text-xs text-muted-foreground border-t border-border">
-              <span>{{ team.players.length }} players</span>
+              <span>{{ team.players.length }} players &bull; avg {{ Math.round(((team.mmr || 0) + team.players.reduce((s, p) => s + p.mmr, 0)) / (1 + team.players.length)).toLocaleString() }} MMR</span>
               <span>Total spent: <span class="font-semibold text-foreground">{{ formatGold(totalSpent(team)) }}</span></span>
             </div>
           </div>

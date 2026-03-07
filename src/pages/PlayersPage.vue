@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { Users, UserPlus, Search, Pencil, Trash2, Upload } from 'lucide-vue-next'
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import { useDraftStore } from '@/composables/useDraftStore'
-import ModalOverlay from '@/components/ModalOverlay.vue'
-import InputGroup from '@/components/InputGroup.vue'
-import TextareaGroup from '@/components/TextareaGroup.vue'
+import ModalOverlay from '@/components/common/ModalOverlay.vue'
+import InputGroup from '@/components/common/InputGroup.vue'
+import RoleBadge from '@/components/common/RoleBadge.vue'
+import MmrDisplay from '@/components/common/MmrDisplay.vue'
+import { sortedRoles } from '@/utils/roles'
 
 const store = useDraftStore()
 const showAddPlayer = ref(false)
@@ -18,20 +20,21 @@ const importing = ref(false)
 const newPlayer = ref({ name: '', roles: [] as string[], mmr: '', info: '' })
 const editPlayer = ref({ id: 0, name: '', roles: [] as string[], mmr: '', info: '' })
 
-const allRoles = ['Carry (Pos 1)', 'Mid (Pos 2)', 'Offlane (Pos 3)', 'Hard Support (Pos 4)', 'Full Support (Pos 5)']
+const allRoles = ['Carry (Pos 1)', 'Mid (Pos 2)', 'Offlane (Pos 3)', 'Soft Support (Pos 4)', 'Hard Support (Pos 5)']
 const roleMap: Record<string, string> = {
   'Carry (Pos 1)': 'Carry',
   'Mid (Pos 2)': 'Mid',
   'Offlane (Pos 3)': 'Offlane',
-  'Hard Support (Pos 4)': 'Support',
-  'Full Support (Pos 5)': 'Support',
+  'Soft Support (Pos 4)': 'Pos4',
+  'Hard Support (Pos 5)': 'Pos5',
 }
 
 const reverseRoleMap: Record<string, string[]> = {
   Carry: ['Carry (Pos 1)'],
   Mid: ['Mid (Pos 2)'],
   Offlane: ['Offlane (Pos 3)'],
-  Support: ['Hard Support (Pos 4)', 'Full Support (Pos 5)'],
+  Pos4: ['Soft Support (Pos 4)'],
+  Pos5: ['Hard Support (Pos 5)'],
 }
 
 function toggleRole(role: string) {
@@ -62,7 +65,7 @@ function openEditPlayer(player: any) {
 }
 
 async function savePlayer() {
-  if (!editPlayer.value.name || editPlayer.value.roles.length === 0) return
+  if (!editPlayer.value.name) return
   await store.updatePlayer(editPlayer.value.id, {
     name: editPlayer.value.name,
     roles: [...new Set(editPlayer.value.roles.map(r => roleMap[r] || r))],
@@ -73,7 +76,7 @@ async function savePlayer() {
 }
 
 async function addPlayer() {
-  if (!newPlayer.value.name || newPlayer.value.roles.length === 0) return
+  if (!newPlayer.value.name) return
   await store.addPlayer({
     name: newPlayer.value.name,
     roles: [...new Set(newPlayer.value.roles.map(r => roleMap[r] || r))],
@@ -85,21 +88,23 @@ async function addPlayer() {
 }
 
 const filteredPlayers = computed(() => {
-  if (!searchQuery.value) return store.players.value
-  const q = searchQuery.value.toLowerCase()
-  return store.players.value.filter(p =>
-    p.name.toLowerCase().includes(q) || p.roles.some(r => r.toLowerCase().includes(q))
-  )
+  let list = [...store.players.value].sort((a, b) => b.mmr - a.mmr)
+  if (searchQuery.value) {
+    const q = searchQuery.value.toLowerCase()
+    list = list.filter(p =>
+      p.name.toLowerCase().includes(q) || p.roles.some(r => r.toLowerCase().includes(q))
+    )
+  }
+  return list
 })
 
-const roleColumns = ['Carry', 'Mid', 'Offlane', 'Support', 'Support']
+const roleColumns = ['Carry', 'Mid', 'Offlane', 'Pos4', 'Pos5']
 
 function parseImportText(text: string) {
   const lines = text.trim().split('\n').filter(l => l.trim())
   const players: { name: string; roles: string[]; mmr: number }[] = []
   for (const line of lines) {
     const cols = line.split('\t')
-    if (cols.length < 3) continue
     const name = cols[0].trim()
     if (!name) continue
     const mmr = Number(cols[1]?.trim()) || 0
@@ -110,14 +115,22 @@ function parseImportText(text: string) {
         roles.push(roleColumns[i])
       }
     }
-    if (roles.length > 0) {
-      players.push({ name, roles: [...new Set(roles)], mmr })
-    }
+    players.push({ name, roles: [...new Set(roles)], mmr })
   }
   return players
 }
 
 const importPreview = computed(() => parseImportText(importText.value))
+
+function onTabInImport(e: KeyboardEvent) {
+  const ta = e.target as HTMLTextAreaElement
+  const start = ta.selectionStart
+  const end = ta.selectionEnd
+  importText.value = ta.value.substring(0, start) + '\t' + ta.value.substring(end)
+  nextTick(() => {
+    ta.selectionStart = ta.selectionEnd = start + 1
+  })
+}
 
 async function handleImport() {
   const players = importPreview.value
@@ -140,65 +153,66 @@ async function handleImport() {
   }
 }
 
-const roleColors: Record<string, string> = {
-  Carry: 'bg-color-success text-color-success-foreground',
-  Mid: 'bg-color-error text-color-error-foreground',
-  Offlane: 'bg-color-info text-color-info-foreground',
-  Support: 'bg-color-warning text-color-warning-foreground',
-}
+
 </script>
 
 <template>
-  <div class="p-8 px-10 flex flex-col gap-6">
+  <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[1440px] mx-auto w-full">
     <div>
       <h1 class="text-2xl font-semibold text-foreground">Player Pool</h1>
       <p class="text-sm text-muted-foreground mt-1">Manage the pool of Dota 2 players available for auction bidding</p>
     </div>
 
     <!-- Stats Row -->
-    <div class="flex gap-4">
-      <div class="card flex-1 p-4">
-        <p class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Total Players</p>
-        <p class="text-3xl font-bold text-foreground mt-1">{{ store.players.value.length }}</p>
+    <div class="grid grid-cols-3 md:grid-cols-6 gap-3 md:gap-4">
+      <div class="card p-3 md:p-4">
+        <p class="text-[10px] md:text-xs font-semibold tracking-wider text-muted-foreground uppercase">Total</p>
+        <p class="text-xl md:text-3xl font-bold text-foreground mt-1">{{ store.players.value.length }}</p>
       </div>
-      <div class="card flex-1 p-4">
-        <p class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Carry</p>
-        <p class="text-3xl font-bold text-foreground mt-1">{{ store.roleCounts.value.Carry }}</p>
+      <div class="card p-3 md:p-4">
+        <p class="text-[10px] md:text-xs font-semibold tracking-wider text-muted-foreground uppercase">Carry</p>
+        <p class="text-xl md:text-3xl font-bold text-foreground mt-1">{{ store.roleCounts.value.Carry }}</p>
       </div>
-      <div class="card flex-1 p-4">
-        <p class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Mid</p>
-        <p class="text-3xl font-bold text-foreground mt-1">{{ store.roleCounts.value.Mid }}</p>
+      <div class="card p-3 md:p-4">
+        <p class="text-[10px] md:text-xs font-semibold tracking-wider text-muted-foreground uppercase">Mid</p>
+        <p class="text-xl md:text-3xl font-bold text-foreground mt-1">{{ store.roleCounts.value.Mid }}</p>
       </div>
-      <div class="card flex-1 p-4">
-        <p class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Offlane</p>
-        <p class="text-3xl font-bold text-foreground mt-1">{{ store.roleCounts.value.Offlane }}</p>
+      <div class="card p-3 md:p-4">
+        <p class="text-[10px] md:text-xs font-semibold tracking-wider text-muted-foreground uppercase">Offlane</p>
+        <p class="text-xl md:text-3xl font-bold text-foreground mt-1">{{ store.roleCounts.value.Offlane }}</p>
       </div>
-      <div class="card flex-1 p-4">
-        <p class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Support</p>
-        <p class="text-3xl font-bold text-foreground mt-1">{{ store.roleCounts.value.Support }}</p>
+      <div class="card p-3 md:p-4">
+        <p class="text-[10px] md:text-xs font-semibold tracking-wider text-muted-foreground uppercase">Pos 4</p>
+        <p class="text-xl md:text-3xl font-bold text-foreground mt-1">{{ store.roleCounts.value.Pos4 }}</p>
+      </div>
+      <div class="card p-3 md:p-4">
+        <p class="text-[10px] md:text-xs font-semibold tracking-wider text-muted-foreground uppercase">Pos 5</p>
+        <p class="text-xl md:text-3xl font-bold text-foreground mt-1">{{ store.roleCounts.value.Pos5 }}</p>
       </div>
     </div>
 
     <!-- Players Table -->
     <div class="card">
-      <div class="flex items-center justify-between px-4 py-3 border-b border-border">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-3 border-b border-border">
         <div class="flex items-center gap-2">
           <Users class="w-5 h-5 text-foreground" />
           <span class="text-sm font-semibold text-foreground">Players ({{ store.players.value.length }})</span>
         </div>
-        <div class="flex items-center gap-3">
-          <div class="relative">
+        <div class="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
+          <div class="relative flex-1 sm:flex-initial">
             <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <input v-model="searchQuery" type="text" placeholder="Search players..." class="input-field pl-9 w-56" />
+            <input v-model="searchQuery" type="text" placeholder="Search..." class="input-field pl-9 w-full sm:w-56" />
           </div>
-          <button class="btn-outline text-sm" @click="showImportPlayers = true">
-            <Upload class="w-4 h-4" />
-            Import
-          </button>
-          <button class="btn-primary text-sm" @click="showAddPlayer = true">
-            <UserPlus class="w-4 h-4" />
-            Add Player
-          </button>
+          <template v-if="store.isAdmin.value">
+            <button class="btn-outline text-sm flex-shrink-0" @click="showImportPlayers = true">
+              <Upload class="w-4 h-4" />
+              <span class="hidden sm:inline">Import</span>
+            </button>
+            <button class="btn-primary text-sm flex-shrink-0" @click="showAddPlayer = true">
+              <UserPlus class="w-4 h-4" />
+              <span class="hidden sm:inline">Add Player</span>
+            </button>
+          </template>
         </div>
       </div>
 
@@ -211,7 +225,7 @@ const roleColors: Record<string, string> = {
               <th class="text-left px-4 py-3 font-medium text-muted-foreground">ROLE</th>
               <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[100px]">MMR</th>
               <th class="text-left px-4 py-3 font-medium text-muted-foreground">INFO</th>
-              <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[100px]">ACTIONS</th>
+              <th v-if="store.isAdmin.value" class="text-left px-4 py-3 font-medium text-muted-foreground w-[100px]">ACTIONS</th>
             </tr>
           </thead>
           <tbody>
@@ -227,12 +241,14 @@ const roleColors: Record<string, string> = {
               </td>
               <td class="px-4 py-3">
                 <div class="flex gap-1">
-                  <span v-for="role in player.roles" :key="role" class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium" :class="roleColors[role] || 'bg-muted text-muted-foreground'">{{ role }}</span>
+                  <RoleBadge v-for="role in sortedRoles(player.roles)" :key="role" :role="role" />
                 </div>
               </td>
-              <td class="px-4 py-3 font-mono text-foreground">{{ player.mmr.toLocaleString() }}</td>
-              <td class="px-4 py-3 text-muted-foreground text-xs">{{ player.info }}</td>
               <td class="px-4 py-3">
+                <MmrDisplay :mmr="player.mmr" size="md" />
+              </td>
+              <td class="px-4 py-3 text-muted-foreground text-xs">{{ player.info }}</td>
+              <td v-if="store.isAdmin.value" class="px-4 py-3">
                 <div class="flex items-center gap-1">
                   <button class="btn-ghost p-2" @click="openEditPlayer(player)"><Pencil class="w-4 h-4" /></button>
                   <button class="btn-ghost p-2 text-destructive" @click="store.deletePlayer(player.id)"><Trash2 class="w-4 h-4" /></button>
@@ -255,7 +271,7 @@ const roleColors: Record<string, string> = {
         <div class="flex flex-col gap-2">
           <label class="label-text">Roles (select all that apply)</label>
           <div class="flex flex-wrap gap-x-5 gap-y-2">
-            <label v-for="role in allRoles" :key="role" class="flex items-center gap-2 text-sm cursor-pointer">
+            <label v-for="role in allRoles" :key="role" class="flex items-center gap-2 text-sm text-foreground cursor-pointer">
               <input type="checkbox" :checked="newPlayer.roles.includes(role)" class="w-4 h-4 rounded border-input text-primary focus:ring-primary" @change="toggleRole(role)" />
               {{ role }}
             </label>
@@ -282,13 +298,17 @@ const roleColors: Record<string, string> = {
         <p class="text-sm text-muted-foreground mt-1">Paste tab-separated player data. Format: Name, MMR, then v for each role (Carry, Mid, Offlane, Pos4, Pos5).</p>
       </div>
       <div class="px-7 py-5 flex flex-col gap-4">
-        <TextareaGroup
-          label="Paste player data"
-          :model-value="importText"
-          placeholder="Ri4man&#9;14000&#9;v&#9;v&#9;v&#9;v&#9;v&#10;majkk&#9;10500&#9;&#9;v"
-          :rows="8"
-          @update:model-value="importText = $event"
-        />
+        <div class="flex flex-col gap-1.5">
+          <label class="label-text">Paste player data</label>
+          <textarea
+            :value="importText"
+            placeholder="Ri4man&#9;14000&#9;v&#9;v&#9;v&#9;v&#9;v&#10;majkk&#9;10500&#9;&#9;v"
+            :rows="8"
+            class="textarea-field"
+            @input="importText = ($event.target as HTMLTextAreaElement).value"
+            @keydown.tab.prevent="onTabInImport"
+          />
+        </div>
         <p v-if="importError" class="text-sm text-red-500">{{ importError }}</p>
 
         <!-- Preview -->
@@ -308,7 +328,9 @@ const roleColors: Record<string, string> = {
                   <td class="px-3 py-1.5 text-foreground">{{ p.name }}</td>
                   <td class="px-3 py-1.5 font-mono text-foreground">{{ p.mmr.toLocaleString() }}</td>
                   <td class="px-3 py-1.5">
-                    <span v-for="role in p.roles" :key="role" class="inline-flex items-center rounded-full px-1.5 py-0 text-[10px] font-medium mr-1" :class="roleColors[role] || 'bg-muted text-muted-foreground'">{{ role }}</span>
+                    <div class="flex flex-wrap gap-1">
+                      <RoleBadge v-for="role in sortedRoles(p.roles)" :key="role" :role="role" size="xs" />
+                    </div>
                   </td>
                 </tr>
               </tbody>
@@ -338,7 +360,7 @@ const roleColors: Record<string, string> = {
         <div class="flex flex-col gap-2">
           <label class="label-text">Roles (select all that apply)</label>
           <div class="flex flex-wrap gap-x-5 gap-y-2">
-            <label v-for="role in allRoles" :key="role" class="flex items-center gap-2 text-sm cursor-pointer">
+            <label v-for="role in allRoles" :key="role" class="flex items-center gap-2 text-sm text-foreground cursor-pointer">
               <input type="checkbox" :checked="editPlayer.roles.includes(role)" class="w-4 h-4 rounded border-input text-primary focus:ring-primary" @change="toggleEditRole(role)" />
               {{ role }}
             </label>
