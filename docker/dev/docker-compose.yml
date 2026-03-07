@@ -1,0 +1,45 @@
+version: '3.5'
+services:
+  draft-app:
+    container_name: draft-dev-app
+    build:
+      context: ../../
+      dockerfile: docker/dev/Dockerfile
+    ports:
+      - "5173:5173"
+      - "3001:3001"
+    environment:
+      - DATABASE_URL=postgresql://draft:draft@draft-dev-db:5432/draft
+      - STEAM_API_KEY=${STEAM_API_KEY}
+    volumes:
+      - ../../src:/app/src
+      - ../../server:/app/server
+      - ../../public:/app/public
+      - ../../index.html:/app/index.html
+      - ../../vite.config.ts:/app/vite.config.ts
+      - ../../tailwind.config.ts:/app/tailwind.config.ts
+      - ../../postcss.config.js:/app/postcss.config.js
+      - ../../tsconfig.json:/app/tsconfig.json
+    depends_on:
+      draft-dev-db:
+        condition: service_healthy
+
+  draft-dev-db:
+    image: postgres:16-alpine
+    container_name: draft-dev-db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: draft
+      POSTGRES_USER: draft
+      POSTGRES_PASSWORD: draft
+    volumes:
+      - draft_dev_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U draft"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  draft_dev_pgdata:

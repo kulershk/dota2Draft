@@ -10,7 +10,8 @@ export default defineConfig({
     },
   },
   server: {
-    allowedHosts: ['blocked-ron-membrane-onion.trycloudflare.com'],
+    host: '0.0.0.0',
+    allowedHosts: true,
     proxy: {
       '/api': 'http://localhost:3001',
       '/socket.io': {

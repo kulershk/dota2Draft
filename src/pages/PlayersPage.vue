@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { Users, UserPlus, Search, Pencil, Trash2, Upload } from 'lucide-vue-next'
-import { ref, computed, nextTick } from 'vue'
+import { Users, UserPlus, Search, Pencil, Trash2, Upload, LogIn } from 'lucide-vue-next'
+import { ref, computed, nextTick, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useDraftStore } from '@/composables/useDraftStore'
+import { useApi } from '@/composables/useApi'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 import InputGroup from '@/components/common/InputGroup.vue'
 import RoleBadge from '@/components/common/RoleBadge.vue'
@@ -9,13 +11,92 @@ import MmrDisplay from '@/components/common/MmrDisplay.vue'
 import { sortedRoles } from '@/utils/roles'
 
 const store = useDraftStore()
+const api = useApi()
+const route = useRoute()
+const router = useRouter()
 const showAddPlayer = ref(false)
 const showEditPlayer = ref(false)
 const showImportPlayers = ref(false)
 const searchQuery = ref('')
+const showRegister = ref(false)
 const importText = ref('')
 const importError = ref('')
 const importing = ref(false)
+
+// Steam registration state
+const steamToken = ref('')
+const steamProfile = ref<{ steamId: string; name: string; avatarUrl: string } | null>(null)
+const registerRoles = ref<string[]>([])
+const registerMmr = ref('')
+const registerInfo = ref('')
+const registerError = ref('')
+const registering = ref(false)
+
+function toggleRegisterRole(role: string) {
+  const idx = registerRoles.value.indexOf(role)
+  if (idx >= 0) registerRoles.value.splice(idx, 1)
+  else registerRoles.value.push(role)
+}
+
+function startSteamLogin() {
+  window.location.href = '/api/auth/steam'
+}
+
+async function submitRegistration() {
+  if (!steamToken.value || !steamProfile.value) return
+  registering.value = true
+  registerError.value = ''
+  try {
+    await api.registerPlayer({
+      token: steamToken.value,
+      roles: [...new Set(registerRoles.value.map(r => roleMap[r] || r))],
+      mmr: Number(registerMmr.value) || 0,
+      info: registerInfo.value,
+    })
+    showRegister.value = false
+    steamToken.value = ''
+    steamProfile.value = null
+    registerRoles.value = []
+    registerMmr.value = ''
+    registerInfo.value = ''
+  } catch (e: any) {
+    registerError.value = e.message || 'Registration failed'
+  } finally {
+    registering.value = false
+  }
+}
+
+// Handle Steam callback redirect
+onMounted(async () => {
+  const token = route.query.steamToken as string
+  const steamError = route.query.steam_error as string
+
+  if (steamError) {
+    const errorMessages: Record<string, string> = {
+      already_registered: 'This Steam account is already registered.',
+      validation_failed: 'Steam authentication failed. Please try again.',
+      invalid_id: 'Could not verify Steam identity.',
+      server_error: 'Server error during authentication.',
+    }
+    registerError.value = errorMessages[steamError] || 'Steam login failed.'
+    showRegister.value = true
+    router.replace({ path: '/players' })
+    return
+  }
+
+  if (token) {
+    try {
+      const profile = await api.getSteamProfile(token)
+      steamToken.value = token
+      steamProfile.value = profile
+      showRegister.value = true
+    } catch {
+      registerError.value = 'Registration session expired. Please try again.'
+      showRegister.value = true
+    }
+    router.replace({ path: '/players' })
+  }
+})
 
 const newPlayer = ref({ name: '', roles: [] as string[], mmr: '', info: '' })
 const editPlayer = ref({ id: 0, name: '', roles: [] as string[], mmr: '', info: '' })
@@ -213,6 +294,10 @@ async function handleImport() {
               <span class="hidden sm:inline">Add Player</span>
             </button>
           </template>
+          <button v-if="!store.isAdmin.value && store.settings.allowSteamRegistration" class="btn-primary text-sm flex-shrink-0" @click="startSteamLogin">
+            <LogIn class="w-4 h-4" />
+            <span class="hidden sm:inline">Register via Steam</span>
+          </button>
         </div>
       </div>
 
@@ -233,7 +318,8 @@ async function handleImport() {
               <td class="px-4 py-3 text-muted-foreground">{{ String(i + 1).padStart(2, '0') }}</td>
               <td class="px-4 py-3">
                 <div class="flex items-center gap-2.5">
-                  <div class="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-xs font-semibold text-secondary-foreground">
+                  <img v-if="player.avatar_url" :src="player.avatar_url" class="w-8 h-8 rounded-full object-cover" />
+                  <div v-else class="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-xs font-semibold text-secondary-foreground">
                     {{ player.name.charAt(0) }}
                   </div>
                   <span class="font-medium text-foreground">{{ player.name }}</span>
@@ -345,6 +431,67 @@ async function handleImport() {
         </button>
         <button class="btn-secondary w-full justify-center" @click="showImportPlayers = false">
           Cancel
+        </button>
+      </div>
+    </ModalOverlay>
+
+    <!-- Steam Register Modal -->
+    <ModalOverlay :show="showRegister" @close="showRegister = false">
+      <div class="border-b border-border px-7 py-6">
+        <h2 class="text-xl font-semibold text-foreground">Complete Registration</h2>
+        <p class="text-sm text-muted-foreground mt-1">Fill in your Dota 2 details to finish signing up.</p>
+      </div>
+      <div class="px-7 py-5 flex flex-col gap-5">
+        <p v-if="registerError" class="text-sm text-red-500 bg-red-500/10 rounded px-3 py-2">{{ registerError }}</p>
+
+        <!-- Steam profile info (read-only, from Steam) -->
+        <template v-if="steamProfile">
+          <div class="flex items-center gap-4 p-4 rounded-lg bg-accent/50 border border-border">
+            <img v-if="steamProfile.avatarUrl" :src="steamProfile.avatarUrl" class="w-14 h-14 rounded-full" />
+            <div v-else class="w-14 h-14 rounded-full bg-secondary flex items-center justify-center text-lg font-bold text-secondary-foreground">
+              {{ steamProfile.name.charAt(0) }}
+            </div>
+            <div>
+              <p class="font-semibold text-foreground text-lg">{{ steamProfile.name }}</p>
+              <p class="text-xs text-muted-foreground">Steam ID: {{ steamProfile.steamId }}</p>
+            </div>
+          </div>
+        </template>
+
+        <!-- If no steam profile yet (error state), show login button -->
+        <template v-if="!steamProfile">
+          <button class="btn-primary w-full justify-center py-3" @click="startSteamLogin">
+            <LogIn class="w-5 h-5" />
+            Sign in with Steam
+          </button>
+        </template>
+
+        <template v-if="steamProfile">
+          <div class="flex flex-col gap-2">
+            <label class="label-text">Roles (select all that apply)</label>
+            <div class="flex flex-wrap gap-x-5 gap-y-2">
+              <label v-for="role in allRoles" :key="role" class="flex items-center gap-2 text-sm text-foreground cursor-pointer">
+                <input type="checkbox" :checked="registerRoles.includes(role)" class="w-4 h-4 rounded border-input text-primary focus:ring-primary" @change="toggleRegisterRole(role)" />
+                {{ role }}
+              </label>
+            </div>
+          </div>
+          <InputGroup label="MMR" :model-value="registerMmr" placeholder="e.g. 11000" @update:model-value="registerMmr = $event" />
+          <TextareaGroup label="About You" :model-value="registerInfo" placeholder="Brief description, achievements, playstyle notes..." :rows="3" @update:model-value="registerInfo = $event" />
+        </template>
+      </div>
+      <div v-if="steamProfile" class="px-7 py-5 flex flex-col gap-3 border-t border-border">
+        <button class="btn-primary w-full justify-center" :disabled="registering" @click="submitRegistration">
+          <UserPlus class="w-4 h-4" />
+          {{ registering ? 'Registering...' : 'Complete Registration' }}
+        </button>
+        <button class="btn-secondary w-full justify-center" @click="showRegister = false">
+          Cancel
+        </button>
+      </div>
+      <div v-else class="px-7 py-5 border-t border-border">
+        <button class="btn-secondary w-full justify-center" @click="showRegister = false">
+          Close
         </button>
       </div>
     </ModalOverlay>

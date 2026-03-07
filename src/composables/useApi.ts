@@ -43,6 +43,10 @@ export function useApi() {
       request(`/api/players/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     deletePlayer: (id: number) =>
       request(`/api/players/${id}`, { method: 'DELETE' }),
+    getSteamProfile: (token: string) =>
+      request(`/api/auth/steam/profile?token=${token}`),
+    registerPlayer: (data: { token: string; roles: string[]; mmr?: number; info?: string }) =>
+      request('/api/players/register', { method: 'POST', body: JSON.stringify(data) }),
 
     // Auction
     getAuction: () => request('/api/auction'),

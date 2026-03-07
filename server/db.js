@@ -95,6 +95,7 @@ export async function initDb() {
       maxBid: '0',
       nominationOrder: 'normal',
       requireAllOnline: 'true',
+      allowSteamRegistration: 'false',
       adminPassword: 'admin',
     }
     for (const [key, value] of Object.entries(defaults)) {
@@ -168,6 +169,17 @@ export async function initDb() {
     for (const [key, value] of Object.entries(defaults)) {
       await execute('INSERT INTO auction_state (key, value) VALUES ($1, $2)', [key, value])
     }
+  }
+
+  // Add steam_id and avatar_url columns if missing
+  const hasSteamId = await queryOne(`
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'players' AND column_name = 'steam_id'
+  `)
+  if (!hasSteamId) {
+    await execute('ALTER TABLE players ADD COLUMN steam_id TEXT DEFAULT NULL')
+    await execute('ALTER TABLE players ADD COLUMN avatar_url TEXT DEFAULT NULL')
+    await execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_players_steam_id ON players (steam_id) WHERE steam_id IS NOT NULL')
   }
 
   // Backfill draft_round from bid_history for already-drafted players missing it

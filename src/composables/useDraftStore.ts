@@ -23,6 +23,8 @@ export interface Player {
   drafted_by?: number | null
   draft_price?: number | null
   draft_round?: number | null
+  steam_id?: string | null
+  avatar_url?: string | null
 }
 
 export interface BidEntry {
@@ -43,6 +45,7 @@ export interface Settings {
   maxBid: number
   nominationOrder: string
   requireAllOnline: boolean
+  allowSteamRegistration: boolean
 }
 
 export interface AuctionState {
@@ -66,6 +69,7 @@ const settings = reactive<Settings>({
   maxBid: 0,
   nominationOrder: 'normal',
   requireAllOnline: true,
+  allowSteamRegistration: false,
 })
 
 const captains = ref<Captain[]>([])

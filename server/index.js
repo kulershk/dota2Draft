@@ -2,9 +2,17 @@ import express from 'express'
 import { createServer } from 'http'
 import { Server } from 'socket.io'
 import cors from 'cors'
+import crypto from 'crypto'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import pool, { query, queryOne, execute, initDb } from './db.js'
+
+// Temporary store for verified Steam registrations (token -> steam data)
+const steamPendingRegistrations = new Map()
+const STEAM_TOKEN_TTL = 5 * 60 * 1000 // 5 minutes
+
+// Base URL for redirects (frontend origin)
+const BASE_URL = process.env.BASE_URL || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5173')
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -37,6 +45,7 @@ async function getSettings() {
     maxBid: Number(obj.maxBid) || 0,
     nominationOrder: obj.nominationOrder || 'normal',
     requireAllOnline: obj.requireAllOnline === 'false' ? false : true,
+    allowSteamRegistration: obj.allowSteamRegistration === 'true' ? true : false,
   }
 }
 
@@ -72,6 +81,8 @@ async function getPlayers() {
     ...p,
     roles: JSON.parse(p.roles),
     drafted: !!p.drafted,
+    steam_id: p.steam_id || null,
+    avatar_url: p.avatar_url || null,
   }))
 }
 
@@ -200,6 +211,130 @@ app.post('/api/auth/captain', async (req, res) => {
   )
   if (!captain) return res.status(401).json({ error: 'Invalid captain name or password' })
   res.json(captain)
+})
+
+// ─── REST API: Steam Auth ────────────────────────────────
+
+app.get('/api/auth/steam', (req, res) => {
+  const serverOrigin = `${req.protocol}://${req.get('host')}`
+  const returnUrl = `${serverOrigin}/api/auth/steam/callback`
+  const params = new URLSearchParams({
+    'openid.ns': 'http://specs.openid.net/auth/2.0',
+    'openid.mode': 'checkid_setup',
+    'openid.return_to': returnUrl,
+    'openid.realm': serverOrigin,
+    'openid.identity': 'http://specs.openid.net/auth/2.0/identifier_select',
+    'openid.claimed_id': 'http://specs.openid.net/auth/2.0/identifier_select',
+  })
+  res.redirect(`https://steamcommunity.com/openid/login?${params}`)
+})
+
+app.get('/api/auth/steam/callback', async (req, res) => {
+  try {
+    // Verify the OpenID response with Steam
+    const params = new URLSearchParams(req.query)
+    params.set('openid.mode', 'check_authentication')
+    const verifyRes = await fetch('https://steamcommunity.com/openid/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+    })
+    const verifyBody = await verifyRes.text()
+    if (!verifyBody.includes('is_valid:true')) {
+      return res.redirect(`${BASE_URL}/players?steam_error=validation_failed`)
+    }
+
+    // Extract Steam ID from claimed_id
+    const claimedId = req.query['openid.claimed_id']
+    const steamIdMatch = claimedId?.match(/\/openid\/id\/(\d+)$/)
+    if (!steamIdMatch) {
+      return res.redirect(`${BASE_URL}/players?steam_error=invalid_id`)
+    }
+    const steamId = steamIdMatch[1]
+
+    // Check if already registered
+    const existing = await queryOne('SELECT id FROM players WHERE steam_id = $1', [steamId])
+    if (existing) {
+      return res.redirect(`${BASE_URL}/players?steam_error=already_registered`)
+    }
+
+    // Fetch Steam profile
+    let personaName = `Steam_${steamId.slice(-6)}`
+    let avatarUrl = ''
+    const steamApiKey = process.env.STEAM_API_KEY
+    if (steamApiKey) {
+      try {
+        const profileRes = await fetch(
+          `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key=${steamApiKey}&steamids=${steamId}`
+        )
+        const profileData = await profileRes.json()
+        const player = profileData?.response?.players?.[0]
+        if (player) {
+          personaName = player.personaname || personaName
+          avatarUrl = player.avatarfull || player.avatarmedium || player.avatar || ''
+        }
+      } catch (e) {
+        console.error('Failed to fetch Steam profile:', e.message)
+      }
+    }
+
+    // Generate temp token and store verified steam data
+    const token = crypto.randomBytes(32).toString('hex')
+    steamPendingRegistrations.set(token, {
+      steamId,
+      name: personaName,
+      avatarUrl,
+      createdAt: Date.now(),
+    })
+    // Clean up expired tokens
+    for (const [k, v] of steamPendingRegistrations) {
+      if (Date.now() - v.createdAt > STEAM_TOKEN_TTL) steamPendingRegistrations.delete(k)
+    }
+
+    res.redirect(`${BASE_URL}/players?steamToken=${token}`)
+  } catch (e) {
+    console.error('Steam callback error:', e)
+    res.redirect(`${BASE_URL}/players?steam_error=server_error`)
+  }
+})
+
+app.get('/api/auth/steam/profile', (req, res) => {
+  const { token } = req.query
+  const data = steamPendingRegistrations.get(token)
+  if (!data || Date.now() - data.createdAt > STEAM_TOKEN_TTL) {
+    return res.status(400).json({ error: 'Invalid or expired token' })
+  }
+  res.json({ steamId: data.steamId, name: data.name, avatarUrl: data.avatarUrl })
+})
+
+app.post('/api/players/register', async (req, res) => {
+  const { token, roles, mmr, info } = req.body
+  const data = steamPendingRegistrations.get(token)
+  if (!data || Date.now() - data.createdAt > STEAM_TOKEN_TTL) {
+    return res.status(400).json({ error: 'Invalid or expired registration token' })
+  }
+
+  // Check settings
+  const settings = await getSettings()
+  if (!settings.allowSteamRegistration) {
+    return res.status(403).json({ error: 'Steam registration is disabled' })
+  }
+
+  // Check duplicate
+  const existing = await queryOne('SELECT id FROM players WHERE steam_id = $1', [data.steamId])
+  if (existing) {
+    steamPendingRegistrations.delete(token)
+    return res.status(409).json({ error: 'You are already registered' })
+  }
+
+  const result = await queryOne(
+    'INSERT INTO players (name, roles, mmr, info, steam_id, avatar_url) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+    [data.name, JSON.stringify(roles || []), mmr || 0, info || '', data.steamId, data.avatarUrl]
+  )
+  steamPendingRegistrations.delete(token)
+
+  io.emit('players:updated', await getPlayers())
+  res.status(201).json({ id: result.id, name: data.name })
 })
 
 // ─── REST API: Settings ───────────────────────────────────

@@ -114,6 +114,10 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
             <input type="checkbox" class="w-4 h-4 accent-primary" :checked="store.settings.requireAllOnline" @change="store.settings.requireAllOnline = ($event.target as HTMLInputElement).checked; saveSettings()" />
             <span class="text-sm text-foreground">Require all captains online to nominate</span>
           </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" class="w-4 h-4 accent-primary" :checked="store.settings.allowSteamRegistration" @change="store.settings.allowSteamRegistration = ($event.target as HTMLInputElement).checked; saveSettings()" />
+            <span class="text-sm text-foreground">Allow players to register via Steam login</span>
+          </label>
         </div>
       </div>
 

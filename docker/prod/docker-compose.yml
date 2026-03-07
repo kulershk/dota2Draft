@@ -25,6 +25,7 @@ services:
     environment:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://draft:draft@draft-db:5432/draft
+      - STEAM_API_KEY=${STEAM_API_KEY}
     depends_on:
       draft-db:
         condition: service_healthy
