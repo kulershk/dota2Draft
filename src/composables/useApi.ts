@@ -47,5 +47,14 @@ export function useApi() {
     // Auction
     getAuction: () => request('/api/auction'),
     getResults: () => request('/api/auction/results'),
+
+    // News
+    getNews: () => request('/api/news'),
+    createNews: (data: { title: string; content: string }) =>
+      request('/api/news', { method: 'POST', body: JSON.stringify(data) }),
+    updateNews: (id: number, data: { title?: string; content?: string }) =>
+      request(`/api/news/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteNews: (id: number) =>
+      request(`/api/news/${id}`, { method: 'DELETE' }),
   }
 }

@@ -9,7 +9,8 @@
       "Bash(taskkill:*)",
       "Bash(npx vite:*)",
       "Bash(curl:*)",
-      "Bash(mv:*)"
+      "Bash(mv:*)",
+      "Bash(npx vue-tsc:*)"
     ]
   }
 }

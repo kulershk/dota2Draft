@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Gamepad2, Settings, Users, Gavel, Trophy, Lock, LogOut, Sun, Moon, Menu, X } from 'lucide-vue-next'
+import { Gamepad2, Shield, Users, Gavel, Trophy, Lock, LogOut, Sun, Moon, Menu, X, Home } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { onMounted, ref, computed } from 'vue'
 import { useDraftStore } from '@/composables/useDraftStore'
@@ -54,7 +54,7 @@ onMounted(async () => {
 })
 
 const navItems = computed(() => [
-  ...(store.isAdmin.value ? [{ label: 'Draft Setup', icon: Settings, path: '/' }] : []),
+  { label: 'Home', icon: Home, path: '/' },
   { label: 'Player Pool', icon: Users, path: '/players' },
   { label: 'Live Auction', icon: Gavel, path: '/auction' },
   { label: 'Results', icon: Trophy, path: '/results' },
@@ -92,7 +92,7 @@ async function handleLogin() {
       await store.loginAdmin(adminPassword.value)
       adminPassword.value = ''
       showLoginModal.value = false
-      router.push('/')
+      router.push('/admin')
     } else {
       await store.loginCaptain(captainName.value, captainPassword.value)
       captainName.value = ''
@@ -110,8 +110,8 @@ function handleLogout() {
     store.logoutCaptain()
   }
   store.logoutAdmin()
-  if (route.path === '/') {
-    router.push('/players')
+  if (route.path.startsWith('/admin')) {
+    router.push('/')
   }
 }
 </script>
@@ -136,7 +136,7 @@ function handleLogout() {
               :key="item.path"
               :to="item.path"
               class="flex items-center gap-2 px-3 py-1.5 rounded text-sm transition-colors"
-              :class="route.path === item.path
+              :class="(item.path === '/' ? route.path === '/' : route.path.startsWith(item.path))
                 ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
                 : 'text-sidebar-foreground hover:bg-accent'"
             >
@@ -147,6 +147,10 @@ function handleLogout() {
         </div>
         <!-- Right: User info + actions -->
         <div class="flex items-center gap-2">
+          <router-link v-if="store.isAdmin.value" to="/admin" class="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors" :class="route.path.startsWith('/admin') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'">
+            <Shield class="w-3.5 h-3.5" />
+            Admin
+          </router-link>
           <span class="text-xs text-muted-foreground hidden sm:inline">{{ userRoleLabel }}: {{ userNameLabel }}</span>
           <button class="p-1.5 rounded hover:bg-accent" :title="isDark ? 'Light mode' : 'Dark mode'" @click="toggleTheme">
             <Moon v-if="!isDark" class="w-4 h-4 text-muted-foreground" />
@@ -180,11 +184,23 @@ function handleLogout() {
           <component :is="item.icon" class="w-[18px] h-[18px]" />
           {{ item.label }}
         </router-link>
+        <router-link
+          v-if="store.isAdmin.value"
+          to="/admin"
+          class="flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-colors"
+          :class="route.path.startsWith('/admin')
+            ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+            : 'text-sidebar-foreground hover:bg-accent'"
+          @click="mobileMenuOpen = false"
+        >
+          <Shield class="w-[18px] h-[18px]" />
+          Admin Panel
+        </router-link>
       </nav>
     </header>
 
     <!-- Main Content -->
-    <main class="flex-1 overflow-y-auto">
+    <main class="flex-1 overflow-hidden flex flex-col" :class="route.path.startsWith('/admin') ? '' : 'overflow-y-auto'">
       <router-view />
     </main>
 

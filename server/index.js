@@ -212,6 +212,38 @@ app.delete('/api/players/:id', (req, res) => {
   res.json({ ok: true })
 })
 
+// ─── REST API: News ───────────────────────────────────────
+
+app.get('/api/news', (req, res) => {
+  const news = db.prepare('SELECT * FROM news ORDER BY created_at DESC').all()
+  res.json(news)
+})
+
+app.post('/api/news', (req, res) => {
+  const { title, content } = req.body
+  if (!title || !content) return res.status(400).json({ error: 'Title and content required' })
+  const result = db.prepare('INSERT INTO news (title, content) VALUES (?, ?)').run(title, content)
+  const post = db.prepare('SELECT * FROM news WHERE id = ?').get(result.lastInsertRowid)
+  io.emit('news:updated')
+  res.status(201).json(post)
+})
+
+app.put('/api/news/:id', (req, res) => {
+  const post = db.prepare('SELECT * FROM news WHERE id = ?').get(req.params.id)
+  if (!post) return res.status(404).json({ error: 'Post not found' })
+  const { title, content } = req.body
+  db.prepare('UPDATE news SET title = ?, content = ? WHERE id = ?')
+    .run(title ?? post.title, content ?? post.content, req.params.id)
+  io.emit('news:updated')
+  res.json(db.prepare('SELECT * FROM news WHERE id = ?').get(req.params.id))
+})
+
+app.delete('/api/news/:id', (req, res) => {
+  db.prepare('DELETE FROM news WHERE id = ?').run(req.params.id)
+  io.emit('news:updated')
+  res.json({ ok: true })
+})
+
 // ─── REST API: Auction State ──────────────────────────────
 
 app.get('/api/auction', (req, res) => {
