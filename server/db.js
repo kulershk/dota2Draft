@@ -95,7 +95,7 @@ export async function initDb() {
       maxBid: '0',
       nominationOrder: 'normal',
       requireAllOnline: 'true',
-      allowSteamRegistration: 'false',
+      allowSteamRegistration: 'true',
       adminPassword: 'admin',
     }
     for (const [key, value] of Object.entries(defaults)) {
@@ -107,27 +107,6 @@ export async function initDb() {
   const hasAdminPw = await queryOne("SELECT 1 FROM settings WHERE key = 'adminPassword'")
   if (!hasAdminPw) {
     await execute("INSERT INTO settings (key, value) VALUES ('adminPassword', 'admin')")
-  }
-
-  // Seed default captains if empty
-  const captainCount = await queryOne('SELECT COUNT(*) as count FROM captains')
-  if (parseInt(captainCount.count) === 0) {
-    const defaultCaptains = [
-      ['Puppey', 'Team Secret', 1000, 'Ready', 'puppey123'],
-      ['KuroKy', 'Nigma Galaxy', 1000, 'Ready', 'kuroky123'],
-      ['N0tail', 'OG Esports', 1000, 'Ready', 'n0tail123'],
-      ['Fly', 'Talon Esports', 1000, 'Ready', 'fly123'],
-      ['Cr1t-', 'Team Liquid', 1000, 'Ready', 'crit123'],
-      ['Misha', 'Team Spirit', 1000, 'Waiting', 'misha123'],
-      ['xNova', 'Xtreme Gaming', 1000, 'Waiting', 'xnova123'],
-      ['zai', 'Falcons Esports', 1000, 'Waiting', 'zai123'],
-    ]
-    for (const [name, team, budget, status, password] of defaultCaptains) {
-      await execute(
-        'INSERT INTO captains (name, team, budget, status, password) VALUES ($1, $2, $3, $4, $5)',
-        [name, team, budget, status, password]
-      )
-    }
   }
 
   // Seed auction state if empty
@@ -148,7 +127,7 @@ export async function initDb() {
     }
   }
 
-  // Add steam_id and avatar_url columns if missing
+  // Migration: add steam_id and avatar_url to players
   const hasSteamId = await queryOne(`
     SELECT 1 FROM information_schema.columns
     WHERE table_name = 'players' AND column_name = 'steam_id'
@@ -157,6 +136,41 @@ export async function initDb() {
     await execute('ALTER TABLE players ADD COLUMN steam_id TEXT DEFAULT NULL')
     await execute('ALTER TABLE players ADD COLUMN avatar_url TEXT DEFAULT NULL')
     await execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_players_steam_id ON players (steam_id) WHERE steam_id IS NOT NULL')
+  }
+
+  // Migration: add is_admin to players
+  const hasIsAdmin = await queryOne(`
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'players' AND column_name = 'is_admin'
+  `)
+  if (!hasIsAdmin) {
+    await execute('ALTER TABLE players ADD COLUMN is_admin BOOLEAN DEFAULT FALSE')
+  }
+
+  // Migration: add player_id to captains
+  const hasPlayerId = await queryOne(`
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'captains' AND column_name = 'player_id'
+  `)
+  if (!hasPlayerId) {
+    await execute('ALTER TABLE captains ADD COLUMN player_id INTEGER REFERENCES players(id) ON DELETE SET NULL')
+  }
+
+  // Migration: rename registered → in_pool (or add in_pool)
+  const hasInPool = await queryOne(`
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'players' AND column_name = 'in_pool'
+  `)
+  if (!hasInPool) {
+    const hasRegistered = await queryOne(`
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name = 'players' AND column_name = 'registered'
+    `)
+    if (hasRegistered) {
+      await execute('ALTER TABLE players RENAME COLUMN registered TO in_pool')
+    } else {
+      await execute('ALTER TABLE players ADD COLUMN in_pool BOOLEAN DEFAULT FALSE')
+    }
   }
 
   // Backfill draft_round from bid_history for already-drafted players missing it

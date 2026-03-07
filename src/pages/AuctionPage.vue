@@ -46,6 +46,7 @@ const timerDisplay = computed(() => {
 const activeCaptainId = computed(() => store.currentCaptain.value?.id ?? 0)
 const bidCooldown = ref(false)
 const canBid = computed(() => !!store.currentCaptain.value && !bidCooldown.value)
+const isLoggedIn = computed(() => !!store.currentUser.value)
 
 function startCooldown() {
   bidCooldown.value = true
@@ -55,7 +56,7 @@ function startCooldown() {
 function placeBid(increment: number) {
   if (!canBid.value) return
   const newAmount = store.auction.currentBid + increment
-  store.placeBid(activeCaptainId.value, newAmount)
+  store.placeBid(newAmount)
   startCooldown()
 }
 
@@ -109,9 +110,9 @@ const allReady = computed(() => totalCaptains.value > 0 && store.captains.value.
 function toggleReady() {
   if (!store.currentCaptain.value) return
   if (isMeReady.value) {
-    store.setUnready(store.currentCaptain.value.id)
+    store.setUnready()
   } else {
-    store.setReady(store.currentCaptain.value.id)
+    store.setReady()
   }
 }
 
@@ -322,7 +323,7 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
               <XCircle class="w-4 h-4" /> Unready
             </button>
           </div>
-          <p v-else class="text-sm text-muted-foreground italic">Login as a captain to ready up</p>
+          <p v-else class="text-sm text-muted-foreground italic">Log in as a captain to ready up</p>
           <p v-if="allReady && store.isAdmin.value" class="text-sm text-green-500 font-medium">All captains ready! You can start the draft from Setup.</p>
           <p v-else-if="!allReady" class="text-sm text-muted-foreground">Waiting for all captains to ready up...</p>
         </div>
@@ -477,7 +478,7 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
                       <Zap class="w-4 h-4" /> {{ bidCooldown ? 'Wait...' : 'Place Bid' }}
                     </button>
                   </template>
-                  <p v-else class="text-sm text-muted-foreground italic py-2">Login as a captain to place bids</p>
+                  <p v-else class="text-sm text-muted-foreground italic py-2">Log in as a captain to place bids</p>
                 </div>
               </div>
             </div>

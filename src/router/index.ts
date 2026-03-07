@@ -15,6 +15,7 @@ const router = createRouter({
       redirect: '/admin/news',
       children: [
         { path: 'draft', name: 'admin-draft', component: () => import('@/pages/SetupPage.vue') },
+        { path: 'users', name: 'admin-users', component: () => import('@/pages/admin/AdminUsersPage.vue') },
         { path: 'news', name: 'admin-news', component: () => import('@/pages/admin/AdminNewsPage.vue') },
       ],
     },

@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { Settings, Newspaper, ChevronRight } from 'lucide-vue-next'
+import { Settings, Newspaper, Users, ChevronRight } from 'lucide-vue-next'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
 
 const adminNav = [
   { label: 'News', icon: Newspaper, path: '/admin/news' },
+  { label: 'Users', icon: Users, path: '/admin/users' },
   { label: 'Draft Setup', icon: Settings, path: '/admin/draft' },
 ]
 </script>

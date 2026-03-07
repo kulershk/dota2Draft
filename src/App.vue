@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Gamepad2, Shield, Users, Gavel, Trophy, Lock, LogOut, Sun, Moon, Menu, X, Home } from 'lucide-vue-next'
+import { Gamepad2, Shield, Users, Gavel, Trophy, LogOut, Sun, Moon, Menu, X, Home, LogIn, Lock } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { onMounted, ref, computed } from 'vue'
 import { useDraftStore } from '@/composables/useDraftStore'
@@ -18,35 +18,53 @@ function toggleTheme() {
   localStorage.setItem('draft_theme', isDark.value ? 'dark' : 'light')
 }
 
-// Apply saved theme on load
 if (isDark.value) {
   document.documentElement.classList.add('dark')
 }
 
-const showLoginModal = ref(false)
-const loginTab = ref<'captain' | 'admin'>('captain')
+const showClaimAdmin = ref(false)
 const adminPassword = ref('')
-const captainName = ref('')
-const captainPassword = ref('')
-const loginError = ref('')
+const claimError = ref('')
+const showClaimAdminButton = ref(false)
 
 onMounted(async () => {
   store.initSocket()
   store.fetchAll()
 
-  // Check for auto-login token in URL first
-  const token = new URLSearchParams(window.location.search).get('token')
-  if (token) {
-    try {
-      await store.loginWithToken(token)
-      const url = new URL(window.location.href)
-      url.searchParams.delete('token')
-      window.history.replaceState({}, '', url.pathname + url.search)
-      router.push('/auction')
-      return
-    } catch {
-      // Invalid token, ignore
+  const params = new URLSearchParams(window.location.search)
+
+  // Show claim admin button only if ?admin is in URL
+  if (params.has('admin')) {
+    showClaimAdminButton.value = true
+    const url = new URL(window.location.href)
+    url.searchParams.delete('admin')
+    window.history.replaceState({}, '', url.pathname + url.search)
+  }
+
+  // Check for authToken in URL (Steam login callback)
+  const authToken = params.get('authToken')
+  const steamError = params.get('steam_error')
+
+  if (authToken) {
+    await store.loginWithAuthToken(authToken)
+    const url = new URL(window.location.href)
+    url.searchParams.delete('authToken')
+    window.history.replaceState({}, '', url.pathname + url.search)
+    return
+  }
+
+  if (steamError) {
+    const errorMessages: Record<string, string> = {
+      registration_disabled: 'Registration is currently closed.',
+      validation_failed: 'Steam authentication failed.',
+      invalid_id: 'Could not verify Steam identity.',
+      server_error: 'Server error during authentication.',
     }
+    store.error.value = errorMessages[steamError] || 'Steam login failed.'
+    const url = new URL(window.location.href)
+    url.searchParams.delete('steam_error')
+    window.history.replaceState({}, '', url.pathname + url.search)
+    return
   }
 
   // Restore previous session
@@ -62,56 +80,35 @@ const navItems = computed(() => [
 
 const mobileMenuOpen = ref(false)
 
-const isLoggedIn = computed(() => store.isAdmin.value || !!store.currentCaptain.value)
+const isLoggedIn = computed(() => !!store.currentUser.value)
 
 const userRoleLabel = computed(() => {
-  if (store.currentCaptain.value && store.isAdmin.value) return 'Captain (Admin)'
-  if (store.isAdmin.value) return 'Admin'
-  if (store.currentCaptain.value) return 'Captain'
-  return 'Viewer'
+  if (!store.currentUser.value) return 'Spectator'
+  const parts: string[] = []
+  if (store.currentUser.value.captain) parts.push('Captain')
+  if (store.currentUser.value.is_admin) parts.push('Admin')
+  return parts.length > 0 ? parts.join(' / ') : 'Player'
 })
 
-const userNameLabel = computed(() => {
-  if (store.currentCaptain.value) return store.currentCaptain.value.name
-  if (store.isAdmin.value) return 'Lobby Host'
-  return 'Spectator'
-})
-
-function openLoginModal() {
-  loginError.value = ''
-  adminPassword.value = ''
-  captainName.value = ''
-  captainPassword.value = ''
-  showLoginModal.value = true
-}
-
-async function handleLogin() {
-  loginError.value = ''
-  try {
-    if (loginTab.value === 'admin') {
-      await store.loginAdmin(adminPassword.value)
-      adminPassword.value = ''
-      showLoginModal.value = false
-      router.push('/admin')
-    } else {
-      await store.loginCaptain(captainName.value, captainPassword.value)
-      captainName.value = ''
-      captainPassword.value = ''
-      showLoginModal.value = false
-      router.push('/auction')
-    }
-  } catch {
-    loginError.value = loginTab.value === 'admin' ? 'Invalid admin password' : 'Invalid captain name or password'
-  }
+function loginWithSteam() {
+  window.location.href = '/api/auth/steam'
 }
 
 function handleLogout() {
-  if (store.currentCaptain.value) {
-    store.logoutCaptain()
-  }
-  store.logoutAdmin()
+  store.logout()
   if (route.path.startsWith('/admin')) {
     router.push('/')
+  }
+}
+
+async function handleClaimAdmin() {
+  claimError.value = ''
+  try {
+    await store.claimAdmin(adminPassword.value)
+    adminPassword.value = ''
+    showClaimAdmin.value = false
+  } catch {
+    claimError.value = 'Invalid admin password'
   }
 }
 </script>
@@ -151,13 +148,25 @@ function handleLogout() {
             <Shield class="w-3.5 h-3.5" />
             Admin
           </router-link>
-          <span class="text-xs text-muted-foreground hidden sm:inline">{{ userRoleLabel }}: {{ userNameLabel }}</span>
+          <!-- Claim Admin button (logged in, not admin) -->
+          <button v-if="isLoggedIn && !store.isAdmin.value && showClaimAdminButton" class="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors" @click="showClaimAdmin = true">
+            <Lock class="w-3.5 h-3.5" />
+            Claim Admin
+          </button>
+          <!-- User info -->
+          <template v-if="isLoggedIn">
+            <div class="flex items-center gap-2 hidden sm:flex">
+              <img v-if="store.currentUser.value?.avatar_url" :src="store.currentUser.value.avatar_url" class="w-6 h-6 rounded-full" />
+              <span class="text-xs text-muted-foreground">{{ userRoleLabel }}: {{ store.currentUser.value?.name }}</span>
+            </div>
+          </template>
           <button class="p-1.5 rounded hover:bg-accent" :title="isDark ? 'Light mode' : 'Dark mode'" @click="toggleTheme">
             <Moon v-if="!isDark" class="w-4 h-4 text-muted-foreground" />
             <Sun v-else class="w-4 h-4 text-muted-foreground" />
           </button>
-          <button v-if="!isLoggedIn" class="p-1.5 rounded hover:bg-accent" title="Login" @click="openLoginModal">
-            <Lock class="w-4 h-4 text-muted-foreground" />
+          <button v-if="!isLoggedIn" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors" @click="loginWithSteam">
+            <LogIn class="w-3.5 h-3.5" />
+            Login with Steam
           </button>
           <button v-else class="p-1.5 rounded hover:bg-accent" title="Logout" @click="handleLogout">
             <LogOut class="w-4 h-4 text-muted-foreground" />
@@ -196,6 +205,10 @@ function handleLogout() {
           <Shield class="w-[18px] h-[18px]" />
           Admin Panel
         </router-link>
+        <button v-if="!isLoggedIn" class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-sidebar-foreground hover:bg-accent" @click="loginWithSteam(); mobileMenuOpen = false">
+          <LogIn class="w-[18px] h-[18px]" />
+          Login with Steam
+        </button>
       </nav>
     </header>
 
@@ -204,41 +217,22 @@ function handleLogout() {
       <router-view />
     </main>
 
-    <!-- Login Modal -->
-    <ModalOverlay :show="showLoginModal" @close="showLoginModal = false">
+    <!-- Claim Admin Modal -->
+    <ModalOverlay :show="showClaimAdmin" @close="showClaimAdmin = false">
       <div class="border-b border-border px-7 py-6">
-        <h2 class="text-xl font-semibold text-foreground">Login</h2>
-        <p class="text-sm text-muted-foreground mt-1">Sign in as a captain to bid, or as admin to manage the draft.</p>
+        <h2 class="text-xl font-semibold text-foreground">Claim Admin Access</h2>
+        <p class="text-sm text-muted-foreground mt-1">Enter the admin password to get admin privileges.</p>
       </div>
-      <!-- Tabs -->
-      <div class="flex border-b border-border">
-        <button
-          class="flex-1 py-3 text-sm font-medium text-center transition-colors"
-          :class="loginTab === 'captain' ? 'text-primary border-b-2 border-primary' : 'text-muted-foreground hover:text-foreground'"
-          @click="loginTab = 'captain'; loginError = ''"
-        >Captain</button>
-        <button
-          class="flex-1 py-3 text-sm font-medium text-center transition-colors"
-          :class="loginTab === 'admin' ? 'text-primary border-b-2 border-primary' : 'text-muted-foreground hover:text-foreground'"
-          @click="loginTab = 'admin'; loginError = ''"
-        >Admin</button>
-      </div>
-      <form class="px-7 py-5 flex flex-col gap-5" @submit.prevent="handleLogin">
-        <template v-if="loginTab === 'captain'">
-          <InputGroup label="Captain Name" :model-value="captainName" placeholder="e.g. Puppey" @update:model-value="captainName = $event" />
-          <InputGroup label="Password" :model-value="captainPassword" placeholder="••••••••" type="password" @update:model-value="captainPassword = $event" />
-        </template>
-        <template v-else>
-          <InputGroup label="Admin Password" :model-value="adminPassword" placeholder="••••••••" type="password" @update:model-value="adminPassword = $event" />
-        </template>
-        <p v-if="loginError" class="text-sm text-red-500">{{ loginError }}</p>
+      <form class="px-7 py-5 flex flex-col gap-5" @submit.prevent="handleClaimAdmin">
+        <InputGroup label="Admin Password" :model-value="adminPassword" placeholder="Enter admin password" type="password" @update:model-value="adminPassword = $event" />
+        <p v-if="claimError" class="text-sm text-red-500">{{ claimError }}</p>
       </form>
       <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
-        <button class="btn-primary w-full justify-center" @click="handleLogin">
-          <Lock class="w-4 h-4" />
-          {{ loginTab === 'captain' ? 'Login as Captain' : 'Login as Admin' }}
+        <button class="btn-primary w-full justify-center" @click="handleClaimAdmin">
+          <Shield class="w-4 h-4" />
+          Claim Admin
         </button>
-        <button class="btn-secondary w-full justify-center" @click="showLoginModal = false">
+        <button class="btn-secondary w-full justify-center" @click="showClaimAdmin = false">
           Cancel
         </button>
       </div>

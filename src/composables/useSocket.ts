@@ -1,12 +1,12 @@
 import { io, Socket } from 'socket.io-client'
-import { ref, onUnmounted } from 'vue'
 
 let socket: Socket | null = null
 let serverTimeOffset = 0
 
 export function getSocket(): Socket {
   if (!socket) {
-    socket = io()
+    const token = localStorage.getItem('draft_auth_token') || ''
+    socket = io({ auth: { token } })
     // Sync time with server
     socket.on('server:time', (serverTime: number) => {
       serverTimeOffset = serverTime - Date.now()
@@ -16,6 +16,14 @@ export function getSocket(): Socket {
     })
   }
   return socket
+}
+
+export function reconnectSocket() {
+  if (socket) {
+    socket.disconnect()
+    socket = null
+  }
+  return getSocket()
 }
 
 export function getServerNow(): number {

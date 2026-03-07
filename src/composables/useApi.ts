@@ -1,6 +1,13 @@
+function getAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const token = localStorage.getItem('draft_auth_token')
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  return headers
+}
+
 async function request(path: string, options?: RequestInit) {
   const res = await fetch(path, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders(),
     ...options,
   })
   if (!res.ok) {
@@ -13,14 +20,21 @@ async function request(path: string, options?: RequestInit) {
 export function useApi() {
   return {
     // Auth
-    loginAdmin: (password: string) =>
-      request('/api/auth/admin', { method: 'POST', body: JSON.stringify({ password }) }),
-    loginCaptain: (name: string, password: string) =>
-      request('/api/auth/captain', { method: 'POST', body: JSON.stringify({ name, password }) }),
-    loginWithToken: (token: string) =>
-      request('/api/auth/token', { method: 'POST', body: JSON.stringify({ token }) }),
-    getCaptainLoginToken: (id: number) =>
-      request(`/api/captains/${id}/login-token`),
+    getMe: () => request('/api/auth/me'),
+    claimAdmin: (password: string) =>
+      request('/api/auth/claim-admin', { method: 'POST', body: JSON.stringify({ password }) }),
+    logout: () => request('/api/auth/logout', { method: 'POST' }),
+
+    // Player pool self-registration
+    registerPlayer: (data: { roles: string[]; mmr?: number; info?: string }) =>
+      request('/api/players/register', { method: 'POST', body: JSON.stringify(data) }),
+
+    // Users (all Steam accounts - admin)
+    getUsers: () => request('/api/users'),
+    addUserToPool: (id: number) =>
+      request(`/api/users/${id}/add-to-pool`, { method: 'POST', body: '{}' }),
+    removeUserFromPool: (id: number) =>
+      request(`/api/users/${id}/remove-from-pool`, { method: 'POST', body: '{}' }),
 
     // Settings
     getSettings: () => request('/api/settings'),
@@ -28,25 +42,19 @@ export function useApi() {
 
     // Captains
     getCaptains: () => request('/api/captains'),
-    createCaptain: (data: { name: string; team: string; budget?: number; password?: string }) =>
-      request('/api/captains', { method: 'POST', body: JSON.stringify(data) }),
+    promoteToCaptain: (data: { playerId: number; team: string }) =>
+      request('/api/captains/promote', { method: 'POST', body: JSON.stringify(data) }),
     updateCaptain: (id: number, data: Record<string, any>) =>
       request(`/api/captains/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    deleteCaptain: (id: number) =>
-      request(`/api/captains/${id}`, { method: 'DELETE' }),
+    demoteCaptain: (id: number) =>
+      request(`/api/captains/${id}/demote`, { method: 'POST' }),
 
     // Players
     getPlayers: () => request('/api/players'),
-    createPlayer: (data: { name: string; roles: string[]; mmr?: number; info?: string }) =>
-      request('/api/players', { method: 'POST', body: JSON.stringify(data) }),
     updatePlayer: (id: number, data: Record<string, any>) =>
       request(`/api/players/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     deletePlayer: (id: number) =>
       request(`/api/players/${id}`, { method: 'DELETE' }),
-    getSteamProfile: (token: string) =>
-      request(`/api/auth/steam/profile?token=${token}`),
-    registerPlayer: (data: { token: string; roles: string[]; mmr?: number; info?: string }) =>
-      request('/api/players/register', { method: 'POST', body: JSON.stringify(data) }),
 
     // Auction
     getAuction: () => request('/api/auction'),

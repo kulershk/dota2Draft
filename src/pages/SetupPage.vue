@@ -1,30 +1,34 @@
 <script setup lang="ts">
-import { Settings, DollarSign, Users, UserPlus, RotateCcw, Play, Trash2, Wifi, Pencil, Link } from 'lucide-vue-next'
+import { Settings, DollarSign, Users, UserPlus, RotateCcw, Play, Trash2, Wifi, Pencil, ArrowDown } from 'lucide-vue-next'
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDraftStore } from '@/composables/useDraftStore'
-import { useApi } from '@/composables/useApi'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 import InputGroup from '@/components/common/InputGroup.vue'
 import CaptainAvatar from '@/components/common/CaptainAvatar.vue'
 
 const store = useDraftStore()
-const api = useApi()
 const router = useRouter()
-const copiedId = ref<number | null>(null)
-const showAddCaptain = ref(false)
+const showPromote = ref(false)
 const showEditCaptain = ref(false)
 const showResetConfirm = ref(false)
 const saving = ref(false)
 
-const newCaptain = ref({ name: '', team: '', budget: 1000, password: '', mmr: 0, is_admin: false })
-const editCaptain = ref({ id: 0, name: '', team: '', budget: 1000, password: '', mmr: 0, is_admin: false })
+const promotePlayerId = ref<number | null>(null)
+const promoteTeam = ref('')
+const editCaptain = ref({ id: 0, team: '', budget: 1000 })
 
-async function addCaptain() {
-  if (!newCaptain.value.name || !newCaptain.value.team) return
-  await store.addCaptain(newCaptain.value)
-  newCaptain.value = { name: '', team: '', budget: 1000, password: '', mmr: 0, is_admin: false }
-  showAddCaptain.value = false
+// Players eligible for promotion (Steam-registered, not already captains)
+const promotablePlayers = computed(() =>
+  store.players.value.filter(p => p.steam_id && !p.is_captain)
+)
+
+async function handlePromote() {
+  if (!promotePlayerId.value || !promoteTeam.value) return
+  await store.promoteToCaptain(promotePlayerId.value, promoteTeam.value)
+  promotePlayerId.value = null
+  promoteTeam.value = ''
+  showPromote.value = false
 }
 
 async function saveSettings() {
@@ -39,29 +43,16 @@ function startDraft() {
 }
 
 function openEditCaptain(captain: any) {
-  editCaptain.value = { id: captain.id, name: captain.name, team: captain.team, budget: captain.budget, password: '', mmr: captain.mmr || 0, is_admin: !!captain.is_admin }
+  editCaptain.value = { id: captain.id, team: captain.team, budget: captain.budget }
   showEditCaptain.value = true
 }
 
 async function saveCaptain() {
-  const data: Record<string, any> = {
-    name: editCaptain.value.name,
+  await store.updateCaptain(editCaptain.value.id, {
     team: editCaptain.value.team,
     budget: editCaptain.value.budget,
-    mmr: editCaptain.value.mmr,
-    is_admin: editCaptain.value.is_admin,
-  }
-  if (editCaptain.value.password) data.password = editCaptain.value.password
-  await store.updateCaptain(editCaptain.value.id, data)
+  })
   showEditCaptain.value = false
-}
-
-async function copyLoginLink(captainId: number) {
-  const { token } = await api.getCaptainLoginToken(captainId)
-  const url = `${window.location.origin}/auction?token=${token}`
-  await navigator.clipboard.writeText(url)
-  copiedId.value = captainId
-  setTimeout(() => { copiedId.value = null }, 2000)
 }
 
 function formatGold(amount: number) {
@@ -156,9 +147,9 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
             {{ readyCount }}/{{ store.captains.value.length }} ready
           </span>
         </div>
-        <button class="btn-primary text-sm" @click="showAddCaptain = true">
+        <button class="btn-primary text-sm" @click="showPromote = true" :disabled="promotablePlayers.length === 0">
           <UserPlus class="w-4 h-4" />
-          Add Captain
+          Promote to Captain
         </button>
       </div>
 
@@ -183,9 +174,9 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
               <td class="px-4 py-3 text-muted-foreground">{{ String(i + 1).padStart(2, '0') }}</td>
               <td class="px-4 py-3">
                 <div class="flex items-center gap-2.5">
-                  <CaptainAvatar :name="captain.name" :online="isCaptainOnline(captain.id)" />
+                  <img v-if="captain.avatar_url" :src="captain.avatar_url" class="w-8 h-8 rounded-full" />
+                  <CaptainAvatar v-else :name="captain.name" :online="isCaptainOnline(captain.id)" />
                   <span class="font-medium text-foreground">{{ captain.name }}</span>
-                  <span v-if="captain.is_admin" class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-primary/10 text-primary">Admin</span>
                 </div>
               </td>
               <td class="px-4 py-3 text-foreground">{{ captain.team }}</td>
@@ -199,14 +190,11 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
               </td>
               <td class="px-4 py-3">
                 <div class="flex items-center gap-1">
-                  <button class="btn-ghost p-2" :title="copiedId === captain.id ? 'Copied!' : 'Copy Login Link'" @click="copyLoginLink(captain.id)">
-                    <Link class="w-4 h-4" :class="copiedId === captain.id ? 'text-green-500' : ''" />
-                  </button>
                   <button class="btn-ghost p-2" title="Edit Captain" @click="openEditCaptain(captain)">
                     <Pencil class="w-4 h-4" />
                   </button>
-                  <button class="btn-ghost p-2 text-destructive" title="Delete Captain" @click="store.deleteCaptain(captain.id)">
-                    <Trash2 class="w-4 h-4" />
+                  <button class="btn-ghost p-2 text-destructive" title="Demote to Player" @click="store.demoteCaptain(captain.id)">
+                    <ArrowDown class="w-4 h-4" />
                   </button>
                 </div>
               </td>
@@ -229,29 +217,28 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
       </button>
     </div>
 
-    <!-- Add Captain Modal -->
-    <ModalOverlay :show="showAddCaptain" @close="showAddCaptain = false">
+    <!-- Promote Player Modal -->
+    <ModalOverlay :show="showPromote" @close="showPromote = false">
       <div class="border-b border-border px-7 py-6">
-        <h2 class="text-xl font-semibold text-foreground">Add New Captain</h2>
-        <p class="text-sm text-muted-foreground mt-1">Set up a captain with their team name, budget and login credentials.</p>
+        <h2 class="text-xl font-semibold text-foreground">Promote Player to Captain</h2>
+        <p class="text-sm text-muted-foreground mt-1">Select a registered player to promote as a captain.</p>
       </div>
       <div class="px-7 py-5 flex flex-col gap-5">
-        <InputGroup label="Captain Name" :model-value="newCaptain.name" placeholder="e.g. Puppey" @update:model-value="newCaptain.name = $event" />
-        <InputGroup label="Team Name" :model-value="newCaptain.team" placeholder="e.g. Team Secret" @update:model-value="newCaptain.team = $event" />
-        <InputGroup label="Custom Budget (Gold)" :model-value="String(newCaptain.budget)" placeholder="1000" @update:model-value="newCaptain.budget = Number($event)" />
-        <InputGroup label="MMR" :model-value="String(newCaptain.mmr)" placeholder="0" @update:model-value="newCaptain.mmr = Number($event)" />
-        <InputGroup label="Login Password" :model-value="newCaptain.password" placeholder="••••••••" type="password" @update:model-value="newCaptain.password = $event" />
-        <label class="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" class="w-4 h-4 accent-primary" v-model="newCaptain.is_admin" />
-          <span class="text-sm text-foreground">Admin permissions</span>
-        </label>
+        <div class="flex flex-col gap-1.5">
+          <label class="label-text">Select Player</label>
+          <select class="input-field" :value="promotePlayerId || ''" @change="promotePlayerId = Number(($event.target as HTMLSelectElement).value) || null">
+            <option value="">Choose a player...</option>
+            <option v-for="p in promotablePlayers" :key="p.id" :value="p.id">{{ p.name }} ({{ p.mmr }} MMR)</option>
+          </select>
+        </div>
+        <InputGroup label="Team Name" :model-value="promoteTeam" placeholder="e.g. Team Secret" @update:model-value="promoteTeam = $event" />
       </div>
       <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
-        <button class="btn-primary w-full justify-center" @click="addCaptain">
+        <button class="btn-primary w-full justify-center" :disabled="!promotePlayerId || !promoteTeam" @click="handlePromote">
           <UserPlus class="w-4 h-4" />
-          Add Captain
+          Promote to Captain
         </button>
-        <button class="btn-secondary w-full justify-center" @click="showAddCaptain = false">
+        <button class="btn-secondary w-full justify-center" @click="showPromote = false">
           Cancel
         </button>
       </div>
@@ -278,18 +265,11 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
     <ModalOverlay :show="showEditCaptain" @close="showEditCaptain = false">
       <div class="border-b border-border px-7 py-6">
         <h2 class="text-xl font-semibold text-foreground">Edit Captain</h2>
-        <p class="text-sm text-muted-foreground mt-1">Update captain details. Leave password blank to keep current.</p>
+        <p class="text-sm text-muted-foreground mt-1">Update captain's team name and budget.</p>
       </div>
       <div class="px-7 py-5 flex flex-col gap-5">
-        <InputGroup label="Captain Name" :model-value="editCaptain.name" placeholder="e.g. Puppey" @update:model-value="editCaptain.name = $event" />
         <InputGroup label="Team Name" :model-value="editCaptain.team" placeholder="e.g. Team Secret" @update:model-value="editCaptain.team = $event" />
         <InputGroup label="Budget (Gold)" :model-value="String(editCaptain.budget)" placeholder="1000" @update:model-value="editCaptain.budget = Number($event)" />
-        <InputGroup label="MMR" :model-value="String(editCaptain.mmr)" placeholder="0" @update:model-value="editCaptain.mmr = Number($event)" />
-        <InputGroup label="New Password (optional)" :model-value="editCaptain.password" placeholder="Leave blank to keep current" type="password" @update:model-value="editCaptain.password = $event" />
-        <label class="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" class="w-4 h-4 accent-primary" v-model="editCaptain.is_admin" />
-          <span class="text-sm text-foreground">Admin permissions</span>
-        </label>
       </div>
       <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
         <button class="btn-primary w-full justify-center" @click="saveCaptain">
