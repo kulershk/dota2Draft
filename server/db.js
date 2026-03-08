@@ -61,6 +61,7 @@ export async function initDb() {
     ['steam_id', 'TEXT DEFAULT NULL'],
     ['avatar_url', 'TEXT DEFAULT NULL'],
     ['is_admin', 'BOOLEAN DEFAULT FALSE'],
+    ['is_banned', 'BOOLEAN DEFAULT FALSE'],
     ['in_pool', 'BOOLEAN DEFAULT FALSE'],
   ]) {
     const has = await queryOne(

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Users, Search, Shield, ShieldOff, ExternalLink } from 'lucide-vue-next'
+import { Users, Search, Shield, ShieldOff, ExternalLink, Ban, CheckCircle } from 'lucide-vue-next'
 import { ref, computed } from 'vue'
 import { useApi } from '@/composables/useApi'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
@@ -15,6 +15,7 @@ interface User {
   mmr: number
   info: string
   is_admin: boolean
+  is_banned: boolean
   created_at: string
 }
 
@@ -42,6 +43,7 @@ const filteredUsers = computed(() => {
 })
 
 const adminConfirmUser = ref<User | null>(null)
+const banConfirmUser = ref<User | null>(null)
 
 function promptToggleAdmin(user: User) {
   adminConfirmUser.value = user
@@ -51,6 +53,17 @@ async function confirmToggleAdmin() {
   if (!adminConfirmUser.value) return
   await api.updatePlayer(adminConfirmUser.value.id, { is_admin: !adminConfirmUser.value.is_admin })
   adminConfirmUser.value = null
+  await fetchUsers()
+}
+
+function promptToggleBan(user: User) {
+  banConfirmUser.value = user
+}
+
+async function confirmToggleBan() {
+  if (!banConfirmUser.value) return
+  await api.updatePlayer(banConfirmUser.value.id, { is_banned: !banConfirmUser.value.is_banned })
+  banConfirmUser.value = null
   await fetchUsers()
 }
 
@@ -71,6 +84,10 @@ function formatDate(dateStr: string) {
       <div class="card p-4">
         <p class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Total Accounts</p>
         <p class="text-3xl font-bold text-foreground mt-1">{{ users.length }}</p>
+      </div>
+      <div class="card p-4">
+        <p class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Banned</p>
+        <p class="text-3xl font-bold text-destructive mt-1">{{ users.filter(u => u.is_banned).length }}</p>
       </div>
     </div>
 
@@ -94,11 +111,11 @@ function formatDate(dateStr: string) {
               <th class="text-left px-4 py-3 font-medium text-muted-foreground">USER</th>
               <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[120px]">STATUS</th>
               <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[100px]">JOINED</th>
-              <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[100px]">ACTIONS</th>
+              <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[120px]">ACTIONS</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(user, i) in filteredUsers" :key="user.id" class="border-b border-border hover:bg-accent/30 transition-colors">
+            <tr v-for="(user, i) in filteredUsers" :key="user.id" class="border-b border-border hover:bg-accent/30 transition-colors" :class="user.is_banned ? 'opacity-60' : ''">
               <td class="px-4 py-3 text-muted-foreground">{{ String(i + 1).padStart(2, '0') }}</td>
               <td class="px-4 py-3">
                 <div class="flex items-center gap-2.5">
@@ -117,8 +134,11 @@ function formatDate(dateStr: string) {
                 </div>
               </td>
               <td class="px-4 py-3">
-                <span v-if="user.is_admin" class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-amber-500/15 text-amber-600 dark:text-amber-400 w-fit">Admin</span>
-                <span v-else class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-accent text-muted-foreground w-fit">User</span>
+                <div class="flex flex-wrap gap-1">
+                  <span v-if="user.is_banned" class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-red-500/15 text-red-600 dark:text-red-400 w-fit">Banned</span>
+                  <span v-if="user.is_admin" class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-amber-500/15 text-amber-600 dark:text-amber-400 w-fit">Admin</span>
+                  <span v-if="!user.is_admin && !user.is_banned" class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-accent text-muted-foreground w-fit">User</span>
+                </div>
               </td>
               <td class="px-4 py-3 text-muted-foreground text-xs">{{ formatDate(user.created_at) }}</td>
               <td class="px-4 py-3">
@@ -128,6 +148,12 @@ function formatDate(dateStr: string) {
                   </button>
                   <button v-else class="btn-ghost p-2 text-amber-500" title="Remove Admin" @click="promptToggleAdmin(user)">
                     <ShieldOff class="w-4 h-4" />
+                  </button>
+                  <button v-if="!user.is_banned" class="btn-ghost p-2" title="Ban User" @click="promptToggleBan(user)">
+                    <Ban class="w-4 h-4" />
+                  </button>
+                  <button v-else class="btn-ghost p-2 text-red-500" title="Unban User" @click="promptToggleBan(user)">
+                    <CheckCircle class="w-4 h-4" />
                   </button>
                 </div>
               </td>
@@ -159,6 +185,37 @@ function formatDate(dateStr: string) {
           {{ adminConfirmUser?.is_admin ? 'Remove Admin' : 'Make Admin' }}
         </button>
         <button class="btn-secondary w-full justify-center" @click="adminConfirmUser = null">
+          Cancel
+        </button>
+      </div>
+    </ModalOverlay>
+
+    <!-- Ban Confirmation Modal -->
+    <ModalOverlay :show="!!banConfirmUser" @close="banConfirmUser = null">
+      <div class="px-7 py-6">
+        <h2 class="text-xl font-semibold text-foreground">
+          {{ banConfirmUser?.is_banned ? 'Unban User' : 'Ban User' }}
+        </h2>
+        <p class="text-sm text-muted-foreground mt-2">
+          <template v-if="banConfirmUser?.is_banned">
+            Are you sure you want to <span class="font-semibold text-foreground">unban</span>
+            <span class="font-semibold text-foreground">{{ banConfirmUser?.name }}</span>?
+            They will be able to join competitions and post comments again.
+          </template>
+          <template v-else>
+            Are you sure you want to <span class="font-semibold text-destructive">ban</span>
+            <span class="font-semibold text-foreground">{{ banConfirmUser?.name }}</span>?
+            They will not be able to join competitions or post comments.
+          </template>
+        </p>
+      </div>
+      <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
+        <button :class="banConfirmUser?.is_banned ? 'btn-primary' : 'btn-destructive'" class="w-full justify-center" @click="confirmToggleBan">
+          <Ban v-if="!banConfirmUser?.is_banned" class="w-4 h-4" />
+          <CheckCircle v-else class="w-4 h-4" />
+          {{ banConfirmUser?.is_banned ? 'Unban User' : 'Ban User' }}
+        </button>
+        <button class="btn-secondary w-full justify-center" @click="banConfirmUser = null">
           Cancel
         </button>
       </div>

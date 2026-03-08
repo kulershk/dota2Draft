@@ -9,7 +9,8 @@ const router = createRouter({
       path: '/c/:compId',
       component: () => import('@/pages/CompetitionLayout.vue'),
       children: [
-        { path: '', redirect: to => ({ path: `/c/${to.params.compId}/players` }) },
+        { path: '', redirect: to => ({ path: `/c/${to.params.compId}/info` }) },
+        { path: 'info', name: 'comp-info', component: () => import('@/pages/CompetitionInfoPage.vue') },
         { path: 'players', name: 'comp-players', component: () => import('@/pages/PlayersPage.vue') },
         { path: 'auction', name: 'comp-auction', component: () => import('@/pages/AuctionPage.vue') },
         { path: 'results', name: 'comp-results', component: () => import('@/pages/ResultsPage.vue') },
@@ -30,9 +31,10 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   if (to.meta.requiresAdmin) {
     const store = useDraftStore()
+    await store.authReady
     if (!store.isAdmin.value) {
       return { name: 'home' }
     }

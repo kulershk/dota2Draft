@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Users, Gavel, Trophy } from 'lucide-vue-next'
+import { Users, Gavel, Trophy, Info } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { watch, onMounted, computed } from 'vue'
 import { useDraftStore } from '@/composables/useDraftStore'
@@ -10,6 +10,7 @@ const store = useDraftStore()
 const compId = computed(() => Number(route.params.compId))
 
 const navItems = computed(() => [
+  { label: 'Info', icon: Info, name: 'comp-info' },
   { label: 'Participants', icon: Users, name: 'comp-players' },
   { label: 'Live Auction', icon: Gavel, name: 'comp-auction' },
   { label: 'Results', icon: Trophy, name: 'comp-results' },

@@ -157,7 +157,7 @@ const isLoggedIn = computed(() => !!store.currentUser.value)
         <router-link
           v-for="comp in store.competitions.value"
           :key="comp.id"
-          :to="`/c/${comp.id}/players`"
+          :to="`/c/${comp.id}/info`"
           class="flex items-center justify-between px-4 py-4 md:px-6 md:py-5 hover:bg-accent/30 transition-colors"
         >
           <div class="flex items-center gap-4">

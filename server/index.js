@@ -631,7 +631,21 @@ app.get('/api/competitions/:compId/players', async (req, res) => {
 app.post('/api/competitions/:compId/players/register', async (req, res) => {
   const player = await getAuthPlayer(req)
   if (!player) return res.status(401).json({ error: 'Not authenticated' })
+  if (player.is_banned) return res.status(403).json({ error: 'Your account has been banned' })
   const compId = Number(req.params.compId)
+
+  // Check registration window (admins bypass)
+  if (!player.is_admin) {
+    const comp = await getCompetition(compId)
+    if (!comp) return res.status(404).json({ error: 'Competition not found' })
+    const now = new Date()
+    if (comp.registration_start && new Date(comp.registration_start) > now) {
+      return res.status(403).json({ error: 'Registration has not opened yet' })
+    }
+    if (comp.registration_end && new Date(comp.registration_end) < now) {
+      return res.status(403).json({ error: 'Registration has closed' })
+    }
+  }
 
   const existing = await queryOne(
     'SELECT * FROM competition_players WHERE competition_id = $1 AND player_id = $2',
@@ -892,6 +906,7 @@ app.get('/api/users', async (req, res) => {
     mmr: p.mmr,
     info: p.info || '',
     is_admin: !!p.is_admin,
+    is_banned: !!p.is_banned,
     created_at: p.created_at,
   })))
 })
@@ -902,15 +917,16 @@ app.put('/api/players/:id', async (req, res) => {
 
   const player = await queryOne('SELECT * FROM players WHERE id = $1', [req.params.id])
   if (!player) return res.status(404).json({ error: 'Player not found' })
-  const { name, roles, mmr, info, is_admin } = req.body
+  const { name, roles, mmr, info, is_admin, is_banned } = req.body
   await execute(
-    'UPDATE players SET name = $1, roles = $2, mmr = $3, info = $4, is_admin = $5 WHERE id = $6',
+    'UPDATE players SET name = $1, roles = $2, mmr = $3, info = $4, is_admin = $5, is_banned = $6 WHERE id = $7',
     [
       name ?? player.name,
       roles ? JSON.stringify(roles) : player.roles,
       mmr ?? player.mmr,
       info ?? player.info,
       is_admin !== undefined ? is_admin : player.is_admin,
+      is_banned !== undefined ? is_banned : !!player.is_banned,
       req.params.id,
     ]
   )
@@ -984,6 +1000,7 @@ app.get('/api/news/:newsId/comments', async (req, res) => {
 app.post('/api/news/:newsId/comments', async (req, res) => {
   const player = await getAuthPlayer(req)
   if (!player) return res.status(401).json({ error: 'Login required' })
+  if (player.is_banned) return res.status(403).json({ error: 'Your account has been banned' })
   const { content } = req.body
   if (!content || !content.trim()) return res.status(400).json({ error: 'Comment cannot be empty' })
   const newsPost = await queryOne('SELECT id FROM news WHERE id = $1', [req.params.newsId])

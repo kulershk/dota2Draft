@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Settings, DollarSign, Users, UserPlus, RotateCcw, Play, Pencil, ArrowDown, Wifi, ArrowLeft } from 'lucide-vue-next'
+import { Settings, DollarSign, Users, UserPlus, RotateCcw, Play, Pencil, ArrowDown, Wifi, ArrowLeft, Plus, Trash2, Search } from 'lucide-vue-next'
 import { ref, computed, onMounted, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useApi } from '@/composables/useApi'
@@ -19,7 +19,9 @@ const compId = computed(() => Number(route.params.compId))
 const showPromote = ref(false)
 const showEditCaptain = ref(false)
 const showResetConfirm = ref(false)
+const showAddParticipant = ref(false)
 const saving = ref(false)
+const participantSearchQuery = ref('')
 
 const compName = ref('')
 const compDescription = ref('')
@@ -66,6 +68,34 @@ const promotablePlayers = computed(() => {
   const captainPlayerIds = store.captains.value.map(c => c.player_id).filter(Boolean)
   return allUsers.value.filter(u => u.steam_id && !captainPlayerIds.includes(u.id))
 })
+
+// Users that can be added as participants (not already in pool, not captains, not banned)
+const addableUsers = computed(() => {
+  const poolPlayerIds = store.players.value.map(p => p.id || 0)
+  const captainPlayerIds = store.captains.value.map(c => c.player_id).filter(Boolean)
+  let list = allUsers.value.filter(u => u.steam_id && !u.is_banned && !poolPlayerIds.includes(u.id) && !captainPlayerIds.includes(u.id))
+  if (participantSearchQuery.value) {
+    const q = participantSearchQuery.value.toLowerCase()
+    list = list.filter(u => u.name.toLowerCase().includes(q))
+  }
+  return list
+})
+
+async function addParticipant(userId: number) {
+  await api.addUserToCompPool(compId.value, userId)
+  await store.fetchCompData()
+}
+
+async function removeParticipant(playerId: number) {
+  await api.deleteCompPlayer(compId.value, playerId)
+  await store.fetchCompData()
+}
+
+function promptPromoteParticipant(player: any) {
+  promotePlayerId.value = player.id
+  promoteTeam.value = ''
+  showPromote.value = true
+}
 
 async function handlePromote() {
   if (!promotePlayerId.value || !promoteTeam.value) return
@@ -247,7 +277,10 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
         </button>
       </div>
 
-      <div class="overflow-x-auto">
+      <div v-if="store.captains.value.length === 0" class="px-4 py-8 text-center text-sm text-muted-foreground">
+        No captains yet. Promote a participant or any registered user.
+      </div>
+      <div v-else class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead>
             <tr class="border-b border-border bg-accent/50">
@@ -283,6 +316,63 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
                   </button>
                   <button class="btn-ghost p-2 text-destructive" title="Demote to Player" @click="handleDemote(captain.id)">
                     <ArrowDown class="w-4 h-4" />
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Participants -->
+    <div class="card">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-3 border-b border-border">
+        <div class="flex items-center gap-2">
+          <Users class="w-5 h-5 text-foreground" />
+          <span class="text-sm font-semibold text-foreground">Participants ({{ store.players.value.filter(p => !p.is_captain).length }})</span>
+        </div>
+        <button class="btn-primary text-sm" @click="showAddParticipant = true">
+          <Plus class="w-4 h-4" />
+          Add Participant
+        </button>
+      </div>
+
+      <div v-if="store.players.value.filter(p => !p.is_captain).length === 0" class="px-4 py-8 text-center text-sm text-muted-foreground">
+        No participants yet. Add users or let them self-register.
+      </div>
+      <div v-else class="overflow-x-auto max-h-[400px] overflow-y-auto">
+        <table class="w-full text-sm">
+          <thead class="sticky top-0 bg-card">
+            <tr class="border-b border-border bg-accent/50">
+              <th class="text-left px-4 py-2.5 font-medium text-muted-foreground w-[40px]">#</th>
+              <th class="text-left px-4 py-2.5 font-medium text-muted-foreground">PLAYER</th>
+              <th class="text-left px-4 py-2.5 font-medium text-muted-foreground">ROLES</th>
+              <th class="text-left px-4 py-2.5 font-medium text-muted-foreground w-[80px]">MMR</th>
+              <th class="text-left px-4 py-2.5 font-medium text-muted-foreground w-[100px]">ACTIONS</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(player, i) in store.players.value.filter(p => !p.is_captain)" :key="player.id" class="border-b border-border hover:bg-accent/30 transition-colors">
+              <td class="px-4 py-2.5 text-muted-foreground text-xs">{{ String(i + 1).padStart(2, '0') }}</td>
+              <td class="px-4 py-2.5">
+                <div class="flex items-center gap-2">
+                  <img v-if="player.avatar_url" :src="player.avatar_url" class="w-6 h-6 rounded-full" />
+                  <div v-else class="w-6 h-6 rounded-full bg-secondary flex items-center justify-center text-[10px] font-semibold text-secondary-foreground">
+                    {{ player.name.charAt(0) }}
+                  </div>
+                  <span class="text-sm font-medium text-foreground">{{ player.name }}</span>
+                </div>
+              </td>
+              <td class="px-4 py-2.5 text-xs text-muted-foreground">{{ (player.roles || []).join(', ') || '—' }}</td>
+              <td class="px-4 py-2.5 text-xs text-muted-foreground">{{ player.mmr || 0 }}</td>
+              <td class="px-4 py-2.5">
+                <div class="flex items-center gap-1">
+                  <button class="btn-ghost p-1.5" title="Promote to Captain" @click="promptPromoteParticipant(player)">
+                    <UserPlus class="w-3.5 h-3.5" />
+                  </button>
+                  <button class="btn-ghost p-1.5 text-destructive" title="Remove" @click="removeParticipant(player.id)">
+                    <Trash2 class="w-3.5 h-3.5" />
                   </button>
                 </div>
               </td>
@@ -344,6 +434,44 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
           Yes, Reset Everything
         </button>
         <button class="btn-secondary w-full justify-center" @click="showResetConfirm = false">Cancel</button>
+      </div>
+    </ModalOverlay>
+
+    <!-- Add Participant Modal -->
+    <ModalOverlay :show="showAddParticipant" @close="showAddParticipant = false; participantSearchQuery = ''">
+      <div class="border-b border-border px-7 py-6">
+        <h2 class="text-xl font-semibold text-foreground">Add Participant</h2>
+        <p class="text-sm text-muted-foreground mt-1">Select registered users to add as participants in this competition.</p>
+      </div>
+      <div class="px-7 py-5 flex flex-col gap-4">
+        <div class="relative">
+          <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input v-model="participantSearchQuery" type="text" placeholder="Search users..." class="input-field pl-9 w-full" />
+        </div>
+        <div class="max-h-[300px] overflow-y-auto border border-border rounded-lg divide-y divide-border">
+          <div v-if="addableUsers.length === 0" class="px-4 py-6 text-center text-sm text-muted-foreground">
+            {{ participantSearchQuery ? 'No matching users found.' : 'All users are already participants or captains.' }}
+          </div>
+          <div v-for="user in addableUsers" :key="user.id" class="flex items-center justify-between px-4 py-2.5 hover:bg-accent/30 transition-colors">
+            <div class="flex items-center gap-2.5">
+              <img v-if="user.avatar_url" :src="user.avatar_url" class="w-7 h-7 rounded-full" />
+              <div v-else class="w-7 h-7 rounded-full bg-secondary flex items-center justify-center text-[10px] font-semibold text-secondary-foreground">
+                {{ user.name.charAt(0) }}
+              </div>
+              <div>
+                <span class="text-sm font-medium text-foreground">{{ user.name }}</span>
+                <span v-if="user.mmr" class="text-xs text-muted-foreground ml-2">{{ user.mmr }} MMR</span>
+              </div>
+            </div>
+            <button class="btn-primary text-xs py-1 px-2.5" @click="addParticipant(user.id)">
+              <Plus class="w-3 h-3" />
+              Add
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="px-7 py-4 border-t border-border">
+        <button class="btn-secondary w-full justify-center" @click="showAddParticipant = false; participantSearchQuery = ''">Close</button>
       </div>
     </ModalOverlay>
 

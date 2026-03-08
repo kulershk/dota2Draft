@@ -24,6 +24,28 @@ function loginWithSteam() {
   window.location.href = '/api/auth/steam'
 }
 
+const registrationOpen = computed(() => {
+  const comp = store.currentCompetition.value
+  if (!comp) return false
+  const now = new Date()
+  if (comp.registration_start && new Date(comp.registration_start) > now) return false
+  if (comp.registration_end && new Date(comp.registration_end) < now) return false
+  return true
+})
+
+const registrationStatus = computed(() => {
+  const comp = store.currentCompetition.value
+  if (!comp) return ''
+  const now = new Date()
+  if (comp.registration_start && new Date(comp.registration_start) > now) {
+    return 'Registration opens ' + new Date(comp.registration_start).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  }
+  if (comp.registration_end && new Date(comp.registration_end) < now) {
+    return 'Registration closed'
+  }
+  return ''
+})
+
 function toggleRegisterRole(role: string) {
   const idx = registerRoles.value.indexOf(role)
   if (idx >= 0) registerRoles.value.splice(idx, 1)
@@ -176,14 +198,20 @@ const filteredPlayers = computed(() => {
             <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input v-model="searchQuery" type="text" placeholder="Search..." class="input-field pl-9 w-full sm:w-56" />
           </div>
-          <button v-if="store.currentUser.value && !store.compUser.value?.in_pool && !store.compUser.value?.captain" class="btn-primary text-sm flex-shrink-0" @click="openRegister">
-            <UserPlus class="w-4 h-4" />
-            <span class="hidden sm:inline">Join as Participant</span>
-          </button>
-          <button v-else-if="!store.currentUser.value && store.settings.allowSteamRegistration" class="btn-primary text-sm flex-shrink-0" @click="loginWithSteam">
-            <LogIn class="w-4 h-4" />
-            <span class="hidden sm:inline">Login to Join</span>
-          </button>
+          <template v-if="store.currentUser.value && !store.compUser.value?.in_pool && !store.compUser.value?.captain">
+            <button v-if="registrationOpen || store.isAdmin.value" class="btn-primary text-sm flex-shrink-0" @click="openRegister">
+              <UserPlus class="w-4 h-4" />
+              <span class="hidden sm:inline">Join as Participant</span>
+            </button>
+            <span v-else-if="registrationStatus" class="text-xs text-muted-foreground italic flex-shrink-0">{{ registrationStatus }}</span>
+          </template>
+          <template v-else-if="!store.currentUser.value && store.settings.allowSteamRegistration">
+            <button v-if="registrationOpen" class="btn-primary text-sm flex-shrink-0" @click="loginWithSteam">
+              <LogIn class="w-4 h-4" />
+              <span class="hidden sm:inline">Login to Join</span>
+            </button>
+            <span v-else-if="registrationStatus" class="text-xs text-muted-foreground italic flex-shrink-0">{{ registrationStatus }}</span>
+          </template>
         </div>
       </div>
 

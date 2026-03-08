@@ -455,6 +455,7 @@ export function useDraftStore() {
     availablePlayers,
     roleCounts,
     // Auth
+    authReady,
     restoreAuth,
     loginWithAuthToken,
     claimAdmin,
