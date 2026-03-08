@@ -5,16 +5,24 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', name: 'home', component: () => import('@/pages/HomePage.vue') },
-    { path: '/players', name: 'players', component: () => import('@/pages/PlayersPage.vue') },
-    { path: '/auction', name: 'auction', component: () => import('@/pages/AuctionPage.vue') },
-    { path: '/results', name: 'results', component: () => import('@/pages/ResultsPage.vue') },
+    {
+      path: '/c/:compId',
+      component: () => import('@/pages/CompetitionLayout.vue'),
+      children: [
+        { path: '', redirect: to => ({ path: `/c/${to.params.compId}/players` }) },
+        { path: 'players', name: 'comp-players', component: () => import('@/pages/PlayersPage.vue') },
+        { path: 'auction', name: 'comp-auction', component: () => import('@/pages/AuctionPage.vue') },
+        { path: 'results', name: 'comp-results', component: () => import('@/pages/ResultsPage.vue') },
+      ],
+    },
     {
       path: '/admin',
       component: () => import('@/pages/admin/AdminLayout.vue'),
       meta: { requiresAdmin: true },
-      redirect: '/admin/news',
+      redirect: '/admin/competitions',
       children: [
-        { path: 'draft', name: 'admin-draft', component: () => import('@/pages/SetupPage.vue') },
+        { path: 'competitions', name: 'admin-competitions', component: () => import('@/pages/admin/AdminCompetitionsPage.vue') },
+        { path: 'competitions/:compId', name: 'admin-competition-setup', component: () => import('@/pages/admin/AdminCompetitionSetupPage.vue') },
         { path: 'users', name: 'admin-users', component: () => import('@/pages/admin/AdminUsersPage.vue') },
         { path: 'news', name: 'admin-news', component: () => import('@/pages/admin/AdminNewsPage.vue') },
       ],

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Gamepad2, Shield, Users, Gavel, Trophy, LogOut, Sun, Moon, Menu, X, Home, LogIn, Lock } from 'lucide-vue-next'
+import { Gamepad2, Shield, LogOut, Sun, Moon, Menu, X, Home, LogIn, Lock } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { onMounted, ref, computed } from 'vue'
 import { useDraftStore } from '@/composables/useDraftStore'
@@ -29,11 +29,10 @@ const showClaimAdminButton = ref(false)
 
 onMounted(async () => {
   store.initSocket()
-  store.fetchAll()
+  store.fetchCompetitions()
 
   const params = new URLSearchParams(window.location.search)
 
-  // Show claim admin button only if ?admin is in URL
   if (params.has('admin')) {
     showClaimAdminButton.value = true
     const url = new URL(window.location.href)
@@ -41,7 +40,6 @@ onMounted(async () => {
     window.history.replaceState({}, '', url.pathname + url.search)
   }
 
-  // Check for authToken in URL (Steam login callback)
   const authToken = params.get('authToken')
   const steamError = params.get('steam_error')
 
@@ -67,15 +65,11 @@ onMounted(async () => {
     return
   }
 
-  // Restore previous session
   await store.restoreAuth()
 })
 
 const navItems = computed(() => [
   { label: 'Home', icon: Home, path: '/' },
-  { label: 'Player Pool', icon: Users, path: '/players' },
-  { label: 'Live Auction', icon: Gavel, path: '/auction' },
-  { label: 'Results', icon: Trophy, path: '/results' },
 ])
 
 const mobileMenuOpen = ref(false)
@@ -85,7 +79,7 @@ const isLoggedIn = computed(() => !!store.currentUser.value)
 const userRoleLabel = computed(() => {
   if (!store.currentUser.value) return 'Spectator'
   const parts: string[] = []
-  if (store.currentUser.value.captain) parts.push('Captain')
+  if (store.compUser.value?.captain) parts.push('Captain')
   if (store.currentUser.value.is_admin) parts.push('Admin')
   return parts.length > 0 ? parts.join(' / ') : 'Player'
 })
@@ -120,27 +114,12 @@ async function handleClaimAdmin() {
       <div class="max-w-[1440px] mx-auto w-full flex items-center justify-between px-4 md:px-6 py-2.5">
         <!-- Left: Logo + Nav -->
         <div class="flex items-center gap-6">
-          <div class="flex items-center gap-2.5">
+          <router-link to="/" class="flex items-center gap-2.5">
             <div class="w-8 h-8 rounded bg-primary flex items-center justify-center">
               <Gamepad2 class="w-4 h-4 text-primary-foreground" />
             </div>
             <span class="text-sm font-semibold text-foreground hidden sm:inline">DOTA2 DRAFT</span>
-          </div>
-          <!-- Desktop Nav Links -->
-          <nav class="hidden md:flex items-center gap-1">
-            <router-link
-              v-for="item in navItems"
-              :key="item.path"
-              :to="item.path"
-              class="flex items-center gap-2 px-3 py-1.5 rounded text-sm transition-colors"
-              :class="(item.path === '/' ? route.path === '/' : route.path.startsWith(item.path))
-                ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
-                : 'text-sidebar-foreground hover:bg-accent'"
-            >
-              <component :is="item.icon" class="w-4 h-4" />
-              {{ item.label }}
-            </router-link>
-          </nav>
+          </router-link>
         </div>
         <!-- Right: User info + actions -->
         <div class="flex items-center gap-2">
@@ -148,12 +127,10 @@ async function handleClaimAdmin() {
             <Shield class="w-3.5 h-3.5" />
             Admin
           </router-link>
-          <!-- Claim Admin button (logged in, not admin) -->
           <button v-if="isLoggedIn && !store.isAdmin.value && showClaimAdminButton" class="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors" @click="showClaimAdmin = true">
             <Lock class="w-3.5 h-3.5" />
             Claim Admin
           </button>
-          <!-- User info -->
           <template v-if="isLoggedIn">
             <div class="flex items-center gap-2 hidden sm:flex">
               <img v-if="store.currentUser.value?.avatar_url" :src="store.currentUser.value.avatar_url" class="w-6 h-6 rounded-full" />
@@ -180,18 +157,9 @@ async function handleClaimAdmin() {
       </div>
       <!-- Mobile Nav Dropdown -->
       <nav v-if="mobileMenuOpen" class="md:hidden flex flex-col gap-1 px-3 py-2 border-t border-sidebar-border">
-        <router-link
-          v-for="item in navItems"
-          :key="item.path"
-          :to="item.path"
-          class="flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-colors"
-          :class="route.path === item.path
-            ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
-            : 'text-sidebar-foreground hover:bg-accent'"
-          @click="mobileMenuOpen = false"
-        >
-          <component :is="item.icon" class="w-[18px] h-[18px]" />
-          {{ item.label }}
+        <router-link to="/" class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-sidebar-foreground hover:bg-accent" @click="mobileMenuOpen = false">
+          <Home class="w-[18px] h-[18px]" />
+          Home
         </router-link>
         <router-link
           v-if="store.isAdmin.value"
@@ -213,7 +181,7 @@ async function handleClaimAdmin() {
     </header>
 
     <!-- Main Content -->
-    <main class="flex-1 overflow-hidden flex flex-col" :class="route.path.startsWith('/admin') ? '' : 'overflow-y-auto'">
+    <main class="flex-1 overflow-hidden flex flex-col" :class="(route.path.startsWith('/admin') || route.path.startsWith('/c/')) ? '' : 'overflow-y-auto'">
       <router-view />
     </main>
 

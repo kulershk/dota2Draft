@@ -25,40 +25,51 @@ export function useApi() {
       request('/api/auth/claim-admin', { method: 'POST', body: JSON.stringify({ password }) }),
     logout: () => request('/api/auth/logout', { method: 'POST' }),
 
-    // Player pool self-registration
-    registerPlayer: (data: { roles: string[]; mmr?: number; info?: string }) =>
-      request('/api/players/register', { method: 'POST', body: JSON.stringify(data) }),
+    // Competitions
+    getCompetitions: () => request('/api/competitions'),
+    getCompetition: (id: number) => request(`/api/competitions/${id}`),
+    createCompetition: (data: { name: string; description?: string; starts_at?: string; registration_start?: string; registration_end?: string; settings?: Record<string, any> }) =>
+      request('/api/competitions', { method: 'POST', body: JSON.stringify(data) }),
+    updateCompetition: (id: number, data: Record<string, any>) =>
+      request(`/api/competitions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteCompetition: (id: number) =>
+      request(`/api/competitions/${id}`, { method: 'DELETE' }),
 
-    // Users (all Steam accounts - admin)
+    // Competition-specific user info
+    getCompMe: (compId: number) => request(`/api/competitions/${compId}/me`),
+
+    // Competition Players
+    getCompPlayers: (compId: number) => request(`/api/competitions/${compId}/players`),
+    registerForComp: (compId: number, data: { roles: string[]; mmr?: number; info?: string }) =>
+      request(`/api/competitions/${compId}/players/register`, { method: 'POST', body: JSON.stringify(data) }),
+    updateCompPlayer: (compId: number, playerId: number, data: Record<string, any>) =>
+      request(`/api/competitions/${compId}/players/${playerId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteCompPlayer: (compId: number, playerId: number) =>
+      request(`/api/competitions/${compId}/players/${playerId}`, { method: 'DELETE' }),
+
+    // Competition Captains
+    getCompCaptains: (compId: number) => request(`/api/competitions/${compId}/captains`),
+    promoteToCaptain: (compId: number, data: { playerId: number; team: string }) =>
+      request(`/api/competitions/${compId}/captains/promote`, { method: 'POST', body: JSON.stringify(data) }),
+    updateCaptain: (compId: number, id: number, data: Record<string, any>) =>
+      request(`/api/competitions/${compId}/captains/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    demoteCaptain: (compId: number, id: number) =>
+      request(`/api/competitions/${compId}/captains/${id}/demote`, { method: 'POST' }),
+
+    // Competition Pool (admin)
+    addUserToCompPool: (compId: number, userId: number) =>
+      request(`/api/competitions/${compId}/users/${userId}/add-to-pool`, { method: 'POST', body: '{}' }),
+    removeUserFromCompPool: (compId: number, userId: number) =>
+      request(`/api/competitions/${compId}/users/${userId}/remove-from-pool`, { method: 'POST', body: '{}' }),
+
+    // Competition Auction
+    getCompAuction: (compId: number) => request(`/api/competitions/${compId}/auction`),
+    getCompResults: (compId: number) => request(`/api/competitions/${compId}/auction/results`),
+
+    // Users (global)
     getUsers: () => request('/api/users'),
-    addUserToPool: (id: number) =>
-      request(`/api/users/${id}/add-to-pool`, { method: 'POST', body: '{}' }),
-    removeUserFromPool: (id: number) =>
-      request(`/api/users/${id}/remove-from-pool`, { method: 'POST', body: '{}' }),
-
-    // Settings
-    getSettings: () => request('/api/settings'),
-    updateSettings: (data: Record<string, any>) => request('/api/settings', { method: 'PUT', body: JSON.stringify(data) }),
-
-    // Captains
-    getCaptains: () => request('/api/captains'),
-    promoteToCaptain: (data: { playerId: number; team: string }) =>
-      request('/api/captains/promote', { method: 'POST', body: JSON.stringify(data) }),
-    updateCaptain: (id: number, data: Record<string, any>) =>
-      request(`/api/captains/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    demoteCaptain: (id: number) =>
-      request(`/api/captains/${id}/demote`, { method: 'POST' }),
-
-    // Players
-    getPlayers: () => request('/api/players'),
     updatePlayer: (id: number, data: Record<string, any>) =>
       request(`/api/players/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    deletePlayer: (id: number) =>
-      request(`/api/players/${id}`, { method: 'DELETE' }),
-
-    // Auction
-    getAuction: () => request('/api/auction'),
-    getResults: () => request('/api/auction/results'),
 
     // News
     getNews: () => request('/api/news'),

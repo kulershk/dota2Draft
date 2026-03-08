@@ -27,21 +27,20 @@ function toggleRegisterRole(role: string) {
 }
 
 function openRegister() {
+  // Prefill from competition-specific data if available, else global user data
+  const cu = store.compUser.value
   const user = store.currentUser.value
-  if (user) {
-    registerRoles.value = user.roles.map(r => {
-      for (const [display, short] of Object.entries(roleMap)) {
-        if (short === r) return display
-      }
-      return r
-    })
-    registerMmr.value = user.mmr ? String(user.mmr) : ''
-    registerInfo.value = user.info || ''
-  } else {
-    registerRoles.value = []
-    registerMmr.value = ''
-    registerInfo.value = ''
-  }
+  const roles = cu?.roles?.length ? cu.roles : (user?.roles || [])
+  const mmr = cu?.mmr || user?.mmr || 0
+  const info = cu?.info || user?.info || ''
+  registerRoles.value = roles.map((r: string) => {
+    for (const [display, short] of Object.entries(roleMap)) {
+      if (short === r) return display
+    }
+    return r
+  })
+  registerMmr.value = mmr ? String(mmr) : ''
+  registerInfo.value = info
   registerError.value = ''
   showRegister.value = true
 }
@@ -173,7 +172,7 @@ const filteredPlayers = computed(() => {
             <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input v-model="searchQuery" type="text" placeholder="Search..." class="input-field pl-9 w-full sm:w-56" />
           </div>
-          <button v-if="store.currentUser.value && !store.currentUser.value.in_pool && !store.currentUser.value.captain" class="btn-primary text-sm flex-shrink-0" @click="openRegister">
+          <button v-if="store.currentUser.value && !store.compUser.value?.in_pool && !store.compUser.value?.captain" class="btn-primary text-sm flex-shrink-0" @click="openRegister">
             <UserPlus class="w-4 h-4" />
             <span class="hidden sm:inline">Join Player Pool</span>
           </button>

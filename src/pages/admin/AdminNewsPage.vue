@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Newspaper, Plus, Pencil, Trash2, Calendar } from 'lucide-vue-next'
+import { Newspaper, Plus, Pencil, Trash2, Calendar, User } from 'lucide-vue-next'
 import { ref } from 'vue'
 import { useApi } from '@/composables/useApi'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
@@ -8,7 +8,7 @@ import RichTextEditor from '@/components/common/RichTextEditor.vue'
 
 const api = useApi()
 
-interface NewsPost { id: number; title: string; content: string; created_at: string }
+interface NewsPost { id: number; title: string; content: string; created_by_name: string | null; created_by_avatar: string | null; created_at: string }
 const newsList = ref<NewsPost[]>([])
 const showAddNews = ref(false)
 const showEditNews = ref(false)
@@ -72,6 +72,10 @@ function formatDate(dateStr: string) {
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-3">
                 <h3 class="text-base font-semibold text-foreground">{{ post.title }}</h3>
+                <span v-if="post.created_by_name" class="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
+                  <User class="w-3 h-3" />
+                  {{ post.created_by_name }}
+                </span>
                 <span class="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
                   <Calendar class="w-3 h-3" />
                   {{ formatDate(post.created_at) }}

@@ -1,6 +1,22 @@
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, watch } from 'vue'
 import { useApi } from './useApi'
 import { getSocket, reconnectSocket } from './useSocket'
+
+export interface Competition {
+  id: number
+  name: string
+  description: string
+  starts_at: string | null
+  registration_start: string | null
+  registration_end: string | null
+  status: string
+  settings: Settings
+  auction_state: Record<string, any>
+  created_by: number | null
+  created_by_name: string | null
+  created_by_avatar: string | null
+  created_at: string
+}
 
 export interface Captain {
   id: number
@@ -11,6 +27,7 @@ export interface Captain {
   mmr: number
   player_id?: number
   avatar_url?: string
+  competition_id?: number
 }
 
 export interface Player {
@@ -69,12 +86,21 @@ export interface CurrentUser {
   steam_id: string
   avatar_url: string
   is_admin: boolean
+  roles: string[]
+  mmr: number
+  info: string
+}
+
+export interface CompetitionUser {
   in_pool: boolean
   roles: string[]
   mmr: number
   info: string
   captain: { id: number; team: string; budget: number; status: string } | null
 }
+
+const competitions = ref<Competition[]>([])
+const currentCompetitionId = ref<number | null>(null)
 
 const settings = reactive<Settings>({
   playersPerTeam: 5,
@@ -103,7 +129,12 @@ const auction = reactive<AuctionState>({
 })
 
 const currentUser = ref<CurrentUser | null>(null)
+const compUser = ref<CompetitionUser | null>(null)
 const loading = ref(false)
+
+// Auth readiness tracking
+let authReadyResolve: () => void
+const authReady = new Promise<void>(resolve => { authReadyResolve = resolve })
 const error = ref('')
 const lastSoldMessage = ref('')
 const undoMessage = ref('')
@@ -115,19 +146,23 @@ export interface LogEntry {
 }
 const activityLog = ref<LogEntry[]>([])
 
-// Derived state for backward compatibility
+// Derived state
 const isAdmin = computed(() => !!currentUser.value?.is_admin)
 const currentCaptain = computed<Captain | null>(() => {
-  if (!currentUser.value?.captain) return null
+  if (!compUser.value?.captain) return null
   return {
-    id: currentUser.value.captain.id,
-    name: currentUser.value.name,
-    team: currentUser.value.captain.team,
-    budget: currentUser.value.captain.budget,
-    status: currentUser.value.captain.status,
-    mmr: currentUser.value.mmr || 0,
+    id: compUser.value.captain.id,
+    name: currentUser.value?.name || '',
+    team: compUser.value.captain.team,
+    budget: compUser.value.captain.budget,
+    status: compUser.value.captain.status,
+    mmr: currentUser.value?.mmr || 0,
   }
 })
+
+const currentCompetition = computed(() =>
+  competitions.value.find(c => c.id === currentCompetitionId.value) || null
+)
 
 const availablePlayers = computed(() =>
   players.value.filter(p => !p.drafted && !p.is_captain)
@@ -136,13 +171,16 @@ const availablePlayers = computed(() =>
 const roleCounts = computed(() => {
   const counts = { Carry: 0, Mid: 0, Offlane: 0, Pos4: 0, Pos5: 0 }
   players.value.forEach(p => {
-    if (p.is_captain) return // exclude captains from role counts
+    if (p.is_captain) return
     p.roles.forEach(r => {
       if (r in counts) counts[r as keyof typeof counts]++
     })
   })
   return counts
 })
+
+const onlineCaptainIds = ref<number[]>([])
+const readyCaptainIds = ref<number[]>([])
 
 let socketInitialized = false
 
@@ -161,13 +199,6 @@ export function useDraftStore() {
 
     socket.on('captains:updated', (data: Captain[]) => {
       captains.value = data
-      // Refresh current user's captain status
-      if (currentUser.value) {
-        const myCaptain = data.find(c => c.player_id === currentUser.value!.id)
-        currentUser.value.captain = myCaptain
-          ? { id: myCaptain.id, team: myCaptain.team, budget: myCaptain.budget, status: myCaptain.status }
-          : null
-      }
     })
 
     socket.on('players:updated', (data: Player[]) => {
@@ -194,6 +225,7 @@ export function useDraftStore() {
       auction.bidHistory = data.bidHistory || []
       if (data.captains) captains.value = data.captains
       if (data.players) players.value = data.players
+      if (data.settings) Object.assign(settings, data.settings)
     })
 
     socket.on('auction:timerUpdate', (data: { bidTimerEnd: number }) => {
@@ -228,12 +260,12 @@ export function useDraftStore() {
     })
   }
 
-  const onlineCaptainIds = ref<number[]>([])
-  const readyCaptainIds = ref<number[]>([])
-
   async function restoreAuth() {
     const token = localStorage.getItem('draft_auth_token')
-    if (!token) return
+    if (!token) {
+      authReadyResolve()
+      return
+    }
     try {
       const user = await api.getMe()
       currentUser.value = user
@@ -241,11 +273,11 @@ export function useDraftStore() {
       localStorage.removeItem('draft_auth_token')
       currentUser.value = null
     }
+    authReadyResolve()
   }
 
   function setAuthToken(token: string) {
     localStorage.setItem('draft_auth_token', token)
-    // Reconnect socket with new auth token
     socketInitialized = false
     reconnectSocket()
     initSocket()
@@ -254,6 +286,7 @@ export function useDraftStore() {
   async function loginWithAuthToken(token: string) {
     setAuthToken(token)
     await restoreAuth()
+    authReadyResolve()
   }
 
   async function claimAdmin(password: string) {
@@ -267,59 +300,119 @@ export function useDraftStore() {
     api.logout().catch(() => {})
     localStorage.removeItem('draft_auth_token')
     currentUser.value = null
+    compUser.value = null
     socketInitialized = false
     reconnectSocket()
     initSocket()
   }
 
-  async function fetchSettings() {
-    const data = await api.getSettings()
-    Object.assign(settings, data)
+  // ─── Competition Management ────────────────────────────
+
+  async function fetchCompetitions() {
+    competitions.value = await api.getCompetitions()
   }
 
-  async function saveSettings() {
-    await api.updateSettings(settings)
-  }
-
-  async function fetchCaptains() {
-    captains.value = await api.getCaptains()
-  }
-
-  async function promoteToCaptain(playerId: number, team: string) {
-    await api.promoteToCaptain({ playerId, team })
-  }
-
-  async function updateCaptain(id: number, data: Record<string, any>) {
-    await api.updateCaptain(id, data)
-  }
-
-  async function demoteCaptain(id: number) {
-    await api.demoteCaptain(id)
-  }
-
-  async function registerForPool(data: { roles: string[]; mmr?: number; info?: string }) {
-    await api.registerPlayer(data)
+  async function joinCompetition(compId: number) {
+    currentCompetitionId.value = compId
+    // Ensure socket handlers are registered before emitting
+    initSocket()
+    const socket = getSocket()
+    socket.emit('competition:join', { competitionId: compId })
+    // Wait for auth to be ready, then fetch competition-specific user data
+    await authReady
     if (currentUser.value) {
-      currentUser.value.in_pool = true
+      try {
+        compUser.value = await api.getCompMe(compId)
+      } catch {
+        compUser.value = null
+      }
     }
   }
 
+  async function fetchCompData() {
+    const compId = currentCompetitionId.value
+    if (!compId) return
+    loading.value = true
+    try {
+      const [comp, caps, plrs] = await Promise.all([
+        api.getCompetition(compId),
+        api.getCompCaptains(compId),
+        api.getCompPlayers(compId),
+      ])
+      Object.assign(settings, comp.settings)
+      captains.value = caps
+      players.value = plrs
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function saveSettings() {
+    const compId = currentCompetitionId.value
+    if (!compId) return
+    await api.updateCompetition(compId, { settings: { ...settings } })
+  }
+
+  async function fetchCaptains() {
+    const compId = currentCompetitionId.value
+    if (!compId) return
+    captains.value = await api.getCompCaptains(compId)
+  }
+
   async function fetchPlayers() {
-    players.value = await api.getPlayers()
+    const compId = currentCompetitionId.value
+    if (!compId) return
+    players.value = await api.getCompPlayers(compId)
+  }
+
+  async function promoteToCaptain(playerId: number, team: string) {
+    const compId = currentCompetitionId.value
+    if (!compId) return
+    await api.promoteToCaptain(compId, { playerId, team })
+  }
+
+  async function updateCaptain(id: number, data: Record<string, any>) {
+    const compId = currentCompetitionId.value
+    if (!compId) return
+    await api.updateCaptain(compId, id, data)
+  }
+
+  async function demoteCaptain(id: number) {
+    const compId = currentCompetitionId.value
+    if (!compId) return
+    await api.demoteCaptain(compId, id)
+  }
+
+  async function registerForPool(data: { roles: string[]; mmr?: number; info?: string }) {
+    const compId = currentCompetitionId.value
+    if (!compId) return
+    await api.registerForComp(compId, data)
+    if (compUser.value) {
+      compUser.value.in_pool = true
+    } else {
+      compUser.value = { in_pool: true, roles: data.roles, mmr: data.mmr || 0, info: data.info || '', captain: null }
+    }
   }
 
   async function updatePlayer(id: number, data: Record<string, any>) {
-    await api.updatePlayer(id, data)
+    const compId = currentCompetitionId.value
+    if (!compId) return
+    await api.updateCompPlayer(compId, id, data)
   }
 
   async function deletePlayer(id: number) {
-    await api.deletePlayer(id)
+    const compId = currentCompetitionId.value
+    if (!compId) return
+    await api.deleteCompPlayer(compId, id)
   }
 
   async function fetchAll() {
     loading.value = true
     try {
-      await Promise.all([fetchSettings(), fetchCaptains(), fetchPlayers()])
+      await fetchCompetitions()
+      if (currentCompetitionId.value) {
+        await fetchCompData()
+      }
     } finally {
       loading.value = false
     }
@@ -343,7 +436,11 @@ export function useDraftStore() {
     // State
     isAdmin,
     currentUser,
+    compUser,
     currentCaptain,
+    currentCompetition,
+    currentCompetitionId,
+    competitions,
     onlineCaptainIds,
     readyCaptainIds,
     settings,
@@ -366,7 +463,9 @@ export function useDraftStore() {
     // Init
     initSocket,
     fetchAll,
-    fetchSettings,
+    fetchCompetitions,
+    joinCompetition,
+    fetchCompData,
     fetchCaptains,
     fetchPlayers,
     // CRUD
@@ -389,7 +488,7 @@ export function useDraftStore() {
     endDraft,
     undoLast,
     resetDraft,
-    // API
-    getResults: api.getResults,
+    // API passthrough
+    getCompResults: (compId: number) => useApi().getCompResults(compId),
   }
 }

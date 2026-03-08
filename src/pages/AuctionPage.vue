@@ -335,7 +335,7 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
       <Gavel class="w-12 h-12 text-primary mx-auto mb-4" />
       <p class="text-lg font-semibold text-foreground">Auction Complete!</p>
       <p class="text-sm text-muted-foreground mt-1">View the results on the Results page.</p>
-      <router-link to="/results" class="btn-primary mt-4 inline-flex">View Results</router-link>
+      <router-link :to="`/c/${store.currentCompetitionId.value}/results`" class="btn-primary mt-4 inline-flex">View Results</router-link>
     </div>
 
     <!-- Active auction: main + sidebar layout -->

@@ -23,9 +23,13 @@ const loading = ref(true)
 
 onMounted(async () => {
   try {
-    results.value = await store.getResults()
+    const compId = store.currentCompetitionId.value
+    if (compId) {
+      results.value = await store.getCompResults(compId)
+    } else {
+      results.value = store.captains.value.map(c => ({ ...c, players: [] }))
+    }
   } catch {
-    // fallback to captains list if no results
     results.value = store.captains.value.map(c => ({ ...c, players: [] }))
   } finally {
     loading.value = false

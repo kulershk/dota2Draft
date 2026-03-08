@@ -1,12 +1,10 @@
 <script setup lang="ts">
-import { Users, UserPlus, UserMinus, Search, Shield, ShieldOff, ExternalLink } from 'lucide-vue-next'
+import { Users, Search, Shield, ShieldOff, ExternalLink } from 'lucide-vue-next'
 import { ref, computed } from 'vue'
 import { useApi } from '@/composables/useApi'
-import { useDraftStore } from '@/composables/useDraftStore'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 
 const api = useApi()
-const store = useDraftStore()
 
 interface User {
   id: number
@@ -17,8 +15,6 @@ interface User {
   mmr: number
   info: string
   is_admin: boolean
-  is_captain: boolean
-  in_pool: boolean
   created_at: string
 }
 
@@ -44,20 +40,6 @@ const filteredUsers = computed(() => {
   }
   return list
 })
-
-const poolCount = computed(() => users.value.filter(u => u.in_pool).length)
-
-async function addToPool(userId: number) {
-  await api.addUserToPool(userId)
-  await fetchUsers()
-  store.fetchPlayers()
-}
-
-async function removeFromPool(userId: number) {
-  await api.removeUserFromPool(userId)
-  await fetchUsers()
-  store.fetchPlayers()
-}
 
 const adminConfirmUser = ref<User | null>(null)
 
@@ -85,19 +67,13 @@ function formatDate(dateStr: string) {
       <p class="text-sm text-muted-foreground mt-1">All accounts registered via Steam login</p>
     </div>
 
-    <!-- Stats -->
     <div class="flex gap-4">
       <div class="card p-4">
         <p class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Total Accounts</p>
         <p class="text-3xl font-bold text-foreground mt-1">{{ users.length }}</p>
       </div>
-      <div class="card p-4">
-        <p class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">In Player Pool</p>
-        <p class="text-3xl font-bold text-foreground mt-1">{{ poolCount }}</p>
-      </div>
     </div>
 
-    <!-- Users Table -->
     <div class="card">
       <div class="flex items-center justify-between gap-3 px-4 py-3 border-b border-border">
         <div class="flex items-center gap-2">
@@ -118,7 +94,7 @@ function formatDate(dateStr: string) {
               <th class="text-left px-4 py-3 font-medium text-muted-foreground">USER</th>
               <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[120px]">STATUS</th>
               <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[100px]">JOINED</th>
-              <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[140px]">ACTIONS</th>
+              <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[100px]">ACTIONS</th>
             </tr>
           </thead>
           <tbody>
@@ -141,22 +117,12 @@ function formatDate(dateStr: string) {
                 </div>
               </td>
               <td class="px-4 py-3">
-                <div class="flex flex-col gap-1">
-                  <span v-if="user.is_captain" class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-primary/15 text-primary w-fit">Captain</span>
-                  <span v-if="user.in_pool" class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-color-success text-color-success-foreground w-fit">In Pool</span>
-                  <span v-else class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-accent text-muted-foreground w-fit">Not in Pool</span>
-                  <span v-if="user.is_admin" class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-amber-500/15 text-amber-600 dark:text-amber-400 w-fit">Admin</span>
-                </div>
+                <span v-if="user.is_admin" class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-amber-500/15 text-amber-600 dark:text-amber-400 w-fit">Admin</span>
+                <span v-else class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-accent text-muted-foreground w-fit">User</span>
               </td>
               <td class="px-4 py-3 text-muted-foreground text-xs">{{ formatDate(user.created_at) }}</td>
               <td class="px-4 py-3">
                 <div class="flex items-center gap-1">
-                  <button v-if="!user.in_pool && !user.is_captain" class="btn-ghost p-2 text-primary" title="Add to Player Pool" @click="addToPool(user.id)">
-                    <UserPlus class="w-4 h-4" />
-                  </button>
-                  <button v-if="user.in_pool && !user.is_captain" class="btn-ghost p-2 text-destructive" title="Remove from Player Pool" @click="removeFromPool(user.id)">
-                    <UserMinus class="w-4 h-4" />
-                  </button>
                   <button v-if="!user.is_admin" class="btn-ghost p-2" title="Make Admin" @click="promptToggleAdmin(user)">
                     <Shield class="w-4 h-4" />
                   </button>
@@ -174,6 +140,7 @@ function formatDate(dateStr: string) {
         {{ loading ? 'Loading...' : 'No users found.' }}
       </div>
     </div>
+
     <!-- Admin Confirmation Modal -->
     <ModalOverlay :show="!!adminConfirmUser" @close="adminConfirmUser = null">
       <div class="px-7 py-6">

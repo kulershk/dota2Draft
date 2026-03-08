@@ -57,96 +57,119 @@ async function getAuthPlayer(req) {
   return await queryOne('SELECT * FROM players WHERE id = $1', [playerId])
 }
 
-// ─── Helpers ──────────────────────────────────────────────
+// ─── Competition Helpers ─────────────────────────────────
 
-async function getSettings() {
-  const rows = await query('SELECT key, value FROM settings')
-  const obj = {}
-  for (const r of rows) obj[r.key] = r.value
+function parseCompSettings(comp) {
+  const s = comp.settings || {}
   return {
-    playersPerTeam: Number(obj.playersPerTeam) || 5,
-    nominationTime: Number(obj.nominationTime) || 180,
-    bidTimer: Number(obj.bidTimer) || 30,
-    startingBudget: Number(obj.startingBudget) || 1000,
-    minimumBid: Number(obj.minimumBid) || 10,
-    bidIncrement: Number(obj.bidIncrement) || 5,
-    maxBid: Number(obj.maxBid) || 0,
-    nominationOrder: obj.nominationOrder || 'normal',
-    requireAllOnline: obj.requireAllOnline === 'false' ? false : true,
-    allowSteamRegistration: obj.allowSteamRegistration === 'true' ? true : false,
+    playersPerTeam: Number(s.playersPerTeam) || 5,
+    bidTimer: Number(s.bidTimer) || 30,
+    startingBudget: Number(s.startingBudget) || 1000,
+    minimumBid: Number(s.minimumBid) || 10,
+    bidIncrement: Number(s.bidIncrement) || 5,
+    maxBid: Number(s.maxBid) || 0,
+    nominationOrder: s.nominationOrder || 'normal',
+    requireAllOnline: s.requireAllOnline !== false,
+    allowSteamRegistration: s.allowSteamRegistration !== false,
   }
 }
 
-async function getAuctionState() {
-  const rows = await query('SELECT key, value FROM auction_state')
-  const obj = {}
-  for (const r of rows) obj[r.key] = r.value
-  return obj
+function parseAuctionState(comp) {
+  return comp.auction_state || {}
 }
 
-async function setAuctionState(key, value) {
-  await execute(
-    'INSERT INTO auction_state (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value',
-    [key, String(value)]
-  )
+async function getCompetition(compId) {
+  return await queryOne('SELECT * FROM competitions WHERE id = $1', [compId])
 }
 
-async function getCaptains() {
+async function setAuctionState(compId, updates) {
+  const comp = await queryOne('SELECT auction_state FROM competitions WHERE id = $1', [compId])
+  const state = comp?.auction_state || {}
+  Object.assign(state, updates)
+  await execute('UPDATE competitions SET auction_state = $1 WHERE id = $2', [JSON.stringify(state), compId])
+}
+
+async function getCaptains(compId) {
   return await query(`
-    SELECT c.id, c.name, c.team, c.budget, c.status, c.mmr, c.player_id,
+    SELECT c.id, c.name, c.team, c.budget, c.status, c.mmr, c.player_id, c.competition_id,
            COALESCE(p.avatar_url, '') as avatar_url
     FROM captains c
     LEFT JOIN players p ON c.player_id = p.id
+    WHERE c.competition_id = $1
     ORDER BY c.id
-  `)
+  `, [compId])
 }
 
-async function getPlayers() {
-  const captainPlayerIds = (await query('SELECT player_id FROM captains WHERE player_id IS NOT NULL')).map(r => r.player_id)
-  const rows = await query('SELECT * FROM players ORDER BY id')
-  return rows.filter(p => p.in_pool || captainPlayerIds.includes(p.id)).map(p => ({
-    ...p,
-    roles: JSON.parse(p.roles),
+async function getCompPlayers(compId) {
+  const captainPlayerIds = (await query(
+    'SELECT player_id FROM captains WHERE competition_id = $1 AND player_id IS NOT NULL', [compId]
+  )).map(r => r.player_id)
+
+  const rows = await query(`
+    SELECT cp.*, p.name, p.steam_id, p.avatar_url, p.is_admin
+    FROM competition_players cp
+    JOIN players p ON cp.player_id = p.id
+    WHERE cp.competition_id = $1
+    ORDER BY cp.id
+  `, [compId])
+
+  return rows.filter(p => p.in_pool || captainPlayerIds.includes(p.player_id)).map(p => ({
+    id: p.player_id,
+    name: p.name,
+    roles: JSON.parse(p.roles || '[]'),
+    mmr: p.mmr,
+    info: p.info || '',
     drafted: !!p.drafted,
+    drafted_by: p.drafted_by,
+    draft_price: p.draft_price,
+    draft_round: p.draft_round,
     steam_id: p.steam_id || null,
     avatar_url: p.avatar_url || null,
     is_admin: !!p.is_admin,
-    is_captain: captainPlayerIds.includes(p.id),
+    is_captain: captainPlayerIds.includes(p.player_id),
     in_pool: !!p.in_pool,
   }))
 }
 
-async function getBidHistory(round) {
+async function getBidHistory(compId, round) {
   if (round !== undefined) {
-    return await query('SELECT * FROM bid_history WHERE round = $1 ORDER BY id DESC', [round])
+    return await query('SELECT * FROM bid_history WHERE competition_id = $1 AND round = $2 ORDER BY id DESC', [compId, round])
   }
-  return await query('SELECT * FROM bid_history ORDER BY id DESC LIMIT 50')
+  return await query('SELECT * FROM bid_history WHERE competition_id = $1 ORDER BY id DESC LIMIT 50', [compId])
 }
 
-async function saveAuctionLog(type, message) {
-  await execute('INSERT INTO auction_log (type, message) VALUES ($1, $2)', [type, message])
+async function saveAuctionLog(compId, type, message) {
+  await execute('INSERT INTO auction_log (competition_id, type, message) VALUES ($1, $2, $3)', [compId, type, message])
 }
 
-async function getAuctionLog() {
-  const rows = await query('SELECT type, message, created_at as time FROM auction_log ORDER BY id DESC LIMIT 200')
+async function getAuctionLog(compId) {
+  const rows = await query(
+    'SELECT type, message, created_at as time FROM auction_log WHERE competition_id = $1 ORDER BY id DESC LIMIT 200', [compId]
+  )
   return rows.map(r => ({ type: r.type, message: r.message, time: new Date(r.time).getTime() }))
 }
 
-async function getCaptainPlayerCount(captainId) {
-  const row = await queryOne('SELECT COUNT(*) as count FROM players WHERE drafted = 1 AND drafted_by = $1', [captainId])
+async function getCaptainPlayerCount(compId, captainId) {
+  const row = await queryOne(
+    'SELECT COUNT(*) as count FROM competition_players WHERE competition_id = $1 AND drafted = 1 AND drafted_by = $2',
+    [compId, captainId]
+  )
   return parseInt(row.count)
 }
 
-async function getCaptainAvgMmr(captain) {
-  const players = await query('SELECT mmr FROM players WHERE drafted = 1 AND drafted_by = $1', [captain.id])
+async function getCaptainAvgMmr(compId, captain) {
+  const players = await query(
+    'SELECT mmr FROM competition_players WHERE competition_id = $1 AND drafted = 1 AND drafted_by = $2',
+    [compId, captain.id]
+  )
   const totalMmr = captain.mmr + players.reduce((s, p) => s + p.mmr, 0)
   return totalMmr / (1 + players.length)
 }
 
-async function getNextNominator(round, captains, settings) {
+async function getNextNominator(compId, round, captains, settings) {
   const active = []
   for (const c of captains) {
-    if (await getCaptainPlayerCount(c.id) < settings.playersPerTeam) {
+    if (await getCaptainPlayerCount(compId, c.id) < settings.playersPerTeam) {
       active.push(c)
     }
   }
@@ -154,9 +177,9 @@ async function getNextNominator(round, captains, settings) {
 
   if (settings.nominationOrder === 'lowest_avg') {
     let lowest = active[0]
-    let lowestAvg = await getCaptainAvgMmr(lowest)
+    let lowestAvg = await getCaptainAvgMmr(compId, lowest)
     for (let i = 1; i < active.length; i++) {
-      const avg = await getCaptainAvgMmr(active[i])
+      const avg = await getCaptainAvgMmr(compId, active[i])
       if (avg < lowestAvg) {
         lowest = active[i]
         lowestAvg = avg
@@ -167,12 +190,12 @@ async function getNextNominator(round, captains, settings) {
 
   if (settings.nominationOrder === 'fewest_then_lowest') {
     let best = active[0]
-    let bestCount = await getCaptainPlayerCount(best.id)
-    let bestAvg = await getCaptainAvgMmr(best)
+    let bestCount = await getCaptainPlayerCount(compId, best.id)
+    let bestAvg = await getCaptainAvgMmr(compId, best)
     for (let i = 1; i < active.length; i++) {
       const c = active[i]
-      const count = await getCaptainPlayerCount(c.id)
-      const avg = await getCaptainAvgMmr(c)
+      const count = await getCaptainPlayerCount(compId, c.id)
+      const avg = await getCaptainAvgMmr(compId, c)
       if (count < bestCount || (count === bestCount && avg < bestAvg)) {
         best = c
         bestCount = count
@@ -182,29 +205,35 @@ async function getNextNominator(round, captains, settings) {
     return best
   }
 
-  // Normal: round-robin, skip full teams
+  // Normal: round-robin
   const nominatorIndex = (round - 1) % captains.length
   for (let i = 0; i < captains.length; i++) {
     const candidate = captains[(nominatorIndex + i) % captains.length]
-    if (active.some(a => a.id === candidate.id)) {
-      return candidate
-    }
+    if (active.some(a => a.id === candidate.id)) return candidate
   }
   return captains[nominatorIndex]
 }
 
-// ─── Socket Tracking ─────────────────────────────────────
+// ─── Socket & Timer Tracking (Per-Competition) ──────────
 
-const socketPlayers = new Map()   // socketId -> playerId
-const onlineCaptains = new Map()  // socketId -> captainId
-const readyCaptains = new Set()
+const socketPlayers = new Map()       // socketId -> playerId
+const socketCompetitions = new Map()  // socketId -> compId
+const compOnlineCaptains = new Map()  // compId -> Map<socketId, captainId>
+const compReadyCaptains = new Map()   // compId -> Set<captainId>
+const compBidTimers = new Map()       // compId -> timeout
+const compLastBidTime = new Map()     // compId -> timestamp
+const BID_COOLDOWN_MS = 300
 
-function getOnlineCaptainIds() {
-  return [...new Set(onlineCaptains.values())]
+function getOnlineCaptainIds(compId) {
+  const map = compOnlineCaptains.get(compId)
+  if (!map) return []
+  return [...new Set(map.values())]
 }
 
-function getReadyCaptainIds() {
-  return [...readyCaptains]
+function getReadyCaptainIds(compId) {
+  const set = compReadyCaptains.get(compId)
+  if (!set) return []
+  return [...set]
 }
 
 async function isAdminSocket(socketId) {
@@ -214,39 +243,43 @@ async function isAdminSocket(socketId) {
   return !!player?.is_admin
 }
 
-async function getSocketCaptainId(socketId) {
+async function getSocketCaptainId(socketId, compId) {
   const playerId = socketPlayers.get(socketId)
   if (!playerId) return null
-  const captain = await queryOne('SELECT id FROM captains WHERE player_id = $1', [playerId])
+  const captain = await queryOne(
+    'SELECT id FROM captains WHERE player_id = $1 AND competition_id = $2', [playerId, compId]
+  )
   return captain?.id || null
 }
 
-let bidTimer = null
-let lastBidTime = 0
-const BID_COOLDOWN_MS = 300
-
-function clearBidTimer() {
-  if (bidTimer) {
-    clearTimeout(bidTimer)
-    bidTimer = null
+function clearCompBidTimer(compId) {
+  const timer = compBidTimers.get(compId)
+  if (timer) {
+    clearTimeout(timer)
+    compBidTimers.delete(compId)
   }
 }
 
-async function startBidTimer() {
-  clearBidTimer()
-  const settings = await getSettings()
+async function startCompBidTimer(compId) {
+  clearCompBidTimer(compId)
+  const comp = await getCompetition(compId)
+  const settings = parseCompSettings(comp)
   const endTime = Date.now() + settings.bidTimer * 1000
-  await setAuctionState('bidTimerEnd', endTime)
-  io.emit('auction:timerUpdate', { bidTimerEnd: endTime })
+  await setAuctionState(compId, { bidTimerEnd: endTime })
+  io.to(`comp:${compId}`).emit('auction:timerUpdate', { bidTimerEnd: endTime })
 
-  bidTimer = setTimeout(() => {
-    finalizeBid()
+  const timer = setTimeout(() => {
+    finalizeCompBid(compId)
   }, settings.bidTimer * 1000)
+  compBidTimers.set(compId, timer)
 }
 
-async function finalizeBid() {
-  clearBidTimer()
-  const state = await getAuctionState()
+async function finalizeCompBid(compId) {
+  clearCompBidTimer(compId)
+  const comp = await getCompetition(compId)
+  const state = parseAuctionState(comp)
+  const settings = parseCompSettings(comp)
+
   const playerId = Number(state.nominatedPlayerId)
   const bidderId = Number(state.currentBidderId)
   const bidAmount = Number(state.currentBid)
@@ -254,61 +287,69 @@ async function finalizeBid() {
   if (playerId && bidderId && bidAmount >= 0) {
     const draftRound = Number(state.currentRound)
     await execute(
-      'UPDATE players SET drafted = 1, drafted_by = $1, draft_price = $2, draft_round = $3 WHERE id = $4',
-      [bidderId, bidAmount, draftRound, playerId]
+      'UPDATE competition_players SET drafted = 1, drafted_by = $1, draft_price = $2, draft_round = $3 WHERE competition_id = $4 AND player_id = $5',
+      [bidderId, bidAmount, draftRound, compId, playerId]
     )
     await execute('UPDATE captains SET budget = budget - $1 WHERE id = $2', [bidAmount, bidderId])
 
     const winner = await queryOne('SELECT name FROM captains WHERE id = $1', [bidderId])
     const player = await queryOne('SELECT name FROM players WHERE id = $1', [playerId])
 
-    io.emit('auction:sold', {
+    io.to(`comp:${compId}`).emit('auction:sold', {
       playerName: player.name,
       captainName: winner.name,
       amount: bidAmount,
     })
-    await saveAuctionLog('sold', `${player.name} sold to ${winner.name} for ${bidAmount}g`)
-    io.emit('auction:log', { type: 'sold', message: `${player.name} sold to ${winner.name} for ${bidAmount}g` })
+    await saveAuctionLog(compId, 'sold', `${player.name} sold to ${winner.name} for ${bidAmount}g`)
+    io.to(`comp:${compId}`).emit('auction:log', { type: 'sold', message: `${player.name} sold to ${winner.name} for ${bidAmount}g` })
   }
 
   const currentRound = Number(state.currentRound)
   const totalRounds = Number(state.totalRounds)
-  const captains = await getCaptains()
-  const settings = await getSettings()
+  const captains = await getCaptains(compId)
   const totalPlayers = settings.playersPerTeam * captains.length
 
-  const draftedRow = await queryOne('SELECT COUNT(*) as count FROM players WHERE drafted = 1')
+  const draftedRow = await queryOne(
+    'SELECT COUNT(*) as count FROM competition_players WHERE competition_id = $1 AND drafted = 1', [compId]
+  )
   const draftedCount = parseInt(draftedRow.count)
 
   if (draftedCount >= totalPlayers || currentRound >= totalRounds) {
-    await setAuctionState('status', 'finished')
-    await setAuctionState('nominatedPlayerId', '')
-    await setAuctionState('currentBid', '0')
-    await setAuctionState('currentBidderId', '')
-    await saveAuctionLog('end', 'Draft complete! All players drafted.')
-    io.emit('auction:log', { type: 'end', message: 'Draft complete! All players drafted.' })
-    io.emit('auction:finished', { results: 'Draft complete!' })
-    io.emit('auction:stateChanged', await getFullAuctionState())
+    await setAuctionState(compId, {
+      status: 'finished', nominatedPlayerId: '', currentBid: 0, currentBidderId: '',
+    })
+    await saveAuctionLog(compId, 'end', 'Draft complete! All players drafted.')
+    io.to(`comp:${compId}`).emit('auction:log', { type: 'end', message: 'Draft complete! All players drafted.' })
+    io.to(`comp:${compId}`).emit('auction:finished', { results: 'Draft complete!' })
+    io.to(`comp:${compId}`).emit('auction:stateChanged', await getFullAuctionState(compId))
   } else {
     const nextRound = currentRound + 1
-    const nextNominator = await getNextNominator(nextRound, captains, settings)
+    const nextNominator = await getNextNominator(compId, nextRound, captains, settings)
 
-    await setAuctionState('status', 'nominating')
-    await setAuctionState('currentRound', nextRound)
-    await setAuctionState('nominatorId', nextNominator.id)
-    await setAuctionState('nominatedPlayerId', '')
-    await setAuctionState('currentBid', '0')
-    await setAuctionState('currentBidderId', '')
-    await setAuctionState('bidTimerEnd', '0')
-
-    io.emit('auction:stateChanged', await getFullAuctionState())
+    await setAuctionState(compId, {
+      status: 'nominating',
+      currentRound: nextRound,
+      nominatorId: nextNominator.id,
+      nominatedPlayerId: '',
+      currentBid: 0,
+      currentBidderId: '',
+      bidTimerEnd: 0,
+    })
+    io.to(`comp:${compId}`).emit('auction:stateChanged', await getFullAuctionState(compId))
   }
 }
 
-async function getFullAuctionState() {
-  const state = await getAuctionState()
+async function getFullAuctionState(compId) {
+  const comp = await getCompetition(compId)
+  const state = parseAuctionState(comp)
+  const settings = parseCompSettings(comp)
+
   const nominatedPlayer = state.nominatedPlayerId
-    ? await queryOne('SELECT * FROM players WHERE id = $1', [state.nominatedPlayerId])
+    ? await queryOne(`
+        SELECT cp.*, p.name, p.steam_id, p.avatar_url
+        FROM competition_players cp JOIN players p ON cp.player_id = p.id
+        WHERE cp.competition_id = $1 AND cp.player_id = $2
+      `, [compId, state.nominatedPlayerId])
     : null
   const nominator = state.nominatorId
     ? await queryOne('SELECT id, name, team FROM captains WHERE id = $1', [state.nominatorId])
@@ -316,20 +357,30 @@ async function getFullAuctionState() {
   const currentBidder = state.currentBidderId
     ? await queryOne('SELECT id, name, team FROM captains WHERE id = $1', [state.currentBidderId])
     : null
-  const history = state.currentRound !== '0' ? await getBidHistory(Number(state.currentRound)) : []
+  const history = state.currentRound ? await getBidHistory(compId, Number(state.currentRound)) : []
 
   return {
-    status: state.status,
-    currentRound: Number(state.currentRound),
-    totalRounds: Number(state.totalRounds),
+    status: state.status || 'idle',
+    currentRound: Number(state.currentRound) || 0,
+    totalRounds: Number(state.totalRounds) || 0,
     nominator,
-    nominatedPlayer: nominatedPlayer ? { ...nominatedPlayer, roles: JSON.parse(nominatedPlayer.roles), drafted: !!nominatedPlayer.drafted } : null,
-    currentBid: Number(state.currentBid),
+    nominatedPlayer: nominatedPlayer ? {
+      id: nominatedPlayer.player_id,
+      name: nominatedPlayer.name,
+      roles: JSON.parse(nominatedPlayer.roles || '[]'),
+      mmr: nominatedPlayer.mmr,
+      info: nominatedPlayer.info,
+      drafted: !!nominatedPlayer.drafted,
+      steam_id: nominatedPlayer.steam_id,
+      avatar_url: nominatedPlayer.avatar_url,
+    } : null,
+    currentBid: Number(state.currentBid) || 0,
     currentBidder,
-    bidTimerEnd: Number(state.bidTimerEnd),
+    bidTimerEnd: Number(state.bidTimerEnd) || 0,
     bidHistory: history,
-    captains: await getCaptains(),
-    players: await getPlayers(),
+    captains: await getCaptains(compId),
+    players: await getCompPlayers(compId),
+    settings,
   }
 }
 
@@ -373,7 +424,6 @@ app.get('/api/auth/steam', (req, res) => {
 
 app.get('/api/auth/steam/callback', async (req, res) => {
   try {
-    // Verify the OpenID response with Steam
     const params = new URLSearchParams(req.query)
     params.set('openid.mode', 'check_authentication')
     const verifyRes = await fetch('https://steamcommunity.com/openid/login', {
@@ -386,33 +436,26 @@ app.get('/api/auth/steam/callback', async (req, res) => {
       return res.redirect(`${BASE_URL}/?steam_error=validation_failed`)
     }
 
-    // Extract Steam ID from claimed_id
     const claimedId = req.query['openid.claimed_id']
     const steamIdMatch = claimedId?.match(/\/openid\/id\/(\d+)$/)
     if (!steamIdMatch) {
       return res.redirect(`${BASE_URL}/?steam_error=invalid_id`)
     }
     const steamId = steamIdMatch[1]
-
-    // Fetch Steam profile
     const { personaName, avatarUrl } = await fetchSteamProfile(steamId)
 
-    // Check if player already exists → LOGIN
     const existing = await queryOne('SELECT * FROM players WHERE steam_id = $1', [steamId])
     if (existing) {
-      // Update profile data from Steam
       await execute('UPDATE players SET name = $1, avatar_url = $2 WHERE id = $3', [personaName, avatarUrl, existing.id])
       const token = createSession(existing.id)
       return res.redirect(`${BASE_URL}/?authToken=${token}`)
     }
 
-    // New user → create account (not in player pool yet)
     const newPlayer = await queryOne(
-      'INSERT INTO players (name, roles, mmr, info, steam_id, avatar_url, in_pool) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
-      [personaName, '[]', 0, '', steamId, avatarUrl, false]
+      'INSERT INTO players (name, roles, mmr, info, steam_id, avatar_url) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+      [personaName, '[]', 0, '', steamId, avatarUrl]
     )
     const token = createSession(newPlayer.id)
-    io.emit('players:updated', await getPlayers())
     res.redirect(`${BASE_URL}/?authToken=${token}`)
   } catch (e) {
     console.error('Steam callback error:', e)
@@ -420,26 +463,9 @@ app.get('/api/auth/steam/callback', async (req, res) => {
   }
 })
 
-app.post('/api/players/register', async (req, res) => {
-  const player = await getAuthPlayer(req)
-  if (!player) return res.status(401).json({ error: 'Not authenticated' })
-  if (player.in_pool) return res.status(409).json({ error: 'Already in the player pool' })
-
-  const { roles, mmr, info } = req.body
-  await execute(
-    'UPDATE players SET roles = $1, mmr = $2, info = $3, in_pool = true WHERE id = $4',
-    [JSON.stringify(roles || []), mmr || 0, info || '', player.id]
-  )
-
-  io.emit('players:updated', await getPlayers())
-  res.json({ ok: true })
-})
-
 app.get('/api/auth/me', async (req, res) => {
   const player = await getAuthPlayer(req)
   if (!player) return res.status(401).json({ error: 'Not authenticated' })
-
-  const captain = await queryOne('SELECT id, team, budget, status FROM captains WHERE player_id = $1', [player.id])
 
   res.json({
     id: player.id,
@@ -447,10 +473,32 @@ app.get('/api/auth/me', async (req, res) => {
     steam_id: player.steam_id,
     avatar_url: player.avatar_url,
     is_admin: !!player.is_admin,
-    in_pool: !!player.in_pool,
     roles: JSON.parse(player.roles || '[]'),
     mmr: player.mmr,
     info: player.info || '',
+  })
+})
+
+// Competition-specific user info
+app.get('/api/competitions/:compId/me', async (req, res) => {
+  const player = await getAuthPlayer(req)
+  if (!player) return res.status(401).json({ error: 'Not authenticated' })
+  const compId = Number(req.params.compId)
+
+  const cp = await queryOne(
+    'SELECT * FROM competition_players WHERE competition_id = $1 AND player_id = $2',
+    [compId, player.id]
+  )
+  const captain = await queryOne(
+    'SELECT id, team, budget, status FROM captains WHERE player_id = $1 AND competition_id = $2',
+    [player.id, compId]
+  )
+
+  res.json({
+    in_pool: cp ? !!cp.in_pool : false,
+    roles: cp ? JSON.parse(cp.roles || '[]') : JSON.parse(player.roles || '[]'),
+    mmr: cp ? cp.mmr : player.mmr,
+    info: cp ? (cp.info || '') : (player.info || ''),
     captain: captain ? { id: captain.id, team: captain.team, budget: captain.budget, status: captain.status } : null,
   })
 })
@@ -477,95 +525,363 @@ app.post('/api/auth/logout', (req, res) => {
   res.json({ ok: true })
 })
 
-// ─── REST API: Settings ───────────────────────────────────
+// ─── REST API: Competitions CRUD ─────────────────────────
 
-app.get('/api/settings', async (req, res) => {
-  res.json(await getSettings())
+app.get('/api/competitions', async (req, res) => {
+  const comps = await query(`
+    SELECT c.*, p.name AS created_by_name, p.avatar_url AS created_by_avatar
+    FROM competitions c
+    LEFT JOIN players p ON p.id = c.created_by
+    ORDER BY c.created_at DESC
+  `)
+  res.json(comps.map(c => ({
+    ...c,
+    settings: parseCompSettings(c),
+    auction_state: parseAuctionState(c),
+  })))
 })
 
-app.put('/api/settings', async (req, res) => {
-  const player = await getAuthPlayer(req)
-  if (!player?.is_admin) return res.status(403).json({ error: 'Admin access required' })
-
-  for (const [key, value] of Object.entries(req.body)) {
-    await execute(
-      'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value',
-      [key, String(value)]
-    )
-  }
-  const settings = await getSettings()
-  io.emit('settings:updated', settings)
-  res.json(settings)
+app.get('/api/competitions/:id', async (req, res) => {
+  const comp = await queryOne(`
+    SELECT c.*, p.name AS created_by_name, p.avatar_url AS created_by_avatar
+    FROM competitions c
+    LEFT JOIN players p ON p.id = c.created_by
+    WHERE c.id = $1
+  `, [req.params.id])
+  if (!comp) return res.status(404).json({ error: 'Competition not found' })
+  res.json({
+    ...comp,
+    settings: parseCompSettings(comp),
+    auction_state: parseAuctionState(comp),
+  })
 })
 
-// ─── REST API: Captains (Promote/Demote) ─────────────────
-
-app.get('/api/captains', async (req, res) => {
-  res.json(await getCaptains())
-})
-
-app.post('/api/captains/promote', async (req, res) => {
+app.post('/api/competitions', async (req, res) => {
   const admin = await getAuthPlayer(req)
   if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
+
+  const { name, description, starts_at, registration_start, registration_end, settings } = req.body
+  if (!name) return res.status(400).json({ error: 'Name is required' })
+
+  const defaultSettings = {
+    playersPerTeam: 5, bidTimer: 30, startingBudget: 1000,
+    minimumBid: 10, bidIncrement: 5, maxBid: 0,
+    nominationOrder: 'normal', requireAllOnline: true, allowSteamRegistration: true,
+  }
+
+  const comp = await queryOne(
+    `INSERT INTO competitions (name, description, starts_at, registration_start, registration_end, settings, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+    [name, description || '', starts_at || null, registration_start || null, registration_end || null, JSON.stringify({ ...defaultSettings, ...settings }), admin.id]
+  )
+  // Fetch with creator info
+  const full = await queryOne(`
+    SELECT c.*, p.name AS created_by_name, p.avatar_url AS created_by_avatar
+    FROM competitions c LEFT JOIN players p ON p.id = c.created_by WHERE c.id = $1
+  `, [comp.id])
+  res.status(201).json({ ...full, settings: parseCompSettings(full) })
+})
+
+app.put('/api/competitions/:id', async (req, res) => {
+  const admin = await getAuthPlayer(req)
+  if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
+
+  const comp = await getCompetition(req.params.id)
+  if (!comp) return res.status(404).json({ error: 'Competition not found' })
+
+  const { name, description, starts_at, registration_start, registration_end, settings } = req.body
+
+  const newSettings = settings ? { ...comp.settings, ...settings } : comp.settings
+  await execute(
+    `UPDATE competitions SET name = $1, description = $2, starts_at = $3, registration_start = $4, registration_end = $5, settings = $6 WHERE id = $7`,
+    [
+      name ?? comp.name,
+      description ?? comp.description,
+      starts_at !== undefined ? starts_at : comp.starts_at,
+      registration_start !== undefined ? registration_start : comp.registration_start,
+      registration_end !== undefined ? registration_end : comp.registration_end,
+      JSON.stringify(newSettings),
+      comp.id,
+    ]
+  )
+
+  const updated = await queryOne(`
+    SELECT c.*, p.name AS created_by_name, p.avatar_url AS created_by_avatar
+    FROM competitions c LEFT JOIN players p ON p.id = c.created_by WHERE c.id = $1
+  `, [comp.id])
+  io.to(`comp:${comp.id}`).emit('settings:updated', parseCompSettings(updated))
+  res.json({ ...updated, settings: parseCompSettings(updated) })
+})
+
+app.delete('/api/competitions/:id', async (req, res) => {
+  const admin = await getAuthPlayer(req)
+  if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
+
+  await execute('DELETE FROM competitions WHERE id = $1', [req.params.id])
+  res.json({ ok: true })
+})
+
+// ─── REST API: Competition Players ───────────────────────
+
+app.get('/api/competitions/:compId/players', async (req, res) => {
+  res.json(await getCompPlayers(Number(req.params.compId)))
+})
+
+// Self-register for a competition's player pool
+app.post('/api/competitions/:compId/players/register', async (req, res) => {
+  const player = await getAuthPlayer(req)
+  if (!player) return res.status(401).json({ error: 'Not authenticated' })
+  const compId = Number(req.params.compId)
+
+  const existing = await queryOne(
+    'SELECT * FROM competition_players WHERE competition_id = $1 AND player_id = $2',
+    [compId, player.id]
+  )
+  if (existing?.in_pool) return res.status(409).json({ error: 'Already in the player pool' })
+
+  const { roles, mmr, info } = req.body
+
+  // Also update player's global defaults
+  await execute(
+    'UPDATE players SET roles = $1, mmr = $2, info = $3 WHERE id = $4',
+    [JSON.stringify(roles || []), mmr || 0, info || '', player.id]
+  )
+
+  if (existing) {
+    await execute(
+      'UPDATE competition_players SET roles = $1, mmr = $2, info = $3, in_pool = true WHERE id = $4',
+      [JSON.stringify(roles || []), mmr || 0, info || '', existing.id]
+    )
+  } else {
+    await execute(
+      `INSERT INTO competition_players (competition_id, player_id, roles, mmr, info, in_pool)
+       VALUES ($1, $2, $3, $4, $5, true)`,
+      [compId, player.id, JSON.stringify(roles || []), mmr || 0, info || '']
+    )
+  }
+
+  io.to(`comp:${compId}`).emit('players:updated', await getCompPlayers(compId))
+  res.json({ ok: true })
+})
+
+app.put('/api/competitions/:compId/players/:playerId', async (req, res) => {
+  const admin = await getAuthPlayer(req)
+  if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
+  const compId = Number(req.params.compId)
+  const playerId = Number(req.params.playerId)
+
+  const cp = await queryOne(
+    'SELECT * FROM competition_players WHERE competition_id = $1 AND player_id = $2',
+    [compId, playerId]
+  )
+  if (!cp) return res.status(404).json({ error: 'Player not in this competition' })
+
+  const { name, roles, mmr, info, is_admin } = req.body
+
+  // Update competition-specific data
+  await execute(
+    'UPDATE competition_players SET roles = $1, mmr = $2, info = $3 WHERE id = $4',
+    [
+      roles ? JSON.stringify(roles) : cp.roles,
+      mmr ?? cp.mmr,
+      info ?? cp.info,
+      cp.id,
+    ]
+  )
+
+  // Update global player data if name or is_admin changed
+  if (name !== undefined || is_admin !== undefined) {
+    const player = await queryOne('SELECT * FROM players WHERE id = $1', [playerId])
+    await execute(
+      'UPDATE players SET name = $1, is_admin = $2 WHERE id = $3',
+      [name ?? player.name, is_admin !== undefined ? is_admin : player.is_admin, playerId]
+    )
+  }
+
+  io.to(`comp:${compId}`).emit('players:updated', await getCompPlayers(compId))
+  res.json({ ok: true })
+})
+
+app.delete('/api/competitions/:compId/players/:playerId', async (req, res) => {
+  const admin = await getAuthPlayer(req)
+  if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
+  const compId = Number(req.params.compId)
+  const playerId = Number(req.params.playerId)
+
+  // Remove from competition pool (set in_pool=false, clear draft state)
+  await execute(
+    'UPDATE competition_players SET in_pool = false, drafted = 0, drafted_by = NULL, draft_price = NULL, draft_round = NULL WHERE competition_id = $1 AND player_id = $2',
+    [compId, playerId]
+  )
+
+  io.to(`comp:${compId}`).emit('players:updated', await getCompPlayers(compId))
+  res.json({ ok: true })
+})
+
+// ─── REST API: Competition Captains ──────────────────────
+
+app.get('/api/competitions/:compId/captains', async (req, res) => {
+  res.json(await getCaptains(Number(req.params.compId)))
+})
+
+app.post('/api/competitions/:compId/captains/promote', async (req, res) => {
+  const admin = await getAuthPlayer(req)
+  if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
+  const compId = Number(req.params.compId)
 
   const { playerId, team } = req.body
   if (!playerId || !team) return res.status(400).json({ error: 'Player ID and team name required' })
 
   const player = await queryOne('SELECT * FROM players WHERE id = $1', [playerId])
   if (!player) return res.status(404).json({ error: 'Player not found' })
-  if (!player.steam_id) return res.status(400).json({ error: 'Player must have a Steam account to be a captain' })
+  if (!player.steam_id) return res.status(400).json({ error: 'Player must have a Steam account' })
 
-  const existing = await queryOne('SELECT id FROM captains WHERE player_id = $1', [playerId])
-  if (existing) return res.status(409).json({ error: 'Player is already a captain' })
+  const existing = await queryOne('SELECT id FROM captains WHERE player_id = $1 AND competition_id = $2', [playerId, compId])
+  if (existing) return res.status(409).json({ error: 'Player is already a captain in this competition' })
 
-  const settings = await getSettings()
+  const comp = await getCompetition(compId)
+  const settings = parseCompSettings(comp)
+
   await queryOne(
-    'INSERT INTO captains (name, team, budget, status, mmr, player_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
-    [player.name, team, settings.startingBudget, 'Waiting', player.mmr, playerId]
+    'INSERT INTO captains (competition_id, name, team, budget, status, mmr, player_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
+    [compId, player.name, team, settings.startingBudget, 'Waiting', player.mmr, playerId]
   )
 
-  io.emit('captains:updated', await getCaptains())
-  io.emit('players:updated', await getPlayers())
+  // Ensure player has a competition_players entry (remove from pool since they're a captain)
+  const cp = await queryOne('SELECT id FROM competition_players WHERE competition_id = $1 AND player_id = $2', [compId, playerId])
+  if (cp) {
+    await execute('UPDATE competition_players SET in_pool = false WHERE id = $1', [cp.id])
+  } else {
+    await execute(
+      `INSERT INTO competition_players (competition_id, player_id, roles, mmr, info, in_pool)
+       VALUES ($1, $2, $3, $4, $5, false)`,
+      [compId, playerId, player.roles || '[]', player.mmr, player.info || '']
+    )
+  }
+
+  io.to(`comp:${compId}`).emit('captains:updated', await getCaptains(compId))
+  io.to(`comp:${compId}`).emit('players:updated', await getCompPlayers(compId))
   res.status(201).json({ ok: true })
 })
 
-app.put('/api/captains/:id', async (req, res) => {
+app.put('/api/competitions/:compId/captains/:id', async (req, res) => {
   const admin = await getAuthPlayer(req)
   if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
+  const compId = Number(req.params.compId)
 
-  const captain = await queryOne('SELECT * FROM captains WHERE id = $1', [req.params.id])
+  const captain = await queryOne('SELECT * FROM captains WHERE id = $1 AND competition_id = $2', [req.params.id, compId])
   if (!captain) return res.status(404).json({ error: 'Captain not found' })
 
   const { team, budget } = req.body
   await execute(
     'UPDATE captains SET team = $1, budget = $2 WHERE id = $3',
-    [team ?? captain.team, budget ?? captain.budget, req.params.id]
+    [team ?? captain.team, budget ?? captain.budget, captain.id]
   )
-  io.emit('captains:updated', await getCaptains())
-  res.json(await queryOne('SELECT * FROM captains WHERE id = $1', [req.params.id]))
+  io.to(`comp:${compId}`).emit('captains:updated', await getCaptains(compId))
+  res.json(await queryOne('SELECT * FROM captains WHERE id = $1', [captain.id]))
 })
 
-app.post('/api/captains/:id/demote', async (req, res) => {
+app.post('/api/competitions/:compId/captains/:id/demote', async (req, res) => {
   const admin = await getAuthPlayer(req)
   if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
+  const compId = Number(req.params.compId)
 
-  const captain = await queryOne('SELECT player_id FROM captains WHERE id = $1', [req.params.id])
+  const captain = await queryOne('SELECT player_id FROM captains WHERE id = $1 AND competition_id = $2', [req.params.id, compId])
   await execute('DELETE FROM captains WHERE id = $1', [req.params.id])
+
   if (captain?.player_id) {
-    await execute('UPDATE players SET in_pool = true WHERE id = $1', [captain.player_id])
+    // Return to pool
+    const cp = await queryOne('SELECT id FROM competition_players WHERE competition_id = $1 AND player_id = $2', [compId, captain.player_id])
+    if (cp) {
+      await execute('UPDATE competition_players SET in_pool = true WHERE id = $1', [cp.id])
+    } else {
+      const player = await queryOne('SELECT * FROM players WHERE id = $1', [captain.player_id])
+      if (player) {
+        await execute(
+          `INSERT INTO competition_players (competition_id, player_id, roles, mmr, info, in_pool)
+           VALUES ($1, $2, $3, $4, $5, true)`,
+          [compId, captain.player_id, player.roles || '[]', player.mmr, player.info || '']
+        )
+      }
+    }
   }
-  io.emit('captains:updated', await getCaptains())
-  io.emit('players:updated', await getPlayers())
+
+  io.to(`comp:${compId}`).emit('captains:updated', await getCaptains(compId))
+  io.to(`comp:${compId}`).emit('players:updated', await getCompPlayers(compId))
   res.json({ ok: true })
 })
 
-// ─── REST API: Users (all Steam accounts) ────────────────
+// ─── REST API: Competition Auction ───────────────────────
+
+app.get('/api/competitions/:compId/auction', async (req, res) => {
+  const compId = Number(req.params.compId)
+  res.json(await getFullAuctionState(compId))
+})
+
+app.get('/api/competitions/:compId/auction/results', async (req, res) => {
+  const compId = Number(req.params.compId)
+  const captains = await getCaptains(compId)
+  const players = await getCompPlayers(compId)
+  const results = captains.map(c => ({
+    ...c,
+    players: players.filter(p => p.drafted && p.drafted_by === c.id).map(p => ({
+      ...p, roles: typeof p.roles === 'string' ? JSON.parse(p.roles) : p.roles
+    })),
+  }))
+  res.json(results)
+})
+
+// Admin: add user to competition pool
+app.post('/api/competitions/:compId/users/:userId/add-to-pool', async (req, res) => {
+  const admin = await getAuthPlayer(req)
+  if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
+  const compId = Number(req.params.compId)
+  const userId = Number(req.params.userId)
+
+  const player = await queryOne('SELECT * FROM players WHERE id = $1', [userId])
+  if (!player) return res.status(404).json({ error: 'User not found' })
+
+  const existing = await queryOne(
+    'SELECT * FROM competition_players WHERE competition_id = $1 AND player_id = $2',
+    [compId, userId]
+  )
+
+  if (existing) {
+    if (existing.in_pool) return res.status(409).json({ error: 'Already in pool' })
+    await execute('UPDATE competition_players SET in_pool = true WHERE id = $1', [existing.id])
+  } else {
+    await execute(
+      `INSERT INTO competition_players (competition_id, player_id, roles, mmr, info, in_pool)
+       VALUES ($1, $2, $3, $4, $5, true)`,
+      [compId, userId, player.roles || '[]', player.mmr, player.info || '']
+    )
+  }
+
+  io.to(`comp:${compId}`).emit('players:updated', await getCompPlayers(compId))
+  res.json({ ok: true })
+})
+
+app.post('/api/competitions/:compId/users/:userId/remove-from-pool', async (req, res) => {
+  const admin = await getAuthPlayer(req)
+  if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
+  const compId = Number(req.params.compId)
+  const userId = Number(req.params.userId)
+
+  await execute(
+    'UPDATE competition_players SET in_pool = false WHERE competition_id = $1 AND player_id = $2',
+    [compId, userId]
+  )
+
+  io.to(`comp:${compId}`).emit('players:updated', await getCompPlayers(compId))
+  res.json({ ok: true })
+})
+
+// ─── REST API: Users (global, all Steam accounts) ───────
 
 app.get('/api/users', async (req, res) => {
   const admin = await getAuthPlayer(req)
   if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
 
-  const captainPlayerIds = (await query('SELECT player_id FROM captains WHERE player_id IS NOT NULL')).map(r => r.player_id)
   const rows = await query('SELECT * FROM players ORDER BY id')
   res.json(rows.map(p => ({
     id: p.id,
@@ -576,41 +892,8 @@ app.get('/api/users', async (req, res) => {
     mmr: p.mmr,
     info: p.info || '',
     is_admin: !!p.is_admin,
-    is_captain: captainPlayerIds.includes(p.id),
-    in_pool: !!p.in_pool,
     created_at: p.created_at,
   })))
-})
-
-app.post('/api/users/:id/add-to-pool', async (req, res) => {
-  const admin = await getAuthPlayer(req)
-  if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
-
-  const player = await queryOne('SELECT * FROM players WHERE id = $1', [req.params.id])
-  if (!player) return res.status(404).json({ error: 'User not found' })
-  if (player.in_pool) return res.status(409).json({ error: 'Already in the player pool' })
-
-  await execute('UPDATE players SET in_pool = true WHERE id = $1', [req.params.id])
-  io.emit('players:updated', await getPlayers())
-  res.json({ ok: true })
-})
-
-app.post('/api/users/:id/remove-from-pool', async (req, res) => {
-  const admin = await getAuthPlayer(req)
-  if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
-
-  const player = await queryOne('SELECT * FROM players WHERE id = $1', [req.params.id])
-  if (!player) return res.status(404).json({ error: 'User not found' })
-
-  await execute('UPDATE players SET in_pool = false WHERE id = $1', [req.params.id])
-  io.emit('players:updated', await getPlayers())
-  res.json({ ok: true })
-})
-
-// ─── REST API: Players (pool only) ───────────────────────
-
-app.get('/api/players', async (req, res) => {
-  res.json(await getPlayers())
 })
 
 app.put('/api/players/:id', async (req, res) => {
@@ -631,43 +914,34 @@ app.put('/api/players/:id', async (req, res) => {
       req.params.id,
     ]
   )
-  io.emit('players:updated', await getPlayers())
   res.json({ ok: true })
 })
 
-app.delete('/api/players/:id', async (req, res) => {
-  const admin = await getAuthPlayer(req)
-  if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
-
-  const player = await queryOne('SELECT * FROM players WHERE id = $1', [req.params.id])
-  if (!player) return res.status(404).json({ error: 'Player not found' })
-
-  if (player.steam_id) {
-    // Steam user: remove from pool and clear draft state, keep the account
-    await execute('UPDATE players SET in_pool = false, drafted = 0, drafted_by = NULL, draft_price = NULL, draft_round = NULL WHERE id = $1', [req.params.id])
-  } else {
-    // Admin-added player with no account: actually delete
-    await execute('DELETE FROM players WHERE id = $1', [req.params.id])
-  }
-  io.emit('players:updated', await getPlayers())
-  res.json({ ok: true })
-})
-
-// ─── REST API: News ───────────────────────────────────────
+// ─── REST API: News ──────────────────────────────────────
 
 app.get('/api/news', async (req, res) => {
-  const news = await query('SELECT * FROM news ORDER BY created_at DESC')
+  const news = await query(`
+    SELECT n.*, p.name AS created_by_name, p.avatar_url AS created_by_avatar
+    FROM news n
+    LEFT JOIN players p ON p.id = n.created_by
+    ORDER BY n.created_at DESC
+  `)
   res.json(news)
 })
 
 app.post('/api/news', async (req, res) => {
+  const admin = await getAuthPlayer(req)
+  if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
   const { title, content } = req.body
   if (!title || !content) return res.status(400).json({ error: 'Title and content required' })
   const result = await queryOne(
-    'INSERT INTO news (title, content) VALUES ($1, $2) RETURNING id',
-    [title, content]
+    'INSERT INTO news (title, content, created_by) VALUES ($1, $2, $3) RETURNING id',
+    [title, content, admin.id]
   )
-  const post = await queryOne('SELECT * FROM news WHERE id = $1', [result.id])
+  const post = await queryOne(`
+    SELECT n.*, p.name AS created_by_name, p.avatar_url AS created_by_avatar
+    FROM news n LEFT JOIN players p ON p.id = n.created_by WHERE n.id = $1
+  `, [result.id])
   io.emit('news:updated')
   res.status(201).json(post)
 })
@@ -681,7 +955,11 @@ app.put('/api/news/:id', async (req, res) => {
     [title ?? post.title, content ?? post.content, req.params.id]
   )
   io.emit('news:updated')
-  res.json(await queryOne('SELECT * FROM news WHERE id = $1', [req.params.id]))
+  const updated = await queryOne(`
+    SELECT n.*, p.name AS created_by_name, p.avatar_url AS created_by_avatar
+    FROM news n LEFT JOIN players p ON p.id = n.created_by WHERE n.id = $1
+  `, [req.params.id])
+  res.json(updated)
 })
 
 app.delete('/api/news/:id', async (req, res) => {
@@ -690,51 +968,7 @@ app.delete('/api/news/:id', async (req, res) => {
   res.json({ ok: true })
 })
 
-// ─── REST API: Auction State ──────────────────────────────
-
-app.get('/api/auction', async (req, res) => {
-  const state = await getAuctionState()
-  const settings = await getSettings()
-  const nominatedPlayer = state.nominatedPlayerId
-    ? await queryOne('SELECT * FROM players WHERE id = $1', [state.nominatedPlayerId])
-    : null
-  const nominator = state.nominatorId
-    ? await queryOne('SELECT id, name, team FROM captains WHERE id = $1', [state.nominatorId])
-    : null
-  const currentBidder = state.currentBidderId
-    ? await queryOne('SELECT id, name, team FROM captains WHERE id = $1', [state.currentBidderId])
-    : null
-  const history = state.currentRound !== '0' ? await getBidHistory(Number(state.currentRound)) : []
-
-  res.json({
-    status: state.status,
-    currentRound: Number(state.currentRound),
-    totalRounds: Number(state.totalRounds),
-    nominator,
-    nominatedPlayer: nominatedPlayer ? { ...nominatedPlayer, roles: JSON.parse(nominatedPlayer.roles), drafted: !!nominatedPlayer.drafted } : null,
-    currentBid: Number(state.currentBid),
-    currentBidder,
-    bidTimerEnd: Number(state.bidTimerEnd),
-    bidHistory: history,
-    settings,
-    captains: await getCaptains(),
-    players: await getPlayers(),
-  })
-})
-
-app.get('/api/auction/results', async (req, res) => {
-  const captains = await getCaptains()
-  const players = await getPlayers()
-  const results = captains.map(c => ({
-    ...c,
-    players: players.filter(p => p.drafted && p.drafted_by === c.id).map(p => ({
-      ...p, roles: typeof p.roles === 'string' ? JSON.parse(p.roles) : p.roles
-    })),
-  }))
-  res.json(results)
-})
-
-// ─── Socket.io: Auction Logic ─────────────────────────────
+// ─── Socket.io: Per-Competition Auction Logic ────────────
 
 io.on('connection', (socket) => {
   console.log(`Client connected: ${socket.id}`)
@@ -745,396 +979,427 @@ io.on('connection', (socket) => {
     const playerId = getSessionPlayerId(token)
     if (playerId) {
       socketPlayers.set(socket.id, playerId)
-      // Check if player is a captain
-      queryOne('SELECT id FROM captains WHERE player_id = $1', [playerId]).then(captain => {
-        if (captain) {
-          onlineCaptains.set(socket.id, captain.id)
-          io.emit('captains:online', getOnlineCaptainIds())
-        }
-      })
     }
   }
 
-  // Send current state on connect
-  ;(async () => {
-    socket.emit('server:time', Date.now())
-    socket.emit('auction:stateChanged', await getFullAuctionState())
-    socket.emit('captains:online', getOnlineCaptainIds())
-    socket.emit('captains:ready', getReadyCaptainIds())
-    socket.emit('auction:logHistory', await getAuctionLog())
-  })()
-
   // Time sync
+  socket.emit('server:time', Date.now())
   socket.on('server:ping', () => {
     socket.emit('server:time', Date.now())
   })
 
-  // Ready up (captain only)
+  // ─── Competition Room Management ───────────────────────
+
+  socket.on('competition:join', async ({ competitionId }) => {
+    const compId = Number(competitionId)
+    const comp = await getCompetition(compId)
+    if (!comp) return socket.emit('auction:error', { message: 'Competition not found' })
+
+    // Leave previous competition room
+    const prevCompId = socketCompetitions.get(socket.id)
+    if (prevCompId) {
+      socket.leave(`comp:${prevCompId}`)
+      // Remove from online captains of previous comp
+      const prevMap = compOnlineCaptains.get(prevCompId)
+      if (prevMap) {
+        prevMap.delete(socket.id)
+        io.to(`comp:${prevCompId}`).emit('captains:online', getOnlineCaptainIds(prevCompId))
+      }
+    }
+
+    // Join new competition room
+    socket.join(`comp:${compId}`)
+    socketCompetitions.set(socket.id, compId)
+
+    // Check if player is a captain in this competition
+    const playerId = socketPlayers.get(socket.id)
+    if (playerId) {
+      const captain = await queryOne(
+        'SELECT id FROM captains WHERE player_id = $1 AND competition_id = $2', [playerId, compId]
+      )
+      if (captain) {
+        if (!compOnlineCaptains.has(compId)) compOnlineCaptains.set(compId, new Map())
+        compOnlineCaptains.get(compId).set(socket.id, captain.id)
+        io.to(`comp:${compId}`).emit('captains:online', getOnlineCaptainIds(compId))
+      }
+    }
+
+    // Send current state
+    socket.emit('auction:stateChanged', await getFullAuctionState(compId))
+    socket.emit('captains:online', getOnlineCaptainIds(compId))
+    socket.emit('captains:ready', getReadyCaptainIds(compId))
+    socket.emit('auction:logHistory', await getAuctionLog(compId))
+  })
+
+  // ─── Captain Ready ────────────────────────────────────
+
   socket.on('captain:ready', async () => {
-    const captainId = await getSocketCaptainId(socket.id)
+    const compId = socketCompetitions.get(socket.id)
+    if (!compId) return socket.emit('auction:error', { message: 'Not in a competition room' })
+    const captainId = await getSocketCaptainId(socket.id, compId)
     if (!captainId) return socket.emit('auction:error', { message: 'Not a captain' })
-    readyCaptains.add(captainId)
-    io.emit('captains:ready', getReadyCaptainIds())
+    if (!compReadyCaptains.has(compId)) compReadyCaptains.set(compId, new Set())
+    compReadyCaptains.get(compId).add(captainId)
+    io.to(`comp:${compId}`).emit('captains:ready', getReadyCaptainIds(compId))
   })
 
   socket.on('captain:unready', async () => {
-    const captainId = await getSocketCaptainId(socket.id)
+    const compId = socketCompetitions.get(socket.id)
+    if (!compId) return socket.emit('auction:error', { message: 'Not in a competition room' })
+    const captainId = await getSocketCaptainId(socket.id, compId)
     if (!captainId) return socket.emit('auction:error', { message: 'Not a captain' })
-    readyCaptains.delete(captainId)
-    io.emit('captains:ready', getReadyCaptainIds())
+    compReadyCaptains.get(compId)?.delete(captainId)
+    io.to(`comp:${compId}`).emit('captains:ready', getReadyCaptainIds(compId))
   })
 
-  // Start draft (admin only)
+  // ─── Auction: Start ───────────────────────────────────
+
   socket.on('auction:start', async () => {
+    const compId = socketCompetitions.get(socket.id)
+    if (!compId) return
     if (!await isAdminSocket(socket.id)) {
-      socket.emit('auction:error', { message: 'Admin access required' })
-      return
+      return socket.emit('auction:error', { message: 'Admin access required' })
     }
-    const captains = await getCaptains()
+    const captains = await getCaptains(compId)
     if (captains.length < 2) {
-      socket.emit('auction:error', { message: 'Need at least 2 captains' })
-      return
+      return socket.emit('auction:error', { message: 'Need at least 2 captains' })
     }
 
-    const settings = await getSettings()
+    const comp = await getCompetition(compId)
+    const settings = parseCompSettings(comp)
 
     if (settings.requireAllOnline) {
-      const allReady = captains.every(c => readyCaptains.has(c.id))
+      const readySet = compReadyCaptains.get(compId) || new Set()
+      const allReady = captains.every(c => readySet.has(c.id))
       if (!allReady) {
-        socket.emit('auction:error', { message: 'All captains must be ready before starting' })
-        return
+        return socket.emit('auction:error', { message: 'All captains must be ready before starting' })
       }
     }
+
     const totalRounds = settings.playersPerTeam * captains.length
 
-    await execute('UPDATE captains SET status = $1', ['Ready'])
-    await execute('UPDATE players SET drafted = 0, drafted_by = NULL, draft_price = NULL, draft_round = NULL')
-    await execute('DELETE FROM bid_history')
-    await execute('DELETE FROM auction_log')
+    await execute('UPDATE captains SET status = $1 WHERE competition_id = $2', ['Ready', compId])
+    await execute(
+      'UPDATE competition_players SET drafted = 0, drafted_by = NULL, draft_price = NULL, draft_round = NULL WHERE competition_id = $1',
+      [compId]
+    )
+    await execute('DELETE FROM bid_history WHERE competition_id = $1', [compId])
+    await execute('DELETE FROM auction_log WHERE competition_id = $1', [compId])
 
-    await setAuctionState('status', 'nominating')
-    await setAuctionState('currentRound', '1')
-    await setAuctionState('totalRounds', String(totalRounds))
-    const firstNominator = await getNextNominator(1, await getCaptains(), settings)
-    await setAuctionState('nominatorId', String(firstNominator.id))
-    await setAuctionState('nominatedPlayerId', '')
-    await setAuctionState('currentBid', '0')
-    await setAuctionState('currentBidderId', '')
-    await setAuctionState('bidTimerEnd', '0')
+    const firstNominator = await getNextNominator(compId, 1, await getCaptains(compId), settings)
+    await setAuctionState(compId, {
+      status: 'nominating',
+      currentRound: 1,
+      totalRounds,
+      nominatorId: firstNominator.id,
+      nominatedPlayerId: '',
+      currentBid: 0,
+      currentBidderId: '',
+      bidTimerEnd: 0,
+    })
 
-    readyCaptains.clear()
-    io.emit('captains:ready', getReadyCaptainIds())
-    await saveAuctionLog('start', `Draft started with ${captains.length} captains`)
-    io.emit('auction:log', { type: 'start', message: `Draft started with ${captains.length} captains` })
-    io.emit('auction:started')
-    io.emit('auction:stateChanged', await getFullAuctionState())
-    io.emit('captains:updated', await getCaptains())
-    io.emit('players:updated', await getPlayers())
+    compReadyCaptains.get(compId)?.clear()
+    io.to(`comp:${compId}`).emit('captains:ready', getReadyCaptainIds(compId))
+    await saveAuctionLog(compId, 'start', `Draft started with ${captains.length} captains`)
+    io.to(`comp:${compId}`).emit('auction:log', { type: 'start', message: `Draft started with ${captains.length} captains` })
+    io.to(`comp:${compId}`).emit('auction:started')
+    io.to(`comp:${compId}`).emit('auction:stateChanged', await getFullAuctionState(compId))
+    io.to(`comp:${compId}`).emit('captains:updated', await getCaptains(compId))
+    io.to(`comp:${compId}`).emit('players:updated', await getCompPlayers(compId))
   })
 
-  // Nominate a player
+  // ─── Auction: Nominate ─────────────────────────────────
+
   socket.on('auction:nominate', async ({ playerId, startingBid }) => {
-    const captainId = await getSocketCaptainId(socket.id)
+    const compId = socketCompetitions.get(socket.id)
+    if (!compId) return
+    const captainId = await getSocketCaptainId(socket.id, compId)
     const isAdmin = await isAdminSocket(socket.id)
-    const currentState = await getAuctionState()
-    if (!isAdmin && captainId !== Number(currentState.nominatorId)) {
-      socket.emit('auction:error', { message: 'Not your turn to nominate' })
-      return
+    const comp = await getCompetition(compId)
+    const state = parseAuctionState(comp)
+
+    if (!isAdmin && captainId !== Number(state.nominatorId)) {
+      return socket.emit('auction:error', { message: 'Not your turn to nominate' })
     }
-    const state = await getAuctionState()
     if (state.status !== 'nominating') {
-      socket.emit('auction:error', { message: 'Not in nomination phase' })
-      return
+      return socket.emit('auction:error', { message: 'Not in nomination phase' })
     }
 
-    const onlineIds = getOnlineCaptainIds()
-    const allCaptains = await getCaptains()
-    const settings = await getSettings()
+    const settings = parseCompSettings(comp)
+    const onlineIds = getOnlineCaptainIds(compId)
+    const allCaptains = await getCaptains(compId)
     const activeCaptains = []
     for (const c of allCaptains) {
-      if (await getCaptainPlayerCount(c.id) < settings.playersPerTeam) activeCaptains.push(c)
+      if (await getCaptainPlayerCount(compId, c.id) < settings.playersPerTeam) activeCaptains.push(c)
     }
     if (settings.requireAllOnline) {
       const allOnline = activeCaptains.every(c => onlineIds.includes(c.id))
       if (!allOnline) {
         const offlineNames = activeCaptains.filter(c => !onlineIds.includes(c.id)).map(c => c.name)
-        socket.emit('auction:error', { message: `Waiting for: ${offlineNames.join(', ')}` })
-        return
+        return socket.emit('auction:error', { message: `Waiting for: ${offlineNames.join(', ')}` })
       }
     }
 
-    const player = await queryOne('SELECT * FROM players WHERE id = $1 AND drafted = 0', [playerId])
-    if (!player) {
-      socket.emit('auction:error', { message: 'Player not available' })
-      return
-    }
+    const cp = await queryOne(
+      'SELECT * FROM competition_players WHERE competition_id = $1 AND player_id = $2 AND drafted = 0',
+      [compId, playerId]
+    )
+    if (!cp) return socket.emit('auction:error', { message: 'Player not available' })
 
     const nominator = await queryOne('SELECT * FROM captains WHERE id = $1', [state.nominatorId])
     const bid = nominator && nominator.budget === 0 ? 0 : Math.max(settings.minimumBid, Number(startingBid) || settings.minimumBid)
 
     if (nominator && bid > nominator.budget) {
-      socket.emit('auction:error', { message: `Starting bid ${bid}g exceeds your budget of ${nominator.budget}g` })
-      return
+      return socket.emit('auction:error', { message: `Starting bid ${bid}g exceeds your budget of ${nominator.budget}g` })
     }
 
-    if (nominator && await getCaptainPlayerCount(nominator.id) >= settings.playersPerTeam) {
-      socket.emit('auction:error', { message: 'Your team is already full' })
-      return
+    if (nominator && await getCaptainPlayerCount(compId, nominator.id) >= settings.playersPerTeam) {
+      return socket.emit('auction:error', { message: 'Your team is already full' })
     }
 
-    await setAuctionState('status', 'bidding')
-    await setAuctionState('nominatedPlayerId', String(playerId))
-    await setAuctionState('currentBid', String(bid))
-    await setAuctionState('currentBidderId', state.nominatorId)
+    await setAuctionState(compId, {
+      status: 'bidding',
+      nominatedPlayerId: playerId,
+      currentBid: bid,
+      currentBidderId: state.nominatorId,
+    })
 
-    const nominatorName = (await queryOne('SELECT name FROM captains WHERE id = $1', [state.nominatorId]))?.name
+    const nominatorName = nominator?.name
     await execute(
-      'INSERT INTO bid_history (round, player_id, captain_id, captain_name, amount) VALUES ($1, $2, $3, $4, $5)',
-      [Number(state.currentRound), playerId, Number(state.nominatorId), nominatorName, bid]
+      'INSERT INTO bid_history (competition_id, round, player_id, captain_id, captain_name, amount) VALUES ($1, $2, $3, $4, $5, $6)',
+      [compId, Number(state.currentRound), playerId, Number(state.nominatorId), nominatorName, bid]
     )
 
-    await saveAuctionLog('nomination', `${nominatorName} nominated ${player.name} for ${bid}g`)
-    io.emit('auction:log', { type: 'nomination', message: `${nominatorName} nominated ${player.name} for ${bid}g` })
-    await startBidTimer()
-    io.emit('auction:stateChanged', await getFullAuctionState())
+    const player = await queryOne('SELECT name FROM players WHERE id = $1', [playerId])
+    await saveAuctionLog(compId, 'nomination', `${nominatorName} nominated ${player.name} for ${bid}g`)
+    io.to(`comp:${compId}`).emit('auction:log', { type: 'nomination', message: `${nominatorName} nominated ${player.name} for ${bid}g` })
+    await startCompBidTimer(compId)
+    io.to(`comp:${compId}`).emit('auction:stateChanged', await getFullAuctionState(compId))
   })
 
-  // Place a bid
+  // ─── Auction: Bid ──────────────────────────────────────
+
   socket.on('auction:bid', async ({ amount }) => {
-    const captainId = await getSocketCaptainId(socket.id)
-    if (!captainId) {
-      socket.emit('auction:error', { message: 'Not authorized to bid' })
-      return
-    }
+    const compId = socketCompetitions.get(socket.id)
+    if (!compId) return
+    const captainId = await getSocketCaptainId(socket.id, compId)
+    if (!captainId) return socket.emit('auction:error', { message: 'Not authorized to bid' })
 
     const now = Date.now()
-    if (now - lastBidTime < BID_COOLDOWN_MS) {
-      socket.emit('auction:error', { message: 'Too fast! Wait a moment before bidding.' })
-      return
+    const lastBid = compLastBidTime.get(compId) || 0
+    if (now - lastBid < BID_COOLDOWN_MS) {
+      return socket.emit('auction:error', { message: 'Too fast! Wait a moment.' })
     }
 
-    const state = await getAuctionState()
+    const comp = await getCompetition(compId)
+    const state = parseAuctionState(comp)
     if (state.status !== 'bidding') {
-      socket.emit('auction:error', { message: 'Not in bidding phase' })
-      return
+      return socket.emit('auction:error', { message: 'Not in bidding phase' })
     }
 
     const captain = await queryOne('SELECT * FROM captains WHERE id = $1', [captainId])
-    if (!captain) {
-      socket.emit('auction:error', { message: 'Captain not found' })
-      return
-    }
+    if (!captain) return socket.emit('auction:error', { message: 'Captain not found' })
 
-    const settings = await getSettings()
-    if (await getCaptainPlayerCount(captainId) >= settings.playersPerTeam) {
-      socket.emit('auction:error', { message: 'Your team is already full' })
-      return
+    const settings = parseCompSettings(comp)
+    if (await getCaptainPlayerCount(compId, captainId) >= settings.playersPerTeam) {
+      return socket.emit('auction:error', { message: 'Your team is already full' })
     }
 
     const currentBid = Number(state.currentBid)
+    if (amount <= currentBid) return socket.emit('auction:error', { message: `Bid must be higher than ${currentBid}g` })
+    if (amount - currentBid < settings.bidIncrement) return socket.emit('auction:error', { message: `Minimum increment is ${settings.bidIncrement}g` })
+    if (amount > captain.budget) return socket.emit('auction:error', { message: 'Insufficient budget' })
+    if (settings.maxBid > 0 && amount > settings.maxBid) return socket.emit('auction:error', { message: `Max bid is ${settings.maxBid}g` })
 
-    if (amount <= currentBid) {
-      socket.emit('auction:error', { message: `Bid must be higher than ${currentBid}g` })
-      return
-    }
-
-    if (amount - currentBid < settings.bidIncrement) {
-      socket.emit('auction:error', { message: `Minimum increment is ${settings.bidIncrement}g` })
-      return
-    }
-
-    if (amount > captain.budget) {
-      socket.emit('auction:error', { message: 'Insufficient budget' })
-      return
-    }
-
-    if (settings.maxBid > 0 && amount > settings.maxBid) {
-      socket.emit('auction:error', { message: `Max bid is ${settings.maxBid}g` })
-      return
-    }
-
-    await setAuctionState('currentBid', String(amount))
-    await setAuctionState('currentBidderId', String(captainId))
-    lastBidTime = Date.now()
+    await setAuctionState(compId, { currentBid: amount, currentBidderId: captainId })
+    compLastBidTime.set(compId, Date.now())
 
     await execute(
-      'INSERT INTO bid_history (round, player_id, captain_id, captain_name, amount) VALUES ($1, $2, $3, $4, $5)',
-      [Number(state.currentRound), Number(state.nominatedPlayerId), captainId, captain.name, amount]
+      'INSERT INTO bid_history (competition_id, round, player_id, captain_id, captain_name, amount) VALUES ($1, $2, $3, $4, $5, $6)',
+      [compId, Number(state.currentRound), Number(state.nominatedPlayerId), captainId, captain.name, amount]
     )
 
     const bidPlayer = await queryOne('SELECT name FROM players WHERE id = $1', [state.nominatedPlayerId])
-    await saveAuctionLog('bid', `${captain.name} bid ${amount}g on ${bidPlayer?.name}`)
-    io.emit('auction:log', { type: 'bid', message: `${captain.name} bid ${amount}g on ${bidPlayer?.name}` })
-
-    await startBidTimer()
-    io.emit('auction:stateChanged', await getFullAuctionState())
+    await saveAuctionLog(compId, 'bid', `${captain.name} bid ${amount}g on ${bidPlayer?.name}`)
+    io.to(`comp:${compId}`).emit('auction:log', { type: 'bid', message: `${captain.name} bid ${amount}g on ${bidPlayer?.name}` })
+    await startCompBidTimer(compId)
+    io.to(`comp:${compId}`).emit('auction:stateChanged', await getFullAuctionState(compId))
   })
 
-  // Pause auction (admin only)
+  // ─── Auction: Pause / Resume / End / Undo / Reset ─────
+
   socket.on('auction:pause', async () => {
-    if (!await isAdminSocket(socket.id)) {
-      socket.emit('auction:error', { message: 'Admin access required' })
-      return
-    }
-    clearBidTimer()
-    await setAuctionState('bidTimerEnd', '0')
-    await setAuctionState('status', 'paused')
-    await saveAuctionLog('pause', 'Auction paused by admin')
-    io.emit('auction:log', { type: 'pause', message: 'Auction paused by admin' })
-    io.emit('auction:stateChanged', await getFullAuctionState())
+    const compId = socketCompetitions.get(socket.id)
+    if (!compId) return
+    if (!await isAdminSocket(socket.id)) return socket.emit('auction:error', { message: 'Admin access required' })
+    clearCompBidTimer(compId)
+    await setAuctionState(compId, { bidTimerEnd: 0, status: 'paused' })
+    await saveAuctionLog(compId, 'pause', 'Auction paused by admin')
+    io.to(`comp:${compId}`).emit('auction:log', { type: 'pause', message: 'Auction paused by admin' })
+    io.to(`comp:${compId}`).emit('auction:stateChanged', await getFullAuctionState(compId))
   })
 
-  // Resume auction (admin only)
   socket.on('auction:resume', async () => {
-    if (!await isAdminSocket(socket.id)) {
-      socket.emit('auction:error', { message: 'Admin access required' })
-      return
-    }
-    const state = await getAuctionState()
+    const compId = socketCompetitions.get(socket.id)
+    if (!compId) return
+    if (!await isAdminSocket(socket.id)) return socket.emit('auction:error', { message: 'Admin access required' })
+    const comp = await getCompetition(compId)
+    const state = parseAuctionState(comp)
     if (state.nominatedPlayerId) {
-      await setAuctionState('status', 'bidding')
-      await startBidTimer()
+      await setAuctionState(compId, { status: 'bidding' })
+      await startCompBidTimer(compId)
     } else {
-      await setAuctionState('status', 'nominating')
+      await setAuctionState(compId, { status: 'nominating' })
     }
-    await saveAuctionLog('resume', 'Auction resumed by admin')
-    io.emit('auction:log', { type: 'resume', message: 'Auction resumed by admin' })
-    io.emit('auction:stateChanged', await getFullAuctionState())
+    await saveAuctionLog(compId, 'resume', 'Auction resumed by admin')
+    io.to(`comp:${compId}`).emit('auction:log', { type: 'resume', message: 'Auction resumed by admin' })
+    io.to(`comp:${compId}`).emit('auction:stateChanged', await getFullAuctionState(compId))
   })
 
-  // End draft early (admin only)
   socket.on('auction:end', async () => {
-    if (!await isAdminSocket(socket.id)) {
-      socket.emit('auction:error', { message: 'Admin access required' })
-      return
-    }
-    clearBidTimer()
-    await setAuctionState('status', 'finished')
-    await setAuctionState('nominatedPlayerId', '')
-    await setAuctionState('currentBid', '0')
-    await setAuctionState('currentBidderId', '')
-    await saveAuctionLog('end', 'Draft ended by admin')
-    io.emit('auction:log', { type: 'end', message: 'Draft ended by admin' })
-    io.emit('auction:finished', { results: 'Draft ended by admin' })
-    io.emit('auction:stateChanged', await getFullAuctionState())
+    const compId = socketCompetitions.get(socket.id)
+    if (!compId) return
+    if (!await isAdminSocket(socket.id)) return socket.emit('auction:error', { message: 'Admin access required' })
+    clearCompBidTimer(compId)
+    await setAuctionState(compId, {
+      status: 'finished', nominatedPlayerId: '', currentBid: 0, currentBidderId: '',
+    })
+    await saveAuctionLog(compId, 'end', 'Draft ended by admin')
+    io.to(`comp:${compId}`).emit('auction:log', { type: 'end', message: 'Draft ended by admin' })
+    io.to(`comp:${compId}`).emit('auction:finished', { results: 'Draft ended by admin' })
+    io.to(`comp:${compId}`).emit('auction:stateChanged', await getFullAuctionState(compId))
   })
 
-  // Undo last action (admin only)
   socket.on('auction:undo', async () => {
-    if (!await isAdminSocket(socket.id)) {
-      socket.emit('auction:error', { message: 'Admin access required' })
-      return
-    }
-    const state = await getAuctionState()
+    const compId = socketCompetitions.get(socket.id)
+    if (!compId) return
+    if (!await isAdminSocket(socket.id)) return socket.emit('auction:error', { message: 'Admin access required' })
+
+    const comp = await getCompetition(compId)
+    const state = parseAuctionState(comp)
+    const settings = parseCompSettings(comp)
 
     // Case 1: Currently in bidding or paused with a nomination
     if (state.status === 'bidding' || (state.status === 'paused' && state.nominatedPlayerId)) {
-      clearBidTimer()
+      clearCompBidTimer(compId)
       const nominatedPlayer = await queryOne('SELECT name FROM players WHERE id = $1', [state.nominatedPlayerId])
-      await execute('DELETE FROM bid_history WHERE round = $1', [Number(state.currentRound)])
-      await setAuctionState('status', 'nominating')
-      await setAuctionState('nominatedPlayerId', '')
-      await setAuctionState('currentBid', '0')
-      await setAuctionState('currentBidderId', '')
-      await setAuctionState('bidTimerEnd', '0')
-      io.emit('auction:undone', { message: `Nomination of ${nominatedPlayer?.name || 'player'} was cancelled` })
-      await saveAuctionLog('undo', `Undo: nomination of ${nominatedPlayer?.name || 'player'} cancelled`)
-      io.emit('auction:log', { type: 'undo', message: `Undo: nomination of ${nominatedPlayer?.name || 'player'} cancelled` })
-      io.emit('auction:stateChanged', await getFullAuctionState())
+      await execute('DELETE FROM bid_history WHERE competition_id = $1 AND round = $2', [compId, Number(state.currentRound)])
+      await setAuctionState(compId, {
+        status: 'nominating', nominatedPlayerId: '', currentBid: 0, currentBidderId: '', bidTimerEnd: 0,
+      })
+      io.to(`comp:${compId}`).emit('auction:undone', { message: `Nomination of ${nominatedPlayer?.name || 'player'} was cancelled` })
+      await saveAuctionLog(compId, 'undo', `Undo: nomination of ${nominatedPlayer?.name || 'player'} cancelled`)
+      io.to(`comp:${compId}`).emit('auction:log', { type: 'undo', message: `Undo: nomination of ${nominatedPlayer?.name || 'player'} cancelled` })
+      io.to(`comp:${compId}`).emit('auction:stateChanged', await getFullAuctionState(compId))
       return
     }
 
-    // Case 2: In nominating phase, paused without nomination, or finished
+    // Case 2: In nominating, paused without nomination, or finished
     if (state.status === 'nominating' || state.status === 'finished' || state.status === 'paused') {
       const currentRound = Number(state.currentRound)
       const prevRound = state.status === 'finished' ? currentRound : currentRound - 1
-      if (prevRound < 1) {
-        socket.emit('auction:error', { message: 'Nothing to undo' })
-        return
-      }
+      if (prevRound < 1) return socket.emit('auction:error', { message: 'Nothing to undo' })
 
-      const lastBid = await queryOne('SELECT * FROM bid_history WHERE round = $1 ORDER BY id DESC LIMIT 1', [prevRound])
-      if (!lastBid) {
-        socket.emit('auction:error', { message: 'Nothing to undo' })
-        return
-      }
+      const lastBid = await queryOne(
+        'SELECT * FROM bid_history WHERE competition_id = $1 AND round = $2 ORDER BY id DESC LIMIT 1',
+        [compId, prevRound]
+      )
+      if (!lastBid) return socket.emit('auction:error', { message: 'Nothing to undo' })
 
-      const player = await queryOne('SELECT * FROM players WHERE id = $1', [lastBid.player_id])
-      if (!player || !player.drafted) {
-        socket.emit('auction:error', { message: 'Nothing to undo' })
-        return
-      }
+      const cp = await queryOne(
+        'SELECT * FROM competition_players WHERE competition_id = $1 AND player_id = $2',
+        [compId, lastBid.player_id]
+      )
+      if (!cp || !cp.drafted) return socket.emit('auction:error', { message: 'Nothing to undo' })
 
-      const buyer = await queryOne('SELECT name FROM captains WHERE id = $1', [player.drafted_by])
-      const undoMsg = `${player.name} (${player.draft_price}g from ${buyer?.name || 'unknown'}) was reversed`
-      await execute('UPDATE captains SET budget = budget + $1 WHERE id = $2', [player.draft_price, player.drafted_by])
-      await execute('UPDATE players SET drafted = 0, drafted_by = NULL, draft_price = NULL, draft_round = NULL WHERE id = $1', [player.id])
-      await execute('DELETE FROM bid_history WHERE round = $1', [prevRound])
+      const buyer = await queryOne('SELECT name FROM captains WHERE id = $1', [cp.drafted_by])
+      const playerName = (await queryOne('SELECT name FROM players WHERE id = $1', [lastBid.player_id]))?.name
+      const undoMsg = `${playerName} (${cp.draft_price}g from ${buyer?.name || 'unknown'}) was reversed`
 
-      const captains = await getCaptains()
-      const settings = await getSettings()
-      const nextNominator = await getNextNominator(prevRound, captains, settings)
+      await execute('UPDATE captains SET budget = budget + $1 WHERE id = $2', [cp.draft_price, cp.drafted_by])
+      await execute(
+        'UPDATE competition_players SET drafted = 0, drafted_by = NULL, draft_price = NULL, draft_round = NULL WHERE id = $1',
+        [cp.id]
+      )
+      await execute('DELETE FROM bid_history WHERE competition_id = $1 AND round = $2', [compId, prevRound])
 
-      await setAuctionState('status', 'nominating')
-      await setAuctionState('currentRound', String(prevRound))
-      await setAuctionState('nominatorId', String(nextNominator.id))
-      await setAuctionState('nominatedPlayerId', '')
-      await setAuctionState('currentBid', '0')
-      await setAuctionState('currentBidderId', '')
-      await setAuctionState('bidTimerEnd', '0')
+      const captains = await getCaptains(compId)
+      const nextNominator = await getNextNominator(compId, prevRound, captains, settings)
+      await setAuctionState(compId, {
+        status: 'nominating',
+        currentRound: prevRound,
+        nominatorId: nextNominator.id,
+        nominatedPlayerId: '',
+        currentBid: 0,
+        currentBidderId: '',
+        bidTimerEnd: 0,
+      })
 
-      io.emit('auction:undone', { message: undoMsg })
-      await saveAuctionLog('undo', `Undo: ${undoMsg}`)
-      io.emit('auction:log', { type: 'undo', message: `Undo: ${undoMsg}` })
-      io.emit('auction:stateChanged', await getFullAuctionState())
-      io.emit('captains:updated', await getCaptains())
-      io.emit('players:updated', await getPlayers())
+      io.to(`comp:${compId}`).emit('auction:undone', { message: undoMsg })
+      await saveAuctionLog(compId, 'undo', `Undo: ${undoMsg}`)
+      io.to(`comp:${compId}`).emit('auction:log', { type: 'undo', message: `Undo: ${undoMsg}` })
+      io.to(`comp:${compId}`).emit('auction:stateChanged', await getFullAuctionState(compId))
+      io.to(`comp:${compId}`).emit('captains:updated', await getCaptains(compId))
+      io.to(`comp:${compId}`).emit('players:updated', await getCompPlayers(compId))
       return
     }
 
     socket.emit('auction:error', { message: 'Nothing to undo' })
   })
 
-  // Reset draft (admin only)
   socket.on('auction:reset', async () => {
-    if (!await isAdminSocket(socket.id)) {
-      socket.emit('auction:error', { message: 'Admin access required' })
-      return
-    }
-    clearBidTimer()
-    readyCaptains.clear()
-    const settings = await getSettings()
-    await execute('UPDATE captains SET budget = $1, status = $2', [settings.startingBudget, 'Waiting'])
-    await execute('UPDATE players SET drafted = 0, drafted_by = NULL, draft_price = NULL, draft_round = NULL')
-    await execute('DELETE FROM bid_history')
-    await execute('DELETE FROM auction_log')
-    await setAuctionState('status', 'idle')
-    await setAuctionState('currentRound', '0')
-    await setAuctionState('nominatorId', '')
-    await setAuctionState('nominatedPlayerId', '')
-    await setAuctionState('currentBid', '0')
-    await setAuctionState('currentBidderId', '')
-    await setAuctionState('bidTimerEnd', '0')
-    io.emit('captains:ready', getReadyCaptainIds())
-    io.emit('auction:stateChanged', await getFullAuctionState())
-    io.emit('captains:updated', await getCaptains())
-    io.emit('players:updated', await getPlayers())
+    const compId = socketCompetitions.get(socket.id)
+    if (!compId) return
+    if (!await isAdminSocket(socket.id)) return socket.emit('auction:error', { message: 'Admin access required' })
+
+    clearCompBidTimer(compId)
+    compReadyCaptains.get(compId)?.clear()
+
+    const comp = await getCompetition(compId)
+    const settings = parseCompSettings(comp)
+    await execute('UPDATE captains SET budget = $1, status = $2 WHERE competition_id = $3', [settings.startingBudget, 'Waiting', compId])
+    await execute(
+      'UPDATE competition_players SET drafted = 0, drafted_by = NULL, draft_price = NULL, draft_round = NULL WHERE competition_id = $1',
+      [compId]
+    )
+    await execute('DELETE FROM bid_history WHERE competition_id = $1', [compId])
+    await execute('DELETE FROM auction_log WHERE competition_id = $1', [compId])
+    await setAuctionState(compId, {
+      status: 'idle', currentRound: 0, nominatorId: '', nominatedPlayerId: '',
+      currentBid: 0, currentBidderId: '', bidTimerEnd: 0, totalRounds: 0,
+    })
+
+    io.to(`comp:${compId}`).emit('captains:ready', getReadyCaptainIds(compId))
+    io.to(`comp:${compId}`).emit('auction:stateChanged', await getFullAuctionState(compId))
+    io.to(`comp:${compId}`).emit('captains:updated', await getCaptains(compId))
+    io.to(`comp:${compId}`).emit('players:updated', await getCompPlayers(compId))
   })
 
+  // ─── Disconnect ────────────────────────────────────────
+
   socket.on('disconnect', () => {
-    const captainId = onlineCaptains.get(socket.id)
+    const compId = socketCompetitions.get(socket.id)
     socketPlayers.delete(socket.id)
-    onlineCaptains.delete(socket.id)
-    if (captainId) {
-      readyCaptains.delete(captainId)
-      io.emit('captains:ready', getReadyCaptainIds())
+    socketCompetitions.delete(socket.id)
+
+    if (compId) {
+      const onlineMap = compOnlineCaptains.get(compId)
+      if (onlineMap) {
+        const captainId = onlineMap.get(socket.id)
+        onlineMap.delete(socket.id)
+        if (captainId) {
+          compReadyCaptains.get(compId)?.delete(captainId)
+          io.to(`comp:${compId}`).emit('captains:ready', getReadyCaptainIds(compId))
+        }
+        io.to(`comp:${compId}`).emit('captains:online', getOnlineCaptainIds(compId))
+      }
     }
-    io.emit('captains:online', getOnlineCaptainIds())
+
     console.log(`Client disconnected: ${socket.id}`)
   })
 })
 
-// SPA fallback - serve index.html for all non-API routes
+// SPA fallback
 app.get('*', (req, res) => {
   res.sendFile(join(staticPath, 'index.html'))
 })
@@ -1145,7 +1410,4 @@ initDb().then(() => {
   server.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`)
   })
-}).catch(err => {
-  console.error('Failed to initialize database:', err)
-  process.exit(1)
 })

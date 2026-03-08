@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { Settings, Newspaper, Users, ChevronRight } from 'lucide-vue-next'
+import { Newspaper, Users, Trophy, ChevronRight } from 'lucide-vue-next'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
 
 const adminNav = [
-  { label: 'News', icon: Newspaper, path: '/admin/news' },
+  { label: 'Competitions', icon: Trophy, path: '/admin/competitions' },
   { label: 'Users', icon: Users, path: '/admin/users' },
-  { label: 'Draft Setup', icon: Settings, path: '/admin/draft' },
+  { label: 'News', icon: Newspaper, path: '/admin/news' },
 ]
 </script>
 
@@ -24,7 +24,7 @@ const adminNav = [
           :key="item.path"
           :to="item.path"
           class="flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors"
-          :class="route.path === item.path
+          :class="route.path.startsWith(item.path)
             ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
             : 'text-sidebar-foreground hover:bg-accent'"
         >
@@ -41,7 +41,7 @@ const adminNav = [
         :key="item.path"
         :to="item.path"
         class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors"
-        :class="route.path === item.path
+        :class="route.path.startsWith(item.path)
           ? 'bg-primary text-primary-foreground font-medium'
           : 'text-muted-foreground hover:bg-accent'"
       >
