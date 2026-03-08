@@ -351,6 +351,15 @@ export default {
     save: 'Išsaugoti pakeitimus',
   },
 
+  // Admin: Site Settings
+  siteSettings: 'Svetainės nustatymai',
+  siteSettingsDesc: 'Tinkinkite pagrindinio puslapio turinį ir prekės ženklą',
+  homepageContent: 'Pagrindinio puslapio turinys',
+  siteHeroTitle: 'Pagrindinis pavadinimas',
+  siteHeroTitleHint: 'Palikite tuščią, kad naudotumėte numatytąjį pavadinimą.',
+  siteHeroSubtitle: 'Pagrindinis aprašymas',
+  siteHeroSubtitleHint: 'Palikite tuščią, kad naudotumėte numatytąjį aprašymą.',
+
   // Settings page
   settingsTitle: 'Nustatymai',
   settingsSubtitle: 'Tvarkykite savo profilį ir nuostatas',

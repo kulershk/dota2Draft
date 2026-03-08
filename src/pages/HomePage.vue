@@ -86,6 +86,7 @@ function canDeleteComment(comment: Comment) {
 onMounted(async () => {
   fetchNews()
   fetchStreamers()
+  fetchSiteSettings()
   getSocket().on('news:updated', fetchNews)
   getSocket().on('news:commented', ({ newsId }: { newsId: number }) => {
     fetchComments(newsId)
@@ -149,6 +150,16 @@ interface Streamer {
 }
 
 const streamers = ref<Streamer[]>([])
+const siteTitle = ref('')
+const siteSubtitle = ref('')
+
+async function fetchSiteSettings() {
+  try {
+    const data = await api.getSiteSettings()
+    siteTitle.value = data.site_title || ''
+    siteSubtitle.value = data.site_subtitle || ''
+  } catch {}
+}
 
 async function fetchStreamers() {
   try {
@@ -165,8 +176,8 @@ const isLoggedIn = computed(() => !!store.currentUser.value)
   <div class="p-4 md:p-8 md:px-10 max-w-[1440px] mx-auto w-full">
     <!-- Hero -->
     <div class="text-center py-6 md:py-10">
-      <h1 class="text-3xl md:text-4xl font-bold text-foreground">{{ t('heroTitle') }}</h1>
-      <p class="text-muted-foreground mt-2 text-sm md:text-base">{{ t('heroSubtitle') }}</p>
+      <h1 class="text-3xl md:text-4xl font-bold text-foreground">{{ siteTitle || t('heroTitle') }}</h1>
+      <p class="text-muted-foreground mt-2 text-sm md:text-base">{{ siteSubtitle || t('heroSubtitle') }}</p>
     </div>
 
     <div class="flex flex-col lg:flex-row gap-6">

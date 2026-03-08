@@ -351,6 +351,15 @@ export default {
     save: 'Saglabāt izmaiņas',
   },
 
+  // Admin: Site Settings
+  siteSettings: 'Vietnes iestatījumi',
+  siteSettingsDesc: 'Pielāgojiet sākumlapas saturu un zīmolu',
+  homepageContent: 'Sākumlapas saturs',
+  siteHeroTitle: 'Galvenais virsraksts',
+  siteHeroTitleHint: 'Atstājiet tukšu, lai izmantotu noklusējuma virsrakstu.',
+  siteHeroSubtitle: 'Galvenais apakšvirsraksts',
+  siteHeroSubtitleHint: 'Atstājiet tukšu, lai izmantotu noklusējuma apakšvirsrakstu.',
+
   // Settings page
   settingsTitle: 'Iestatījumi',
   settingsSubtitle: 'Pārvaldiet savu profilu un preferences',

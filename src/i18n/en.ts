@@ -351,6 +351,15 @@ export default {
     save: 'Save Changes',
   },
 
+  // Admin: Site Settings
+  siteSettings: 'Site Settings',
+  siteSettingsDesc: 'Customize the homepage content and branding',
+  homepageContent: 'Homepage Content',
+  siteHeroTitle: 'Hero Title',
+  siteHeroTitleHint: 'Leave empty to use the default title.',
+  siteHeroSubtitle: 'Hero Subtitle',
+  siteHeroSubtitleHint: 'Leave empty to use the default subtitle.',
+
   // Settings page
   settingsTitle: 'Settings',
   settingsSubtitle: 'Manage your profile and preferences',

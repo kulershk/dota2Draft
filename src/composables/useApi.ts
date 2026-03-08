@@ -87,6 +87,11 @@ export function useApi() {
     updateMe: (data: Record<string, any>) =>
       request('/api/auth/me', { method: 'PUT', body: JSON.stringify(data) }),
 
+    // Site Settings
+    getSiteSettings: () => request('/api/site-settings'),
+    updateSiteSettings: (data: Record<string, string>) =>
+      request('/api/site-settings', { method: 'PUT', body: JSON.stringify(data) }),
+
     // Twitch OAuth
     getTwitchLinkUrl: () => request('/api/auth/twitch/link'),
     unlinkTwitch: () => request('/api/auth/twitch/unlink', { method: 'POST' }),

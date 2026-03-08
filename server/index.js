@@ -1103,6 +1103,32 @@ let streamersCache = null
 let streamersCacheTime = 0
 const STREAMERS_CACHE_TTL = 60 * 1000 // 1 minute
 
+// ─── Site Settings ────────────────────────────────────────
+app.get('/api/site-settings', async (req, res) => {
+  const rows = await query("SELECT key, value FROM settings WHERE key LIKE 'site_%'")
+  const obj = {}
+  for (const r of rows) obj[r.key] = r.value
+  res.json({
+    site_title: obj.site_title || '',
+    site_subtitle: obj.site_subtitle || '',
+  })
+})
+
+app.put('/api/site-settings', async (req, res) => {
+  const admin = await getAuthPlayer(req)
+  if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
+  const { site_title, site_subtitle } = req.body
+  for (const [key, value] of [['site_title', site_title], ['site_subtitle', site_subtitle]]) {
+    if (value !== undefined) {
+      await execute(
+        "INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2",
+        [key, value || '']
+      )
+    }
+  }
+  res.json({ ok: true })
+})
+
 app.get('/api/streamers', async (req, res) => {
   if (streamersCache && Date.now() - streamersCacheTime < STREAMERS_CACHE_TTL) {
     return res.json(streamersCache)

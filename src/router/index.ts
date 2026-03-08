@@ -27,6 +27,7 @@ const router = createRouter({
         { path: 'competitions/:compId', name: 'admin-competition-setup', component: () => import('@/pages/admin/AdminCompetitionSetupPage.vue') },
         { path: 'users', name: 'admin-users', component: () => import('@/pages/admin/AdminUsersPage.vue') },
         { path: 'news', name: 'admin-news', component: () => import('@/pages/admin/AdminNewsPage.vue') },
+        { path: 'settings', name: 'admin-settings', component: () => import('@/pages/admin/AdminSiteSettingsPage.vue') },
       ],
     },
   ],
