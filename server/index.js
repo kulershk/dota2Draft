@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import fs from 'fs'
 import multer from 'multer'
+import jwt from 'jsonwebtoken'
 import pool, { query, queryOne, execute, initDb } from './db.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -48,26 +49,23 @@ const upload = multer({
 // Base URL for redirects (frontend origin)
 const BASE_URL = process.env.BASE_URL || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5173')
 
-// ─── Session Management ──────────────────────────────────
+// ─── Session Management (JWT) ────────────────────────────
 
-const sessions = new Map() // token -> { playerId, createdAt }
-const SESSION_TTL = 30 * 24 * 60 * 60 * 1000 // 30 days
+const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex')
+const JWT_EXPIRY = '30d'
 
 function createSession(playerId) {
-  const token = crypto.randomBytes(32).toString('hex')
-  sessions.set(token, { playerId, createdAt: Date.now() })
-  return token
+  return jwt.sign({ playerId }, JWT_SECRET, { expiresIn: JWT_EXPIRY })
 }
 
 function getSessionPlayerId(token) {
   if (!token) return null
-  const session = sessions.get(token)
-  if (!session) return null
-  if (Date.now() - session.createdAt > SESSION_TTL) {
-    sessions.delete(token)
+  try {
+    const payload = jwt.verify(token, JWT_SECRET)
+    return payload.playerId
+  } catch {
     return null
   }
-  return session.playerId
 }
 
 function getTokenFromReq(req) {
@@ -678,8 +676,7 @@ app.post('/api/auth/twitch/unlink', async (req, res) => {
 })
 
 app.post('/api/auth/logout', (req, res) => {
-  const token = getTokenFromReq(req)
-  if (token) sessions.delete(token)
+  // JWT is stateless; client removes the token
   res.json({ ok: true })
 })
 
