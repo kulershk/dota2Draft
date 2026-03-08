@@ -498,6 +498,34 @@ app.get('/api/auth/me', async (req, res) => {
     roles: JSON.parse(player.roles || '[]'),
     mmr: player.mmr,
     info: player.info || '',
+    twitch_username: player.twitch_username || null,
+  })
+})
+
+app.put('/api/auth/me', async (req, res) => {
+  const player = await getAuthPlayer(req)
+  if (!player) return res.status(401).json({ error: 'Not authenticated' })
+  const { mmr, info, roles } = req.body
+  await execute(
+    'UPDATE players SET mmr = $1, info = $2, roles = $3 WHERE id = $4',
+    [
+      mmr ?? player.mmr,
+      info ?? player.info,
+      roles ? JSON.stringify(roles) : player.roles,
+      player.id,
+    ]
+  )
+  const updated = await queryOne('SELECT * FROM players WHERE id = $1', [player.id])
+  res.json({
+    id: updated.id,
+    name: updated.name,
+    steam_id: updated.steam_id,
+    avatar_url: updated.avatar_url,
+    is_admin: !!updated.is_admin,
+    roles: JSON.parse(updated.roles || '[]'),
+    mmr: updated.mmr,
+    info: updated.info || '',
+    twitch_username: updated.twitch_username || null,
   })
 })
 
@@ -538,6 +566,113 @@ app.post('/api/auth/claim-admin', async (req, res) => {
   }
 
   await execute('UPDATE players SET is_admin = true WHERE id = $1', [player.id])
+  res.json({ ok: true })
+})
+
+// ─── Twitch OAuth ─────────────────────────────────────────
+const TWITCH_CLIENT_ID = process.env.TWITCH_CLIENT_ID || ''
+const TWITCH_CLIENT_SECRET = process.env.TWITCH_CLIENT_SECRET || ''
+const DOTA2_GAME_ID = '29595'
+
+let twitchAppToken = null
+let twitchAppTokenExpiresAt = 0
+
+async function getTwitchAppToken() {
+  if (twitchAppToken && Date.now() < twitchAppTokenExpiresAt - 60000) return twitchAppToken
+  if (!TWITCH_CLIENT_ID || !TWITCH_CLIENT_SECRET) return null
+  try {
+    const res = await fetch('https://id.twitch.tv/oauth2/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: TWITCH_CLIENT_ID,
+        client_secret: TWITCH_CLIENT_SECRET,
+        grant_type: 'client_credentials',
+      }),
+    })
+    const data = await res.json()
+    if (data.access_token) {
+      twitchAppToken = data.access_token
+      twitchAppTokenExpiresAt = Date.now() + data.expires_in * 1000
+      return twitchAppToken
+    }
+  } catch (e) {
+    console.error('Failed to get Twitch app token:', e.message)
+  }
+  return null
+}
+
+app.get('/api/auth/twitch/link', async (req, res) => {
+  const player = await getAuthPlayer(req)
+  if (!player) return res.status(401).json({ error: 'Not authenticated' })
+  if (!TWITCH_CLIENT_ID) return res.status(500).json({ error: 'Twitch not configured' })
+
+  const token = getTokenFromReq(req)
+  const serverOrigin = `${req.protocol}://${req.get('host')}`
+  const redirectUri = `${serverOrigin}/api/auth/twitch/callback`
+  const params = new URLSearchParams({
+    client_id: TWITCH_CLIENT_ID,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: '',
+    state: token,
+  })
+  res.json({ url: `https://id.twitch.tv/oauth2/authorize?${params}` })
+})
+
+app.get('/api/auth/twitch/callback', async (req, res) => {
+  try {
+    const { code, state } = req.query
+    if (!code || !state) return res.redirect(`${BASE_URL}/settings?twitch_error=missing_params`)
+
+    const playerId = getSessionPlayerId(state)
+    if (!playerId) return res.redirect(`${BASE_URL}/settings?twitch_error=not_authenticated`)
+
+    const serverOrigin = `${req.protocol}://${req.get('host')}`
+    const redirectUri = `${serverOrigin}/api/auth/twitch/callback`
+
+    // Exchange code for access token
+    const tokenRes = await fetch('https://id.twitch.tv/oauth2/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: TWITCH_CLIENT_ID,
+        client_secret: TWITCH_CLIENT_SECRET,
+        code,
+        grant_type: 'authorization_code',
+        redirect_uri: redirectUri,
+      }),
+    })
+    const tokenData = await tokenRes.json()
+    if (!tokenData.access_token) return res.redirect(`${BASE_URL}/settings?twitch_error=token_failed`)
+
+    // Get Twitch user info
+    const userRes = await fetch('https://api.twitch.tv/helix/users', {
+      headers: {
+        Authorization: `Bearer ${tokenData.access_token}`,
+        'Client-Id': TWITCH_CLIENT_ID,
+      },
+    })
+    const userData = await userRes.json()
+    const twitchUser = userData.data?.[0]
+    if (!twitchUser) return res.redirect(`${BASE_URL}/settings?twitch_error=user_fetch_failed`)
+
+    await execute(
+      'UPDATE players SET twitch_id = $1, twitch_username = $2 WHERE id = $3',
+      [twitchUser.id, twitchUser.login, playerId]
+    )
+
+    res.redirect(`${BASE_URL}/settings?twitch_linked=1`)
+  } catch (e) {
+    console.error('Twitch callback error:', e)
+    res.redirect(`${BASE_URL}/settings?twitch_error=server_error`)
+  }
+})
+
+app.post('/api/auth/twitch/unlink', async (req, res) => {
+  const player = await getAuthPlayer(req)
+  if (!player) return res.status(401).json({ error: 'Not authenticated' })
+  await execute('UPDATE players SET twitch_id = NULL, twitch_username = NULL WHERE id = $1', [player.id])
   res.json({ ok: true })
 })
 
@@ -963,6 +1098,63 @@ app.post('/api/competitions/:compId/users/:userId/remove-from-pool', async (req,
 
 // ─── REST API: Users (global, all Steam accounts) ───────
 
+let streamersCache = null
+let streamersCacheTime = 0
+const STREAMERS_CACHE_TTL = 60 * 1000 // 1 minute
+
+app.get('/api/streamers', async (req, res) => {
+  if (streamersCache && Date.now() - streamersCacheTime < STREAMERS_CACHE_TTL) {
+    return res.json(streamersCache)
+  }
+
+  const rows = await query(
+    "SELECT id, name, avatar_url, twitch_username FROM players WHERE twitch_username IS NOT NULL AND twitch_username != '' ORDER BY name"
+  )
+  if (rows.length === 0) { streamersCache = []; streamersCacheTime = Date.now(); return res.json([]) }
+
+  const token = await getTwitchAppToken()
+  if (!token) { streamersCache = []; streamersCacheTime = Date.now(); return res.json([]) }
+
+  try {
+    const logins = rows.map(r => r.twitch_username)
+    const params = new URLSearchParams()
+    params.set('game_id', DOTA2_GAME_ID)
+    logins.slice(0, 100).forEach(l => params.append('user_login', l))
+    params.set('first', '100')
+
+    const streamRes = await fetch(`https://api.twitch.tv/helix/streams?${params}`, {
+      headers: { Authorization: `Bearer ${token}`, 'Client-Id': TWITCH_CLIENT_ID },
+    })
+    const streamData = await streamRes.json()
+    const liveStreams = streamData.data || []
+
+    const liveMap = new Map()
+    for (const s of liveStreams) {
+      liveMap.set(s.user_login.toLowerCase(), {
+        title: s.title,
+        viewer_count: s.viewer_count,
+        thumbnail_url: s.thumbnail_url?.replace('{width}', '440').replace('{height}', '248'),
+        started_at: s.started_at,
+      })
+    }
+
+    const result = rows
+      .filter(r => liveMap.has(r.twitch_username.toLowerCase()))
+      .map(r => ({
+        ...r,
+        stream: liveMap.get(r.twitch_username.toLowerCase()),
+      }))
+      .sort((a, b) => b.stream.viewer_count - a.stream.viewer_count)
+
+    streamersCache = result
+    streamersCacheTime = Date.now()
+    res.json(result)
+  } catch (e) {
+    console.error('Failed to fetch Twitch streams:', e.message)
+    res.json(streamersCache || [])
+  }
+})
+
 app.get('/api/users', async (req, res) => {
   const admin = await getAuthPlayer(req)
   if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
@@ -978,6 +1170,7 @@ app.get('/api/users', async (req, res) => {
     info: p.info || '',
     is_admin: !!p.is_admin,
     is_banned: !!p.is_banned,
+    twitch_username: p.twitch_username || null,
     created_at: p.created_at,
   })))
 })

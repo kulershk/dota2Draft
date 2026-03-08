@@ -351,6 +351,27 @@ export default {
     save: 'Save Changes',
   },
 
+  // Settings page
+  settingsTitle: 'Settings',
+  settingsSubtitle: 'Manage your profile and preferences',
+  settingsLoginRequired: 'Please log in to access settings.',
+  profileInfo: 'Profile Info',
+  yourRoles: 'Your Roles',
+  aboutYouLabel: 'About You',
+  aboutYouPlaceholder: 'Brief description, achievements, playstyle notes...',
+  twitchIntegration: 'Twitch Integration',
+  twitchDesc: 'Link your Twitch account to appear in the streams section on the home page.',
+  twitchLinkBtn: 'Link with Twitch',
+  twitchUnlinkBtn: 'Unlink',
+  twitchLinked: 'Twitch account linked',
+  twitchLinkedSuccess: 'Twitch account linked successfully!',
+  twitchUnlinked: 'Twitch account unlinked.',
+  twitchLinkFailed: 'Failed to link Twitch account.',
+  settingsSaved: 'Settings saved!',
+
+  // Streams
+  liveStreams: 'Live Dota 2 Streams',
+
   // Language
   language: 'Language',
 }

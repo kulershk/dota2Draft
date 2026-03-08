@@ -83,6 +83,17 @@ export function useApi() {
     getCompAuction: (compId: number) => request(`/api/competitions/${compId}/auction`),
     getCompResults: (compId: number) => request(`/api/competitions/${compId}/auction/results`),
 
+    // User self-update
+    updateMe: (data: Record<string, any>) =>
+      request('/api/auth/me', { method: 'PUT', body: JSON.stringify(data) }),
+
+    // Twitch OAuth
+    getTwitchLinkUrl: () => request('/api/auth/twitch/link'),
+    unlinkTwitch: () => request('/api/auth/twitch/unlink', { method: 'POST' }),
+
+    // Streamers (public)
+    getStreamers: () => request('/api/streamers'),
+
     // Users (global)
     getUsers: () => request('/api/users'),
     updatePlayer: (id: number, data: Record<string, any>) =>

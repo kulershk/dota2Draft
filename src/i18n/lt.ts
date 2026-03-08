@@ -351,6 +351,27 @@ export default {
     save: 'Išsaugoti pakeitimus',
   },
 
+  // Settings page
+  settingsTitle: 'Nustatymai',
+  settingsSubtitle: 'Tvarkykite savo profilį ir nuostatas',
+  settingsLoginRequired: 'Prisijunkite, kad galėtumėte pasiekti nustatymus.',
+  profileInfo: 'Profilio informacija',
+  yourRoles: 'Jūsų rolės',
+  aboutYouLabel: 'Apie jus',
+  aboutYouPlaceholder: 'Trumpas aprašymas, pasiekimai, žaidimo stilius...',
+  twitchIntegration: 'Twitch integracija',
+  twitchDesc: 'Susiekite savo Twitch paskyrą, kad pasirodytumėte transliacijų skiltyje pagrindiniame puslapyje.',
+  twitchLinkBtn: 'Susieti su Twitch',
+  twitchUnlinkBtn: 'Atsieti',
+  twitchLinked: 'Twitch paskyra susieta',
+  twitchLinkedSuccess: 'Twitch paskyra sėkmingai susieta!',
+  twitchUnlinked: 'Twitch paskyra atsieta.',
+  twitchLinkFailed: 'Nepavyko susieti Twitch paskyros.',
+  settingsSaved: 'Nustatymai išsaugoti!',
+
+  // Streams
+  liveStreams: 'Dota 2 transliacijos gyvai',
+
   // Language
   language: 'Kalba',
 }

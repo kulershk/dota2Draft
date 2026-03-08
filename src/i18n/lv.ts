@@ -351,6 +351,27 @@ export default {
     save: 'Saglabāt izmaiņas',
   },
 
+  // Settings page
+  settingsTitle: 'Iestatījumi',
+  settingsSubtitle: 'Pārvaldiet savu profilu un preferences',
+  settingsLoginRequired: 'Lūdzu, pieslēdzieties, lai piekļūtu iestatījumiem.',
+  profileInfo: 'Profila informācija',
+  yourRoles: 'Jūsu lomas',
+  aboutYouLabel: 'Par jums',
+  aboutYouPlaceholder: 'Īss apraksts, sasniegumi, spēles stils...',
+  twitchIntegration: 'Twitch integrācija',
+  twitchDesc: 'Saistiet savu Twitch kontu, lai parādītos straumēšanas sadaļā sākumlapā.',
+  twitchLinkBtn: 'Saistīt ar Twitch',
+  twitchUnlinkBtn: 'Atsaistīt',
+  twitchLinked: 'Twitch konts saistīts',
+  twitchLinkedSuccess: 'Twitch konts veiksmīgi saistīts!',
+  twitchUnlinked: 'Twitch konts atsaistīts.',
+  twitchLinkFailed: 'Neizdevās saistīt Twitch kontu.',
+  settingsSaved: 'Iestatījumi saglabāti!',
+
+  // Streams
+  liveStreams: 'Dota 2 tiešraides',
+
   // Language
   language: 'Valoda',
 }

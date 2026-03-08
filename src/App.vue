@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Gamepad2, Shield, LogOut, Sun, Moon, Menu, X, Home, LogIn, Lock, Globe } from 'lucide-vue-next'
+import { Gamepad2, Shield, LogOut, Sun, Moon, Menu, X, Home, LogIn, Lock, Globe, Settings } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { onMounted, ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -144,6 +144,9 @@ async function handleClaimAdmin() {
             {{ t('claimAdmin') }}
           </button>
           <template v-if="isLoggedIn">
+            <router-link to="/settings" class="p-1.5 rounded hover:bg-accent" :title="t('settingsTitle')">
+              <Settings class="w-4 h-4 text-muted-foreground" />
+            </router-link>
             <div class="flex items-center gap-2 hidden sm:flex">
               <img v-if="store.currentUser.value?.avatar_url" :src="store.currentUser.value.avatar_url" class="w-6 h-6 rounded-full" />
               <span class="text-xs text-muted-foreground">{{ userRoleLabel }}: {{ store.currentUser.value?.name }}</span>
@@ -189,6 +192,10 @@ async function handleClaimAdmin() {
         <router-link to="/" class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-sidebar-foreground hover:bg-accent" @click="mobileMenuOpen = false">
           <Home class="w-[18px] h-[18px]" />
           {{ t('home') }}
+        </router-link>
+        <router-link v-if="isLoggedIn" to="/settings" class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-sidebar-foreground hover:bg-accent" @click="mobileMenuOpen = false">
+          <Settings class="w-[18px] h-[18px]" />
+          {{ t('settingsTitle') }}
         </router-link>
         <router-link
           v-if="store.isAdmin.value"

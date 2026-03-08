@@ -90,6 +90,7 @@ export interface CurrentUser {
   roles: string[]
   mmr: number
   info: string
+  twitch_username: string | null
 }
 
 export interface CompetitionUser {
