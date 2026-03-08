@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { Users, Search, Shield, ShieldOff, ExternalLink, Ban, CheckCircle } from 'lucide-vue-next'
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 
+const { t } = useI18n()
 const api = useApi()
 
 interface User {
@@ -76,17 +78,17 @@ function formatDate(dateStr: string) {
 <template>
   <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[1200px] mx-auto w-full">
     <div>
-      <h1 class="text-2xl font-semibold text-foreground">Steam Users</h1>
-      <p class="text-sm text-muted-foreground mt-1">All accounts registered via Steam login</p>
+      <h1 class="text-2xl font-semibold text-foreground">{{ t('steamUsers') }}</h1>
+      <p class="text-sm text-muted-foreground mt-1">{{ t('steamUsersSubtitle') }}</p>
     </div>
 
     <div class="flex gap-4">
       <div class="card p-4">
-        <p class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Total Accounts</p>
+        <p class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">{{ t('totalAccounts') }}</p>
         <p class="text-3xl font-bold text-foreground mt-1">{{ users.length }}</p>
       </div>
       <div class="card p-4">
-        <p class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Banned</p>
+        <p class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">{{ t('banned') }}</p>
         <p class="text-3xl font-bold text-destructive mt-1">{{ users.filter(u => u.is_banned).length }}</p>
       </div>
     </div>
@@ -95,11 +97,11 @@ function formatDate(dateStr: string) {
       <div class="flex items-center justify-between gap-3 px-4 py-3 border-b border-border">
         <div class="flex items-center gap-2">
           <Users class="w-5 h-5 text-foreground" />
-          <span class="text-sm font-semibold text-foreground">Users ({{ users.length }})</span>
+          <span class="text-sm font-semibold text-foreground">{{ t('users', { count: users.length }) }}</span>
         </div>
         <div class="relative">
           <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input v-model="searchQuery" type="text" placeholder="Search..." class="input-field pl-9 w-56" />
+          <input v-model="searchQuery" type="text" :placeholder="t('search')" class="input-field pl-9 w-56" />
         </div>
       </div>
 
@@ -108,10 +110,10 @@ function formatDate(dateStr: string) {
           <thead>
             <tr class="border-b border-border bg-accent/50">
               <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[40px]">#</th>
-              <th class="text-left px-4 py-3 font-medium text-muted-foreground">USER</th>
-              <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[120px]">STATUS</th>
-              <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[100px]">JOINED</th>
-              <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[120px]">ACTIONS</th>
+              <th class="text-left px-4 py-3 font-medium text-muted-foreground">{{ t('user') }}</th>
+              <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[120px]">{{ t('status') }}</th>
+              <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[100px]">{{ t('joined') }}</th>
+              <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[120px]">{{ t('actions') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -135,24 +137,24 @@ function formatDate(dateStr: string) {
               </td>
               <td class="px-4 py-3">
                 <div class="flex flex-wrap gap-1">
-                  <span v-if="user.is_banned" class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-red-500/15 text-red-600 dark:text-red-400 w-fit">Banned</span>
-                  <span v-if="user.is_admin" class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-amber-500/15 text-amber-600 dark:text-amber-400 w-fit">Admin</span>
-                  <span v-if="!user.is_admin && !user.is_banned" class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-accent text-muted-foreground w-fit">User</span>
+                  <span v-if="user.is_banned" class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-red-500/15 text-red-600 dark:text-red-400 w-fit">{{ t('banned') }}</span>
+                  <span v-if="user.is_admin" class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-amber-500/15 text-amber-600 dark:text-amber-400 w-fit">{{ t('admin') }}</span>
+                  <span v-if="!user.is_admin && !user.is_banned" class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-accent text-muted-foreground w-fit">{{ t('user') }}</span>
                 </div>
               </td>
               <td class="px-4 py-3 text-muted-foreground text-xs">{{ formatDate(user.created_at) }}</td>
               <td class="px-4 py-3">
                 <div class="flex items-center gap-1">
-                  <button v-if="!user.is_admin" class="btn-ghost p-2" title="Make Admin" @click="promptToggleAdmin(user)">
+                  <button v-if="!user.is_admin" class="btn-ghost p-2" :title="t('makeAdmin')" @click="promptToggleAdmin(user)">
                     <Shield class="w-4 h-4" />
                   </button>
-                  <button v-else class="btn-ghost p-2 text-amber-500" title="Remove Admin" @click="promptToggleAdmin(user)">
+                  <button v-else class="btn-ghost p-2 text-amber-500" :title="t('removeAdmin')" @click="promptToggleAdmin(user)">
                     <ShieldOff class="w-4 h-4" />
                   </button>
-                  <button v-if="!user.is_banned" class="btn-ghost p-2" title="Ban User" @click="promptToggleBan(user)">
+                  <button v-if="!user.is_banned" class="btn-ghost p-2" :title="t('banUser')" @click="promptToggleBan(user)">
                     <Ban class="w-4 h-4" />
                   </button>
-                  <button v-else class="btn-ghost p-2 text-red-500" title="Unban User" @click="promptToggleBan(user)">
+                  <button v-else class="btn-ghost p-2 text-red-500" :title="t('unbanUser')" @click="promptToggleBan(user)">
                     <CheckCircle class="w-4 h-4" />
                   </button>
                 </div>
@@ -163,7 +165,7 @@ function formatDate(dateStr: string) {
       </div>
 
       <div v-if="filteredUsers.length === 0" class="px-4 py-12 text-center text-sm text-muted-foreground">
-        {{ loading ? 'Loading...' : 'No users found.' }}
+        {{ loading ? t('loading') : t('noUsersFound') }}
       </div>
     </div>
 
@@ -171,21 +173,21 @@ function formatDate(dateStr: string) {
     <ModalOverlay :show="!!adminConfirmUser" @close="adminConfirmUser = null">
       <div class="px-7 py-6">
         <h2 class="text-xl font-semibold text-foreground">
-          {{ adminConfirmUser?.is_admin ? 'Remove Admin' : 'Make Admin' }}
+          {{ adminConfirmUser?.is_admin ? t('adminConfirmModal.removeTitle') : t('adminConfirmModal.makeTitle') }}
         </h2>
         <p class="text-sm text-muted-foreground mt-2">
-          Are you sure you want to
-          <span class="font-semibold text-foreground">{{ adminConfirmUser?.is_admin ? 'remove admin access from' : 'grant admin access to' }}</span>
+          {{ t('adminConfirmModal.confirmQuestion') }}
+          <span class="font-semibold text-foreground">{{ adminConfirmUser?.is_admin ? t('adminConfirmModal.removeDesc') : t('adminConfirmModal.makeDesc') }}</span>
           <span class="font-semibold text-foreground">{{ adminConfirmUser?.name }}</span>?
         </p>
       </div>
       <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
         <button class="btn-primary w-full justify-center" @click="confirmToggleAdmin">
           <Shield class="w-4 h-4" />
-          {{ adminConfirmUser?.is_admin ? 'Remove Admin' : 'Make Admin' }}
+          {{ adminConfirmUser?.is_admin ? t('removeAdmin') : t('makeAdmin') }}
         </button>
         <button class="btn-secondary w-full justify-center" @click="adminConfirmUser = null">
-          Cancel
+          {{ t('cancel') }}
         </button>
       </div>
     </ModalOverlay>
@@ -194,18 +196,14 @@ function formatDate(dateStr: string) {
     <ModalOverlay :show="!!banConfirmUser" @close="banConfirmUser = null">
       <div class="px-7 py-6">
         <h2 class="text-xl font-semibold text-foreground">
-          {{ banConfirmUser?.is_banned ? 'Unban User' : 'Ban User' }}
+          {{ banConfirmUser?.is_banned ? t('banConfirmModal.unbanTitle') : t('banConfirmModal.banTitle') }}
         </h2>
         <p class="text-sm text-muted-foreground mt-2">
           <template v-if="banConfirmUser?.is_banned">
-            Are you sure you want to <span class="font-semibold text-foreground">unban</span>
-            <span class="font-semibold text-foreground">{{ banConfirmUser?.name }}</span>?
-            They will be able to join competitions and post comments again.
+            {{ t('banConfirmModal.unbanDesc', { name: banConfirmUser?.name }) }}
           </template>
           <template v-else>
-            Are you sure you want to <span class="font-semibold text-destructive">ban</span>
-            <span class="font-semibold text-foreground">{{ banConfirmUser?.name }}</span>?
-            They will not be able to join competitions or post comments.
+            {{ t('banConfirmModal.banDesc', { name: banConfirmUser?.name }) }}
           </template>
         </p>
       </div>
@@ -213,10 +211,10 @@ function formatDate(dateStr: string) {
         <button :class="banConfirmUser?.is_banned ? 'btn-primary' : 'btn-destructive'" class="w-full justify-center" @click="confirmToggleBan">
           <Ban v-if="!banConfirmUser?.is_banned" class="w-4 h-4" />
           <CheckCircle v-else class="w-4 h-4" />
-          {{ banConfirmUser?.is_banned ? 'Unban User' : 'Ban User' }}
+          {{ banConfirmUser?.is_banned ? t('unbanUser') : t('banUser') }}
         </button>
         <button class="btn-secondary w-full justify-center" @click="banConfirmUser = null">
-          Cancel
+          {{ t('cancel') }}
         </button>
       </div>
     </ModalOverlay>

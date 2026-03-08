@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Newspaper, Calendar, Trophy, Users, Swords, User, MessageSquare, Send, Trash2, ChevronDown, ChevronUp } from 'lucide-vue-next'
 import { ref, reactive, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { getSocket } from '@/composables/useSocket'
@@ -24,6 +25,7 @@ interface Comment {
   created_at: string
 }
 
+const { t } = useI18n()
 const api = useApi()
 const store = useDraftStore()
 const news = ref<NewsPost[]>([])
@@ -100,22 +102,22 @@ function formatCommentDate(dateStr: string) {
   const now = new Date()
   const diff = now.getTime() - d.getTime()
   const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
+  if (mins < 1) return t('justNow')
+  if (mins < 60) return t('mAgo', { n: mins })
   const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
+  if (hours < 24) return t('hAgo', { n: hours })
   const days = Math.floor(hours / 24)
-  if (days < 7) return `${days}d ago`
+  if (days < 7) return t('dAgo', { n: days })
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-const statusLabel: Record<string, string> = {
-  draft: 'Setup',
-  registration: 'Registration Open',
-  active: 'In Progress',
-  finished: 'Completed',
-  archived: 'Archived',
-}
+const statusLabel = computed<Record<string, string>>(() => ({
+  draft: t('statusSetup'),
+  registration: t('statusRegistrationOpen'),
+  active: t('statusInProgress'),
+  finished: t('statusCompleted'),
+  archived: t('statusArchived'),
+}))
 
 const statusClass: Record<string, string> = {
   draft: 'bg-accent text-muted-foreground',
@@ -139,19 +141,19 @@ const isLoggedIn = computed(() => !!store.currentUser.value)
   <div class="p-4 md:p-8 md:px-10 flex flex-col gap-6 max-w-[1440px] mx-auto w-full">
     <!-- Hero -->
     <div class="text-center py-6 md:py-10">
-      <h1 class="text-3xl md:text-4xl font-bold text-foreground">DOTA 2 Auction Draft</h1>
-      <p class="text-muted-foreground mt-2 text-sm md:text-base">Salary Cap Auction Draft System</p>
+      <h1 class="text-3xl md:text-4xl font-bold text-foreground">{{ t('heroTitle') }}</h1>
+      <p class="text-muted-foreground mt-2 text-sm md:text-base">{{ t('heroSubtitle') }}</p>
     </div>
 
     <!-- Competitions -->
     <div class="card">
       <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
         <Swords class="w-5 h-5 text-foreground" />
-        <span class="text-sm font-semibold text-foreground">Competitions</span>
+        <span class="text-sm font-semibold text-foreground">{{ t('competitions') }}</span>
         <span class="text-xs text-muted-foreground">({{ store.competitions.value.length }})</span>
       </div>
       <div v-if="store.competitions.value.length === 0" class="px-4 py-10 text-center text-sm text-muted-foreground">
-        No competitions yet. An admin can create one from the Admin Panel.
+        {{ t('noCompetitionsYet') }}
       </div>
       <div v-else class="divide-y divide-border">
         <router-link
@@ -185,7 +187,7 @@ const isLoggedIn = computed(() => !!store.currentUser.value)
           </div>
           <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
             :class="statusClass[getAuctionStatus(comp)] || statusClass.draft">
-            {{ statusLabel[getAuctionStatus(comp)] || 'Setup' }}
+            {{ statusLabel[getAuctionStatus(comp)] || t('statusSetup') }}
           </span>
         </router-link>
       </div>
@@ -195,10 +197,10 @@ const isLoggedIn = computed(() => !!store.currentUser.value)
     <div class="card">
       <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
         <Newspaper class="w-5 h-5 text-foreground" />
-        <span class="text-sm font-semibold text-foreground">News & Announcements</span>
+        <span class="text-sm font-semibold text-foreground">{{ t('newsTitle') }}</span>
       </div>
       <div v-if="news.length === 0" class="px-4 py-10 text-center text-sm text-muted-foreground">
-        No announcements yet.
+        {{ t('noNewsYet') }}
       </div>
       <div v-else class="divide-y divide-border">
         <div v-for="post in news" :key="post.id" class="px-4 py-4 md:px-6 md:py-5">
@@ -225,7 +227,7 @@ const isLoggedIn = computed(() => !!store.currentUser.value)
             @click="toggleComments(post.id)"
           >
             <MessageSquare class="w-3.5 h-3.5" />
-            {{ commentCounts[post.id] || 0 }} {{ (commentCounts[post.id] || 0) === 1 ? 'comment' : 'comments' }}
+            {{ commentCounts[post.id] || 0 }} {{ (commentCounts[post.id] || 0) === 1 ? t('comment') : t('comments') }}
             <ChevronUp v-if="expandedComments[post.id]" class="w-3 h-3" />
             <ChevronDown v-else class="w-3 h-3" />
           </button>
@@ -256,7 +258,7 @@ const isLoggedIn = computed(() => !!store.currentUser.value)
                 </div>
               </div>
             </div>
-            <div v-else class="text-xs text-muted-foreground mb-3">No comments yet.</div>
+            <div v-else class="text-xs text-muted-foreground mb-3">{{ t('noCommentsYet') }}</div>
 
             <!-- Add comment -->
             <div v-if="isLoggedIn" class="flex gap-2 items-start">
@@ -268,7 +270,7 @@ const isLoggedIn = computed(() => !!store.currentUser.value)
                 <input
                   type="text"
                   class="input-field flex-1 text-sm py-1.5"
-                  placeholder="Write a comment..."
+                  :placeholder="t('writeComment')"
                   :value="newComment[post.id] || ''"
                   @input="newComment[post.id] = ($event.target as HTMLInputElement).value"
                   @keydown.enter="submitComment(post.id)"
@@ -283,7 +285,7 @@ const isLoggedIn = computed(() => !!store.currentUser.value)
                 </button>
               </div>
             </div>
-            <p v-else class="text-xs text-muted-foreground italic">Log in to leave a comment.</p>
+            <p v-else class="text-xs text-muted-foreground italic">{{ t('loginToComment') }}</p>
           </div>
         </div>
       </div>

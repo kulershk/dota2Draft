@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Trophy, Download } from 'lucide-vue-next'
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useDraftStore } from '@/composables/useDraftStore'
 import RoleBadge from '@/components/common/RoleBadge.vue'
 import MmrDisplay from '@/components/common/MmrDisplay.vue'
@@ -18,6 +19,7 @@ interface TeamResult {
   players: { id: number; name: string; roles: string[]; mmr: number; draft_price: number }[]
 }
 
+const { t } = useI18n()
 const store = useDraftStore()
 const results = ref<TeamResult[]>([])
 const loading = ref(true)
@@ -51,12 +53,12 @@ function totalSpent(team: TeamResult) {
   <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[1440px] mx-auto w-full">
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-semibold text-foreground">Draft Results</h1>
-        <p class="text-sm text-muted-foreground mt-1">Final team compositions from the auction draft</p>
+        <h1 class="text-2xl font-semibold text-foreground">{{ t('draftResults') }}</h1>
+        <p class="text-sm text-muted-foreground mt-1">{{ t('draftResultsSubtitle') }}</p>
       </div>
     </div>
 
-    <div v-if="loading" class="text-center py-12 text-muted-foreground">Loading results...</div>
+    <div v-if="loading" class="text-center py-12 text-muted-foreground">{{ t('loadingResults') }}</div>
 
     <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
       <div v-for="team in results" :key="team.id" class="card overflow-hidden">
@@ -66,18 +68,18 @@ function totalSpent(team: TeamResult) {
             <CaptainAvatar :name="team.name" />
             <div>
               <p class="text-sm font-semibold text-foreground">{{ team.team }}</p>
-              <p class="text-xs text-muted-foreground">Captain: {{ team.name }}</p>
+              <p class="text-xs text-muted-foreground">{{ t('captainLabel', { name: team.name }) }}</p>
             </div>
           </div>
           <div class="text-right">
             <p class="text-sm font-mono font-semibold text-foreground">{{ formatGold(team.budget) }}</p>
-            <p class="text-xs text-muted-foreground">remaining</p>
+            <p class="text-xs text-muted-foreground">{{ t('remaining') }}</p>
           </div>
         </div>
 
         <div class="p-4">
           <div v-if="team.players.length === 0" class="text-xs text-muted-foreground py-2">
-            No players drafted yet.
+            {{ t('noDraftedYet') }}
           </div>
           <div v-else class="flex flex-col gap-2">
             <div v-for="player in team.players" :key="player.id" class="flex items-center justify-between py-1.5 border-b border-border last:border-0">
@@ -93,8 +95,8 @@ function totalSpent(team: TeamResult) {
               </div>
             </div>
             <div class="flex justify-between pt-2 text-xs text-muted-foreground border-t border-border">
-              <span>{{ team.players.length }} players &bull; avg {{ Math.round(((team.mmr || 0) + team.players.reduce((s, p) => s + p.mmr, 0)) / (1 + team.players.length)).toLocaleString() }} MMR</span>
-              <span>Total spent: <span class="font-semibold text-foreground">{{ formatGold(totalSpent(team)) }}</span></span>
+              <span>{{ team.players.length }} players &bull; {{ t('avgMmr') }} {{ Math.round(((team.mmr || 0) + team.players.reduce((s, p) => s + p.mmr, 0)) / (1 + team.players.length)).toLocaleString() }} MMR</span>
+              <span>{{ t('totalSpent') }} <span class="font-semibold text-foreground">{{ formatGold(totalSpent(team)) }}</span></span>
             </div>
           </div>
         </div>

@@ -3,17 +3,19 @@ import { Users, Gavel, Trophy, Info } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { watch, onMounted, computed } from 'vue'
 import { useDraftStore } from '@/composables/useDraftStore'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 const route = useRoute()
 const store = useDraftStore()
 
 const compId = computed(() => Number(route.params.compId))
 
 const navItems = computed(() => [
-  { label: 'Info', icon: Info, name: 'comp-info' },
-  { label: 'Participants', icon: Users, name: 'comp-players' },
-  { label: 'Live Auction', icon: Gavel, name: 'comp-auction' },
-  { label: 'Results', icon: Trophy, name: 'comp-results' },
+  { label: t('navInfo'), icon: Info, name: 'comp-info' },
+  { label: t('navParticipants'), icon: Users, name: 'comp-players' },
+  { label: t('navLiveAuction'), icon: Gavel, name: 'comp-auction' },
+  { label: t('navResults'), icon: Trophy, name: 'comp-results' },
 ])
 
 async function enterCompetition(id: number) {

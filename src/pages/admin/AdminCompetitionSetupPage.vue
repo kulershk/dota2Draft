@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Settings, DollarSign, Users, UserPlus, RotateCcw, Play, Pencil, ArrowDown, Wifi, ArrowLeft, Plus, Trash2, Search } from 'lucide-vue-next'
 import { ref, computed, onMounted, reactive } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
@@ -9,6 +10,7 @@ import InputGroup from '@/components/common/InputGroup.vue'
 import CaptainAvatar from '@/components/common/CaptainAvatar.vue'
 import RichTextEditor from '@/components/common/RichTextEditor.vue'
 
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const api = useApi()
@@ -173,8 +175,8 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
         <ArrowLeft class="w-4 h-4" />
       </button>
       <div>
-        <h1 class="text-2xl font-semibold text-foreground">Competition Setup</h1>
-        <p class="text-sm text-muted-foreground mt-1">{{ compName || 'Loading...' }}</p>
+        <h1 class="text-2xl font-semibold text-foreground">{{ t('competitionSetup') }}</h1>
+        <p class="text-sm text-muted-foreground mt-1">{{ compName || t('loading') }}</p>
       </div>
     </div>
 
@@ -182,25 +184,25 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
     <div class="card">
       <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
         <Settings class="w-5 h-5 text-foreground" />
-        <span class="text-sm font-semibold text-foreground">Competition Info</span>
+        <span class="text-sm font-semibold text-foreground">{{ t('competitionInfo') }}</span>
       </div>
       <div class="p-4 flex flex-col gap-4">
-        <InputGroup label="Name" :model-value="compName" placeholder="Competition name" @update:model-value="compName = $event" />
+        <InputGroup :label="t('name')" :model-value="compName" placeholder="Competition name" @update:model-value="compName = $event" />
         <div class="flex flex-col gap-1.5">
-          <label class="label-text">Description</label>
+          <label class="label-text">{{ t('description') }}</label>
           <RichTextEditor v-model="compDescription" />
         </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div class="flex flex-col gap-1.5">
-            <label class="label-text">Registration Start</label>
+            <label class="label-text">{{ t('registrationStart') }}</label>
             <input type="datetime-local" class="input-field" :value="compRegStart" @input="compRegStart = ($event.target as HTMLInputElement).value" />
           </div>
           <div class="flex flex-col gap-1.5">
-            <label class="label-text">Registration End</label>
+            <label class="label-text">{{ t('registrationEnd') }}</label>
             <input type="datetime-local" class="input-field" :value="compRegEnd" @input="compRegEnd = ($event.target as HTMLInputElement).value" />
           </div>
           <div class="flex flex-col gap-1.5">
-            <label class="label-text">Draft Start Date</label>
+            <label class="label-text">{{ t('draftStartDate') }}</label>
             <input type="datetime-local" class="input-field" :value="compStartsAt" @input="compStartsAt = ($event.target as HTMLInputElement).value" />
           </div>
         </div>
@@ -212,26 +214,26 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
       <div class="card flex-1">
         <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
           <Settings class="w-5 h-5 text-foreground" />
-          <span class="text-sm font-semibold text-foreground">General Settings</span>
+          <span class="text-sm font-semibold text-foreground">{{ t('generalSettings') }}</span>
         </div>
         <div class="p-4 flex flex-col gap-4">
-          <InputGroup label="Players per Team" :model-value="String(localSettings.playersPerTeam)" placeholder="5" @update:model-value="localSettings.playersPerTeam = Number($event)" :hint="`1 captain + ${localSettings.playersPerTeam} drafted = ${localSettings.playersPerTeam + 1} total per team`" />
-          <InputGroup label="Bid Timer (seconds)" :model-value="String(localSettings.bidTimer)" placeholder="30" @update:model-value="localSettings.bidTimer = Number($event)" />
+          <InputGroup :label="t('playersPerTeam')" :model-value="String(localSettings.playersPerTeam)" placeholder="5" @update:model-value="localSettings.playersPerTeam = Number($event)" :hint="t('captainPlusDrafted', { n: localSettings.playersPerTeam })" />
+          <InputGroup :label="t('bidTimerSeconds')" :model-value="String(localSettings.bidTimer)" placeholder="30" @update:model-value="localSettings.bidTimer = Number($event)" />
           <div class="flex flex-col gap-1.5">
-            <label class="label-text">Nomination Order</label>
+            <label class="label-text">{{ t('nominationOrder') }}</label>
             <select class="input-field" :value="localSettings.nominationOrder" @change="localSettings.nominationOrder = ($event.target as HTMLSelectElement).value">
-              <option value="normal">Normal (Round Robin)</option>
-              <option value="lowest_avg">Lowest Average MMR First</option>
-              <option value="fewest_then_lowest">Fewest Players, then Lowest Avg MMR</option>
+              <option value="normal">{{ t('normalRoundRobin') }}</option>
+              <option value="lowest_avg">{{ t('lowestAvgFirst') }}</option>
+              <option value="fewest_then_lowest">{{ t('fewestThenLowest') }}</option>
             </select>
           </div>
           <label class="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" class="w-4 h-4 accent-primary" v-model="localSettings.requireAllOnline" />
-            <span class="text-sm text-foreground">Require all captains online to nominate</span>
+            <span class="text-sm text-foreground">{{ t('requireOnlineNominate') }}</span>
           </label>
           <label class="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" class="w-4 h-4 accent-primary" v-model="localSettings.allowSteamRegistration" />
-            <span class="text-sm text-foreground">Allow players to self-register</span>
+            <span class="text-sm text-foreground">{{ t('allowSelfRegister') }}</span>
           </label>
         </div>
       </div>
@@ -239,13 +241,13 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
       <div class="card flex-1">
         <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
           <DollarSign class="w-5 h-5 text-foreground" />
-          <span class="text-sm font-semibold text-foreground">Budget Settings</span>
+          <span class="text-sm font-semibold text-foreground">{{ t('budgetSettings') }}</span>
         </div>
         <div class="p-4 flex flex-col gap-4">
-          <InputGroup label="Starting Budget (Gold)" :model-value="String(localSettings.startingBudget)" placeholder="1000" @update:model-value="localSettings.startingBudget = Number($event)" />
-          <InputGroup label="Minimum Starting Bid" :model-value="String(localSettings.minimumBid)" placeholder="10" @update:model-value="localSettings.minimumBid = Number($event)" />
-          <InputGroup label="Bid Increment" :model-value="String(localSettings.bidIncrement)" placeholder="5" @update:model-value="localSettings.bidIncrement = Number($event)" />
-          <InputGroup label="Max Bid (0 = no limit)" :model-value="String(localSettings.maxBid)" placeholder="0" @update:model-value="localSettings.maxBid = Number($event)" />
+          <InputGroup :label="t('startingBudgetGold')" :model-value="String(localSettings.startingBudget)" placeholder="1000" @update:model-value="localSettings.startingBudget = Number($event)" />
+          <InputGroup :label="t('minimumStartingBid')" :model-value="String(localSettings.minimumBid)" placeholder="10" @update:model-value="localSettings.minimumBid = Number($event)" />
+          <InputGroup :label="t('bidIncrementLabel')" :model-value="String(localSettings.bidIncrement)" placeholder="5" @update:model-value="localSettings.bidIncrement = Number($event)" />
+          <InputGroup :label="t('maxBidNoLimit')" :model-value="String(localSettings.maxBid)" placeholder="0" @update:model-value="localSettings.maxBid = Number($event)" />
         </div>
       </div>
     </div>
@@ -253,7 +255,7 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
     <!-- Save -->
     <div class="flex justify-end">
       <button class="btn-outline text-sm" :disabled="saving" @click="saveAll">
-        {{ saving ? 'Saving...' : 'Save Settings' }}
+        {{ saving ? t('saving') : t('saveSettings') }}
       </button>
     </div>
 
@@ -262,34 +264,34 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
       <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-3 border-b border-border">
         <div class="flex items-center gap-2 flex-wrap">
           <Users class="w-5 h-5 text-foreground" />
-          <span class="text-sm font-semibold text-foreground">Captains &amp; Teams ({{ store.captains.value.length }})</span>
+          <span class="text-sm font-semibold text-foreground">{{ t('captainsAndTeams') }} ({{ store.captains.value.length }})</span>
           <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium bg-color-success text-color-success-foreground">
             <Wifi class="w-3 h-3" />
-            {{ onlineCount }} online
+            {{ onlineCount }} {{ t('online') }}
           </span>
           <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium" :class="allCaptainsReady ? 'bg-color-success text-color-success-foreground' : 'bg-accent text-muted-foreground'">
-            {{ readyCount }}/{{ store.captains.value.length }} ready
+            {{ readyCount }}/{{ store.captains.value.length }} {{ t('ready').toLowerCase() }}
           </span>
         </div>
         <button class="btn-primary text-sm" @click="showPromote = true" :disabled="promotablePlayers.length === 0">
           <UserPlus class="w-4 h-4" />
-          Promote to Captain
+          {{ t('promoteToCaptain') }}
         </button>
       </div>
 
       <div v-if="store.captains.value.length === 0" class="px-4 py-8 text-center text-sm text-muted-foreground">
-        No captains yet. Promote a participant or any registered user.
+        {{ t('noCaptainsYet') }}
       </div>
       <div v-else class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead>
             <tr class="border-b border-border bg-accent/50">
               <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[40px]">#</th>
-              <th class="text-left px-4 py-3 font-medium text-muted-foreground">CAPTAIN</th>
-              <th class="text-left px-4 py-3 font-medium text-muted-foreground">TEAM NAME</th>
-              <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[120px]">BUDGET</th>
-              <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[100px]">STATUS</th>
-              <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[100px]">ACTIONS</th>
+              <th class="text-left px-4 py-3 font-medium text-muted-foreground">{{ t('captainCol') }}</th>
+              <th class="text-left px-4 py-3 font-medium text-muted-foreground">{{ t('teamName') }}</th>
+              <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[120px]">{{ t('budgetCol') }}</th>
+              <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[100px]">{{ t('statusCol') }}</th>
+              <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[100px]">{{ t('actionsCol') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -305,16 +307,16 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
               <td class="px-4 py-3 text-foreground">{{ captain.team }}</td>
               <td class="px-4 py-3 font-mono text-foreground">{{ formatGold(captain.budget) }}</td>
               <td class="px-4 py-3">
-                <span v-if="isCaptainReady(captain.id)" class="badge-ready">Ready</span>
-                <span v-else-if="isCaptainOnline(captain.id)" class="badge-waiting">Waiting</span>
-                <span v-else class="badge-waiting">Offline</span>
+                <span v-if="isCaptainReady(captain.id)" class="badge-ready">{{ t('ready') }}</span>
+                <span v-else-if="isCaptainOnline(captain.id)" class="badge-waiting">{{ t('waiting') }}</span>
+                <span v-else class="badge-waiting">{{ t('offline') }}</span>
               </td>
               <td class="px-4 py-3">
                 <div class="flex items-center gap-1">
-                  <button class="btn-ghost p-2" title="Edit Captain" @click="openEditCaptain(captain)">
+                  <button class="btn-ghost p-2" :title="t('editCaptain')" @click="openEditCaptain(captain)">
                     <Pencil class="w-4 h-4" />
                   </button>
-                  <button class="btn-ghost p-2 text-destructive" title="Demote to Player" @click="handleDemote(captain.id)">
+                  <button class="btn-ghost p-2 text-destructive" :title="t('demoteToPlayer')" @click="handleDemote(captain.id)">
                     <ArrowDown class="w-4 h-4" />
                   </button>
                 </div>
@@ -330,26 +332,26 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
       <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-3 border-b border-border">
         <div class="flex items-center gap-2">
           <Users class="w-5 h-5 text-foreground" />
-          <span class="text-sm font-semibold text-foreground">Participants ({{ store.players.value.filter(p => !p.is_captain).length }})</span>
+          <span class="text-sm font-semibold text-foreground">{{ t('participants') }} ({{ store.players.value.filter(p => !p.is_captain).length }})</span>
         </div>
         <button class="btn-primary text-sm" @click="showAddParticipant = true">
           <Plus class="w-4 h-4" />
-          Add Participant
+          {{ t('addParticipant') }}
         </button>
       </div>
 
       <div v-if="store.players.value.filter(p => !p.is_captain).length === 0" class="px-4 py-8 text-center text-sm text-muted-foreground">
-        No participants yet. Add users or let them self-register.
+        {{ t('noParticipantsYet') }}
       </div>
       <div v-else class="overflow-x-auto max-h-[400px] overflow-y-auto">
         <table class="w-full text-sm">
           <thead class="sticky top-0 bg-card">
             <tr class="border-b border-border bg-accent/50">
               <th class="text-left px-4 py-2.5 font-medium text-muted-foreground w-[40px]">#</th>
-              <th class="text-left px-4 py-2.5 font-medium text-muted-foreground">PLAYER</th>
-              <th class="text-left px-4 py-2.5 font-medium text-muted-foreground">ROLES</th>
-              <th class="text-left px-4 py-2.5 font-medium text-muted-foreground w-[80px]">MMR</th>
-              <th class="text-left px-4 py-2.5 font-medium text-muted-foreground w-[100px]">ACTIONS</th>
+              <th class="text-left px-4 py-2.5 font-medium text-muted-foreground">{{ t('playerCol') }}</th>
+              <th class="text-left px-4 py-2.5 font-medium text-muted-foreground">{{ t('rolesCol') }}</th>
+              <th class="text-left px-4 py-2.5 font-medium text-muted-foreground w-[80px]">{{ t('mmrCol') }}</th>
+              <th class="text-left px-4 py-2.5 font-medium text-muted-foreground w-[100px]">{{ t('actionsCol') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -368,10 +370,10 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
               <td class="px-4 py-2.5 text-xs text-muted-foreground">{{ player.mmr || 0 }}</td>
               <td class="px-4 py-2.5">
                 <div class="flex items-center gap-1">
-                  <button class="btn-ghost p-1.5" title="Promote to Captain" @click="promptPromoteParticipant(player)">
+                  <button class="btn-ghost p-1.5" :title="t('promoteToCaptain')" @click="promptPromoteParticipant(player)">
                     <UserPlus class="w-3.5 h-3.5" />
                   </button>
-                  <button class="btn-ghost p-1.5 text-destructive" title="Remove" @click="removeParticipant(player.id)">
+                  <button class="btn-ghost p-1.5 text-destructive" :title="t('delete')" @click="removeParticipant(player.id)">
                     <Trash2 class="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -385,72 +387,72 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
     <!-- Action Bar -->
     <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3">
       <p v-if="!allCaptainsReady && store.captains.value.length > 0" class="text-sm text-muted-foreground mr-2">
-        Waiting for all captains to ready up ({{ readyCount }}/{{ store.captains.value.length }})...
+        {{ t('waitingReady', { ready: readyCount, total: store.captains.value.length }) }}
       </p>
       <button class="btn-outline" @click="showResetConfirm = true">
         <RotateCcw class="w-4 h-4" />
-        Reset
+        {{ t('reset') }}
       </button>
       <button v-if="store.auction.status === 'idle'" class="btn-primary" :disabled="!allCaptainsReady" @click="startDraft">
         <Play class="w-4 h-4" />
-        Start Draft
+        {{ t('startDraft') }}
       </button>
     </div>
 
     <!-- Promote Modal -->
     <ModalOverlay :show="showPromote" @close="showPromote = false">
       <div class="border-b border-border px-7 py-6">
-        <h2 class="text-xl font-semibold text-foreground">Promote Player to Captain</h2>
-        <p class="text-sm text-muted-foreground mt-1">Select a registered player to promote as a captain.</p>
+        <h2 class="text-xl font-semibold text-foreground">{{ t('promoteModal.title') }}</h2>
+        <p class="text-sm text-muted-foreground mt-1">{{ t('promoteModal.subtitle') }}</p>
       </div>
       <div class="px-7 py-5 flex flex-col gap-5">
         <div class="flex flex-col gap-1.5">
-          <label class="label-text">Select Player</label>
+          <label class="label-text">{{ t('promoteModal.selectPlayer') }}</label>
           <select class="input-field" :value="promotePlayerId || ''" @change="promotePlayerId = Number(($event.target as HTMLSelectElement).value) || null">
-            <option value="">Choose a player...</option>
+            <option value="">{{ t('promoteModal.choosePlaceholder') }}</option>
             <option v-for="p in promotablePlayers" :key="p.id" :value="p.id">{{ p.name }} ({{ p.mmr }} MMR)</option>
           </select>
         </div>
-        <InputGroup label="Team Name" :model-value="promoteTeam" placeholder="e.g. Team Secret" @update:model-value="promoteTeam = $event" />
+        <InputGroup :label="t('promoteModal.teamName')" :model-value="promoteTeam" :placeholder="t('promoteModal.teamPlaceholder')" @update:model-value="promoteTeam = $event" />
       </div>
       <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
         <button class="btn-primary w-full justify-center" :disabled="!promotePlayerId || !promoteTeam" @click="handlePromote">
           <UserPlus class="w-4 h-4" />
-          Promote to Captain
+          {{ t('promoteToCaptain') }}
         </button>
-        <button class="btn-secondary w-full justify-center" @click="showPromote = false">Cancel</button>
+        <button class="btn-secondary w-full justify-center" @click="showPromote = false">{{ t('cancel') }}</button>
       </div>
     </ModalOverlay>
 
     <!-- Reset Confirmation -->
     <ModalOverlay :show="showResetConfirm" @close="showResetConfirm = false">
       <div class="px-7 py-6">
-        <h2 class="text-xl font-semibold text-foreground">Reset Draft</h2>
-        <p class="text-sm text-muted-foreground mt-2">This will reset all captain budgets, drafted players, bid history, and auction state for this competition.</p>
+        <h2 class="text-xl font-semibold text-foreground">{{ t('resetModal.title') }}</h2>
+        <p class="text-sm text-muted-foreground mt-2">{{ t('resetModal.message') }}</p>
       </div>
       <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
         <button class="btn-destructive w-full justify-center" @click="store.resetDraft(); showResetConfirm = false">
           <RotateCcw class="w-4 h-4" />
-          Yes, Reset Everything
+          {{ t('resetModal.confirm') }}
         </button>
-        <button class="btn-secondary w-full justify-center" @click="showResetConfirm = false">Cancel</button>
+        <button class="btn-secondary w-full justify-center" @click="showResetConfirm = false">{{ t('cancel') }}</button>
       </div>
     </ModalOverlay>
 
     <!-- Add Participant Modal -->
     <ModalOverlay :show="showAddParticipant" @close="showAddParticipant = false; participantSearchQuery = ''">
       <div class="border-b border-border px-7 py-6">
-        <h2 class="text-xl font-semibold text-foreground">Add Participant</h2>
-        <p class="text-sm text-muted-foreground mt-1">Select registered users to add as participants in this competition.</p>
+        <h2 class="text-xl font-semibold text-foreground">{{ t('addParticipantModal.title') }}</h2>
+        <p class="text-sm text-muted-foreground mt-1">{{ t('addParticipantModal.subtitle') }}</p>
       </div>
       <div class="px-7 py-5 flex flex-col gap-4">
         <div class="relative">
           <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input v-model="participantSearchQuery" type="text" placeholder="Search users..." class="input-field pl-9 w-full" />
+          <input v-model="participantSearchQuery" type="text" :placeholder="t('addParticipantModal.searchPlaceholder')" class="input-field pl-9 w-full" />
         </div>
         <div class="max-h-[300px] overflow-y-auto border border-border rounded-lg divide-y divide-border">
           <div v-if="addableUsers.length === 0" class="px-4 py-6 text-center text-sm text-muted-foreground">
-            {{ participantSearchQuery ? 'No matching users found.' : 'All users are already participants or captains.' }}
+            {{ participantSearchQuery ? t('addParticipantModal.noMatching') : t('addParticipantModal.allAdded') }}
           </div>
           <div v-for="user in addableUsers" :key="user.id" class="flex items-center justify-between px-4 py-2.5 hover:bg-accent/30 transition-colors">
             <div class="flex items-center gap-2.5">
@@ -465,31 +467,31 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
             </div>
             <button class="btn-primary text-xs py-1 px-2.5" @click="addParticipant(user.id)">
               <Plus class="w-3 h-3" />
-              Add
+              {{ t('add') }}
             </button>
           </div>
         </div>
       </div>
       <div class="px-7 py-4 border-t border-border">
-        <button class="btn-secondary w-full justify-center" @click="showAddParticipant = false; participantSearchQuery = ''">Close</button>
+        <button class="btn-secondary w-full justify-center" @click="showAddParticipant = false; participantSearchQuery = ''">{{ t('close') }}</button>
       </div>
     </ModalOverlay>
 
     <!-- Edit Captain Modal -->
     <ModalOverlay :show="showEditCaptain" @close="showEditCaptain = false">
       <div class="border-b border-border px-7 py-6">
-        <h2 class="text-xl font-semibold text-foreground">Edit Captain</h2>
+        <h2 class="text-xl font-semibold text-foreground">{{ t('editCaptainModal.title') }}</h2>
       </div>
       <div class="px-7 py-5 flex flex-col gap-5">
-        <InputGroup label="Team Name" :model-value="editCaptain.team" placeholder="e.g. Team Secret" @update:model-value="editCaptain.team = $event" />
-        <InputGroup label="Budget (Gold)" :model-value="String(editCaptain.budget)" placeholder="1000" @update:model-value="editCaptain.budget = Number($event)" />
+        <InputGroup :label="t('editCaptainModal.teamName')" :model-value="editCaptain.team" placeholder="e.g. Team Secret" @update:model-value="editCaptain.team = $event" />
+        <InputGroup :label="t('editCaptainModal.budgetGold')" :model-value="String(editCaptain.budget)" placeholder="1000" @update:model-value="editCaptain.budget = Number($event)" />
       </div>
       <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
         <button class="btn-primary w-full justify-center" @click="saveCaptain">
           <Pencil class="w-4 h-4" />
-          Save Changes
+          {{ t('editCaptainModal.save') }}
         </button>
-        <button class="btn-secondary w-full justify-center" @click="showEditCaptain = false">Cancel</button>
+        <button class="btn-secondary w-full justify-center" @click="showEditCaptain = false">{{ t('cancel') }}</button>
       </div>
     </ModalOverlay>
   </div>

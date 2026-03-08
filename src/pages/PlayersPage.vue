@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Users, UserPlus, Search, Pencil, Trash2, ExternalLink, LogIn } from 'lucide-vue-next'
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useDraftStore } from '@/composables/useDraftStore'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 import InputGroup from '@/components/common/InputGroup.vue'
@@ -8,6 +9,7 @@ import RoleBadge from '@/components/common/RoleBadge.vue'
 import MmrDisplay from '@/components/common/MmrDisplay.vue'
 import { sortedRoles } from '@/utils/roles'
 
+const { t } = useI18n()
 const store = useDraftStore()
 const showEditPlayer = ref(false)
 const showRegister = ref(false)
@@ -38,10 +40,10 @@ const registrationStatus = computed(() => {
   if (!comp) return ''
   const now = new Date()
   if (comp.registration_start && new Date(comp.registration_start) > now) {
-    return 'Registration opens ' + new Date(comp.registration_start).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    return t('registrationOpensAt', { date: new Date(comp.registration_start).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) })
   }
   if (comp.registration_end && new Date(comp.registration_end) < now) {
-    return 'Registration closed'
+    return t('registrationClosedLabel')
   }
   return ''
 })
@@ -154,34 +156,34 @@ const filteredPlayers = computed(() => {
 <template>
   <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[1440px] mx-auto w-full">
     <div>
-      <h1 class="text-2xl font-semibold text-foreground">Participants</h1>
-      <p class="text-sm text-muted-foreground mt-1">Dota 2 players available for auction bidding</p>
+      <h1 class="text-2xl font-semibold text-foreground">{{ t('participantsTitle') }}</h1>
+      <p class="text-sm text-muted-foreground mt-1">{{ t('participantsSubtitle') }}</p>
     </div>
 
     <!-- Stats Row -->
     <div class="grid grid-cols-3 md:grid-cols-6 gap-3 md:gap-4">
       <div class="card p-3 md:p-4">
-        <p class="text-[10px] md:text-xs font-semibold tracking-wider text-muted-foreground uppercase">Total</p>
+        <p class="text-[10px] md:text-xs font-semibold tracking-wider text-muted-foreground uppercase">{{ t('total') }}</p>
         <p class="text-xl md:text-3xl font-bold text-foreground mt-1">{{ store.players.value.length }}</p>
       </div>
       <div class="card p-3 md:p-4">
-        <p class="text-[10px] md:text-xs font-semibold tracking-wider text-muted-foreground uppercase">Carry</p>
+        <p class="text-[10px] md:text-xs font-semibold tracking-wider text-muted-foreground uppercase">{{ t('carry') }}</p>
         <p class="text-xl md:text-3xl font-bold text-foreground mt-1">{{ store.roleCounts.value.Carry }}</p>
       </div>
       <div class="card p-3 md:p-4">
-        <p class="text-[10px] md:text-xs font-semibold tracking-wider text-muted-foreground uppercase">Mid</p>
+        <p class="text-[10px] md:text-xs font-semibold tracking-wider text-muted-foreground uppercase">{{ t('mid') }}</p>
         <p class="text-xl md:text-3xl font-bold text-foreground mt-1">{{ store.roleCounts.value.Mid }}</p>
       </div>
       <div class="card p-3 md:p-4">
-        <p class="text-[10px] md:text-xs font-semibold tracking-wider text-muted-foreground uppercase">Offlane</p>
+        <p class="text-[10px] md:text-xs font-semibold tracking-wider text-muted-foreground uppercase">{{ t('offlane') }}</p>
         <p class="text-xl md:text-3xl font-bold text-foreground mt-1">{{ store.roleCounts.value.Offlane }}</p>
       </div>
       <div class="card p-3 md:p-4">
-        <p class="text-[10px] md:text-xs font-semibold tracking-wider text-muted-foreground uppercase">Pos 4</p>
+        <p class="text-[10px] md:text-xs font-semibold tracking-wider text-muted-foreground uppercase">{{ t('pos4') }}</p>
         <p class="text-xl md:text-3xl font-bold text-foreground mt-1">{{ store.roleCounts.value.Pos4 }}</p>
       </div>
       <div class="card p-3 md:p-4">
-        <p class="text-[10px] md:text-xs font-semibold tracking-wider text-muted-foreground uppercase">Pos 5</p>
+        <p class="text-[10px] md:text-xs font-semibold tracking-wider text-muted-foreground uppercase">{{ t('pos5') }}</p>
         <p class="text-xl md:text-3xl font-bold text-foreground mt-1">{{ store.roleCounts.value.Pos5 }}</p>
       </div>
     </div>
@@ -191,24 +193,24 @@ const filteredPlayers = computed(() => {
       <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-3 border-b border-border">
         <div class="flex items-center gap-2">
           <Users class="w-5 h-5 text-foreground" />
-          <span class="text-sm font-semibold text-foreground">Players ({{ store.players.value.length }})</span>
+          <span class="text-sm font-semibold text-foreground">{{ t('players') }} ({{ store.players.value.length }})</span>
         </div>
         <div class="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
           <div class="relative flex-1 sm:flex-initial">
             <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <input v-model="searchQuery" type="text" placeholder="Search..." class="input-field pl-9 w-full sm:w-56" />
+            <input v-model="searchQuery" type="text" :placeholder="t('search')" class="input-field pl-9 w-full sm:w-56" />
           </div>
           <template v-if="store.currentUser.value && !store.compUser.value?.in_pool && !store.compUser.value?.captain">
             <button v-if="registrationOpen || store.isAdmin.value" class="btn-primary text-sm flex-shrink-0" @click="openRegister">
               <UserPlus class="w-4 h-4" />
-              <span class="hidden sm:inline">Join as Participant</span>
+              <span class="hidden sm:inline">{{ t('joinAsParticipant') }}</span>
             </button>
             <span v-else-if="registrationStatus" class="text-xs text-muted-foreground italic flex-shrink-0">{{ registrationStatus }}</span>
           </template>
           <template v-else-if="!store.currentUser.value && store.settings.allowSteamRegistration">
             <button v-if="registrationOpen" class="btn-primary text-sm flex-shrink-0" @click="loginWithSteam">
               <LogIn class="w-4 h-4" />
-              <span class="hidden sm:inline">Login to Join</span>
+              <span class="hidden sm:inline">{{ t('loginToJoin') }}</span>
             </button>
             <span v-else-if="registrationStatus" class="text-xs text-muted-foreground italic flex-shrink-0">{{ registrationStatus }}</span>
           </template>
@@ -220,11 +222,11 @@ const filteredPlayers = computed(() => {
           <thead>
             <tr class="border-b border-border bg-accent/50">
               <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[40px]">#</th>
-              <th class="text-left px-4 py-3 font-medium text-muted-foreground">PLAYER NAME</th>
-              <th class="text-left px-4 py-3 font-medium text-muted-foreground">ROLE</th>
-              <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[100px]">MMR</th>
-              <th class="text-left px-4 py-3 font-medium text-muted-foreground">INFO</th>
-              <th v-if="store.isAdmin.value" class="text-left px-4 py-3 font-medium text-muted-foreground w-[100px]">ACTIONS</th>
+              <th class="text-left px-4 py-3 font-medium text-muted-foreground">{{ t('playerName') }}</th>
+              <th class="text-left px-4 py-3 font-medium text-muted-foreground">{{ t('role') }}</th>
+              <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[100px]">{{ t('mmr') }}</th>
+              <th class="text-left px-4 py-3 font-medium text-muted-foreground">{{ t('info') }}</th>
+              <th v-if="store.isAdmin.value" class="text-left px-4 py-3 font-medium text-muted-foreground w-[100px]">{{ t('actions') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -273,8 +275,8 @@ const filteredPlayers = computed(() => {
     <!-- Join as Participant Modal -->
     <ModalOverlay :show="showRegister" @close="showRegister = false">
       <div class="border-b border-border px-7 py-6">
-        <h2 class="text-xl font-semibold text-foreground">Join as Participant</h2>
-        <p class="text-sm text-muted-foreground mt-1">Fill in your Dota 2 details to join as a participant.</p>
+        <h2 class="text-xl font-semibold text-foreground">{{ t('joinModal.title') }}</h2>
+        <p class="text-sm text-muted-foreground mt-1">{{ t('joinModal.subtitle') }}</p>
       </div>
       <div class="px-7 py-5 flex flex-col gap-5">
         <p v-if="registerError" class="text-sm text-red-500 bg-red-500/10 rounded px-3 py-2">{{ registerError }}</p>
@@ -291,7 +293,7 @@ const filteredPlayers = computed(() => {
         </div>
 
         <div class="flex flex-col gap-2">
-          <label class="label-text">Roles (select all that apply)</label>
+          <label class="label-text">{{ t('joinModal.roles') }}</label>
           <div class="flex flex-wrap gap-x-5 gap-y-2">
             <label v-for="role in allRoles" :key="role" class="flex items-center gap-2 text-sm text-foreground cursor-pointer">
               <input type="checkbox" :checked="registerRoles.includes(role)" class="w-4 h-4 rounded border-input text-primary focus:ring-primary" @change="toggleRegisterRole(role)" />
@@ -301,18 +303,18 @@ const filteredPlayers = computed(() => {
         </div>
         <InputGroup label="MMR" :model-value="registerMmr" placeholder="e.g. 11000" @update:model-value="registerMmr = $event" />
         <div class="flex flex-col gap-1.5">
-          <label class="label-text">About You</label>
-          <textarea :value="registerInfo" maxlength="200" placeholder="Brief description, achievements, playstyle notes..." rows="3" class="textarea-field" @input="registerInfo = ($event.target as HTMLTextAreaElement).value" />
+          <label class="label-text">{{ t('joinModal.aboutYou') }}</label>
+          <textarea :value="registerInfo" maxlength="200" :placeholder="t('joinModal.aboutPlaceholder')" rows="3" class="textarea-field" @input="registerInfo = ($event.target as HTMLTextAreaElement).value" />
           <p class="text-xs text-muted-foreground text-right">{{ registerInfo.length }}/200</p>
         </div>
       </div>
       <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
         <button class="btn-primary w-full justify-center" :disabled="registering" @click="submitRegistration">
           <UserPlus class="w-4 h-4" />
-          {{ registering ? 'Joining...' : 'Join as Participant' }}
+          {{ registering ? t('joinModal.joining') : t('joinAsParticipant') }}
         </button>
         <button class="btn-secondary w-full justify-center" @click="showRegister = false">
-          Cancel
+          {{ t('cancel') }}
         </button>
       </div>
     </ModalOverlay>
@@ -320,8 +322,8 @@ const filteredPlayers = computed(() => {
     <!-- Edit Player Modal -->
     <ModalOverlay :show="showEditPlayer" @close="showEditPlayer = false">
       <div class="border-b border-border px-7 py-6">
-        <h2 class="text-xl font-semibold text-foreground">Edit Player</h2>
-        <p class="text-sm text-muted-foreground mt-1">Update this player's details.</p>
+        <h2 class="text-xl font-semibold text-foreground">{{ t('editPlayerModal.title') }}</h2>
+        <p class="text-sm text-muted-foreground mt-1">{{ t('editPlayerModal.subtitle') }}</p>
       </div>
       <div class="px-7 py-5 flex flex-col gap-5">
         <InputGroup label="Player Name" :model-value="editPlayer.name" placeholder="e.g. Miracle-" @update:model-value="editPlayer.name = $event" />
@@ -343,10 +345,10 @@ const filteredPlayers = computed(() => {
       <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
         <button class="btn-primary w-full justify-center" @click="savePlayer">
           <Pencil class="w-4 h-4" />
-          Save Changes
+          {{ t('editPlayerModal.saveChanges') }}
         </button>
         <button class="btn-secondary w-full justify-center" @click="showEditPlayer = false">
-          Cancel
+          {{ t('cancel') }}
         </button>
       </div>
     </ModalOverlay>

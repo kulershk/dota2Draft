@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { Newspaper, Users, Trophy, ChevronRight } from 'lucide-vue-next'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 const route = useRoute()
 
 const adminNav = [
-  { label: 'Competitions', icon: Trophy, path: '/admin/competitions' },
-  { label: 'Users', icon: Users, path: '/admin/users' },
-  { label: 'News', icon: Newspaper, path: '/admin/news' },
+  { labelKey: 'adminCompetitions', icon: Trophy, path: '/admin/competitions' },
+  { labelKey: 'users', icon: Users, path: '/admin/users' },
+  { labelKey: 'newsAnnouncements', icon: Newspaper, path: '/admin/news' },
 ]
 </script>
 
@@ -16,7 +18,7 @@ const adminNav = [
     <!-- Sidebar -->
     <aside class="hidden md:flex flex-col w-56 bg-sidebar border-r border-sidebar-border shrink-0">
       <div class="px-4 py-4 border-b border-sidebar-border">
-        <h2 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Admin Panel</h2>
+        <h2 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{{ t('adminPanel') }}</h2>
       </div>
       <nav class="flex flex-col gap-0.5 p-2">
         <router-link
@@ -29,7 +31,7 @@ const adminNav = [
             : 'text-sidebar-foreground hover:bg-accent'"
         >
           <component :is="item.icon" class="w-4 h-4" />
-          {{ item.label }}
+          {{ t(item.labelKey) }}
         </router-link>
       </nav>
     </aside>

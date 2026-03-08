@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { Calendar, Users, User, Gavel, Trophy, Clock, Settings, DollarSign, Upload, X } from 'lucide-vue-next'
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { useApi } from '@/composables/useApi'
 
+const { t } = useI18n()
 const store = useDraftStore()
 const api = useApi()
 const uploading = ref(false)
@@ -12,9 +14,9 @@ const comp = computed(() => store.currentCompetition.value)
 
 const auctionStatus = computed(() => {
   const s = comp.value?.auction_state?.status || 'idle'
-  if (s === 'finished') return 'Completed'
-  if (['nominating', 'bidding', 'paused'].includes(s)) return 'In Progress'
-  return 'Not Started'
+  if (s === 'finished') return t('auctionCompleted')
+  if (['nominating', 'bidding', 'paused'].includes(s)) return t('auctionInProgress')
+  return t('notStarted')
 })
 
 const auctionStatusClass = computed(() => {
@@ -28,15 +30,15 @@ const registrationStatus = computed(() => {
   if (!comp.value) return { label: '—', open: false }
   const now = new Date()
   if (comp.value.registration_start && new Date(comp.value.registration_start) > now) {
-    return { label: 'Not Yet Open', open: false }
+    return { label: t('registrationNotYetOpen'), open: false }
   }
   if (comp.value.registration_end && new Date(comp.value.registration_end) < now) {
-    return { label: 'Closed', open: false }
+    return { label: t('registrationClosed'), open: false }
   }
   if (comp.value.registration_start || comp.value.registration_end) {
-    return { label: 'Open', open: true }
+    return { label: t('registrationOpen'), open: true }
   }
-  return { label: 'Open', open: true }
+  return { label: t('registrationOpen'), open: true }
 })
 
 const participantCount = computed(() => store.players.value.filter(p => !p.is_captain).length)
@@ -81,7 +83,7 @@ async function removeBanner(captain: any) {
 
 <template>
   <div class="p-4 md:p-8 md:px-10 flex flex-col gap-5 md:gap-6 max-w-[1200px] mx-auto w-full">
-    <div v-if="!comp" class="text-center py-12 text-muted-foreground">Loading...</div>
+    <div v-if="!comp" class="text-center py-12 text-muted-foreground">{{ t('loading') }}</div>
 
     <template v-else>
       <!-- Header -->
@@ -93,13 +95,13 @@ async function removeBanner(captain: any) {
           </span>
           <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
             :class="registrationStatus.open ? 'bg-color-success text-color-success-foreground' : 'bg-accent text-muted-foreground'">
-            Registration {{ registrationStatus.label }}
+            {{ t('registrationLabel') }} {{ registrationStatus.label }}
           </span>
         </div>
         <div v-if="comp.created_by_name" class="flex items-center gap-1.5 mt-2 text-sm text-muted-foreground">
           <img v-if="comp.created_by_avatar" :src="comp.created_by_avatar" class="w-5 h-5 rounded-full" />
           <User v-else class="w-4 h-4" />
-          <span>Created by <span class="font-medium text-foreground">{{ comp.created_by_name }}</span></span>
+          <span>{{ t('createdBy') }} <span class="font-medium text-foreground">{{ comp.created_by_name }}</span></span>
           <span class="mx-1">&middot;</span>
           <span>{{ formatDate(comp.created_at) }}</span>
         </div>
@@ -108,7 +110,7 @@ async function removeBanner(captain: any) {
       <!-- Description -->
       <div v-if="comp.description" class="card">
         <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
-          <span class="text-sm font-semibold text-foreground">About</span>
+          <span class="text-sm font-semibold text-foreground">{{ t('about') }}</span>
         </div>
         <div class="p-4 md:p-6 prose prose-sm dark:prose-invert max-w-none text-foreground/80" v-html="comp.description"></div>
       </div>
@@ -118,31 +120,31 @@ async function removeBanner(captain: any) {
         <div class="card p-4">
           <div class="flex items-center gap-2 text-muted-foreground mb-1">
             <Users class="w-4 h-4" />
-            <p class="text-xs font-semibold tracking-wider uppercase">Participants</p>
+            <p class="text-xs font-semibold tracking-wider uppercase">{{ t('participants') }}</p>
           </div>
           <p class="text-2xl font-bold text-foreground">{{ participantCount }}</p>
         </div>
         <div class="card p-4">
           <div class="flex items-center gap-2 text-muted-foreground mb-1">
             <Trophy class="w-4 h-4" />
-            <p class="text-xs font-semibold tracking-wider uppercase">Captains</p>
+            <p class="text-xs font-semibold tracking-wider uppercase">{{ t('captains') }}</p>
           </div>
           <p class="text-2xl font-bold text-foreground">{{ captainCount }}</p>
         </div>
         <div class="card p-4">
           <div class="flex items-center gap-2 text-muted-foreground mb-1">
             <DollarSign class="w-4 h-4" />
-            <p class="text-xs font-semibold tracking-wider uppercase">Budget</p>
+            <p class="text-xs font-semibold tracking-wider uppercase">{{ t('budget') }}</p>
           </div>
           <p class="text-2xl font-bold text-foreground">{{ store.settings.startingBudget.toLocaleString() }}g</p>
         </div>
         <div class="card p-4">
           <div class="flex items-center gap-2 text-muted-foreground mb-1">
             <Settings class="w-4 h-4" />
-            <p class="text-xs font-semibold tracking-wider uppercase">Per Team</p>
+            <p class="text-xs font-semibold tracking-wider uppercase">{{ t('perTeam') }}</p>
           </div>
           <p class="text-2xl font-bold text-foreground">{{ store.settings.playersPerTeam + 1 }}</p>
-          <p class="text-xs text-muted-foreground">1 captain + {{ store.settings.playersPerTeam }} drafted</p>
+          <p class="text-xs text-muted-foreground">{{ t('captainPlusDrafted', { n: store.settings.playersPerTeam }) }}</p>
         </div>
       </div>
 
@@ -150,19 +152,19 @@ async function removeBanner(captain: any) {
       <div class="card">
         <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
           <Calendar class="w-5 h-5 text-foreground" />
-          <span class="text-sm font-semibold text-foreground">Schedule</span>
+          <span class="text-sm font-semibold text-foreground">{{ t('schedule') }}</span>
         </div>
         <div class="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <p class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Registration Opens</p>
+            <p class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{{ t('registrationOpens') }}</p>
             <p class="text-sm text-foreground mt-1">{{ formatDate(comp.registration_start) }}</p>
           </div>
           <div>
-            <p class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Registration Closes</p>
+            <p class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{{ t('registrationCloses') }}</p>
             <p class="text-sm text-foreground mt-1">{{ formatDate(comp.registration_end) }}</p>
           </div>
           <div>
-            <p class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Draft Starts</p>
+            <p class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{{ t('draftStarts') }}</p>
             <p class="text-sm text-foreground mt-1">{{ formatDate(comp.starts_at) }}</p>
           </div>
         </div>
@@ -172,36 +174,36 @@ async function removeBanner(captain: any) {
       <div class="card">
         <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
           <Gavel class="w-5 h-5 text-foreground" />
-          <span class="text-sm font-semibold text-foreground">Draft Settings</span>
+          <span class="text-sm font-semibold text-foreground">{{ t('draftSettings') }}</span>
         </div>
         <div class="p-4 grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-3">
           <div>
-            <p class="text-xs text-muted-foreground">Bid Timer</p>
+            <p class="text-xs text-muted-foreground">{{ t('bidTimer') }}</p>
             <p class="text-sm font-medium text-foreground">{{ store.settings.bidTimer }}s</p>
           </div>
           <div>
-            <p class="text-xs text-muted-foreground">Minimum Bid</p>
+            <p class="text-xs text-muted-foreground">{{ t('minimumBid') }}</p>
             <p class="text-sm font-medium text-foreground">{{ store.settings.minimumBid }}g</p>
           </div>
           <div>
-            <p class="text-xs text-muted-foreground">Bid Increment</p>
+            <p class="text-xs text-muted-foreground">{{ t('bidIncrement') }}</p>
             <p class="text-sm font-medium text-foreground">{{ store.settings.bidIncrement }}g</p>
           </div>
           <div>
-            <p class="text-xs text-muted-foreground">Max Bid</p>
-            <p class="text-sm font-medium text-foreground">{{ store.settings.maxBid ? store.settings.maxBid + 'g' : 'No limit' }}</p>
+            <p class="text-xs text-muted-foreground">{{ t('maxBid') }}</p>
+            <p class="text-sm font-medium text-foreground">{{ store.settings.maxBid ? store.settings.maxBid + 'g' : t('noLimit') }}</p>
           </div>
           <div>
-            <p class="text-xs text-muted-foreground">Nomination Order</p>
-            <p class="text-sm font-medium text-foreground">{{ store.settings.nominationOrder === 'normal' ? 'Round Robin' : store.settings.nominationOrder === 'lowest_avg' ? 'Lowest Avg MMR' : 'Fewest Players First' }}</p>
+            <p class="text-xs text-muted-foreground">{{ t('nominationOrder') }}</p>
+            <p class="text-sm font-medium text-foreground">{{ store.settings.nominationOrder === 'normal' ? t('roundRobin') : store.settings.nominationOrder === 'lowest_avg' ? t('lowestAvgMmr') : t('fewestPlayersFirst') }}</p>
           </div>
           <div>
-            <p class="text-xs text-muted-foreground">Require All Online</p>
-            <p class="text-sm font-medium text-foreground">{{ store.settings.requireAllOnline ? 'Yes' : 'No' }}</p>
+            <p class="text-xs text-muted-foreground">{{ t('requireAllOnline') }}</p>
+            <p class="text-sm font-medium text-foreground">{{ store.settings.requireAllOnline ? t('yes') : t('no') }}</p>
           </div>
           <div>
-            <p class="text-xs text-muted-foreground">Self Registration</p>
-            <p class="text-sm font-medium text-foreground">{{ store.settings.allowSteamRegistration ? 'Allowed' : 'Disabled' }}</p>
+            <p class="text-xs text-muted-foreground">{{ t('selfRegistration') }}</p>
+            <p class="text-sm font-medium text-foreground">{{ store.settings.allowSteamRegistration ? t('allowed') : t('disabled') }}</p>
           </div>
         </div>
       </div>
@@ -210,7 +212,7 @@ async function removeBanner(captain: any) {
       <div v-if="store.captains.value.length > 0" class="card">
         <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
           <Trophy class="w-5 h-5 text-foreground" />
-          <span class="text-sm font-semibold text-foreground">Captains ({{ captainCount }})</span>
+          <span class="text-sm font-semibold text-foreground">{{ t('captains') }} ({{ captainCount }})</span>
         </div>
         <div class="p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
           <div v-for="captain in store.captains.value" :key="captain.id" class="rounded-lg bg-accent/30 border border-border overflow-hidden">
@@ -220,11 +222,11 @@ async function removeBanner(captain: any) {
               <div v-else class="w-full h-24 bg-gradient-to-br from-primary/10 to-primary/5"></div>
               <!-- Upload/remove controls for captain owner or admin -->
               <div v-if="canEditBanner(captain)" class="absolute top-1.5 right-1.5 flex gap-1">
-                <label class="p-1 rounded bg-background/80 backdrop-blur-sm cursor-pointer hover:bg-background transition-colors" title="Upload banner">
+                <label class="p-1 rounded bg-background/80 backdrop-blur-sm cursor-pointer hover:bg-background transition-colors" :title="t('uploadBanner')">
                   <Upload class="w-3.5 h-3.5 text-foreground" />
                   <input type="file" accept="image/*" class="hidden" @change="uploadBanner(captain, $event)" :disabled="uploading" />
                 </label>
-                <button v-if="captain.banner_url" class="p-1 rounded bg-background/80 backdrop-blur-sm hover:bg-background transition-colors" title="Remove banner" @click="removeBanner(captain)">
+                <button v-if="captain.banner_url" class="p-1 rounded bg-background/80 backdrop-blur-sm hover:bg-background transition-colors" :title="t('removeBanner')" @click="removeBanner(captain)">
                   <X class="w-3.5 h-3.5 text-destructive" />
                 </button>
               </div>

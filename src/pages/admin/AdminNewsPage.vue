@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { Newspaper, Plus, Pencil, Trash2, Calendar, User } from 'lucide-vue-next'
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 import InputGroup from '@/components/common/InputGroup.vue'
 import RichTextEditor from '@/components/common/RichTextEditor.vue'
 
+const { t } = useI18n()
 const api = useApi()
 
 interface NewsPost { id: number; title: string; content: string; created_by_name: string | null; created_by_avatar: string | null; created_at: string }
@@ -52,19 +54,19 @@ function formatDate(dateStr: string) {
   <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[1200px] mx-auto w-full">
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-semibold text-foreground">News & Announcements</h1>
-        <p class="text-sm text-muted-foreground mt-1">Manage news posts visible on the home page</p>
+        <h1 class="text-2xl font-semibold text-foreground">{{ t('newsAnnouncements') }}</h1>
+        <p class="text-sm text-muted-foreground mt-1">{{ t('manageNews') }}</p>
       </div>
       <button class="btn-primary text-sm" @click="showAddNews = true">
         <Plus class="w-4 h-4" />
-        Add Post
+        {{ t('addPost') }}
       </button>
     </div>
 
     <!-- News List -->
     <div class="card">
       <div v-if="newsList.length === 0" class="px-4 py-12 text-center text-sm text-muted-foreground">
-        No news posts yet. Click "Add Post" to create one.
+        {{ t('noNewsPosts') }}
       </div>
       <div v-else class="divide-y divide-border">
         <div v-for="post in newsList" :key="post.id" class="px-4 py-4 md:px-6">
@@ -99,43 +101,43 @@ function formatDate(dateStr: string) {
     <!-- Add News Modal -->
     <ModalOverlay :show="showAddNews" wide @close="showAddNews = false">
       <div class="border-b border-border px-7 py-6">
-        <h2 class="text-xl font-semibold text-foreground">Add News Post</h2>
-        <p class="text-sm text-muted-foreground mt-1">Create a new announcement visible to everyone.</p>
+        <h2 class="text-xl font-semibold text-foreground">{{ t('addNewsModal.title') }}</h2>
+        <p class="text-sm text-muted-foreground mt-1">{{ t('addNewsModal.subtitle') }}</p>
       </div>
       <div class="px-7 py-5 flex flex-col gap-5">
-        <InputGroup label="Title" :model-value="newNews.title" placeholder="e.g. Draft Date Announced" @update:model-value="newNews.title = $event" />
+        <InputGroup :label="t('addNewsModal.titleLabel')" :model-value="newNews.title" :placeholder="t('addNewsModal.titlePlaceholder')" @update:model-value="newNews.title = $event" />
         <div class="flex flex-col gap-1.5">
-          <label class="label-text">Content</label>
+          <label class="label-text">{{ t('addNewsModal.content') }}</label>
           <RichTextEditor v-model="newNews.content" />
         </div>
       </div>
       <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
         <button class="btn-primary w-full justify-center" @click="addNews">
           <Plus class="w-4 h-4" />
-          Publish
+          {{ t('addNewsModal.publish') }}
         </button>
-        <button class="btn-secondary w-full justify-center" @click="showAddNews = false">Cancel</button>
+        <button class="btn-secondary w-full justify-center" @click="showAddNews = false">{{ t('cancel') }}</button>
       </div>
     </ModalOverlay>
 
     <!-- Edit News Modal -->
     <ModalOverlay :show="showEditNews" wide @close="showEditNews = false">
       <div class="border-b border-border px-7 py-6">
-        <h2 class="text-xl font-semibold text-foreground">Edit News Post</h2>
+        <h2 class="text-xl font-semibold text-foreground">{{ t('editNewsModal.title') }}</h2>
       </div>
       <div class="px-7 py-5 flex flex-col gap-5">
-        <InputGroup label="Title" :model-value="editNews.title" placeholder="Title" @update:model-value="editNews.title = $event" />
+        <InputGroup :label="t('editNewsModal.titleLabel')" :model-value="editNews.title" placeholder="Title" @update:model-value="editNews.title = $event" />
         <div class="flex flex-col gap-1.5">
-          <label class="label-text">Content</label>
+          <label class="label-text">{{ t('editNewsModal.content') }}</label>
           <RichTextEditor v-model="editNews.content" />
         </div>
       </div>
       <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
         <button class="btn-primary w-full justify-center" @click="saveNews">
           <Pencil class="w-4 h-4" />
-          Save Changes
+          {{ t('editNewsModal.save') }}
         </button>
-        <button class="btn-secondary w-full justify-center" @click="showEditNews = false">Cancel</button>
+        <button class="btn-secondary w-full justify-center" @click="showEditNews = false">{{ t('cancel') }}</button>
       </div>
     </ModalOverlay>
   </div>
