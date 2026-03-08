@@ -12,6 +12,7 @@ import pool, { query, queryOne, execute, initDb } from './db.js'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const app = express()
+app.set('trust proxy', true)
 const server = createServer(app)
 const io = new Server(server, {
   cors: { origin: ['http://localhost:5173', 'http://localhost:3000'], methods: ['GET', 'POST'] }
