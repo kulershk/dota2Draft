@@ -14,6 +14,7 @@ interface TeamResult {
   budget: number
   status: string
   mmr: number
+  banner_url?: string | null
   players: { id: number; name: string; roles: string[]; mmr: number; draft_price: number }[]
 }
 
@@ -58,7 +59,8 @@ function totalSpent(team: TeamResult) {
     <div v-if="loading" class="text-center py-12 text-muted-foreground">Loading results...</div>
 
     <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-      <div v-for="team in results" :key="team.id" class="card">
+      <div v-for="team in results" :key="team.id" class="card overflow-hidden">
+        <img v-if="team.banner_url" :src="team.banner_url" class="w-full h-20 object-cover" />
         <div class="flex items-center justify-between px-4 py-3 border-b border-border">
           <div class="flex items-center gap-2.5">
             <CaptainAvatar :name="team.name" />

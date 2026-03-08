@@ -5,6 +5,8 @@ import cors from 'cors'
 import crypto from 'crypto'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
+import fs from 'fs'
+import multer from 'multer'
 import pool, { query, queryOne, execute, initDb } from './db.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -21,6 +23,26 @@ app.use(express.json())
 // Serve static files in production
 const staticPath = join(__dirname, '..', 'dist')
 app.use(express.static(staticPath))
+
+// Uploads directory
+const uploadsDir = join(__dirname, '..', 'uploads')
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true })
+app.use('/uploads', express.static(uploadsDir))
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, uploadsDir),
+    filename: (req, file, cb) => {
+      const ext = file.originalname.split('.').pop()
+      cb(null, `banner_${Date.now()}_${crypto.randomBytes(4).toString('hex')}.${ext}`)
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (/^image\/(jpeg|png|gif|webp)$/.test(file.mimetype)) cb(null, true)
+    else cb(new Error('Only image files are allowed'))
+  },
+})
 
 // Base URL for redirects (frontend origin)
 const BASE_URL = process.env.BASE_URL || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5173')
@@ -92,7 +114,7 @@ async function setAuctionState(compId, updates) {
 async function getCaptains(compId) {
   return await query(`
     SELECT c.id, c.name, c.team, c.budget, c.status, c.mmr, c.player_id, c.competition_id,
-           COALESCE(p.avatar_url, '') as avatar_url
+           c.banner_url, COALESCE(p.avatar_url, '') as avatar_url
     FROM captains c
     LEFT JOIN players p ON c.player_id = p.id
     WHERE c.competition_id = $1
@@ -793,6 +815,55 @@ app.put('/api/competitions/:compId/captains/:id', async (req, res) => {
   )
   io.to(`comp:${compId}`).emit('captains:updated', await getCaptains(compId))
   res.json(await queryOne('SELECT * FROM captains WHERE id = $1', [captain.id]))
+})
+
+app.post('/api/competitions/:compId/captains/:id/banner', upload.single('banner'), async (req, res) => {
+  const player = await getAuthPlayer(req)
+  if (!player) return res.status(401).json({ error: 'Not authenticated' })
+  const compId = Number(req.params.compId)
+  const captainId = Number(req.params.id)
+
+  const captain = await queryOne('SELECT * FROM captains WHERE id = $1 AND competition_id = $2', [captainId, compId])
+  if (!captain) return res.status(404).json({ error: 'Captain not found' })
+
+  // Only the captain themselves or an admin can upload
+  if (captain.player_id !== player.id && !player.is_admin) {
+    return res.status(403).json({ error: 'Only the team captain or an admin can upload a banner' })
+  }
+
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
+
+  // Delete old banner file if exists
+  if (captain.banner_url) {
+    const oldPath = join(uploadsDir, captain.banner_url.replace('/uploads/', ''))
+    if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath)
+  }
+
+  const bannerUrl = `/uploads/${req.file.filename}`
+  await execute('UPDATE captains SET banner_url = $1 WHERE id = $2', [bannerUrl, captainId])
+  io.to(`comp:${compId}`).emit('captains:updated', await getCaptains(compId))
+  res.json({ banner_url: bannerUrl })
+})
+
+app.delete('/api/competitions/:compId/captains/:id/banner', async (req, res) => {
+  const player = await getAuthPlayer(req)
+  if (!player) return res.status(401).json({ error: 'Not authenticated' })
+  const compId = Number(req.params.compId)
+  const captainId = Number(req.params.id)
+
+  const captain = await queryOne('SELECT * FROM captains WHERE id = $1 AND competition_id = $2', [captainId, compId])
+  if (!captain) return res.status(404).json({ error: 'Captain not found' })
+  if (captain.player_id !== player.id && !player.is_admin) {
+    return res.status(403).json({ error: 'Only the team captain or an admin can remove the banner' })
+  }
+
+  if (captain.banner_url) {
+    const oldPath = join(uploadsDir, captain.banner_url.replace('/uploads/', ''))
+    if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath)
+    await execute('UPDATE captains SET banner_url = NULL WHERE id = $1', [captainId])
+  }
+  io.to(`comp:${compId}`).emit('captains:updated', await getCaptains(compId))
+  res.json({ ok: true })
 })
 
 app.post('/api/competitions/:compId/captains/:id/demote', async (req, res) => {

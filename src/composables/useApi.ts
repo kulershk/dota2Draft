@@ -55,6 +55,23 @@ export function useApi() {
       request(`/api/competitions/${compId}/captains/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     demoteCaptain: (compId: number, id: number) =>
       request(`/api/competitions/${compId}/captains/${id}/demote`, { method: 'POST' }),
+    uploadCaptainBanner: async (compId: number, captainId: number, file: File) => {
+      const form = new FormData()
+      form.append('banner', file)
+      const token = localStorage.getItem('draft_auth_token')
+      const res = await fetch(`/api/competitions/${compId}/captains/${captainId}/banner`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }))
+        throw new Error(err.error || 'Upload failed')
+      }
+      return res.json()
+    },
+    deleteCaptainBanner: (compId: number, captainId: number) =>
+      request(`/api/competitions/${compId}/captains/${captainId}/banner`, { method: 'DELETE' }),
 
     // Competition Pool (admin)
     addUserToCompPool: (compId: number, userId: number) =>

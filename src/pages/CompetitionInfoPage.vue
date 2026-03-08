@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { Calendar, Users, User, Gavel, Trophy, Clock, Settings, DollarSign } from 'lucide-vue-next'
-import { computed } from 'vue'
+import { Calendar, Users, User, Gavel, Trophy, Clock, Settings, DollarSign, Upload, X } from 'lucide-vue-next'
+import { computed, ref } from 'vue'
 import { useDraftStore } from '@/composables/useDraftStore'
+import { useApi } from '@/composables/useApi'
 
 const store = useDraftStore()
+const api = useApi()
+const uploading = ref(false)
 
 const comp = computed(() => store.currentCompetition.value)
 
@@ -43,6 +46,36 @@ function formatDate(dateStr: string | null) {
   if (!dateStr) return '—'
   const d = new Date(dateStr)
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+const myCaptain = computed(() => {
+  if (!store.currentUser.value) return null
+  return store.captains.value.find(c => c.player_id === store.currentUser.value!.id) || null
+})
+
+function canEditBanner(captain: any) {
+  if (!store.currentUser.value) return false
+  return captain.player_id === store.currentUser.value.id || store.isAdmin.value
+}
+
+async function uploadBanner(captain: any, event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file || !store.currentCompetitionId.value) return
+  uploading.value = true
+  try {
+    await api.uploadCaptainBanner(store.currentCompetitionId.value, captain.id, file)
+    await store.fetchCaptains()
+  } finally {
+    uploading.value = false
+    input.value = ''
+  }
+}
+
+async function removeBanner(captain: any) {
+  if (!store.currentCompetitionId.value) return
+  await api.deleteCaptainBanner(store.currentCompetitionId.value, captain.id)
+  await store.fetchCaptains()
 }
 </script>
 
@@ -180,14 +213,32 @@ function formatDate(dateStr: string | null) {
           <span class="text-sm font-semibold text-foreground">Captains ({{ captainCount }})</span>
         </div>
         <div class="p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-          <div v-for="captain in store.captains.value" :key="captain.id" class="flex items-center gap-3 p-3 rounded-lg bg-accent/30 border border-border">
-            <img v-if="captain.avatar_url" :src="captain.avatar_url" class="w-9 h-9 rounded-full" />
-            <div v-else class="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
-              {{ captain.name.charAt(0) }}
+          <div v-for="captain in store.captains.value" :key="captain.id" class="rounded-lg bg-accent/30 border border-border overflow-hidden">
+            <!-- Banner -->
+            <div class="relative">
+              <img v-if="captain.banner_url" :src="captain.banner_url" class="w-full h-24 object-cover" />
+              <div v-else class="w-full h-24 bg-gradient-to-br from-primary/10 to-primary/5"></div>
+              <!-- Upload/remove controls for captain owner or admin -->
+              <div v-if="canEditBanner(captain)" class="absolute top-1.5 right-1.5 flex gap-1">
+                <label class="p-1 rounded bg-background/80 backdrop-blur-sm cursor-pointer hover:bg-background transition-colors" title="Upload banner">
+                  <Upload class="w-3.5 h-3.5 text-foreground" />
+                  <input type="file" accept="image/*" class="hidden" @change="uploadBanner(captain, $event)" :disabled="uploading" />
+                </label>
+                <button v-if="captain.banner_url" class="p-1 rounded bg-background/80 backdrop-blur-sm hover:bg-background transition-colors" title="Remove banner" @click="removeBanner(captain)">
+                  <X class="w-3.5 h-3.5 text-destructive" />
+                </button>
+              </div>
             </div>
-            <div class="min-w-0">
-              <p class="text-sm font-semibold text-foreground truncate">{{ captain.team }}</p>
-              <p class="text-xs text-muted-foreground truncate">{{ captain.name }}</p>
+            <!-- Captain info -->
+            <div class="flex items-center gap-3 p-3">
+              <img v-if="captain.avatar_url" :src="captain.avatar_url" class="w-9 h-9 rounded-full" />
+              <div v-else class="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
+                {{ captain.name.charAt(0) }}
+              </div>
+              <div class="min-w-0">
+                <p class="text-sm font-semibold text-foreground truncate">{{ captain.team }}</p>
+                <p class="text-xs text-muted-foreground truncate">{{ captain.name }}</p>
+              </div>
             </div>
           </div>
         </div>

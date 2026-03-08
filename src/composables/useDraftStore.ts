@@ -27,6 +27,7 @@ export interface Captain {
   mmr: number
   player_id?: number
   avatar_url?: string
+  banner_url?: string | null
   competition_id?: number
 }
 

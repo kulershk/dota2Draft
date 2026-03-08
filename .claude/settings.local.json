@@ -12,7 +12,8 @@
       "Bash(mv:*)",
       "Bash(npx vue-tsc:*)",
       "Bash(npm:*)",
-      "Bash(chmod +x:*)"
+      "Bash(chmod +x:*)",
+      "Bash(node:*)"
     ]
   }
 }

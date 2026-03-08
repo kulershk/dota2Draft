@@ -92,6 +92,12 @@ export async function initDb() {
     if (!hasPlayerId) {
       await execute('ALTER TABLE captains ADD COLUMN player_id INTEGER REFERENCES players(id) ON DELETE SET NULL')
     }
+    const hasBanner = await queryOne(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'captains' AND column_name = 'banner_url'`
+    )
+    if (!hasBanner) {
+      await execute('ALTER TABLE captains ADD COLUMN banner_url TEXT DEFAULT NULL')
+    }
   }
 
   // ─── Competitions system ───────────────────────────────
@@ -185,6 +191,7 @@ async function createFreshCompetitionTables() {
       status TEXT NOT NULL DEFAULT 'Waiting',
       mmr INTEGER NOT NULL DEFAULT 0,
       player_id INTEGER REFERENCES players(id) ON DELETE SET NULL,
+      banner_url TEXT DEFAULT NULL,
       created_at TIMESTAMP DEFAULT NOW()
     );
 
