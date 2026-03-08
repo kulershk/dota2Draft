@@ -87,6 +87,19 @@ export function useApi() {
     updateMe: (data: Record<string, any>) =>
       request('/api/auth/me', { method: 'PUT', body: JSON.stringify(data) }),
 
+    // Permission Groups
+    getAllPermissions: () => request('/api/permissions/all'),
+    getPermissionGroups: () => request('/api/permission-groups'),
+    createPermissionGroup: (data: { name: string; permissions: string[] }) =>
+      request('/api/permission-groups', { method: 'POST', body: JSON.stringify(data) }),
+    updatePermissionGroup: (id: number, data: { name?: string; permissions?: string[] }) =>
+      request(`/api/permission-groups/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deletePermissionGroup: (id: number) =>
+      request(`/api/permission-groups/${id}`, { method: 'DELETE' }),
+    getPlayerGroups: (playerId: number) => request(`/api/players/${playerId}/groups`),
+    setPlayerGroups: (playerId: number, groupIds: number[]) =>
+      request(`/api/players/${playerId}/groups`, { method: 'PUT', body: JSON.stringify({ groupIds }) }),
+
     // Site Settings
     getSiteSettings: () => request('/api/site-settings'),
     updateSiteSettings: (data: Record<string, string>) =>

@@ -28,6 +28,7 @@ const router = createRouter({
         { path: 'users', name: 'admin-users', component: () => import('@/pages/admin/AdminUsersPage.vue') },
         { path: 'news', name: 'admin-news', component: () => import('@/pages/admin/AdminNewsPage.vue') },
         { path: 'settings', name: 'admin-settings', component: () => import('@/pages/admin/AdminSiteSettingsPage.vue') },
+        { path: 'permissions', name: 'admin-permissions', component: () => import('@/pages/admin/AdminPermissionsPage.vue') },
       ],
     },
   ],
@@ -37,7 +38,7 @@ router.beforeEach(async (to) => {
   if (to.meta.requiresAdmin) {
     const store = useDraftStore()
     await store.authReady
-    if (!store.isAdmin.value) {
+    if (!store.canAccessAdmin.value) {
       return { name: 'home' }
     }
   }

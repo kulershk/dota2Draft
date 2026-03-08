@@ -135,7 +135,7 @@ async function handleClaimAdmin() {
         </div>
         <!-- Right: User info + actions -->
         <div class="flex items-center gap-2">
-          <router-link v-if="store.isAdmin.value" to="/admin" class="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors" :class="route.path.startsWith('/admin') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'">
+          <router-link v-if="store.canAccessAdmin.value" to="/admin" class="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors" :class="route.path.startsWith('/admin') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'">
             <Shield class="w-3.5 h-3.5" />
             {{ t('admin') }}
           </router-link>
@@ -198,7 +198,7 @@ async function handleClaimAdmin() {
           {{ t('settingsTitle') }}
         </router-link>
         <router-link
-          v-if="store.isAdmin.value"
+          v-if="store.canAccessAdmin.value"
           to="/admin"
           class="flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-colors"
           :class="route.path.startsWith('/admin')

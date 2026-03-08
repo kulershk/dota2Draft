@@ -8,6 +8,11 @@ import ModalOverlay from '@/components/common/ModalOverlay.vue'
 const { t } = useI18n()
 const api = useApi()
 
+interface PermGroupRef {
+  id: number
+  name: string
+}
+
 interface User {
   id: number
   name: string
@@ -19,6 +24,7 @@ interface User {
   is_admin: boolean
   is_banned: boolean
   created_at: string
+  permission_groups: PermGroupRef[]
 }
 
 const users = ref<User[]>([])
@@ -111,7 +117,7 @@ function formatDate(dateStr: string) {
             <tr class="border-b border-border bg-accent/50">
               <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[40px]">#</th>
               <th class="text-left px-4 py-3 font-medium text-muted-foreground">{{ t('user') }}</th>
-              <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[120px]">{{ t('status') }}</th>
+              <th class="text-left px-4 py-3 font-medium text-muted-foreground">{{ t('status') }}</th>
               <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[100px]">{{ t('joined') }}</th>
               <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[120px]">{{ t('actions') }}</th>
             </tr>
@@ -138,8 +144,13 @@ function formatDate(dateStr: string) {
               <td class="px-4 py-3">
                 <div class="flex flex-wrap gap-1">
                   <span v-if="user.is_banned" class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-red-500/15 text-red-600 dark:text-red-400 w-fit">{{ t('banned') }}</span>
-                  <span v-if="user.is_admin" class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-amber-500/15 text-amber-600 dark:text-amber-400 w-fit">{{ t('admin') }}</span>
-                  <span v-if="!user.is_admin && !user.is_banned" class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-accent text-muted-foreground w-fit">{{ t('user') }}</span>
+                  <span v-if="user.is_admin" class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-amber-500/15 text-amber-600 dark:text-amber-400 w-fit">{{ t('rootAdmin') }}</span>
+                  <span v-if="!user.is_admin && !user.is_banned && user.permission_groups.length === 0" class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-accent text-muted-foreground w-fit">{{ t('user') }}</span>
+                  <span
+                    v-for="pg in user.permission_groups"
+                    :key="pg.id"
+                    class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-primary/15 text-primary w-fit"
+                  >{{ pg.name }}</span>
                 </div>
               </td>
               <td class="px-4 py-3 text-muted-foreground text-xs">{{ formatDate(user.created_at) }}</td>

@@ -244,6 +244,7 @@ export default {
   user: 'Vartotojas',
   status: 'BŪSENA',
   joined: 'PRISIJUNGĖ',
+  rootAdmin: 'Pagrindinis admin',
   makeAdmin: 'Padaryti admin',
   removeAdmin: 'Pašalinti admin',
   banUser: 'Užblokuoti',
@@ -359,6 +360,8 @@ export default {
   siteHeroTitleHint: 'Palikite tuščią, kad naudotumėte numatytąjį pavadinimą.',
   siteHeroSubtitle: 'Pagrindinis aprašymas',
   siteHeroSubtitleHint: 'Palikite tuščią, kad naudotumėte numatytąjį aprašymą.',
+  siteDiscordUrl: 'Discord kvietimo nuoroda',
+  siteDiscordUrlHint: 'Palikite tuščią, kad paslėptumėte Discord kortelę pagrindiniame puslapyje.',
 
   // Settings page
   settingsTitle: 'Nustatymai',
@@ -378,8 +381,27 @@ export default {
   twitchLinkFailed: 'Nepavyko susieti Twitch paskyros.',
   settingsSaved: 'Nustatymai išsaugoti!',
 
+  // Discord
+  joinDiscord: 'Prisijunk prie Discord',
+  discordDesc: 'Bendraukite, raskite komandas ir sekite naujienas',
+
   // Streams
   liveStreams: 'Dota 2 transliacijos gyvai',
+
+  // Admin: Permission Groups
+  permissionGroups: 'Teisių grupės',
+  permissionGroupsDesc: 'Kurkite ir valdykite teisių grupes prieigos kontrolei',
+  newGroup: 'Nauja grupė',
+  noGroupsYet: 'Teisių grupių dar nėra. Sukurkite naują.',
+  permissionsCount: 'teisės',
+  assignUsers: 'Priskirti vartotojus',
+  groupName: 'Grupės pavadinimas',
+  permissionsLabel: 'Teisės',
+  groupNamePlaceholder: 'pvz. Moderatoriai',
+  newGroupDesc: 'Sukurkite naują teisių grupę ir pasirinkite, kokias teises ji suteikia.',
+  createGroup: 'Sukurti grupę',
+  assignUsersDesc: 'Perjunkite, kurie vartotojai priklauso šiai teisių grupei.',
+  saveChanges: 'Išsaugoti pakeitimus',
 
   // Language
   language: 'Kalba',

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Newspaper, Users, Trophy, ChevronRight, Settings } from 'lucide-vue-next'
+import { Newspaper, Users, Trophy, ChevronRight, Settings, ShieldCheck } from 'lucide-vue-next'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
@@ -11,6 +11,7 @@ const adminNav = [
   { labelKey: 'users', icon: Users, path: '/admin/users' },
   { labelKey: 'newsAnnouncements', icon: Newspaper, path: '/admin/news' },
   { labelKey: 'siteSettings', icon: Settings, path: '/admin/settings' },
+  { labelKey: 'permissionGroups', icon: ShieldCheck, path: '/admin/permissions' },
 ]
 </script>
 

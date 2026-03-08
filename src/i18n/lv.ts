@@ -244,6 +244,7 @@ export default {
   user: 'Lietotājs',
   status: 'STATUSS',
   joined: 'PIEVIENOJĀS',
+  rootAdmin: 'Galvenais admin',
   makeAdmin: 'Padarīt par admin',
   removeAdmin: 'Noņemt admin',
   banUser: 'Bloķēt',
@@ -359,6 +360,8 @@ export default {
   siteHeroTitleHint: 'Atstājiet tukšu, lai izmantotu noklusējuma virsrakstu.',
   siteHeroSubtitle: 'Galvenais apakšvirsraksts',
   siteHeroSubtitleHint: 'Atstājiet tukšu, lai izmantotu noklusējuma apakšvirsrakstu.',
+  siteDiscordUrl: 'Discord ielūguma saite',
+  siteDiscordUrlHint: 'Atstājiet tukšu, lai paslēptu Discord kartīti sākumlapā.',
 
   // Settings page
   settingsTitle: 'Iestatījumi',
@@ -378,8 +381,27 @@ export default {
   twitchLinkFailed: 'Neizdevās saistīt Twitch kontu.',
   settingsSaved: 'Iestatījumi saglabāti!',
 
+  // Discord
+  joinDiscord: 'Pievienojies mūsu Discord',
+  discordDesc: 'Sarunājies, atrodi komandas un seko jaunumiem',
+
   // Streams
   liveStreams: 'Dota 2 tiešraides',
+
+  // Admin: Permission Groups
+  permissionGroups: 'Atļauju grupas',
+  permissionGroupsDesc: 'Izveidojiet un pārvaldiet atļauju grupas piekļuves kontrolei',
+  newGroup: 'Jauna grupa',
+  noGroupsYet: 'Atļauju grupu vēl nav. Izveidojiet jaunu.',
+  permissionsCount: 'atļaujas',
+  assignUsers: 'Piešķirt lietotājus',
+  groupName: 'Grupas nosaukums',
+  permissionsLabel: 'Atļaujas',
+  groupNamePlaceholder: 'piem. Moderatori',
+  newGroupDesc: 'Izveidojiet jaunu atļauju grupu un izvēlieties, kādas atļaujas tā piešķir.',
+  createGroup: 'Izveidot grupu',
+  assignUsersDesc: 'Pārslēdziet, kuri lietotāji pieder šai atļauju grupai.',
+  saveChanges: 'Saglabāt izmaiņas',
 
   // Language
   language: 'Valoda',

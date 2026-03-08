@@ -163,6 +163,22 @@ export async function initDb() {
     await createFreshCompetitionTables()
   }
 
+  // ─── Permission Groups ───────────────────────────────────
+  await execute(`
+    CREATE TABLE IF NOT EXISTS permission_groups (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      permissions JSONB NOT NULL DEFAULT '[]',
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS player_permission_groups (
+      player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      group_id INTEGER NOT NULL REFERENCES permission_groups(id) ON DELETE CASCADE,
+      PRIMARY KEY (player_id, group_id)
+    );
+  `)
+
   // Ensure competition_players exists (might already from migration)
   await execute(`
     CREATE TABLE IF NOT EXISTS competition_players (

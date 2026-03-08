@@ -9,6 +9,7 @@ const api = useApi()
 
 const siteTitle = ref('')
 const siteSubtitle = ref('')
+const discordUrl = ref('')
 const saving = ref(false)
 const saved = ref(false)
 
@@ -16,6 +17,7 @@ onMounted(async () => {
   const data = await api.getSiteSettings()
   siteTitle.value = data.site_title || ''
   siteSubtitle.value = data.site_subtitle || ''
+  discordUrl.value = data.site_discord_url || ''
 })
 
 async function saveSettings() {
@@ -25,6 +27,7 @@ async function saveSettings() {
     await api.updateSiteSettings({
       site_title: siteTitle.value,
       site_subtitle: siteSubtitle.value,
+      site_discord_url: discordUrl.value,
     })
     saved.value = true
     setTimeout(() => { saved.value = false }, 3000)
@@ -56,6 +59,11 @@ async function saveSettings() {
           <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('siteHeroSubtitle') }}</label>
           <input type="text" v-model="siteSubtitle" class="input-field w-full" :placeholder="t('heroSubtitle')" />
           <p class="text-[11px] text-muted-foreground mt-1">{{ t('siteHeroSubtitleHint') }}</p>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('siteDiscordUrl') }}</label>
+          <input type="text" v-model="discordUrl" class="input-field w-full" placeholder="https://discord.gg/..." />
+          <p class="text-[11px] text-muted-foreground mt-1">{{ t('siteDiscordUrlHint') }}</p>
         </div>
       </div>
     </div>

@@ -13,7 +13,9 @@
       "Bash(npx vue-tsc:*)",
       "Bash(npm:*)",
       "Bash(chmod +x:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker exec:*)"
     ]
   }
 }

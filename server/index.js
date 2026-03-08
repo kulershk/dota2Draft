@@ -78,6 +78,48 @@ async function getAuthPlayer(req) {
   return await queryOne('SELECT * FROM players WHERE id = $1', [playerId])
 }
 
+// ─── Permission Helpers ──────────────────────────────────
+
+const ALL_PERMISSIONS = [
+  'manage_competitions',
+  'manage_users',
+  'manage_news',
+  'manage_site_settings',
+  'manage_captains',
+  'manage_players',
+  'manage_auction',
+  'manage_permissions',
+]
+
+async function getPlayerPermissions(playerId) {
+  const rows = await query(`
+    SELECT DISTINCT pg.permissions FROM permission_groups pg
+    JOIN player_permission_groups ppg ON ppg.group_id = pg.id
+    WHERE ppg.player_id = $1
+  `, [playerId])
+  const perms = new Set()
+  for (const r of rows) {
+    const list = r.permissions || []
+    for (const p of list) perms.add(p)
+  }
+  return perms
+}
+
+async function hasPermission(player, permission) {
+  if (!player) return false
+  if (player.is_admin) return true
+  const perms = await getPlayerPermissions(player.id)
+  return perms.has(permission)
+}
+
+async function requirePermission(req, res, permission) {
+  const player = await getAuthPlayer(req)
+  if (!player) { res.status(401).json({ error: 'Not authenticated' }); return null }
+  const allowed = await hasPermission(player, permission)
+  if (!allowed) { res.status(403).json({ error: 'Permission denied' }); return null }
+  return player
+}
+
 // ─── Competition Helpers ─────────────────────────────────
 
 function parseCompSettings(comp) {
@@ -260,8 +302,8 @@ function getReadyCaptainIds(compId) {
 async function isAdminSocket(socketId) {
   const playerId = socketPlayers.get(socketId)
   if (!playerId) return false
-  const player = await queryOne('SELECT is_admin FROM players WHERE id = $1', [playerId])
-  return !!player?.is_admin
+  const player = await queryOne('SELECT * FROM players WHERE id = $1', [playerId])
+  return await hasPermission(player, 'manage_auction')
 }
 
 async function getSocketCaptainId(socketId, compId) {
@@ -488,12 +530,17 @@ app.get('/api/auth/me', async (req, res) => {
   const player = await getAuthPlayer(req)
   if (!player) return res.status(401).json({ error: 'Not authenticated' })
 
+  const permissions = player.is_admin
+    ? ALL_PERMISSIONS
+    : [...await getPlayerPermissions(player.id)]
+
   res.json({
     id: player.id,
     name: player.name,
     steam_id: player.steam_id,
     avatar_url: player.avatar_url,
     is_admin: !!player.is_admin,
+    permissions,
     roles: JSON.parse(player.roles || '[]'),
     mmr: player.mmr,
     info: player.info || '',
@@ -712,8 +759,8 @@ app.get('/api/competitions/:id', async (req, res) => {
 })
 
 app.post('/api/competitions', async (req, res) => {
-  const admin = await getAuthPlayer(req)
-  if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
+  const admin = await requirePermission(req, res, 'manage_competitions')
+  if (!admin) return
 
   const { name, description, starts_at, registration_start, registration_end, settings } = req.body
   if (!name) return res.status(400).json({ error: 'Name is required' })
@@ -738,8 +785,8 @@ app.post('/api/competitions', async (req, res) => {
 })
 
 app.put('/api/competitions/:id', async (req, res) => {
-  const admin = await getAuthPlayer(req)
-  if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
+  const admin = await requirePermission(req, res, 'manage_competitions')
+  if (!admin) return
 
   const comp = await getCompetition(req.params.id)
   if (!comp) return res.status(404).json({ error: 'Competition not found' })
@@ -769,8 +816,8 @@ app.put('/api/competitions/:id', async (req, res) => {
 })
 
 app.delete('/api/competitions/:id', async (req, res) => {
-  const admin = await getAuthPlayer(req)
-  if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
+  const admin = await requirePermission(req, res, 'manage_competitions')
+  if (!admin) return
 
   await execute('DELETE FROM competitions WHERE id = $1', [req.params.id])
   res.json({ ok: true })
@@ -834,8 +881,8 @@ app.post('/api/competitions/:compId/players/register', async (req, res) => {
 })
 
 app.put('/api/competitions/:compId/players/:playerId', async (req, res) => {
-  const admin = await getAuthPlayer(req)
-  if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
+  const admin = await requirePermission(req, res, 'manage_players')
+  if (!admin) return
   const compId = Number(req.params.compId)
   const playerId = Number(req.params.playerId)
 
@@ -872,8 +919,8 @@ app.put('/api/competitions/:compId/players/:playerId', async (req, res) => {
 })
 
 app.delete('/api/competitions/:compId/players/:playerId', async (req, res) => {
-  const admin = await getAuthPlayer(req)
-  if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
+  const admin = await requirePermission(req, res, 'manage_players')
+  if (!admin) return
   const compId = Number(req.params.compId)
   const playerId = Number(req.params.playerId)
 
@@ -894,8 +941,8 @@ app.get('/api/competitions/:compId/captains', async (req, res) => {
 })
 
 app.post('/api/competitions/:compId/captains/promote', async (req, res) => {
-  const admin = await getAuthPlayer(req)
-  if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
+  const admin = await requirePermission(req, res, 'manage_captains')
+  if (!admin) return
   const compId = Number(req.params.compId)
 
   const { playerId, team } = req.body
@@ -934,8 +981,8 @@ app.post('/api/competitions/:compId/captains/promote', async (req, res) => {
 })
 
 app.put('/api/competitions/:compId/captains/:id', async (req, res) => {
-  const admin = await getAuthPlayer(req)
-  if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
+  const admin = await requirePermission(req, res, 'manage_captains')
+  if (!admin) return
   const compId = Number(req.params.compId)
 
   const captain = await queryOne('SELECT * FROM captains WHERE id = $1 AND competition_id = $2', [req.params.id, compId])
@@ -1000,8 +1047,8 @@ app.delete('/api/competitions/:compId/captains/:id/banner', async (req, res) => 
 })
 
 app.post('/api/competitions/:compId/captains/:id/demote', async (req, res) => {
-  const admin = await getAuthPlayer(req)
-  if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
+  const admin = await requirePermission(req, res, 'manage_captains')
+  if (!admin) return
   const compId = Number(req.params.compId)
 
   const captain = await queryOne('SELECT player_id FROM captains WHERE id = $1 AND competition_id = $2', [req.params.id, compId])
@@ -1051,8 +1098,8 @@ app.get('/api/competitions/:compId/auction/results', async (req, res) => {
 
 // Admin: add user to competition pool
 app.post('/api/competitions/:compId/users/:userId/add-to-pool', async (req, res) => {
-  const admin = await getAuthPlayer(req)
-  if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
+  const admin = await requirePermission(req, res, 'manage_players')
+  if (!admin) return
   const compId = Number(req.params.compId)
   const userId = Number(req.params.userId)
 
@@ -1080,8 +1127,8 @@ app.post('/api/competitions/:compId/users/:userId/add-to-pool', async (req, res)
 })
 
 app.post('/api/competitions/:compId/users/:userId/remove-from-pool', async (req, res) => {
-  const admin = await getAuthPlayer(req)
-  if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
+  const admin = await requirePermission(req, res, 'manage_players')
+  if (!admin) return
   const compId = Number(req.params.compId)
   const userId = Number(req.params.userId)
 
@@ -1100,6 +1147,76 @@ let streamersCache = null
 let streamersCacheTime = 0
 const STREAMERS_CACHE_TTL = 60 * 1000 // 1 minute
 
+// ─── Permission Groups ────────────────────────────────────
+
+app.get('/api/permissions/all', (req, res) => {
+  res.json(ALL_PERMISSIONS)
+})
+
+app.get('/api/permission-groups', async (req, res) => {
+  const admin = await requirePermission(req, res, 'manage_permissions')
+  if (!admin) return
+  const groups = await query('SELECT * FROM permission_groups ORDER BY name')
+  res.json(groups.map(g => ({ ...g, permissions: g.permissions || [] })))
+})
+
+app.post('/api/permission-groups', async (req, res) => {
+  const admin = await requirePermission(req, res, 'manage_permissions')
+  if (!admin) return
+  const { name, permissions } = req.body
+  if (!name?.trim()) return res.status(400).json({ error: 'Name is required' })
+  const group = await queryOne(
+    'INSERT INTO permission_groups (name, permissions) VALUES ($1, $2) RETURNING *',
+    [name.trim(), JSON.stringify(permissions || [])]
+  )
+  res.json({ ...group, permissions: group.permissions || [] })
+})
+
+app.put('/api/permission-groups/:id', async (req, res) => {
+  const admin = await requirePermission(req, res, 'manage_permissions')
+  if (!admin) return
+  const { name, permissions } = req.body
+  await execute(
+    'UPDATE permission_groups SET name = COALESCE($1, name), permissions = COALESCE($2, permissions) WHERE id = $3',
+    [name?.trim() || null, permissions ? JSON.stringify(permissions) : null, req.params.id]
+  )
+  const group = await queryOne('SELECT * FROM permission_groups WHERE id = $1', [req.params.id])
+  res.json({ ...group, permissions: group.permissions || [] })
+})
+
+app.delete('/api/permission-groups/:id', async (req, res) => {
+  const admin = await requirePermission(req, res, 'manage_permissions')
+  if (!admin) return
+  await execute('DELETE FROM permission_groups WHERE id = $1', [req.params.id])
+  res.json({ ok: true })
+})
+
+app.get('/api/players/:id/groups', async (req, res) => {
+  const admin = await requirePermission(req, res, 'manage_permissions')
+  if (!admin) return
+  const groups = await query(`
+    SELECT pg.* FROM permission_groups pg
+    JOIN player_permission_groups ppg ON ppg.group_id = pg.id
+    WHERE ppg.player_id = $1
+  `, [req.params.id])
+  res.json(groups.map(g => ({ ...g, permissions: g.permissions || [] })))
+})
+
+app.put('/api/players/:id/groups', async (req, res) => {
+  const admin = await requirePermission(req, res, 'manage_permissions')
+  if (!admin) return
+  const { groupIds } = req.body
+  const playerId = req.params.id
+  await execute('DELETE FROM player_permission_groups WHERE player_id = $1', [playerId])
+  for (const gid of (groupIds || [])) {
+    await execute(
+      'INSERT INTO player_permission_groups (player_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      [playerId, gid]
+    )
+  }
+  res.json({ ok: true })
+})
+
 // ─── Site Settings ────────────────────────────────────────
 app.get('/api/site-settings', async (req, res) => {
   const rows = await query("SELECT key, value FROM settings WHERE key LIKE 'site_%'")
@@ -1108,14 +1225,15 @@ app.get('/api/site-settings', async (req, res) => {
   res.json({
     site_title: obj.site_title || '',
     site_subtitle: obj.site_subtitle || '',
+    site_discord_url: obj.site_discord_url || '',
   })
 })
 
 app.put('/api/site-settings', async (req, res) => {
-  const admin = await getAuthPlayer(req)
-  if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
-  const { site_title, site_subtitle } = req.body
-  for (const [key, value] of [['site_title', site_title], ['site_subtitle', site_subtitle]]) {
+  const admin = await requirePermission(req, res, 'manage_site_settings')
+  if (!admin) return
+  const { site_title, site_subtitle, site_discord_url } = req.body
+  for (const [key, value] of [['site_title', site_title], ['site_subtitle', site_subtitle], ['site_discord_url', site_discord_url]]) {
     if (value !== undefined) {
       await execute(
         "INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2",
@@ -1180,10 +1298,21 @@ app.get('/api/streamers', async (req, res) => {
 })
 
 app.get('/api/users', async (req, res) => {
-  const admin = await getAuthPlayer(req)
-  if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
+  const admin = await requirePermission(req, res, 'manage_users')
+  if (!admin) return
 
   const rows = await query('SELECT * FROM players ORDER BY id')
+  const groupMemberships = await query(`
+    SELECT ppg.player_id, pg.id AS group_id, pg.name AS group_name
+    FROM player_permission_groups ppg
+    JOIN permission_groups pg ON pg.id = ppg.group_id
+    ORDER BY pg.name
+  `)
+  const groupsByPlayer = {}
+  for (const m of groupMemberships) {
+    if (!groupsByPlayer[m.player_id]) groupsByPlayer[m.player_id] = []
+    groupsByPlayer[m.player_id].push({ id: m.group_id, name: m.group_name })
+  }
   res.json(rows.map(p => ({
     id: p.id,
     name: p.name,
@@ -1196,12 +1325,13 @@ app.get('/api/users', async (req, res) => {
     is_banned: !!p.is_banned,
     twitch_username: p.twitch_username || null,
     created_at: p.created_at,
+    permission_groups: groupsByPlayer[p.id] || [],
   })))
 })
 
 app.put('/api/players/:id', async (req, res) => {
-  const admin = await getAuthPlayer(req)
-  if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
+  const admin = await requirePermission(req, res, 'manage_users')
+  if (!admin) return
 
   const player = await queryOne('SELECT * FROM players WHERE id = $1', [req.params.id])
   if (!player) return res.status(404).json({ error: 'Player not found' })
@@ -1234,8 +1364,8 @@ app.get('/api/news', async (req, res) => {
 })
 
 app.post('/api/news', async (req, res) => {
-  const admin = await getAuthPlayer(req)
-  if (!admin?.is_admin) return res.status(403).json({ error: 'Admin access required' })
+  const admin = await requirePermission(req, res, 'manage_news')
+  if (!admin) return
   const { title, content } = req.body
   if (!title || !content) return res.status(400).json({ error: 'Title and content required' })
   const result = await queryOne(
@@ -1251,6 +1381,8 @@ app.post('/api/news', async (req, res) => {
 })
 
 app.put('/api/news/:id', async (req, res) => {
+  const admin = await requirePermission(req, res, 'manage_news')
+  if (!admin) return
   const post = await queryOne('SELECT * FROM news WHERE id = $1', [req.params.id])
   if (!post) return res.status(404).json({ error: 'Post not found' })
   const { title, content } = req.body
@@ -1267,6 +1399,8 @@ app.put('/api/news/:id', async (req, res) => {
 })
 
 app.delete('/api/news/:id', async (req, res) => {
+  const admin = await requirePermission(req, res, 'manage_news')
+  if (!admin) return
   await execute('DELETE FROM news WHERE id = $1', [req.params.id])
   io.emit('news:updated')
   res.json({ ok: true })

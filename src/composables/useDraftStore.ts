@@ -87,6 +87,7 @@ export interface CurrentUser {
   steam_id: string
   avatar_url: string
   is_admin: boolean
+  permissions: string[]
   roles: string[]
   mmr: number
   info: string
@@ -150,6 +151,16 @@ const activityLog = ref<LogEntry[]>([])
 
 // Derived state
 const isAdmin = computed(() => !!currentUser.value?.is_admin)
+
+function hasPerm(permission: string): boolean {
+  if (!currentUser.value) return false
+  if (currentUser.value.is_admin) return true
+  return currentUser.value.permissions?.includes(permission) ?? false
+}
+
+const canAccessAdmin = computed(() =>
+  isAdmin.value || (currentUser.value?.permissions?.length ?? 0) > 0
+)
 const currentCaptain = computed<Captain | null>(() => {
   if (!compUser.value?.captain) return null
   return {
@@ -437,6 +448,8 @@ export function useDraftStore() {
   return {
     // State
     isAdmin,
+    canAccessAdmin,
+    hasPerm,
     currentUser,
     compUser,
     currentCaptain,

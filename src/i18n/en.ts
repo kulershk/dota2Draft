@@ -244,6 +244,7 @@ export default {
   user: 'User',
   status: 'STATUS',
   joined: 'JOINED',
+  rootAdmin: 'Root Admin',
   makeAdmin: 'Make Admin',
   removeAdmin: 'Remove Admin',
   banUser: 'Ban User',
@@ -359,6 +360,8 @@ export default {
   siteHeroTitleHint: 'Leave empty to use the default title.',
   siteHeroSubtitle: 'Hero Subtitle',
   siteHeroSubtitleHint: 'Leave empty to use the default subtitle.',
+  siteDiscordUrl: 'Discord Invite URL',
+  siteDiscordUrlHint: 'Leave empty to hide the Discord card on the homepage.',
 
   // Settings page
   settingsTitle: 'Settings',
@@ -378,8 +381,27 @@ export default {
   twitchLinkFailed: 'Failed to link Twitch account.',
   settingsSaved: 'Settings saved!',
 
+  // Discord
+  joinDiscord: 'Join our Discord',
+  discordDesc: 'Chat, find teams, and stay updated',
+
   // Streams
   liveStreams: 'Live Dota 2 Streams',
+
+  // Admin: Permission Groups
+  permissionGroups: 'Permission Groups',
+  permissionGroupsDesc: 'Create and manage permission groups to control access',
+  newGroup: 'New Group',
+  noGroupsYet: 'No permission groups yet. Create one to get started.',
+  permissionsCount: 'permissions',
+  assignUsers: 'Assign Users',
+  groupName: 'Group Name',
+  permissionsLabel: 'Permissions',
+  groupNamePlaceholder: 'e.g. Moderators',
+  newGroupDesc: 'Create a new permission group and select which permissions it grants.',
+  createGroup: 'Create Group',
+  assignUsersDesc: 'Toggle which users belong to this permission group.',
+  saveChanges: 'Save Changes',
 
   // Language
   language: 'Language',
