@@ -79,5 +79,12 @@ export function useApi() {
       request(`/api/news/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     deleteNews: (id: number) =>
       request(`/api/news/${id}`, { method: 'DELETE' }),
+
+    // News Comments
+    getComments: (newsId: number) => request(`/api/news/${newsId}/comments`),
+    addComment: (newsId: number, content: string) =>
+      request(`/api/news/${newsId}/comments`, { method: 'POST', body: JSON.stringify({ content }) }),
+    deleteComment: (newsId: number, commentId: number) =>
+      request(`/api/news/${newsId}/comments/${commentId}`, { method: 'DELETE' }),
   }
 }

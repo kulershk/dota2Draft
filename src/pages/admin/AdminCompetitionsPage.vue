@@ -107,7 +107,7 @@ function formatDate(dateStr: string) {
     <ModalOverlay :show="showCreate" wide @close="showCreate = false">
       <div class="border-b border-border px-7 py-6">
         <h2 class="text-xl font-semibold text-foreground">New Competition</h2>
-        <p class="text-sm text-muted-foreground mt-1">Create a new draft competition with its own player pool and settings.</p>
+        <p class="text-sm text-muted-foreground mt-1">Create a new draft competition with its own participants and settings.</p>
       </div>
       <div class="px-7 py-5 flex flex-col gap-5">
         <InputGroup label="Name" :model-value="newComp.name" placeholder="e.g. Season 1 Draft" @update:model-value="newComp.name = $event" />
@@ -142,7 +142,7 @@ function formatDate(dateStr: string) {
       <div class="px-7 py-6">
         <h2 class="text-xl font-semibold text-foreground">Delete Competition</h2>
         <p class="text-sm text-muted-foreground mt-2">
-          This will permanently delete this competition and all associated data (player pool, captains, auction history). This cannot be undone.
+          This will permanently delete this competition and all associated data (participants, captains, auction history). This cannot be undone.
         </p>
       </div>
       <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">

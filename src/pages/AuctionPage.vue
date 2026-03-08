@@ -346,7 +346,7 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
         <div v-if="isNominating" class="card">
           <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
             <Gavel class="w-5 h-5 text-foreground" />
-            <span class="text-sm font-semibold text-foreground">{{ (isNominator || store.isAdmin.value) ? 'Nominate a Player' : 'Player Pool' }}</span>
+            <span class="text-sm font-semibold text-foreground">{{ (isNominator || store.isAdmin.value) ? 'Nominate a Player' : 'Participants' }}</span>
             <span class="badge-info ml-2">NOMINATING</span>
             <span class="text-xs text-muted-foreground ml-auto">{{ store.availablePlayers.value.length }} remaining</span>
           </div>
@@ -505,11 +505,11 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
           </div>
         </template>
 
-        <!-- Player Pool (show during bidding/paused) -->
+        <!-- Participants (show during bidding/paused) -->
         <div v-if="isBidding || isPaused" class="card">
           <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
             <UsersIcon class="w-5 h-5 text-foreground" />
-            <span class="text-sm font-semibold text-foreground">Player Pool ({{ store.availablePlayers.value.length }} remaining)</span>
+            <span class="text-sm font-semibold text-foreground">Participants ({{ store.availablePlayers.value.length }} remaining)</span>
           </div>
           <div class="overflow-x-auto max-h-[300px] overflow-y-auto">
             <table class="w-full text-sm">

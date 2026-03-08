@@ -627,7 +627,7 @@ app.get('/api/competitions/:compId/players', async (req, res) => {
   res.json(await getCompPlayers(Number(req.params.compId)))
 })
 
-// Self-register for a competition's player pool
+// Self-register for a competition's participant list
 app.post('/api/competitions/:compId/players/register', async (req, res) => {
   const player = await getAuthPlayer(req)
   if (!player) return res.status(401).json({ error: 'Not authenticated' })
@@ -637,7 +637,7 @@ app.post('/api/competitions/:compId/players/register', async (req, res) => {
     'SELECT * FROM competition_players WHERE competition_id = $1 AND player_id = $2',
     [compId, player.id]
   )
-  if (existing?.in_pool) return res.status(409).json({ error: 'Already in the player pool' })
+  if (existing?.in_pool) return res.status(409).json({ error: 'Already registered as a participant' })
 
   const { roles, mmr, info } = req.body
 
@@ -965,6 +965,52 @@ app.put('/api/news/:id', async (req, res) => {
 app.delete('/api/news/:id', async (req, res) => {
   await execute('DELETE FROM news WHERE id = $1', [req.params.id])
   io.emit('news:updated')
+  res.json({ ok: true })
+})
+
+// ─── REST API: News Comments ────────────────────────────
+
+app.get('/api/news/:newsId/comments', async (req, res) => {
+  const comments = await query(`
+    SELECT c.*, p.name AS player_name, p.avatar_url AS player_avatar
+    FROM news_comments c
+    JOIN players p ON p.id = c.player_id
+    WHERE c.news_id = $1
+    ORDER BY c.created_at ASC
+  `, [req.params.newsId])
+  res.json(comments)
+})
+
+app.post('/api/news/:newsId/comments', async (req, res) => {
+  const player = await getAuthPlayer(req)
+  if (!player) return res.status(401).json({ error: 'Login required' })
+  const { content } = req.body
+  if (!content || !content.trim()) return res.status(400).json({ error: 'Comment cannot be empty' })
+  const newsPost = await queryOne('SELECT id FROM news WHERE id = $1', [req.params.newsId])
+  if (!newsPost) return res.status(404).json({ error: 'News post not found' })
+  const result = await queryOne(
+    'INSERT INTO news_comments (news_id, player_id, content) VALUES ($1, $2, $3) RETURNING id',
+    [req.params.newsId, player.id, content.trim()]
+  )
+  const comment = await queryOne(`
+    SELECT c.*, p.name AS player_name, p.avatar_url AS player_avatar
+    FROM news_comments c JOIN players p ON p.id = c.player_id WHERE c.id = $1
+  `, [result.id])
+  io.emit('news:commented', { newsId: Number(req.params.newsId) })
+  res.status(201).json(comment)
+})
+
+app.delete('/api/news/:newsId/comments/:commentId', async (req, res) => {
+  const player = await getAuthPlayer(req)
+  if (!player) return res.status(401).json({ error: 'Login required' })
+  const comment = await queryOne('SELECT * FROM news_comments WHERE id = $1 AND news_id = $2', [req.params.commentId, req.params.newsId])
+  if (!comment) return res.status(404).json({ error: 'Comment not found' })
+  // Only the author or an admin can delete
+  if (comment.player_id !== player.id && !player.is_admin) {
+    return res.status(403).json({ error: 'Not authorized' })
+  }
+  await execute('DELETE FROM news_comments WHERE id = $1', [req.params.commentId])
+  io.emit('news:commented', { newsId: Number(req.params.newsId) })
   res.json({ ok: true })
 })
 

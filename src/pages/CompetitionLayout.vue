@@ -10,7 +10,7 @@ const store = useDraftStore()
 const compId = computed(() => Number(route.params.compId))
 
 const navItems = computed(() => [
-  { label: 'Player Pool', icon: Users, name: 'comp-players' },
+  { label: 'Participants', icon: Users, name: 'comp-players' },
   { label: 'Live Auction', icon: Gavel, name: 'comp-auction' },
   { label: 'Results', icon: Trophy, name: 'comp-results' },
 ])

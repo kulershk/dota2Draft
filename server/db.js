@@ -122,6 +122,17 @@ export async function initDb() {
     if (!has) await execute(`ALTER TABLE competitions ADD COLUMN ${col} ${def}`)
   }
 
+  // ─── News comments ────────────────────────────────────
+  await execute(`
+    CREATE TABLE IF NOT EXISTS news_comments (
+      id SERIAL PRIMARY KEY,
+      news_id INTEGER NOT NULL REFERENCES news(id) ON DELETE CASCADE,
+      player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      content TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `)
+
   // ─── News table migrations ────────────────────────────
   {
     const has = await queryOne(

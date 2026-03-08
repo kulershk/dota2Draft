@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Users, UserPlus, Search, Pencil, Trash2, ExternalLink } from 'lucide-vue-next'
+import { Users, UserPlus, Search, Pencil, Trash2, ExternalLink, LogIn } from 'lucide-vue-next'
 import { ref, computed } from 'vue'
 import { useDraftStore } from '@/composables/useDraftStore'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
@@ -19,6 +19,10 @@ const registerMmr = ref('')
 const registerInfo = ref('')
 const registerError = ref('')
 const registering = ref(false)
+
+function loginWithSteam() {
+  window.location.href = '/api/auth/steam'
+}
 
 function toggleRegisterRole(role: string) {
   const idx = registerRoles.value.indexOf(role)
@@ -128,7 +132,7 @@ const filteredPlayers = computed(() => {
 <template>
   <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[1440px] mx-auto w-full">
     <div>
-      <h1 class="text-2xl font-semibold text-foreground">Player Pool</h1>
+      <h1 class="text-2xl font-semibold text-foreground">Participants</h1>
       <p class="text-sm text-muted-foreground mt-1">Dota 2 players available for auction bidding</p>
     </div>
 
@@ -174,7 +178,11 @@ const filteredPlayers = computed(() => {
           </div>
           <button v-if="store.currentUser.value && !store.compUser.value?.in_pool && !store.compUser.value?.captain" class="btn-primary text-sm flex-shrink-0" @click="openRegister">
             <UserPlus class="w-4 h-4" />
-            <span class="hidden sm:inline">Join Player Pool</span>
+            <span class="hidden sm:inline">Join as Participant</span>
+          </button>
+          <button v-else-if="!store.currentUser.value && store.settings.allowSteamRegistration" class="btn-primary text-sm flex-shrink-0" @click="loginWithSteam">
+            <LogIn class="w-4 h-4" />
+            <span class="hidden sm:inline">Login to Join</span>
           </button>
         </div>
       </div>
@@ -234,11 +242,11 @@ const filteredPlayers = computed(() => {
       </div>
     </div>
 
-    <!-- Join Player Pool Modal -->
+    <!-- Join as Participant Modal -->
     <ModalOverlay :show="showRegister" @close="showRegister = false">
       <div class="border-b border-border px-7 py-6">
-        <h2 class="text-xl font-semibold text-foreground">Join Player Pool</h2>
-        <p class="text-sm text-muted-foreground mt-1">Fill in your Dota 2 details to join the draft pool.</p>
+        <h2 class="text-xl font-semibold text-foreground">Join as Participant</h2>
+        <p class="text-sm text-muted-foreground mt-1">Fill in your Dota 2 details to join as a participant.</p>
       </div>
       <div class="px-7 py-5 flex flex-col gap-5">
         <p v-if="registerError" class="text-sm text-red-500 bg-red-500/10 rounded px-3 py-2">{{ registerError }}</p>
@@ -273,7 +281,7 @@ const filteredPlayers = computed(() => {
       <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
         <button class="btn-primary w-full justify-center" :disabled="registering" @click="submitRegistration">
           <UserPlus class="w-4 h-4" />
-          {{ registering ? 'Joining...' : 'Join Player Pool' }}
+          {{ registering ? 'Joining...' : 'Join as Participant' }}
         </button>
         <button class="btn-secondary w-full justify-center" @click="showRegister = false">
           Cancel
