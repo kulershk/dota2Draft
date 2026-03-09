@@ -5,6 +5,7 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', name: 'home', component: () => import('@/pages/HomePage.vue') },
+    { path: '/competitions', name: 'competitions', component: () => import('@/pages/CompetitionsPage.vue') },
     { path: '/settings', name: 'settings', component: () => import('@/pages/SettingsPage.vue') },
     {
       path: '/c/:compId',

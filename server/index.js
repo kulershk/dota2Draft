@@ -749,15 +749,43 @@ app.post('/api/auth/logout', (req, res) => {
 
 // ─── REST API: Competitions CRUD ─────────────────────────
 
+// Compute effective competition status based on dates
+function computeCompStatus(comp) {
+  const stored = comp.status || 'draft'
+  // Don't override active or finished — those are set by auction/admin
+  if (stored === 'active' || stored === 'finished') return stored
+  // Auto-detect registration window for draft-status competitions
+  if (stored === 'draft' || stored === 'registration') {
+    const now = new Date()
+    if (comp.registration_start && new Date(comp.registration_start) <= now) {
+      if (!comp.registration_end || new Date(comp.registration_end) > now) {
+        return 'registration'
+      }
+    }
+  }
+  return stored
+}
+
 app.get('/api/competitions', async (req, res) => {
+  const player = await getAuthPlayer(req)
   const comps = await query(`
     SELECT c.*, p.name AS created_by_name, p.avatar_url AS created_by_avatar
     FROM competitions c
     LEFT JOIN players p ON p.id = c.created_by
     ORDER BY c.created_at DESC
   `)
-  res.json(comps.map(c => ({
+  // Filter: show public comps to everyone, non-public only to admins/creator
+  const canManageAll = player && await hasPermission(player, 'manage_competitions')
+  const visible = comps.filter(c => {
+    if (c.is_public) return true
+    if (!player) return false
+    if (player.is_admin || canManageAll) return true
+    if (c.created_by === player.id) return true
+    return false
+  })
+  res.json(visible.map(c => ({
     ...c,
+    status: computeCompStatus(c),
     settings: parseCompSettings(c),
     auction_state: parseAuctionState(c),
   })))
@@ -771,8 +799,17 @@ app.get('/api/competitions/:id', async (req, res) => {
     WHERE c.id = $1
   `, [req.params.id])
   if (!comp) return res.status(404).json({ error: 'Competition not found' })
+  // Check visibility for non-public competitions
+  if (!comp.is_public) {
+    const player = await getAuthPlayer(req)
+    const canManageAll = player && await hasPermission(player, 'manage_competitions')
+    if (!player || (!player.is_admin && !canManageAll && comp.created_by !== player.id)) {
+      return res.status(404).json({ error: 'Competition not found' })
+    }
+  }
   res.json({
     ...comp,
+    status: computeCompStatus(comp),
     settings: parseCompSettings(comp),
     auction_state: parseAuctionState(comp),
   })
@@ -811,11 +848,13 @@ app.put('/api/competitions/:id', async (req, res) => {
   const comp = await getCompetition(req.params.id)
   if (!comp) return res.status(404).json({ error: 'Competition not found' })
 
-  const { name, description, starts_at, registration_start, registration_end, settings } = req.body
+  const { name, description, starts_at, registration_start, registration_end, settings, status, is_public } = req.body
 
   const newSettings = settings ? { ...comp.settings, ...settings } : comp.settings
+  const newStatus = status || comp.status
+  const newIsPublic = is_public !== undefined ? is_public : comp.is_public
   await execute(
-    `UPDATE competitions SET name = $1, description = $2, starts_at = $3, registration_start = $4, registration_end = $5, settings = $6 WHERE id = $7`,
+    `UPDATE competitions SET name = $1, description = $2, starts_at = $3, registration_start = $4, registration_end = $5, settings = $6, status = $8, is_public = $9 WHERE id = $7`,
     [
       name ?? comp.name,
       description ?? comp.description,
@@ -824,6 +863,8 @@ app.put('/api/competitions/:id', async (req, res) => {
       registration_end !== undefined ? registration_end : comp.registration_end,
       JSON.stringify(newSettings),
       comp.id,
+      newStatus,
+      newIsPublic,
     ]
   )
 
@@ -1481,6 +1522,34 @@ app.post('/api/competitions/:compId/tournament/stages', async (req, res) => {
   res.json({ ok: true, stageId })
 })
 
+// Update a stage (admin) - name and status
+app.put('/api/competitions/:compId/tournament/stages/:stageId', async (req, res) => {
+  const compId = Number(req.params.compId)
+  const stageId = Number(req.params.stageId)
+  const admin = await requireCompPermission(req, res, compId)
+  if (!admin) return
+
+  const comp = await getCompetition(compId)
+  if (!comp) return res.status(404).json({ error: 'Competition not found' })
+
+  const ts = comp.tournament_state || {}
+  if (!ts.stages) return res.status(404).json({ error: 'No stages' })
+
+  const stage = ts.stages.find(s => s.id === stageId)
+  if (!stage) return res.status(404).json({ error: 'Stage not found' })
+
+  const { name, status } = req.body
+  if (name !== undefined) stage.name = name
+  if (status !== undefined && ['pending', 'active', 'completed'].includes(status)) {
+    stage.status = status
+  }
+
+  await execute('UPDATE competitions SET tournament_state = $1 WHERE id = $2', [JSON.stringify(ts), compId])
+
+  io.to(`comp:${compId}`).emit('tournament:updated')
+  res.json({ ok: true })
+})
+
 // Delete a specific stage (admin)
 app.delete('/api/competitions/:compId/tournament/stages/:stageId', async (req, res) => {
   const compId = Number(req.params.compId)
@@ -1748,6 +1817,161 @@ app.delete('/api/site-settings/logo', async (req, res) => {
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
   }
   await execute("DELETE FROM settings WHERE key = 'site_logo_url'")
+  res.json({ ok: true })
+})
+
+// ─── Competition Streams ─────────────────────────────────
+
+// Get streams for a competition (public)
+app.get('/api/competitions/:compId/streams', async (req, res) => {
+  const compId = Number(req.params.compId)
+  const streams = await query(
+    'SELECT * FROM competition_streams WHERE competition_id = $1 ORDER BY id',
+    [compId]
+  )
+  res.json(streams)
+})
+
+// Get live streams for a competition (public, checks Twitch)
+app.get('/api/competitions/:compId/streams/live', async (req, res) => {
+  const compId = Number(req.params.compId)
+  const streams = await query(
+    'SELECT * FROM competition_streams WHERE competition_id = $1 ORDER BY id',
+    [compId]
+  )
+  if (streams.length === 0) return res.json([])
+
+  const token = await getTwitchAppToken()
+  if (!token) return res.json(streams.map(s => ({ ...s, live: false })))
+
+  try {
+    const logins = streams.map(s => s.twitch_username)
+    const params = new URLSearchParams()
+    logins.slice(0, 100).forEach(l => params.append('user_login', l))
+    params.set('first', '100')
+
+    // Fetch live streams and user profiles in parallel
+    const [streamRes, usersRes] = await Promise.all([
+      fetch(`https://api.twitch.tv/helix/streams?${params}`, {
+        headers: { Authorization: `Bearer ${token}`, 'Client-Id': TWITCH_CLIENT_ID },
+      }),
+      fetch(`https://api.twitch.tv/helix/users?${params}`, {
+        headers: { Authorization: `Bearer ${token}`, 'Client-Id': TWITCH_CLIENT_ID },
+      }),
+    ])
+    const streamData = await streamRes.json()
+    const usersData = await usersRes.json()
+    const liveStreams = streamData.data || []
+    const twitchUsers = usersData.data || []
+
+    const liveMap = new Map()
+    for (const s of liveStreams) {
+      liveMap.set(s.user_login.toLowerCase(), {
+        title: s.title,
+        viewer_count: s.viewer_count,
+        thumbnail_url: s.thumbnail_url?.replace('{width}', '440').replace('{height}', '248'),
+        started_at: s.started_at,
+        game_name: s.game_name,
+      })
+    }
+
+    const profileMap = new Map()
+    for (const u of twitchUsers) {
+      profileMap.set(u.login.toLowerCase(), u.profile_image_url)
+    }
+
+    // Backfill profile images for streams missing them
+    for (const s of streams) {
+      const img = profileMap.get(s.twitch_username.toLowerCase())
+      if (img && !s.profile_image_url) {
+        execute('UPDATE competition_streams SET profile_image_url = $1 WHERE id = $2', [img, s.id]).catch(() => {})
+        s.profile_image_url = img
+      }
+    }
+
+    const result = streams.map(s => ({
+      ...s,
+      profile_image_url: s.profile_image_url || profileMap.get(s.twitch_username.toLowerCase()) || null,
+      is_live: liveMap.has(s.twitch_username.toLowerCase()),
+      viewer_count: liveMap.get(s.twitch_username.toLowerCase())?.viewer_count || null,
+      stream: liveMap.get(s.twitch_username.toLowerCase()) || null,
+    }))
+
+    res.json(result)
+  } catch (e) {
+    console.error('Failed to fetch comp streams:', e.message)
+    res.json(streams.map(s => ({ ...s, is_live: false })))
+  }
+})
+
+// Fetch Twitch user profile image by username
+async function fetchTwitchProfileImage(username) {
+  const token = await getTwitchAppToken()
+  if (!token) return null
+  try {
+    const res = await fetch(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(username)}`, {
+      headers: { Authorization: `Bearer ${token}`, 'Client-Id': TWITCH_CLIENT_ID },
+    })
+    const data = await res.json()
+    return data.data?.[0]?.profile_image_url || null
+  } catch { return null }
+}
+
+// Add stream to competition (admin)
+app.post('/api/competitions/:compId/streams', async (req, res) => {
+  const compId = Number(req.params.compId)
+  const admin = await requireCompPermission(req, res, compId)
+  if (!admin) return
+
+  const { title, twitch_username } = req.body
+  if (!twitch_username) return res.status(400).json({ error: 'Twitch username is required' })
+
+  const login = twitch_username.trim().toLowerCase()
+  const profileImage = await fetchTwitchProfileImage(login)
+
+  const stream = await queryOne(
+    'INSERT INTO competition_streams (competition_id, title, twitch_username, profile_image_url) VALUES ($1, $2, $3, $4) RETURNING *',
+    [compId, title || '', login, profileImage]
+  )
+  res.json(stream)
+})
+
+// Update stream (admin)
+app.put('/api/competitions/:compId/streams/:streamId', async (req, res) => {
+  const compId = Number(req.params.compId)
+  const streamId = Number(req.params.streamId)
+  const admin = await requireCompPermission(req, res, compId)
+  if (!admin) return
+
+  const { title, twitch_username } = req.body
+  const login = twitch_username?.trim().toLowerCase()
+
+  // Re-fetch profile image if username changed
+  let profileImage = undefined
+  if (login) {
+    profileImage = await fetchTwitchProfileImage(login)
+  }
+
+  const stream = await queryOne(
+    profileImage !== undefined
+      ? 'UPDATE competition_streams SET title = COALESCE($1, title), twitch_username = COALESCE($2, twitch_username), profile_image_url = $5 WHERE id = $3 AND competition_id = $4 RETURNING *'
+      : 'UPDATE competition_streams SET title = COALESCE($1, title), twitch_username = COALESCE($2, twitch_username) WHERE id = $3 AND competition_id = $4 RETURNING *',
+    profileImage !== undefined
+      ? [title, login, streamId, compId, profileImage]
+      : [title, login, streamId, compId]
+  )
+  if (!stream) return res.status(404).json({ error: 'Stream not found' })
+  res.json(stream)
+})
+
+// Delete stream (admin)
+app.delete('/api/competitions/:compId/streams/:streamId', async (req, res) => {
+  const compId = Number(req.params.compId)
+  const streamId = Number(req.params.streamId)
+  const admin = await requireCompPermission(req, res, compId)
+  if (!admin) return
+
+  await execute('DELETE FROM competition_streams WHERE id = $1 AND competition_id = $2', [streamId, compId])
   res.json({ ok: true })
 })
 
@@ -2147,6 +2371,9 @@ io.on('connection', (socket) => {
       currentBidderId: '',
       bidTimerEnd: 0,
     })
+
+    // Auto-transition competition status to active
+    await execute("UPDATE competitions SET status = 'active' WHERE id = $1 AND status != 'active'", [compId])
 
     compReadyCaptains.get(compId)?.clear()
     io.to(`comp:${compId}`).emit('captains:ready', getReadyCaptainIds(compId))

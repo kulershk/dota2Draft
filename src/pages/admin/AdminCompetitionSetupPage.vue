@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Settings, DollarSign, Users, UserPlus, RotateCcw, Play, Pencil, ArrowDown, Wifi, ArrowLeft, Plus, Trash2, Search } from 'lucide-vue-next'
+import { Settings, DollarSign, Users, UserPlus, RotateCcw, Play, Pencil, ArrowDown, Wifi, ArrowLeft, Plus, Trash2, Search, Tv } from 'lucide-vue-next'
 import { ref, computed, onMounted, reactive, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
@@ -33,6 +33,8 @@ const PAGE_SIZE = 20
 
 const compName = ref('')
 const compDescription = ref('')
+const compStatus = ref('draft')
+const compIsPublic = ref(false)
 const compStartsAt = ref('')
 const compRegStart = ref('')
 const compRegEnd = ref('')
@@ -63,12 +65,16 @@ onMounted(async () => {
   const comp = await api.getCompetition(compId.value)
   compName.value = comp.name
   compDescription.value = comp.description || ''
+  compStatus.value = comp.status || 'draft'
+  compIsPublic.value = !!comp.is_public
   compStartsAt.value = comp.starts_at ? new Date(comp.starts_at).toISOString().slice(0, 16) : ''
   compRegStart.value = comp.registration_start ? new Date(comp.registration_start).toISOString().slice(0, 16) : ''
   compRegEnd.value = comp.registration_end ? new Date(comp.registration_end).toISOString().slice(0, 16) : ''
   Object.assign(localSettings, comp.settings)
   // Load all users for promote
   allUsers.value = await api.getUsers()
+  // Load streams
+  await fetchStreams()
 })
 
 // Players eligible for promotion (Steam-registered, not already captains in this competition)
@@ -143,6 +149,8 @@ async function saveAll() {
     await api.updateCompetition(compId.value, {
       name: compName.value,
       description: compDescription.value,
+      status: compStatus.value,
+      is_public: compIsPublic.value,
       starts_at: compStartsAt.value || null,
       registration_start: compRegStart.value || null,
       registration_end: compRegEnd.value || null,
@@ -195,6 +203,39 @@ const allCaptainsReady = computed(() =>
   store.captains.value.length > 0 && (!localSettings.requireAllOnline || store.captains.value.every(c => store.readyCaptainIds.value.includes(c.id)))
 )
 const readyCount = computed(() => store.readyCaptainIds.value.length)
+
+// Streams
+const streams = ref<any[]>([])
+const showAddStream = ref(false)
+const newStreamUsername = ref('')
+const newStreamTitle = ref('')
+const editingStream = ref<any>(null)
+
+async function fetchStreams() {
+  if (!compId.value) return
+  streams.value = await api.getCompStreams(compId.value)
+}
+
+async function addStream() {
+  if (!newStreamUsername.value.trim()) return
+  await api.addCompStream(compId.value, { twitch_username: newStreamUsername.value.trim(), title: newStreamTitle.value.trim() })
+  newStreamUsername.value = ''
+  newStreamTitle.value = ''
+  showAddStream.value = false
+  await fetchStreams()
+}
+
+async function saveStream() {
+  if (!editingStream.value) return
+  await api.updateCompStream(compId.value, editingStream.value.id, { twitch_username: editingStream.value.twitch_username, title: editingStream.value.title })
+  editingStream.value = null
+  await fetchStreams()
+}
+
+async function deleteStream(id: number) {
+  await api.deleteCompStream(compId.value, id)
+  await fetchStreams()
+}
 </script>
 
 <template>
@@ -217,6 +258,20 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
       </div>
       <div class="p-4 flex flex-col gap-4">
         <InputGroup :label="t('name')" :model-value="compName" placeholder="Competition name" @update:model-value="compName = $event" />
+        <div class="flex flex-col gap-1.5">
+          <label class="label-text">{{ t('statusCol') }}</label>
+          <select class="input-field" v-model="compStatus">
+            <option value="draft">{{ t('statusSetup') }}</option>
+            <option value="registration">{{ t('statusRegistrationOpen') }}</option>
+            <option value="active">{{ t('statusInProgress') }}</option>
+            <option value="finished">{{ t('statusFinished') }}</option>
+          </select>
+        </div>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" class="w-4 h-4 accent-primary" v-model="compIsPublic" />
+          <span class="text-sm text-foreground">{{ t('publicCompetition') }}</span>
+          <span class="text-xs text-muted-foreground">{{ t('publicCompetitionHint') }}</span>
+        </label>
         <div class="flex flex-col gap-1.5">
           <label class="label-text">{{ t('description') }}</label>
           <RichTextEditor v-model="compDescription" />
@@ -289,6 +344,57 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
       <button class="btn-outline text-sm" :disabled="saving" @click="saveAll">
         {{ saving ? t('saving') : t('saveSettings') }}
       </button>
+    </div>
+
+    <!-- Official Streams -->
+    <div class="card">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-3 border-b border-border">
+        <div class="flex items-center gap-2">
+          <Tv class="w-5 h-5 text-foreground" />
+          <span class="text-sm font-semibold text-foreground">{{ t('officialStreams') }} ({{ streams.length }})</span>
+        </div>
+        <button class="btn-primary text-sm" @click="showAddStream = true">
+          <Plus class="w-4 h-4" />
+          {{ t('addStream') }}
+        </button>
+      </div>
+      <div v-if="streams.length === 0" class="px-4 py-8 text-center text-sm text-muted-foreground">
+        {{ t('noStreamsYet') }}
+      </div>
+      <div v-else class="divide-y divide-border">
+        <div v-for="stream in streams" :key="stream.id" class="flex items-center justify-between px-4 py-3">
+          <template v-if="editingStream && editingStream.id === stream.id">
+            <div class="flex items-center gap-2 flex-1 mr-3">
+              <input v-model="editingStream.twitch_username" type="text" :placeholder="t('twitchUsername')" class="input-field w-40" />
+              <input v-model="editingStream.title" type="text" :placeholder="t('streamTitlePlaceholder')" class="input-field flex-1" />
+            </div>
+            <div class="flex items-center gap-1">
+              <button class="btn-primary text-xs py-1 px-2.5" @click="saveStream">{{ t('save') }}</button>
+              <button class="btn-ghost text-xs py-1 px-2.5" @click="editingStream = null">{{ t('cancel') }}</button>
+            </div>
+          </template>
+          <template v-else>
+            <div class="flex items-center gap-3">
+              <img v-if="stream.profile_image_url" :src="stream.profile_image_url" class="w-8 h-8 rounded-full" />
+              <div v-else class="w-8 h-8 rounded-full bg-[#9146FF]/10 flex items-center justify-center">
+                <Tv class="w-4 h-4 text-[#9146FF]" />
+              </div>
+              <div>
+                <p class="text-sm font-medium text-foreground">{{ stream.title || stream.twitch_username }}</p>
+                <p class="text-xs text-muted-foreground">twitch.tv/{{ stream.twitch_username }}</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-1">
+              <button class="btn-ghost p-2" :title="t('edit')" @click="editingStream = { ...stream }">
+                <Pencil class="w-4 h-4" />
+              </button>
+              <button class="btn-ghost p-2 text-destructive" :title="t('delete')" @click="deleteStream(stream.id)">
+                <Trash2 class="w-4 h-4" />
+              </button>
+            </div>
+          </template>
+        </div>
+      </div>
     </div>
 
     <!-- Captains -->
@@ -540,6 +646,24 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
       </div>
       <div class="px-7 py-4 border-t border-border">
         <button class="btn-secondary w-full justify-center" @click="showAddParticipant = false; participantSearchQuery = ''">{{ t('close') }}</button>
+      </div>
+    </ModalOverlay>
+
+    <!-- Add Stream Modal -->
+    <ModalOverlay :show="showAddStream" @close="showAddStream = false">
+      <div class="border-b border-border px-7 py-6">
+        <h2 class="text-xl font-semibold text-foreground">{{ t('addStream') }}</h2>
+      </div>
+      <div class="px-7 py-5 flex flex-col gap-5">
+        <InputGroup :label="t('twitchUsername')" :model-value="newStreamUsername" placeholder="username" @update:model-value="newStreamUsername = $event" />
+        <InputGroup :label="t('streamTitle')" :model-value="newStreamTitle" :placeholder="t('streamTitlePlaceholder')" @update:model-value="newStreamTitle = $event" />
+      </div>
+      <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
+        <button class="btn-primary w-full justify-center" :disabled="!newStreamUsername.trim()" @click="addStream">
+          <Plus class="w-4 h-4" />
+          {{ t('addStream') }}
+        </button>
+        <button class="btn-secondary w-full justify-center" @click="showAddStream = false">{{ t('cancel') }}</button>
       </div>
     </ModalOverlay>
 

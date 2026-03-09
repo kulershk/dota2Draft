@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Swords, Settings, Plus, RotateCcw, Trash2, ChevronRight } from 'lucide-vue-next'
+import { Swords, Settings, Plus, RotateCcw, Trash2, ChevronRight, Pencil } from 'lucide-vue-next'
 import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
@@ -17,8 +17,14 @@ const store = useDraftStore()
 const loading = ref(true)
 const showAddStage = ref(false)
 const showReset = ref(false)
+const showEditStage = ref(false)
 const editingMatch = ref<any>(null)
 const activeStageId = ref<number | null>(null)
+
+// Edit stage form
+const editStageName = ref('')
+const editStageStatus = ref('')
+const editStageId = ref<number | null>(null)
 
 // Add-stage form state
 const stageName = ref('')
@@ -196,6 +202,28 @@ async function saveMatchScore(matchId: number, data: any) {
   await store.fetchTournament()
 }
 
+function openEditStage(stage: any) {
+  editStageId.value = stage.id
+  editStageName.value = stage.name
+  editStageStatus.value = stage.status
+  showEditStage.value = true
+}
+
+async function saveEditStage() {
+  const compId = store.currentCompetitionId.value
+  if (!compId || !editStageId.value) return
+  try {
+    await api.updateTournamentStage(compId, editStageId.value, {
+      name: editStageName.value,
+      status: editStageStatus.value,
+    })
+    showEditStage.value = false
+    await store.fetchTournament()
+  } catch (e: any) {
+    alert(e.message)
+  }
+}
+
 function stageStatusClass(stage: any) {
   if (stage.status === 'completed') return 'text-green-600 dark:text-green-400'
   if (stage.status === 'active') return 'text-primary'
@@ -265,8 +293,12 @@ function stageStatusClass(stage: any) {
 
       <!-- Active stage content -->
       <div v-if="activeStage">
-        <!-- Admin: delete this stage -->
-        <div v-if="isCompAdmin" class="flex justify-end mb-2">
+        <!-- Admin: edit/delete this stage -->
+        <div v-if="isCompAdmin" class="flex justify-end gap-2 mb-2">
+          <button class="btn-ghost text-xs" @click="openEditStage(activeStage)">
+            <Pencil class="w-3 h-3" />
+            {{ t('editStage') }}
+          </button>
           <button class="btn-ghost text-xs text-destructive" @click="deleteStage(activeStage.id)">
             <Trash2 class="w-3 h-3" />
             {{ t('deleteStage') }}
@@ -438,6 +470,40 @@ function stageStatusClass(stage: any) {
           {{ t('resetTournamentConfirm') }}
         </button>
         <button class="btn-secondary w-full justify-center" @click="showReset = false">{{ t('cancel') }}</button>
+      </div>
+    </ModalOverlay>
+
+    <!-- Edit Stage Modal -->
+    <ModalOverlay :show="showEditStage" @close="showEditStage = false">
+      <div class="border-b border-border px-7 py-6">
+        <h2 class="text-xl font-semibold text-foreground">{{ t('editStage') }}</h2>
+      </div>
+      <div class="px-7 py-5 flex flex-col gap-5">
+        <div class="flex flex-col gap-1.5">
+          <label class="label-text">{{ t('stageName') }}</label>
+          <input v-model="editStageName" class="input-field" :placeholder="t('stageNamePlaceholder')" />
+        </div>
+        <div>
+          <label class="label-text mb-2 block">{{ t('status') }}</label>
+          <div class="flex gap-2">
+            <button v-for="s in ['pending', 'active', 'completed']" :key="s"
+              class="px-4 py-2 rounded-md text-sm font-medium transition-colors"
+              :class="editStageStatus === s
+                ? s === 'completed' ? 'bg-green-600 text-white' : s === 'active' ? 'bg-primary text-primary-foreground' : 'bg-accent text-foreground ring-2 ring-border'
+                : 'bg-accent text-foreground hover:bg-accent/80'"
+              @click="editStageStatus = s"
+            >
+              {{ s === 'completed' ? t('matchCompleted') : s === 'active' ? t('matchLive') : t('matchPending') }}
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
+        <button class="btn-primary w-full justify-center" @click="saveEditStage">
+          <Pencil class="w-4 h-4" />
+          {{ t('saveChanges') }}
+        </button>
+        <button class="btn-secondary w-full justify-center" @click="showEditStage = false">{{ t('cancel') }}</button>
       </div>
     </ModalOverlay>
 

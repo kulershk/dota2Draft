@@ -58,6 +58,13 @@ export default {
   heroSubtitle: 'Salary Cap Auction Draft System',
   competitions: 'Competitions',
   noCompetitionsYet: 'No competitions yet. An admin can create one from the Admin Panel.',
+  noActiveCompetitions: 'No active or upcoming competitions right now.',
+  allCompetitions: 'All Competitions',
+  allCompetitionsDesc: 'Browse all competitions — past, present, and upcoming.',
+  allStatuses: 'All Statuses',
+  viewAll: 'View all',
+  publicCompetition: 'Public',
+  publicCompetitionHint: '— visible to everyone. Private competitions are only visible to you and admins.',
   newsTitle: 'News & Announcements',
   noNewsYet: 'No announcements yet.',
   comment: 'comment',
@@ -74,7 +81,8 @@ export default {
   statusSetup: 'Setup',
   statusRegistrationOpen: 'Registration Open',
   statusInProgress: 'In Progress',
-  statusCompleted: 'Completed',
+  statusCompleted: 'Live',
+  statusFinished: 'Finished',
   statusArchived: 'Archived',
 
   // Competition layout nav
@@ -446,6 +454,7 @@ export default {
   seeding: 'Seeding Order',
   addStage: 'Add Stage',
   addStageDesc: 'Add a tournament stage. You can chain multiple stages (e.g. Group Stage then Playoffs).',
+  editStage: 'Edit Stage',
   deleteStage: 'Delete Stage',
   stageName: 'Stage Name',
   stageNamePlaceholder: 'e.g. Group Stage, Playoffs',
@@ -478,4 +487,14 @@ export default {
   roundN: 'Round {n}',
   winner: 'Winner',
   vs: 'vs',
+
+  // Competition Streams
+  officialStreams: 'Official Streams',
+  addStream: 'Add Stream',
+  twitchUsername: 'Twitch Username',
+  streamTitle: 'Stream Title',
+  streamTitlePlaceholder: 'e.g. Main Stream, English Cast',
+  noStreamsYet: 'No official streams added yet.',
+  live: 'LIVE',
+  streamOffline: 'Offline',
 }

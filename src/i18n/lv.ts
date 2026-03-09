@@ -58,6 +58,13 @@ export default {
   heroSubtitle: 'Algu budžeta izsoles drafta sistēma',
   competitions: 'Sacensības',
   noCompetitionsYet: 'Sacensību vēl nav. Administrators var izveidot jaunu no Admin paneļa.',
+  noActiveCompetitions: 'Pašlaik nav aktīvu vai gaidāmu sacensību.',
+  allCompetitions: 'Visas sacensības',
+  allCompetitionsDesc: 'Pārskatiet visas sacensības — pagātnes, pašreizējās un gaidāmās.',
+  allStatuses: 'Visi statusi',
+  viewAll: 'Skatīt visas',
+  publicCompetition: 'Publisks',
+  publicCompetitionHint: '— redzams visiem. Privātas sacensības redzamas tikai jums un administratoriem.',
   newsTitle: 'Jaunumi un paziņojumi',
   noNewsYet: 'Paziņojumu vēl nav.',
   comment: 'komentārs',
@@ -74,7 +81,8 @@ export default {
   statusSetup: 'Iestatīšana',
   statusRegistrationOpen: 'Reģistrācija atvērta',
   statusInProgress: 'Notiek',
-  statusCompleted: 'Pabeigts',
+  statusCompleted: 'Notiek',
+  statusFinished: 'Pabeigts',
   statusArchived: 'Arhivēts',
 
   // Competition layout nav
@@ -446,6 +454,7 @@ export default {
   seeding: 'Izsēšanas secība',
   addStage: 'Pievienot posmu',
   addStageDesc: 'Pievienojiet turnīra posmu. Varat savienot vairākus posmus (piem. Grupu posms, pēc tam Izslēgšana).',
+  editStage: 'Rediģēt posmu',
   deleteStage: 'Dzēst posmu',
   stageName: 'Posma nosaukums',
   stageNamePlaceholder: 'piem. Grupu posms, Izslēgšana',
@@ -478,4 +487,14 @@ export default {
   roundN: '{n}. kārta',
   winner: 'Uzvarētājs',
   vs: 'pret',
+
+  // Competition Streams
+  officialStreams: 'Oficiālās translācijas',
+  addStream: 'Pievienot translāciju',
+  twitchUsername: 'Twitch lietotājvārds',
+  streamTitle: 'Translācijas nosaukums',
+  streamTitlePlaceholder: 'piem. Galvenā translācija, Angļu komentāri',
+  noStreamsYet: 'Vēl nav pievienotu oficiālo translāciju.',
+  live: 'TIEŠRAIDE',
+  streamOffline: 'Bezsaistē',
 }

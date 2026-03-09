@@ -32,6 +32,8 @@ export function useApi() {
       request('/api/competitions', { method: 'POST', body: JSON.stringify(data) }),
     updateCompetition: (id: number, data: Record<string, any>) =>
       request(`/api/competitions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    toggleCompPublic: (id: number, isPublic: boolean) =>
+      request(`/api/competitions/${id}`, { method: 'PUT', body: JSON.stringify({ is_public: isPublic }) }),
     deleteCompetition: (id: number) =>
       request(`/api/competitions/${id}`, { method: 'DELETE' }),
 
@@ -87,6 +89,8 @@ export function useApi() {
     getTournament: (compId: number) => request(`/api/competitions/${compId}/tournament`),
     addTournamentStage: (compId: number, data: { name: string; format: string; groups?: any[]; bestOf?: number; seeds?: number[] }) =>
       request(`/api/competitions/${compId}/tournament/stages`, { method: 'POST', body: JSON.stringify(data) }),
+    updateTournamentStage: (compId: number, stageId: number, data: { name?: string; status?: string }) =>
+      request(`/api/competitions/${compId}/tournament/stages/${stageId}`, { method: 'PUT', body: JSON.stringify(data) }),
     deleteTournamentStage: (compId: number, stageId: number) =>
       request(`/api/competitions/${compId}/tournament/stages/${stageId}`, { method: 'DELETE' }),
     updateMatchScore: (compId: number, matchId: number, data: { score1?: number; score2?: number; status?: string; games?: any[] }) =>
@@ -148,6 +152,16 @@ export function useApi() {
       request(`/api/admin/impersonate/${id}`, { method: 'POST' }),
     generateTestUsers: (count: number) =>
       request('/api/admin/generate-test-users', { method: 'POST', body: JSON.stringify({ count }) }),
+
+    // Competition Streams
+    getCompStreams: (compId: number) => request(`/api/competitions/${compId}/streams`),
+    getCompStreamsLive: (compId: number) => request(`/api/competitions/${compId}/streams/live`),
+    addCompStream: (compId: number, data: { twitch_username: string; title?: string }) =>
+      request(`/api/competitions/${compId}/streams`, { method: 'POST', body: JSON.stringify(data) }),
+    updateCompStream: (compId: number, streamId: number, data: { twitch_username?: string; title?: string }) =>
+      request(`/api/competitions/${compId}/streams/${streamId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteCompStream: (compId: number, streamId: number) =>
+      request(`/api/competitions/${compId}/streams/${streamId}`, { method: 'DELETE' }),
 
     // News
     getNews: () => request('/api/news'),

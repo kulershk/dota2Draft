@@ -58,6 +58,13 @@ export default {
   heroSubtitle: 'Atlyginimų biudžeto aukciono drafto sistema',
   competitions: 'Varžybos',
   noCompetitionsYet: 'Varžybų dar nėra. Administratorius gali sukurti naują iš Admin skydelio.',
+  noActiveCompetitions: 'Šiuo metu nėra aktyvių ar būsimų varžybų.',
+  allCompetitions: 'Visos varžybos',
+  allCompetitionsDesc: 'Naršykite visas varžybas — praėjusias, esamas ir būsimas.',
+  allStatuses: 'Visi statusai',
+  viewAll: 'Visos',
+  publicCompetition: 'Viešos',
+  publicCompetitionHint: '— matoma visiems. Privačios varžybos matomos tik jums ir administratoriams.',
   newsTitle: 'Naujienos ir pranešimai',
   noNewsYet: 'Pranešimų dar nėra.',
   comment: 'komentaras',
@@ -74,7 +81,8 @@ export default {
   statusSetup: 'Nustatymas',
   statusRegistrationOpen: 'Registracija atidaryta',
   statusInProgress: 'Vyksta',
-  statusCompleted: 'Baigta',
+  statusCompleted: 'Vyksta',
+  statusFinished: 'Baigta',
   statusArchived: 'Archyvuota',
 
   // Competition layout nav
@@ -446,6 +454,7 @@ export default {
   seeding: 'Reitingavimo tvarka',
   addStage: 'Pridėti etapą',
   addStageDesc: 'Pridėkite turnyro etapą. Galite sujungti kelis etapus (pvz. Grupių etapas, tada Atkrintamosios).',
+  editStage: 'Redaguoti etapą',
   deleteStage: 'Ištrinti etapą',
   stageName: 'Etapo pavadinimas',
   stageNamePlaceholder: 'pvz. Grupių etapas, Atkrintamosios',
@@ -478,4 +487,14 @@ export default {
   roundN: '{n} raundas',
   winner: 'Nugalėtojas',
   vs: 'prieš',
+
+  // Competition Streams
+  officialStreams: 'Oficialios transliacijos',
+  addStream: 'Pridėti transliaciją',
+  twitchUsername: 'Twitch vartotojo vardas',
+  streamTitle: 'Transliacijos pavadinimas',
+  streamTitlePlaceholder: 'pvz. Pagrindinė transliacija, Anglų komentarai',
+  noStreamsYet: 'Dar nėra pridėtų oficialių transliacijų.',
+  live: 'GYVA',
+  streamOffline: 'Neprisijungęs',
 }

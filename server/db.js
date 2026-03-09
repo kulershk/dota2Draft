@@ -124,6 +124,7 @@ export async function initDb() {
     ['registration_start', 'TIMESTAMP DEFAULT NULL'],
     ['registration_end', 'TIMESTAMP DEFAULT NULL'],
     ['created_by', 'INTEGER REFERENCES players(id) ON DELETE SET NULL'],
+    ['is_public', 'BOOLEAN NOT NULL DEFAULT FALSE'],
   ]) {
     const has = await queryOne(
       `SELECT 1 FROM information_schema.columns WHERE table_name = 'competitions' AND column_name = $1`, [col]
@@ -244,6 +245,28 @@ export async function initDb() {
         await execute("ALTER TABLE matches ADD COLUMN loser_next_match_id INTEGER REFERENCES matches(id) ON DELETE SET NULL DEFAULT NULL")
         await execute("ALTER TABLE matches ADD COLUMN loser_next_match_slot INTEGER DEFAULT NULL")
       }
+    }
+  }
+
+  // Competition streams
+  await execute(`
+    CREATE TABLE IF NOT EXISTS competition_streams (
+      id SERIAL PRIMARY KEY,
+      competition_id INTEGER NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
+      title TEXT NOT NULL DEFAULT '',
+      twitch_username TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `)
+
+  // Competition streams migration: add profile_image_url
+  {
+    const has = await queryOne(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'competition_streams' AND column_name = 'profile_image_url'`
+    )
+    if (!has) {
+      const tableExists = await queryOne(`SELECT 1 FROM information_schema.tables WHERE table_name = 'competition_streams'`)
+      if (tableExists) await execute('ALTER TABLE competition_streams ADD COLUMN profile_image_url TEXT DEFAULT NULL')
     }
   }
 

@@ -1,30 +1,43 @@
 <script setup lang="ts">
-import { Calendar, Users, User, Gavel, Trophy, Clock, Settings, DollarSign, Upload, X } from 'lucide-vue-next'
-import { computed, ref } from 'vue'
+import { Calendar, Users, User, Gavel, Trophy, Clock, Settings, DollarSign, Upload, X, Tv } from 'lucide-vue-next'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { useApi } from '@/composables/useApi'
 
 const { t } = useI18n()
+const route = useRoute()
 const store = useDraftStore()
 const api = useApi()
 const uploading = ref(false)
 
+const compId = computed(() => Number(route.params.compId))
 const comp = computed(() => store.currentCompetition.value)
 
-const auctionStatus = computed(() => {
-  const s = comp.value?.auction_state?.status || 'idle'
-  if (s === 'finished') return t('auctionCompleted')
-  if (['nominating', 'bidding', 'paused'].includes(s)) return t('auctionInProgress')
-  return t('notStarted')
-})
+const compStatusLabels = computed<Record<string, string>>(() => ({
+  draft: t('statusSetup'),
+  registration: t('statusRegistrationOpen'),
+  active: t('statusInProgress'),
+  finished: t('statusFinished'),
+}))
 
-const auctionStatusClass = computed(() => {
-  const s = comp.value?.auction_state?.status || 'idle'
-  if (s === 'finished') return 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400'
-  if (['nominating', 'bidding', 'paused'].includes(s)) return 'bg-color-success text-color-success-foreground'
-  return 'bg-accent text-muted-foreground'
-})
+const compStatusClasses: Record<string, string> = {
+  draft: 'bg-accent text-muted-foreground',
+  registration: 'bg-primary/10 text-primary',
+  active: 'bg-color-success text-color-success-foreground',
+  finished: 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400',
+}
+
+function getCompStatus(c: any) {
+  const auc = c?.auction_state?.status || 'idle'
+  if (['nominating', 'bidding', 'paused'].includes(auc)) return 'active'
+  return c?.status || 'draft'
+}
+
+const displayStatus = computed(() => getCompStatus(comp.value))
+const auctionStatus = computed(() => compStatusLabels.value[displayStatus.value] || t('statusSetup'))
+const auctionStatusClass = computed(() => compStatusClasses[displayStatus.value] || compStatusClasses.draft)
 
 const registrationStatus = computed(() => {
   if (!comp.value) return { label: '—', open: false }
@@ -41,7 +54,7 @@ const registrationStatus = computed(() => {
   return { label: t('registrationOpen'), open: true }
 })
 
-const participantCount = computed(() => store.players.value.filter(p => !p.is_captain).length)
+const participantCount = computed(() => store.players.value.length)
 const captainCount = computed(() => store.captains.value.length)
 
 function formatDate(dateStr: string | null) {
@@ -49,6 +62,16 @@ function formatDate(dateStr: string | null) {
   const d = new Date(dateStr)
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
+
+// Streams
+const streams = ref<any[]>([])
+
+watch(compId, async (id) => {
+  if (!id) return
+  try {
+    streams.value = await api.getCompStreamsLive(id)
+  } catch { }
+}, { immediate: true })
 
 const myCaptain = computed(() => {
   if (!store.currentUser.value) return null
@@ -113,6 +136,50 @@ async function removeBanner(captain: any) {
           <span class="text-sm font-semibold text-foreground">{{ t('about') }}</span>
         </div>
         <div class="p-4 md:p-6 prose prose-sm dark:prose-invert max-w-none text-foreground/80" v-html="comp.description"></div>
+      </div>
+
+      <!-- Official Streams -->
+      <div v-if="streams.length > 0" class="card">
+        <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
+          <Tv class="w-5 h-5 text-foreground" />
+          <span class="text-sm font-semibold text-foreground">{{ t('officialStreams') }}</span>
+        </div>
+        <div class="p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+          <a v-for="stream in streams" :key="stream.id"
+            :href="'https://twitch.tv/' + stream.twitch_username" target="_blank" rel="noopener"
+            class="rounded-lg border border-border overflow-hidden hover:border-primary/40 transition-colors group">
+            <!-- Thumbnail preview (live) -->
+            <div v-if="stream.is_live && stream.stream?.thumbnail_url" class="relative">
+              <img :src="stream.stream.thumbnail_url" class="w-full aspect-video object-cover" />
+              <span class="absolute top-2 left-2 inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold bg-red-600 text-white">
+                {{ t('live') }}
+              </span>
+              <span v-if="stream.viewer_count != null" class="absolute bottom-2 left-2 inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-black/70 text-white">
+                {{ stream.viewer_count.toLocaleString() }} viewers
+              </span>
+            </div>
+            <!-- Offline placeholder -->
+            <div v-else class="w-full aspect-video bg-accent/50 flex items-center justify-center">
+              <Tv class="w-8 h-8 text-muted-foreground/40" />
+            </div>
+            <!-- Stream info -->
+            <div class="flex items-center gap-2.5 p-3">
+              <div class="relative shrink-0">
+                <img v-if="stream.profile_image_url" :src="stream.profile_image_url" class="w-9 h-9 rounded-full" />
+                <div v-else class="w-9 h-9 rounded-full bg-[#9146FF]/10 flex items-center justify-center">
+                  <Tv class="w-4 h-4 text-[#9146FF]" />
+                </div>
+                <span v-if="stream.is_live" class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-red-500 border-2 border-card"></span>
+              </div>
+              <div class="min-w-0">
+                <p class="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">
+                  {{ stream.is_live && stream.stream?.title ? stream.stream.title : (stream.title || stream.twitch_username) }}
+                </p>
+                <p class="text-xs text-muted-foreground truncate">{{ stream.twitch_username }}</p>
+              </div>
+            </div>
+          </a>
+        </div>
       </div>
 
       <!-- Stats -->

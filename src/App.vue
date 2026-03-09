@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Gamepad2, Shield, LogOut, Sun, Moon, Menu, X, Home, LogIn, Lock, Globe, Settings } from 'lucide-vue-next'
+import { Gamepad2, Shield, LogOut, Sun, Moon, Menu, X, Home, LogIn, Lock, Globe, Settings, Swords } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { onMounted, ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -149,6 +149,10 @@ async function handleClaimAdmin() {
             </div>
             <span class="text-sm font-semibold text-foreground hidden sm:inline">{{ customSiteName || t('appTitle') }}</span>
           </router-link>
+          <router-link to="/competitions" class="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors" :class="route.path === '/competitions' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'">
+            <Swords class="w-3.5 h-3.5" />
+            {{ t('competitions') }}
+          </router-link>
         </div>
         <!-- Right: User info + actions -->
         <div class="flex items-center gap-2">
@@ -209,6 +213,10 @@ async function handleClaimAdmin() {
         <router-link to="/" class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-sidebar-foreground hover:bg-accent" @click="mobileMenuOpen = false">
           <Home class="w-[18px] h-[18px]" />
           {{ t('home') }}
+        </router-link>
+        <router-link to="/competitions" class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-sidebar-foreground hover:bg-accent" @click="mobileMenuOpen = false">
+          <Swords class="w-[18px] h-[18px]" />
+          {{ t('competitions') }}
         </router-link>
         <router-link v-if="isLoggedIn" to="/settings" class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-sidebar-foreground hover:bg-accent" @click="mobileMenuOpen = false">
           <Settings class="w-[18px] h-[18px]" />

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Newspaper, Calendar, Trophy, Users, Swords, User, MessageSquare, Send, Trash2, ChevronDown, ChevronUp, Twitch, Eye, Radio } from 'lucide-vue-next'
+import { Newspaper, Calendar, Trophy, Users, Swords, User, MessageSquare, Send, Trash2, ChevronDown, ChevronUp, Twitch, Eye, Radio, ArrowRight } from 'lucide-vue-next'
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
@@ -118,21 +118,20 @@ const statusLabel = computed<Record<string, string>>(() => ({
   registration: t('statusRegistrationOpen'),
   active: t('statusInProgress'),
   finished: t('statusCompleted'),
-  archived: t('statusArchived'),
 }))
 
 const statusClass: Record<string, string> = {
   draft: 'bg-accent text-muted-foreground',
   registration: 'bg-primary/10 text-primary',
   active: 'bg-color-success text-color-success-foreground',
-  finished: 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400',
-  archived: 'bg-accent text-muted-foreground',
+  finished: 'bg-color-success text-color-success-foreground',
 }
 
-function getAuctionStatus(comp: any) {
+function getCompStatus(comp: any) {
   const auctionStatus = comp.auction_state?.status || 'idle'
-  if (auctionStatus === 'finished') return 'finished'
+  // If auction is actively running, show as active regardless of comp.status
   if (['nominating', 'bidding', 'paused'].includes(auctionStatus)) return 'active'
+  // Otherwise use the competition's own status
   return comp.status || 'draft'
 }
 
@@ -171,6 +170,13 @@ async function fetchStreamers() {
   }
 }
 
+const activeCompetitions = computed(() =>
+  store.competitions.value.filter(c => {
+    const s = c.status || 'draft'
+    return s !== 'finished'
+  })
+)
+
 const isLoggedIn = computed(() => !!store.currentUser.value)
 </script>
 
@@ -187,17 +193,23 @@ const isLoggedIn = computed(() => !!store.currentUser.value)
       <div class="flex-1 min-w-0 flex flex-col gap-6">
         <!-- Competitions -->
         <div class="card">
-          <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
-            <Swords class="w-5 h-5 text-foreground" />
-            <span class="text-sm font-semibold text-foreground">{{ t('competitions') }}</span>
-            <span class="text-xs text-muted-foreground">({{ store.competitions.value.length }})</span>
+          <div class="flex items-center justify-between px-4 py-3 border-b border-border">
+            <div class="flex items-center gap-2">
+              <Swords class="w-5 h-5 text-foreground" />
+              <span class="text-sm font-semibold text-foreground">{{ t('competitions') }}</span>
+              <span class="text-xs text-muted-foreground">({{ activeCompetitions.length }})</span>
+            </div>
+            <router-link to="/competitions" class="flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80 transition-colors">
+              {{ t('viewAll') }}
+              <ArrowRight class="w-3.5 h-3.5" />
+            </router-link>
           </div>
-          <div v-if="store.competitions.value.length === 0" class="px-4 py-10 text-center text-sm text-muted-foreground">
-            {{ t('noCompetitionsYet') }}
+          <div v-if="activeCompetitions.length === 0" class="px-4 py-10 text-center text-sm text-muted-foreground">
+            {{ t('noActiveCompetitions') }}
           </div>
           <div v-else class="divide-y divide-border">
             <router-link
-              v-for="comp in store.competitions.value"
+              v-for="comp in activeCompetitions"
               :key="comp.id"
               :to="`/c/${comp.id}/info`"
               class="flex items-center justify-between px-4 py-4 md:px-6 md:py-5 hover:bg-accent/30 transition-colors"
@@ -226,8 +238,8 @@ const isLoggedIn = computed(() => !!store.currentUser.value)
                 </div>
               </div>
               <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                :class="statusClass[getAuctionStatus(comp)] || statusClass.draft">
-                {{ statusLabel[getAuctionStatus(comp)] || t('statusSetup') }}
+                :class="statusClass[getCompStatus(comp)] || statusClass.draft">
+                {{ statusLabel[getCompStatus(comp)] || t('statusSetup') }}
               </span>
             </router-link>
           </div>
