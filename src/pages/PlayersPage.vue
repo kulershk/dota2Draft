@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Users, UserPlus, Search, Pencil, Trash2, ExternalLink, LogIn } from 'lucide-vue-next'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDraftStore } from '@/composables/useDraftStore'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
@@ -141,6 +141,9 @@ async function savePlayer() {
   showEditPlayer.value = false
 }
 
+const playersPage = ref(1)
+const PLAYERS_PAGE_SIZE = 20
+
 const filteredPlayers = computed(() => {
   let list = [...store.players.value].sort((a, b) => b.mmr - a.mmr)
   if (searchQuery.value) {
@@ -151,6 +154,11 @@ const filteredPlayers = computed(() => {
   }
   return list
 })
+
+const paginatedPlayers = computed(() => filteredPlayers.value.slice(0, playersPage.value * PLAYERS_PAGE_SIZE))
+const hasMorePlayers = computed(() => paginatedPlayers.value.length < filteredPlayers.value.length)
+
+watch(searchQuery, () => { playersPage.value = 1 })
 </script>
 
 <template>
@@ -230,7 +238,7 @@ const filteredPlayers = computed(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(player, i) in filteredPlayers" :key="player.id" class="border-b border-border hover:bg-accent/30 transition-colors">
+            <tr v-for="(player, i) in paginatedPlayers" :key="player.id" class="border-b border-border hover:bg-accent/30 transition-colors">
               <td class="px-4 py-3 text-muted-foreground">{{ String(i + 1).padStart(2, '0') }}</td>
               <td class="px-4 py-3">
                 <div class="flex items-center gap-2.5">
@@ -269,6 +277,14 @@ const filteredPlayers = computed(() => {
             </tr>
           </tbody>
         </table>
+      </div>
+      <div v-if="hasMorePlayers" class="px-4 py-3 border-t border-border text-center">
+        <button class="btn-ghost text-sm text-primary" @click="playersPage++">
+          {{ t('showMore', { remaining: filteredPlayers.length - paginatedPlayers.length }) }}
+        </button>
+      </div>
+      <div v-else-if="filteredPlayers.length > PLAYERS_PAGE_SIZE" class="px-4 py-2 border-t border-border text-center">
+        <span class="text-xs text-muted-foreground">{{ t('showingAll', { count: filteredPlayers.length }) }}</span>
       </div>
     </div>
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ShieldCheck, Plus, Trash2, Save, Users, ChevronDown, ChevronUp } from 'lucide-vue-next'
-import { ref, reactive, onMounted } from 'vue'
+import { ShieldCheck, Plus, Trash2, Save, Users, ChevronDown, ChevronUp, Search } from 'lucide-vue-next'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
@@ -41,6 +41,22 @@ const savingGroup = ref<number | null>(null)
 const assignGroup = ref<PermGroup | null>(null)
 const userGroups = reactive<Record<number, number[]>>({})
 const loadingUserGroups = ref(false)
+const assignSearchQuery = ref('')
+const assignPage = ref(1)
+const ASSIGN_PAGE_SIZE = 20
+
+const filteredAssignUsers = computed(() => {
+  let list = users.value
+  if (assignSearchQuery.value) {
+    const q = assignSearchQuery.value.toLowerCase()
+    list = list.filter(u => u.name.toLowerCase().includes(q))
+  }
+  return list
+})
+const paginatedAssignUsers = computed(() => filteredAssignUsers.value.slice(0, assignPage.value * ASSIGN_PAGE_SIZE))
+const hasMoreAssignUsers = computed(() => paginatedAssignUsers.value.length < filteredAssignUsers.value.length)
+
+watch(assignSearchQuery, () => { assignPage.value = 1 })
 
 const permLabels: Record<string, string> = {
   manage_competitions: 'Manage All Competitions',
@@ -267,16 +283,22 @@ async function toggleUserGroup(userId: number, groupId: number) {
     </ModalOverlay>
 
     <!-- Assign Users Modal -->
-    <ModalOverlay :show="!!assignGroup" @close="assignGroup = null">
+    <ModalOverlay :show="!!assignGroup" @close="assignGroup = null; assignSearchQuery = ''">
       <div class="border-b border-border px-7 py-6">
         <h2 class="text-xl font-semibold text-foreground">{{ t('assignUsers') }}: {{ assignGroup?.name }}</h2>
         <p class="text-sm text-muted-foreground mt-1">{{ t('assignUsersDesc') }}</p>
       </div>
-      <div class="px-7 py-4 max-h-[400px] overflow-y-auto">
+      <div class="px-7 pt-4 pb-2">
+        <div class="relative">
+          <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input v-model="assignSearchQuery" type="text" :placeholder="t('search')" class="input-field pl-9 w-full" />
+        </div>
+      </div>
+      <div class="px-7 py-2 max-h-[350px] overflow-y-auto">
         <div v-if="loadingUserGroups" class="text-sm text-muted-foreground py-4 text-center">{{ t('loading') }}</div>
         <div v-else class="flex flex-col divide-y divide-border">
           <label
-            v-for="user in users"
+            v-for="user in paginatedAssignUsers"
             :key="user.id"
             class="flex items-center gap-3 py-2.5 cursor-pointer hover:bg-accent/30 px-2 rounded transition-colors"
           >
@@ -293,10 +315,18 @@ async function toggleUserGroup(userId: number, groupId: number) {
             <span class="text-sm text-foreground">{{ user.name }}</span>
             <span v-if="user.is_admin" class="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 font-medium">{{ t('admin') }}</span>
           </label>
+          <div v-if="filteredAssignUsers.length === 0" class="py-6 text-center text-sm text-muted-foreground">
+            {{ t('noUsersFound') }}
+          </div>
+        </div>
+        <div v-if="hasMoreAssignUsers" class="py-2 text-center">
+          <button class="btn-ghost text-sm text-primary" @click="assignPage++">
+            {{ t('showMore', { remaining: filteredAssignUsers.length - paginatedAssignUsers.length }) }}
+          </button>
         </div>
       </div>
       <div class="px-7 py-4 border-t border-border">
-        <button class="btn-secondary w-full justify-center" @click="assignGroup = null">{{ t('close') }}</button>
+        <button class="btn-secondary w-full justify-center" @click="assignGroup = null; assignSearchQuery = ''">{{ t('close') }}</button>
       </div>
     </ModalOverlay>
   </div>

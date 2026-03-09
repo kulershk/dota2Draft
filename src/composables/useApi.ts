@@ -146,6 +146,8 @@ export function useApi() {
       request(`/api/players/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     impersonateUser: (id: number) =>
       request(`/api/admin/impersonate/${id}`, { method: 'POST' }),
+    generateTestUsers: (count: number) =>
+      request('/api/admin/generate-test-users', { method: 'POST', body: JSON.stringify({ count }) }),
 
     // News
     getNews: () => request('/api/news'),

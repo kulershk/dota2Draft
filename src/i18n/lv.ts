@@ -12,6 +12,8 @@ export default {
   to: 'Līdz',
   loading: 'Ielādē...',
   noResults: 'Rezultāti nav atrasti.',
+  showMore: 'Rādīt vairāk (atlikuši {remaining})',
+  showingAll: 'Rāda visus {count} ierakstus',
   yes: 'Jā',
   no: 'Nē',
   online: 'tiešsaistē',
@@ -253,6 +255,9 @@ export default {
   banUser: 'Bloķēt',
   unbanUser: 'Atbloķēt',
   loginAs: 'Pieslēgties kā šis lietotājs',
+  generateTestUsers: 'Testa lietotāji',
+  generate: 'Ģenerēt',
+  generating: 'Ģenerē...',
   noUsersFound: 'Lietotāji nav atrasti.',
   adminConfirmModal: {
     makeTitle: 'Padarīt par administratoru',

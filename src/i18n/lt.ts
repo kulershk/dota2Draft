@@ -12,6 +12,8 @@ export default {
   to: 'Iki',
   loading: 'Kraunama...',
   noResults: 'Rezultatų nerasta.',
+  showMore: 'Rodyti daugiau (liko {remaining})',
+  showingAll: 'Rodomi visi {count} įrašai',
   yes: 'Taip',
   no: 'Ne',
   online: 'prisijungęs',
@@ -253,6 +255,9 @@ export default {
   banUser: 'Užblokuoti',
   unbanUser: 'Atblokuoti',
   loginAs: 'Prisijungti kaip šis vartotojas',
+  generateTestUsers: 'Testiniai vartotojai',
+  generate: 'Generuoti',
+  generating: 'Generuojama...',
   noUsersFound: 'Vartotojų nerasta.',
   adminConfirmModal: {
     makeTitle: 'Padaryti administratoriumi',

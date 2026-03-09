@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Users, Search, Shield, ShieldOff, ExternalLink, Ban, CheckCircle, LogIn } from 'lucide-vue-next'
-import { ref, computed } from 'vue'
+import { Users, Search, Shield, ShieldOff, ExternalLink, Ban, CheckCircle, LogIn, UserPlus } from 'lucide-vue-next'
+import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
@@ -32,6 +32,8 @@ interface User {
 const users = ref<User[]>([])
 const searchQuery = ref('')
 const loading = ref(false)
+const usersPage = ref(1)
+const USERS_PAGE_SIZE = 20
 
 async function fetchUsers() {
   loading.value = true
@@ -51,6 +53,11 @@ const filteredUsers = computed(() => {
   }
   return list
 })
+
+const paginatedUsers = computed(() => filteredUsers.value.slice(0, usersPage.value * USERS_PAGE_SIZE))
+const hasMoreUsers = computed(() => paginatedUsers.value.length < filteredUsers.value.length)
+
+watch(searchQuery, () => { usersPage.value = 1 })
 
 const adminConfirmUser = ref<User | null>(null)
 const banConfirmUser = ref<User | null>(null)
@@ -83,6 +90,21 @@ async function impersonateUser(user: User) {
   window.location.href = '/'
 }
 
+const generateCount = ref(5)
+const generating = ref(false)
+
+async function generateTestUsers() {
+  generating.value = true
+  try {
+    await api.generateTestUsers(generateCount.value)
+    await fetchUsers()
+  } catch (e: any) {
+    alert(e.message)
+  } finally {
+    generating.value = false
+  }
+}
+
 function formatDate(dateStr: string) {
   const d = new Date(dateStr)
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
@@ -105,13 +127,21 @@ function formatDate(dateStr: string) {
         <p class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">{{ t('banned') }}</p>
         <p class="text-3xl font-bold text-destructive mt-1">{{ users.filter(u => u.is_banned).length }}</p>
       </div>
+      <div class="card p-4 flex items-center gap-3 ml-auto">
+        <p class="text-xs font-semibold tracking-wider text-muted-foreground uppercase whitespace-nowrap">{{ t('generateTestUsers') }}</p>
+        <input v-model.number="generateCount" type="number" min="1" max="50" class="input-field !h-9 !w-20 text-center" />
+        <button class="btn-primary text-sm whitespace-nowrap" :disabled="generating" @click="generateTestUsers">
+          <UserPlus class="w-4 h-4" />
+          {{ generating ? t('generating') : t('generate') }}
+        </button>
+      </div>
     </div>
 
     <div class="card">
       <div class="flex items-center justify-between gap-3 px-4 py-3 border-b border-border">
         <div class="flex items-center gap-2">
           <Users class="w-5 h-5 text-foreground" />
-          <span class="text-sm font-semibold text-foreground">{{ t('users', { count: users.length }) }}</span>
+          <span class="text-sm font-semibold text-foreground">{{ t('users', { count: filteredUsers.length }) }}</span>
         </div>
         <div class="relative">
           <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -131,7 +161,7 @@ function formatDate(dateStr: string) {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(user, i) in filteredUsers" :key="user.id" class="border-b border-border hover:bg-accent/30 transition-colors" :class="user.is_banned ? 'opacity-60' : ''">
+            <tr v-for="(user, i) in paginatedUsers" :key="user.id" class="border-b border-border hover:bg-accent/30 transition-colors" :class="user.is_banned ? 'opacity-60' : ''">
               <td class="px-4 py-3 text-muted-foreground">{{ String(i + 1).padStart(2, '0') }}</td>
               <td class="px-4 py-3">
                 <div class="flex items-center gap-2.5">
@@ -188,6 +218,14 @@ function formatDate(dateStr: string) {
 
       <div v-if="filteredUsers.length === 0" class="px-4 py-12 text-center text-sm text-muted-foreground">
         {{ loading ? t('loading') : t('noUsersFound') }}
+      </div>
+      <div v-else-if="hasMoreUsers" class="px-4 py-3 border-t border-border text-center">
+        <button class="btn-ghost text-sm text-primary" @click="usersPage++">
+          {{ t('showMore', { remaining: filteredUsers.length - paginatedUsers.length }) }}
+        </button>
+      </div>
+      <div v-else-if="filteredUsers.length > USERS_PAGE_SIZE" class="px-4 py-2 border-t border-border text-center">
+        <span class="text-xs text-muted-foreground">{{ t('showingAll', { count: filteredUsers.length }) }}</span>
       </div>
     </div>
 

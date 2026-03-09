@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Gavel, Pause, Play, XCircle, Zap, History, Wallet, Users as UsersIcon, AlertCircle, CheckCircle, Circle, Undo2 } from 'lucide-vue-next'
+import { Gavel, Pause, Play, XCircle, Zap, History, Wallet, Users as UsersIcon, AlertCircle, CheckCircle, Circle, Undo2, Search } from 'lucide-vue-next'
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDraftStore } from '@/composables/useDraftStore'
@@ -73,6 +73,15 @@ const isNominator = computed(() =>
 const startingPrices = ref<Record<number, number>>({})
 const showNominateConfirm = ref(false)
 const pendingNominateId = ref<number | null>(null)
+const nominateSearch = ref('')
+
+const filteredAvailablePlayers = computed(() => {
+  if (!nominateSearch.value) return store.availablePlayers.value
+  const q = nominateSearch.value.toLowerCase()
+  return store.availablePlayers.value.filter(p =>
+    p.name.toLowerCase().includes(q) || p.roles.some((r: string) => r.toLowerCase().includes(q))
+  )
+})
 
 function nominatePlayer(playerId: number) {
   if (store.isAdmin.value && !isNominator.value) {
@@ -364,9 +373,15 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
               </div>
             </div>
 
+            <!-- Search -->
+            <div class="relative mb-3">
+              <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <input v-model="nominateSearch" type="text" :placeholder="t('search')" class="input-field pl-9 w-full" />
+            </div>
+
             <!-- Mobile: card list -->
             <div class="md:hidden max-h-[400px] overflow-y-auto flex flex-col gap-2">
-              <div v-for="player in store.availablePlayers.value" :key="player.id" class="border border-border rounded-lg p-3 hover:bg-accent/30 transition-colors">
+              <div v-for="player in filteredAvailablePlayers" :key="player.id" class="border border-border rounded-lg p-3 hover:bg-accent/30 transition-colors">
                 <div class="flex items-center justify-between">
                   <div class="min-w-0">
                     <p class="text-sm font-medium text-foreground truncate">{{ player.name }}</p>
@@ -404,7 +419,7 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="player in store.availablePlayers.value" :key="player.id" class="border-b border-border hover:bg-accent/30 transition-colors">
+                  <tr v-for="player in filteredAvailablePlayers" :key="player.id" class="border-b border-border hover:bg-accent/30 transition-colors">
                     <td class="px-4 py-2.5 font-medium text-foreground">{{ player.name }}</td>
                     <td class="px-4 py-2.5">
                       <div class="flex flex-wrap gap-1">
@@ -509,9 +524,15 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
 
         <!-- Participants (show during bidding/paused) -->
         <div v-if="isBidding || isPaused" class="card">
-          <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
-            <UsersIcon class="w-5 h-5 text-foreground" />
-            <span class="text-sm font-semibold text-foreground">{{ t('participantsRemaining', { n: store.availablePlayers.value.length }) }}</span>
+          <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-border">
+            <div class="flex items-center gap-2">
+              <UsersIcon class="w-5 h-5 text-foreground" />
+              <span class="text-sm font-semibold text-foreground">{{ t('participantsRemaining', { n: store.availablePlayers.value.length }) }}</span>
+            </div>
+            <div class="relative">
+              <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <input v-model="nominateSearch" type="text" :placeholder="t('search')" class="input-field pl-9 w-44" />
+            </div>
           </div>
           <div class="overflow-x-auto max-h-[300px] overflow-y-auto">
             <table class="w-full text-sm">
@@ -523,7 +544,7 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="player in store.availablePlayers.value" :key="player.id" class="border-b border-border">
+                <tr v-for="player in filteredAvailablePlayers" :key="player.id" class="border-b border-border">
                   <td class="px-4 py-2 text-foreground">{{ player.name }}</td>
                   <td class="px-4 py-2">
                     <div class="flex flex-wrap gap-1">

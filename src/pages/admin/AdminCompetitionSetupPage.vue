@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Settings, DollarSign, Users, UserPlus, RotateCcw, Play, Pencil, ArrowDown, Wifi, ArrowLeft, Plus, Trash2, Search } from 'lucide-vue-next'
-import { ref, computed, onMounted, reactive } from 'vue'
+import { ref, computed, onMounted, reactive, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useApi } from '@/composables/useApi'
@@ -25,6 +25,11 @@ const showResetConfirm = ref(false)
 const showAddParticipant = ref(false)
 const saving = ref(false)
 const participantSearchQuery = ref('')
+const participantTableSearch = ref('')
+const participantTablePage = ref(1)
+const addParticipantPage = ref(1)
+const promoteSearchQuery = ref('')
+const PAGE_SIZE = 20
 
 const compName = ref('')
 const compDescription = ref('')
@@ -83,6 +88,29 @@ const addableUsers = computed(() => {
   }
   return list
 })
+
+const paginatedAddableUsers = computed(() => addableUsers.value.slice(0, addParticipantPage.value * PAGE_SIZE))
+const hasMoreAddable = computed(() => paginatedAddableUsers.value.length < addableUsers.value.length)
+
+// Participants table with search + pagination
+const participants = computed(() => store.players.value.filter(p => !p.is_captain))
+const filteredParticipants = computed(() => {
+  if (!participantTableSearch.value) return participants.value
+  const q = participantTableSearch.value.toLowerCase()
+  return participants.value.filter(p => p.name.toLowerCase().includes(q))
+})
+const paginatedParticipants = computed(() => filteredParticipants.value.slice(0, participantTablePage.value * PAGE_SIZE))
+const hasMoreParticipants = computed(() => paginatedParticipants.value.length < filteredParticipants.value.length)
+
+// Promotable players with search
+const filteredPromotable = computed(() => {
+  if (!promoteSearchQuery.value) return promotablePlayers.value
+  const q = promoteSearchQuery.value.toLowerCase()
+  return promotablePlayers.value.filter(u => u.name.toLowerCase().includes(q))
+})
+
+watch(participantSearchQuery, () => { addParticipantPage.value = 1 })
+watch(participantTableSearch, () => { participantTablePage.value = 1 })
 
 async function addParticipant(userId: number) {
   await api.addUserToCompPool(compId.value, userId)
@@ -336,15 +364,21 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
       <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-3 border-b border-border">
         <div class="flex items-center gap-2">
           <Users class="w-5 h-5 text-foreground" />
-          <span class="text-sm font-semibold text-foreground">{{ t('participants') }} ({{ store.players.value.filter(p => !p.is_captain).length }})</span>
+          <span class="text-sm font-semibold text-foreground">{{ t('participants') }} ({{ participants.length }})</span>
         </div>
-        <button class="btn-primary text-sm" @click="showAddParticipant = true">
-          <Plus class="w-4 h-4" />
-          {{ t('addParticipant') }}
-        </button>
+        <div class="flex items-center gap-2">
+          <div class="relative">
+            <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input v-model="participantTableSearch" type="text" :placeholder="t('search')" class="input-field pl-9 w-44" />
+          </div>
+          <button class="btn-primary text-sm" @click="showAddParticipant = true">
+            <Plus class="w-4 h-4" />
+            {{ t('addParticipant') }}
+          </button>
+        </div>
       </div>
 
-      <div v-if="store.players.value.filter(p => !p.is_captain).length === 0" class="px-4 py-8 text-center text-sm text-muted-foreground">
+      <div v-if="participants.length === 0" class="px-4 py-8 text-center text-sm text-muted-foreground">
         {{ t('noParticipantsYet') }}
       </div>
       <div v-else class="overflow-x-auto max-h-[400px] overflow-y-auto">
@@ -359,7 +393,7 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(player, i) in store.players.value.filter(p => !p.is_captain)" :key="player.id" class="border-b border-border hover:bg-accent/30 transition-colors">
+            <tr v-for="(player, i) in paginatedParticipants" :key="player.id" class="border-b border-border hover:bg-accent/30 transition-colors">
               <td class="px-4 py-2.5 text-muted-foreground text-xs">{{ String(i + 1).padStart(2, '0') }}</td>
               <td class="px-4 py-2.5">
                 <div class="flex items-center gap-2">
@@ -386,6 +420,11 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
           </tbody>
         </table>
       </div>
+      <div v-if="hasMoreParticipants" class="px-4 py-3 border-t border-border text-center">
+        <button class="btn-ghost text-sm text-primary" @click="participantTablePage++">
+          {{ t('showMore', { remaining: filteredParticipants.length - paginatedParticipants.length }) }}
+        </button>
+      </div>
     </div>
 
     <!-- Action Bar -->
@@ -404,7 +443,7 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
     </div>
 
     <!-- Promote Modal -->
-    <ModalOverlay :show="showPromote" @close="showPromote = false">
+    <ModalOverlay :show="showPromote" @close="showPromote = false; promoteSearchQuery = ''">
       <div class="border-b border-border px-7 py-6">
         <h2 class="text-xl font-semibold text-foreground">{{ t('promoteModal.title') }}</h2>
         <p class="text-sm text-muted-foreground mt-1">{{ t('promoteModal.subtitle') }}</p>
@@ -412,10 +451,28 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
       <div class="px-7 py-5 flex flex-col gap-5">
         <div class="flex flex-col gap-1.5">
           <label class="label-text">{{ t('promoteModal.selectPlayer') }}</label>
-          <select class="input-field" :value="promotePlayerId || ''" @change="promotePlayerId = Number(($event.target as HTMLSelectElement).value) || null">
-            <option value="">{{ t('promoteModal.choosePlaceholder') }}</option>
-            <option v-for="p in promotablePlayers" :key="p.id" :value="p.id">{{ p.name }} ({{ p.mmr }} MMR)</option>
-          </select>
+          <div class="relative">
+            <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input v-model="promoteSearchQuery" type="text" :placeholder="t('search')" class="input-field pl-9 w-full" />
+          </div>
+          <div class="max-h-[200px] overflow-y-auto border border-border rounded-lg divide-y divide-border">
+            <button
+              v-for="p in filteredPromotable.slice(0, 20)" :key="p.id"
+              class="flex items-center gap-2.5 w-full px-3 py-2 text-left hover:bg-accent/30 transition-colors"
+              :class="promotePlayerId === p.id ? 'bg-primary/10' : ''"
+              @click="promotePlayerId = p.id"
+            >
+              <img v-if="p.avatar_url" :src="p.avatar_url" class="w-6 h-6 rounded-full" />
+              <div v-else class="w-6 h-6 rounded-full bg-secondary flex items-center justify-center text-[10px] font-semibold text-secondary-foreground">
+                {{ p.name.charAt(0) }}
+              </div>
+              <span class="text-sm font-medium text-foreground">{{ p.name }}</span>
+              <span class="text-xs text-muted-foreground ml-auto">{{ p.mmr }} MMR</span>
+            </button>
+            <div v-if="filteredPromotable.length === 0" class="px-3 py-4 text-center text-sm text-muted-foreground">
+              {{ t('noUsersFound') }}
+            </div>
+          </div>
         </div>
         <InputGroup :label="t('promoteModal.teamName')" :model-value="promoteTeam" :placeholder="t('promoteModal.teamPlaceholder')" @update:model-value="promoteTeam = $event" />
       </div>
@@ -424,7 +481,7 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
           <UserPlus class="w-4 h-4" />
           {{ t('promoteToCaptain') }}
         </button>
-        <button class="btn-secondary w-full justify-center" @click="showPromote = false">{{ t('cancel') }}</button>
+        <button class="btn-secondary w-full justify-center" @click="showPromote = false; promoteSearchQuery = ''">{{ t('cancel') }}</button>
       </div>
     </ModalOverlay>
 
@@ -458,7 +515,7 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
           <div v-if="addableUsers.length === 0" class="px-4 py-6 text-center text-sm text-muted-foreground">
             {{ participantSearchQuery ? t('addParticipantModal.noMatching') : t('addParticipantModal.allAdded') }}
           </div>
-          <div v-for="user in addableUsers" :key="user.id" class="flex items-center justify-between px-4 py-2.5 hover:bg-accent/30 transition-colors">
+          <div v-for="user in paginatedAddableUsers" :key="user.id" class="flex items-center justify-between px-4 py-2.5 hover:bg-accent/30 transition-colors">
             <div class="flex items-center gap-2.5">
               <img v-if="user.avatar_url" :src="user.avatar_url" class="w-7 h-7 rounded-full" />
               <div v-else class="w-7 h-7 rounded-full bg-secondary flex items-center justify-center text-[10px] font-semibold text-secondary-foreground">
@@ -474,6 +531,11 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
               {{ t('add') }}
             </button>
           </div>
+        </div>
+        <div v-if="hasMoreAddable" class="py-2 text-center">
+          <button class="btn-ghost text-sm text-primary" @click="addParticipantPage++">
+            {{ t('showMore', { remaining: addableUsers.length - paginatedAddableUsers.length }) }}
+          </button>
         </div>
       </div>
       <div class="px-7 py-4 border-t border-border">

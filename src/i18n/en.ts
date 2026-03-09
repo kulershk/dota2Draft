@@ -12,6 +12,8 @@ export default {
   to: 'To',
   loading: 'Loading...',
   noResults: 'No results found.',
+  showMore: 'Show more ({remaining} remaining)',
+  showingAll: 'Showing all {count} items',
   yes: 'Yes',
   no: 'No',
   online: 'online',
@@ -253,6 +255,9 @@ export default {
   banUser: 'Ban User',
   unbanUser: 'Unban User',
   loginAs: 'Login as this user',
+  generateTestUsers: 'Test Users',
+  generate: 'Generate',
+  generating: 'Generating...',
   noUsersFound: 'No users found.',
   adminConfirmModal: {
     makeTitle: 'Make Admin',

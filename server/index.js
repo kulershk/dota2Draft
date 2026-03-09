@@ -1868,6 +1868,54 @@ app.post('/api/admin/impersonate/:id', async (req, res) => {
   res.json({ token })
 })
 
+// Generate test users (dev only)
+app.post('/api/admin/generate-test-users', async (req, res) => {
+  if (process.env.NODE_ENV === 'production') return res.status(403).json({ error: 'Not available in production' })
+  const admin = await requirePermission(req, res, 'manage_users')
+  if (!admin) return
+
+  const { count = 5 } = req.body
+  const num = Math.min(Math.max(1, Number(count)), 50)
+
+  const DOTA_HEROES = [
+    'Anti-Mage', 'Axe', 'Crystal Maiden', 'Drow Ranger', 'Earthshaker',
+    'Juggernaut', 'Mirana', 'Morphling', 'Phantom Assassin', 'Pudge',
+    'Shadow Fiend', 'Sniper', 'Storm Spirit', 'Sven', 'Tiny',
+    'Vengeful Spirit', 'Windranger', 'Zeus', 'Invoker', 'Rubick',
+    'Lina', 'Lion', 'Witch Doctor', 'Tidehunter', 'Sand King',
+    'Ogre Magi', 'Techies', 'Io', 'Phoenix', 'Tusk',
+    'Bristleback', 'Slark', 'Ember Spirit', 'Earth Spirit', 'Oracle',
+    'Monkey King', 'Pangolier', 'Dark Willow', 'Grimstroke', 'Snapfire',
+    'Void Spirit', 'Hoodwink', 'Dawnbreaker', 'Marci', 'Primal Beast',
+    'Muerta', 'Ringmaster', 'Kez', 'Luna', 'Ursa'
+  ]
+
+  const ADJECTIVES = [
+    'Swift', 'Dark', 'Silent', 'Mighty', 'Ancient', 'Frozen', 'Blazing',
+    'Shadow', 'Iron', 'Storm', 'Toxic', 'Divine', 'Cursed', 'Noble', 'Wild',
+    'Brutal', 'Arcane', 'Mystic', 'Radiant', 'Dire', 'Immortal', 'Ethereal'
+  ]
+
+  const created = []
+  for (let i = 0; i < num; i++) {
+    const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)]
+    const hero = DOTA_HEROES[Math.floor(Math.random() * DOTA_HEROES.length)]
+    const suffix = Math.floor(Math.random() * 9999)
+    const name = `${adj} ${hero} ${suffix}`
+    const fakeSteamId = `7656${Date.now()}${Math.floor(Math.random() * 10000)}`
+    const avatarHash = Math.random().toString(36).substring(2, 10)
+    const avatarUrl = `https://api.dicebear.com/7.x/identicon/svg?seed=${avatarHash}`
+    const mmr = Math.floor(Math.random() * 8000) + 1000
+
+    const p = await queryOne(
+      'INSERT INTO players (name, steam_id, avatar_url, roles, mmr, info) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name',
+      [name, fakeSteamId, avatarUrl, '["core","support"]', mmr, `Test user - MMR ${mmr}`]
+    )
+    created.push(p)
+  }
+  res.json({ created: created.length, users: created })
+})
+
 // ─── REST API: News ──────────────────────────────────────
 
 app.get('/api/news', async (req, res) => {
