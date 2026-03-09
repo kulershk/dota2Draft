@@ -355,6 +355,12 @@ export default {
   // Admin: Site Settings
   siteSettings: 'Site Settings',
   siteSettingsDesc: 'Customize the homepage content and branding',
+  siteBranding: 'Branding',
+  siteLogo: 'Site Logo',
+  uploadLogo: 'Upload Logo',
+  siteLogoHint: 'Recommended: square image, at least 64x64px. Leave empty to use the default icon.',
+  siteNameLabel: 'Site Name',
+  siteNameHint: 'Displayed in the header and footer. Leave empty to use the default.',
   homepageContent: 'Homepage Content',
   siteHeroTitle: 'Hero Title',
   siteHeroTitleHint: 'Leave empty to use the default title.',
@@ -402,6 +408,9 @@ export default {
   createGroup: 'Create Group',
   assignUsersDesc: 'Toggle which users belong to this permission group.',
   saveChanges: 'Save Changes',
+
+  // Footer
+  allRightsReserved: 'All rights reserved.',
 
   // Language
   language: 'Language',

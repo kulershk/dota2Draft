@@ -355,6 +355,12 @@ export default {
   // Admin: Site Settings
   siteSettings: 'Vietnes iestatījumi',
   siteSettingsDesc: 'Pielāgojiet sākumlapas saturu un zīmolu',
+  siteBranding: 'Zīmols',
+  siteLogo: 'Vietnes logotips',
+  uploadLogo: 'Augšupielādēt logotipu',
+  siteLogoHint: 'Ieteicams: kvadrātisks attēls, vismaz 64x64px. Atstājiet tukšu noklusējumam.',
+  siteNameLabel: 'Vietnes nosaukums',
+  siteNameHint: 'Tiek rādīts galvenē un kājenē. Atstājiet tukšu noklusējumam.',
   homepageContent: 'Sākumlapas saturs',
   siteHeroTitle: 'Galvenais virsraksts',
   siteHeroTitleHint: 'Atstājiet tukšu, lai izmantotu noklusējuma virsrakstu.',
@@ -402,6 +408,9 @@ export default {
   createGroup: 'Izveidot grupu',
   assignUsersDesc: 'Pārslēdziet, kuri lietotāji pieder šai atļauju grupai.',
   saveChanges: 'Saglabāt izmaiņas',
+
+  // Footer
+  allRightsReserved: 'Visas tiesības aizsargātas.',
 
   // Language
   language: 'Valoda',

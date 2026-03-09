@@ -355,6 +355,12 @@ export default {
   // Admin: Site Settings
   siteSettings: 'Svetainės nustatymai',
   siteSettingsDesc: 'Tinkinkite pagrindinio puslapio turinį ir prekės ženklą',
+  siteBranding: 'Prekės ženklas',
+  siteLogo: 'Svetainės logotipas',
+  uploadLogo: 'Įkelti logotipą',
+  siteLogoHint: 'Rekomenduojama: kvadratinis vaizdas, bent 64x64px. Palikite tuščią numatytajam.',
+  siteNameLabel: 'Svetainės pavadinimas',
+  siteNameHint: 'Rodomas antraštėje ir poraštėje. Palikite tuščią numatytajam.',
   homepageContent: 'Pagrindinio puslapio turinys',
   siteHeroTitle: 'Pagrindinis pavadinimas',
   siteHeroTitleHint: 'Palikite tuščią, kad naudotumėte numatytąjį pavadinimą.',
@@ -402,6 +408,9 @@ export default {
   createGroup: 'Sukurti grupę',
   assignUsersDesc: 'Perjunkite, kurie vartotojai priklauso šiai teisių grupei.',
   saveChanges: 'Išsaugoti pakeitimus',
+
+  // Footer
+  allRightsReserved: 'Visos teisės saugomos.',
 
   // Language
   language: 'Kalba',

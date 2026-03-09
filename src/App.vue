@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { onMounted, ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDraftStore } from '@/composables/useDraftStore'
+import { useApi } from '@/composables/useApi'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 import InputGroup from '@/components/common/InputGroup.vue'
 import { setLocale } from '@/i18n'
@@ -30,6 +31,8 @@ const adminPassword = ref('')
 const claimError = ref('')
 const showClaimAdminButton = ref(false)
 const showLangMenu = ref(false)
+const customSiteName = ref('')
+const customLogoUrl = ref('')
 
 const languages = [
   { code: 'en', label: 'English' },
@@ -45,6 +48,19 @@ function switchLang(code: string) {
 onMounted(async () => {
   store.initSocket()
   store.fetchCompetitions()
+
+  useApi().getSiteSettings().then(data => {
+    customSiteName.value = data.site_name || ''
+    customLogoUrl.value = data.site_logo_url || ''
+    if (data.site_name) document.title = data.site_name
+    if (data.site_logo_url) {
+      const favicon = document.getElementById('favicon') as HTMLLinkElement
+      if (favicon) {
+        favicon.href = data.site_logo_url
+        favicon.type = 'image/png'
+      }
+    }
+  }).catch(() => {})
 
   const params = new URLSearchParams(window.location.search)
 
@@ -127,10 +143,11 @@ async function handleClaimAdmin() {
         <!-- Left: Logo + Nav -->
         <div class="flex items-center gap-6">
           <router-link to="/" class="flex items-center gap-2.5">
-            <div class="w-8 h-8 rounded bg-primary flex items-center justify-center">
+            <img v-if="customLogoUrl" :src="customLogoUrl" class="w-8 h-8 rounded object-contain" />
+            <div v-else class="w-8 h-8 rounded bg-primary flex items-center justify-center">
               <Gamepad2 class="w-4 h-4 text-primary-foreground" />
             </div>
-            <span class="text-sm font-semibold text-foreground hidden sm:inline">{{ t('appTitle') }}</span>
+            <span class="text-sm font-semibold text-foreground hidden sm:inline">{{ customSiteName || t('appTitle') }}</span>
           </router-link>
         </div>
         <!-- Right: User info + actions -->
@@ -219,6 +236,19 @@ async function handleClaimAdmin() {
     <!-- Main Content -->
     <main class="flex-1 overflow-hidden flex flex-col" :class="(route.path.startsWith('/admin') || route.path.startsWith('/c/')) ? '' : 'overflow-y-auto'">
       <router-view />
+      <!-- Footer (only on public pages) -->
+      <footer v-if="!route.path.startsWith('/admin') && !route.path.startsWith('/c/')" class="mt-auto border-t border-border bg-sidebar">
+        <div class="max-w-[1440px] mx-auto px-4 md:px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <img v-if="customLogoUrl" :src="customLogoUrl" class="w-6 h-6 rounded object-contain" />
+            <div v-else class="w-6 h-6 rounded bg-primary flex items-center justify-center">
+              <Gamepad2 class="w-3 h-3 text-primary-foreground" />
+            </div>
+            <span class="text-xs font-semibold text-foreground">{{ customSiteName || t('appTitle') }}</span>
+          </div>
+          <p class="text-xs text-muted-foreground">&copy; {{ new Date().getFullYear() }} {{ customSiteName || t('appTitle') }}. {{ t('allRightsReserved') }}</p>
+        </div>
+      </footer>
     </main>
 
     <!-- Claim Admin Modal -->

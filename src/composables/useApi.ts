@@ -104,6 +104,23 @@ export function useApi() {
     getSiteSettings: () => request('/api/site-settings'),
     updateSiteSettings: (data: Record<string, string>) =>
       request('/api/site-settings', { method: 'PUT', body: JSON.stringify(data) }),
+    uploadSiteLogo: async (file: File) => {
+      const form = new FormData()
+      form.append('logo', file)
+      const token = localStorage.getItem('draft_auth_token')
+      const res = await fetch('/api/site-settings/logo', {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }))
+        throw new Error(err.error || 'Upload failed')
+      }
+      return res.json()
+    },
+    deleteSiteLogo: () =>
+      request('/api/site-settings/logo', { method: 'DELETE' }),
 
     // Twitch OAuth
     getTwitchLinkUrl: () => request('/api/auth/twitch/link'),
