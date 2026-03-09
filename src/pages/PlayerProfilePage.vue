@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { User, Trophy, Swords, ExternalLink, Tv, Calendar, Medal } from 'lucide-vue-next'
+import { User, Trophy, Swords, ExternalLink, Tv, Calendar, Medal, MessageCircle } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -108,6 +108,15 @@ function placementBg(n: number) {
             target="_blank" rel="noopener"
             class="shrink-0 px-3 py-1.5 rounded-md text-xs font-medium bg-[#9146FF] text-white hover:bg-[#7c3aed] transition-colors"
           >{{ t('watchStream') }}</a>
+        </div>
+
+        <!-- Discord -->
+        <div v-if="profile.discord_username" class="mt-4 flex items-center gap-3 p-3 rounded-lg bg-[#5865F2]/10 border border-[#5865F2]/20">
+          <MessageCircle class="w-5 h-5 text-[#5865F2] shrink-0" />
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-medium text-foreground truncate">{{ profile.discord_username }}</p>
+            <p class="text-xs text-muted-foreground">{{ t('discordLinked') }}</p>
+          </div>
         </div>
       </div>
 

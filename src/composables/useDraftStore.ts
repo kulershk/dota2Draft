@@ -92,6 +92,7 @@ export interface CurrentUser {
   mmr: number
   info: string
   twitch_username: string | null
+  discord_username: string | null
 }
 
 export interface CompetitionUser {

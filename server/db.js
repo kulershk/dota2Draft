@@ -65,6 +65,8 @@ export async function initDb() {
     ['in_pool', 'BOOLEAN DEFAULT FALSE'],
     ['twitch_username', 'TEXT DEFAULT NULL'],
     ['twitch_id', 'TEXT DEFAULT NULL'],
+    ['discord_username', 'TEXT DEFAULT NULL'],
+    ['discord_id', 'TEXT DEFAULT NULL'],
   ]) {
     const has = await queryOne(
       `SELECT 1 FROM information_schema.columns WHERE table_name = 'players' AND column_name = $1`, [col]

@@ -141,6 +141,10 @@ export function useApi() {
     getTwitchLinkUrl: () => request('/api/auth/twitch/link'),
     unlinkTwitch: () => request('/api/auth/twitch/unlink', { method: 'POST' }),
 
+    // Discord OAuth
+    getDiscordLinkUrl: () => request('/api/auth/discord/link'),
+    unlinkDiscord: () => request('/api/auth/discord/unlink', { method: 'POST' }),
+
     // Streamers (public)
     getStreamers: () => request('/api/streamers'),
 

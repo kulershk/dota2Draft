@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Settings, Save, Twitch, User, LinkIcon, Unlink } from 'lucide-vue-next'
+import { Settings, Save, Twitch, User, LinkIcon, Unlink, MessageCircle } from 'lucide-vue-next'
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
@@ -17,6 +17,9 @@ const saved = ref(false)
 const twitchLinking = ref(false)
 const twitchUnlinking = ref(false)
 const twitchMessage = ref('')
+const discordLinking = ref(false)
+const discordUnlinking = ref(false)
+const discordMessage = ref('')
 
 const allRoles = ['Carry', 'Mid', 'Offlane', 'Pos4', 'Pos5']
 
@@ -32,11 +35,20 @@ onMounted(async () => {
   const params = new URLSearchParams(window.location.search)
   if (params.has('twitch_linked')) {
     twitchMessage.value = t('twitchLinkedSuccess')
-    // Refresh user data to get the new twitch_username
     await store.restoreAuth()
     cleanUrl()
   } else if (params.has('twitch_error')) {
     twitchMessage.value = t('twitchLinkFailed')
+    cleanUrl()
+  }
+
+  // Handle Discord callback params
+  if (params.has('discord_linked')) {
+    discordMessage.value = t('discordLinkedSuccess')
+    await store.restoreAuth()
+    cleanUrl()
+  } else if (params.has('discord_error')) {
+    discordMessage.value = t('discordLinkFailed')
     cleanUrl()
   }
 })
@@ -45,8 +57,10 @@ function cleanUrl() {
   const url = new URL(window.location.href)
   url.searchParams.delete('twitch_linked')
   url.searchParams.delete('twitch_error')
+  url.searchParams.delete('discord_linked')
+  url.searchParams.delete('discord_error')
   window.history.replaceState({}, '', url.pathname + url.search)
-  setTimeout(() => { twitchMessage.value = '' }, 5000)
+  setTimeout(() => { twitchMessage.value = ''; discordMessage.value = '' }, 5000)
 }
 
 function toggleRole(role: string) {
@@ -102,8 +116,35 @@ async function unlinkTwitch() {
   }
 }
 
+async function linkDiscord() {
+  discordLinking.value = true
+  try {
+    const { url } = await api.getDiscordLinkUrl()
+    window.location.href = url
+  } catch {
+    discordMessage.value = t('discordLinkFailed')
+    setTimeout(() => { discordMessage.value = '' }, 4000)
+    discordLinking.value = false
+  }
+}
+
+async function unlinkDiscord() {
+  discordUnlinking.value = true
+  try {
+    await api.unlinkDiscord()
+    if (store.currentUser.value) {
+      store.currentUser.value.discord_username = null
+    }
+    discordMessage.value = t('discordUnlinked')
+    setTimeout(() => { discordMessage.value = '' }, 3000)
+  } finally {
+    discordUnlinking.value = false
+  }
+}
+
 const isLoggedIn = computed(() => !!store.currentUser.value)
 const hasTwitch = computed(() => !!store.currentUser.value?.twitch_username)
+const hasDiscord = computed(() => !!store.currentUser.value?.discord_username)
 </script>
 
 <template>
@@ -186,6 +227,40 @@ const hasTwitch = computed(() => !!store.currentUser.value?.twitch_username)
           </div>
 
           <p v-if="twitchMessage" class="text-sm font-medium" :class="twitchMessage.includes('!') ? 'text-color-success' : 'text-destructive'">{{ twitchMessage }}</p>
+        </div>
+      </div>
+
+      <!-- Discord Integration -->
+      <div class="card">
+        <div class="flex items-center gap-2 px-5 py-3 border-b border-border">
+          <MessageCircle class="w-4 h-4 text-[#5865F2]" />
+          <span class="text-sm font-semibold text-foreground">{{ t('discordIntegration') }}</span>
+        </div>
+        <div class="px-5 py-4 flex flex-col gap-3">
+          <p class="text-xs text-muted-foreground">{{ t('discordLinkDesc') }}</p>
+
+          <!-- Linked state -->
+          <div v-if="hasDiscord" class="flex items-center gap-3 p-3 rounded-lg bg-[#5865F2]/10 border border-[#5865F2]/20">
+            <MessageCircle class="w-5 h-5 text-[#5865F2]" />
+            <div class="flex-1">
+              <p class="text-sm font-medium text-foreground">{{ store.currentUser.value?.discord_username }}</p>
+              <p class="text-xs text-muted-foreground">{{ t('discordLinked') }}</p>
+            </div>
+            <button class="btn-secondary text-xs py-1.5 px-3" :disabled="discordUnlinking" @click="unlinkDiscord">
+              <Unlink class="w-3.5 h-3.5" />
+              {{ t('twitchUnlinkBtn') }}
+            </button>
+          </div>
+
+          <!-- Not linked state -->
+          <div v-else>
+            <button class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white bg-[#5865F2] hover:bg-[#4752C4] transition-colors" :disabled="discordLinking" @click="linkDiscord">
+              <MessageCircle class="w-4 h-4" />
+              {{ discordLinking ? t('loading') : t('discordLinkBtn') }}
+            </button>
+          </div>
+
+          <p v-if="discordMessage" class="text-sm font-medium" :class="discordMessage.includes('!') ? 'text-color-success' : 'text-destructive'">{{ discordMessage }}</p>
         </div>
       </div>
 

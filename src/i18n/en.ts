@@ -405,6 +405,13 @@ export default {
   twitchLinkedSuccess: 'Twitch account linked successfully!',
   twitchUnlinked: 'Twitch account unlinked.',
   twitchLinkFailed: 'Failed to link Twitch account.',
+  discordIntegration: 'Discord Integration',
+  discordLinkDesc: 'Link your Discord account to display it on your player profile.',
+  discordLinkBtn: 'Link with Discord',
+  discordLinked: 'Discord account linked',
+  discordLinkedSuccess: 'Discord account linked successfully!',
+  discordUnlinked: 'Discord account unlinked.',
+  discordLinkFailed: 'Failed to link Discord account.',
   settingsSaved: 'Settings saved!',
 
   // Discord

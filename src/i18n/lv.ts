@@ -405,6 +405,13 @@ export default {
   twitchLinkedSuccess: 'Twitch konts veiksmīgi saistīts!',
   twitchUnlinked: 'Twitch konts atsaistīts.',
   twitchLinkFailed: 'Neizdevās saistīt Twitch kontu.',
+  discordIntegration: 'Discord integrācija',
+  discordLinkDesc: 'Saistiet savu Discord kontu, lai to parādītu savā spēlētāja profilā.',
+  discordLinkBtn: 'Saistīt ar Discord',
+  discordLinked: 'Discord konts saistīts',
+  discordLinkedSuccess: 'Discord konts veiksmīgi saistīts!',
+  discordUnlinked: 'Discord konts atsaistīts.',
+  discordLinkFailed: 'Neizdevās saistīt Discord kontu.',
   settingsSaved: 'Iestatījumi saglabāti!',
 
   // Discord

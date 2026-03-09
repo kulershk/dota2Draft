@@ -405,6 +405,13 @@ export default {
   twitchLinkedSuccess: 'Twitch paskyra sėkmingai susieta!',
   twitchUnlinked: 'Twitch paskyra atsieta.',
   twitchLinkFailed: 'Nepavyko susieti Twitch paskyros.',
+  discordIntegration: 'Discord integracija',
+  discordLinkDesc: 'Susiekite savo Discord paskyrą, kad ji būtų rodoma jūsų žaidėjo profilyje.',
+  discordLinkBtn: 'Susieti su Discord',
+  discordLinked: 'Discord paskyra susieta',
+  discordLinkedSuccess: 'Discord paskyra sėkmingai susieta!',
+  discordUnlinked: 'Discord paskyra atsieta.',
+  discordLinkFailed: 'Nepavyko susieti Discord paskyros.',
   settingsSaved: 'Nustatymai išsaugoti!',
 
   // Discord

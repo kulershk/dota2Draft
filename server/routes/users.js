@@ -40,7 +40,7 @@ router.get('/api/users', async (req, res) => {
 // Public player profile
 router.get('/api/players/:id/profile', async (req, res) => {
   const playerId = Number(req.params.id)
-  const player = await queryOne('SELECT id, name, steam_id, avatar_url, roles, mmr, info, twitch_username, created_at FROM players WHERE id = $1', [playerId])
+  const player = await queryOne('SELECT id, name, steam_id, avatar_url, roles, mmr, info, twitch_username, discord_username, created_at FROM players WHERE id = $1', [playerId])
   if (!player) return res.status(404).json({ error: 'Player not found' })
 
   // Get all competitions this player participated in (as player or captain)
@@ -151,6 +151,7 @@ router.get('/api/players/:id/profile', async (req, res) => {
     mmr: player.mmr,
     info: player.info || '',
     twitch_username: player.twitch_username || null,
+    discord_username: player.discord_username || null,
     created_at: player.created_at,
     competitions: participations.map(p => ({
       competition_id: p.competition_id,

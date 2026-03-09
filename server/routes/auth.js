@@ -3,7 +3,7 @@ import { queryOne, execute } from '../db.js'
 import { createSession, getSessionPlayerId, getTokenFromReq, getAuthPlayer } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/permissions.js'
 import { getTwitchAppToken } from '../helpers/twitch.js'
-import { BASE_URL, TWITCH_CLIENT_ID, TWITCH_CLIENT_SECRET } from '../config.js'
+import { BASE_URL, TWITCH_CLIENT_ID, TWITCH_CLIENT_SECRET, DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET } from '../config.js'
 import { getCompetition } from '../helpers/competition.js'
 
 const router = Router()
@@ -100,6 +100,7 @@ router.get('/api/auth/me', async (req, res) => {
     mmr: player.mmr,
     info: player.info || '',
     twitch_username: player.twitch_username || null,
+    discord_username: player.discord_username || null,
   })
 })
 
@@ -127,6 +128,7 @@ router.put('/api/auth/me', async (req, res) => {
     mmr: updated.mmr,
     info: updated.info || '',
     twitch_username: updated.twitch_username || null,
+    discord_username: updated.discord_username || null,
   })
 })
 
@@ -239,6 +241,76 @@ router.post('/api/auth/twitch/unlink', async (req, res) => {
   const player = await getAuthPlayer(req)
   if (!player) return res.status(401).json({ error: 'Not authenticated' })
   await execute('UPDATE players SET twitch_id = NULL, twitch_username = NULL WHERE id = $1', [player.id])
+  res.json({ ok: true })
+})
+
+// Discord OAuth
+router.get('/api/auth/discord/link', async (req, res) => {
+  const player = await getAuthPlayer(req)
+  if (!player) return res.status(401).json({ error: 'Not authenticated' })
+  if (!DISCORD_CLIENT_ID) return res.status(500).json({ error: 'Discord not configured' })
+
+  const token = getTokenFromReq(req)
+  const serverOrigin = `${req.protocol}://${req.get('host')}`
+  const redirectUri = `${serverOrigin}/api/auth/discord/callback`
+  const params = new URLSearchParams({
+    client_id: DISCORD_CLIENT_ID,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: 'identify',
+    state: token,
+  })
+  res.json({ url: `https://discord.com/oauth2/authorize?${params}` })
+})
+
+router.get('/api/auth/discord/callback', async (req, res) => {
+  try {
+    const { code, state } = req.query
+    if (!code || !state) return res.redirect(`${BASE_URL}/settings?discord_error=missing_params`)
+
+    const playerId = getSessionPlayerId(state)
+    if (!playerId) return res.redirect(`${BASE_URL}/settings?discord_error=not_authenticated`)
+
+    const serverOrigin = `${req.protocol}://${req.get('host')}`
+    const redirectUri = `${serverOrigin}/api/auth/discord/callback`
+
+    const tokenRes = await fetch('https://discord.com/api/oauth2/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: DISCORD_CLIENT_ID,
+        client_secret: DISCORD_CLIENT_SECRET,
+        code,
+        grant_type: 'authorization_code',
+        redirect_uri: redirectUri,
+      }),
+    })
+    const tokenData = await tokenRes.json()
+    if (!tokenData.access_token) return res.redirect(`${BASE_URL}/settings?discord_error=token_failed`)
+
+    const userRes = await fetch('https://discord.com/api/users/@me', {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    })
+    const discordUser = await userRes.json()
+    if (!discordUser?.id) return res.redirect(`${BASE_URL}/settings?discord_error=user_fetch_failed`)
+
+    const username = discordUser.username
+    await execute(
+      'UPDATE players SET discord_id = $1, discord_username = $2 WHERE id = $3',
+      [discordUser.id, username, playerId]
+    )
+
+    res.redirect(`${BASE_URL}/settings?discord_linked=1`)
+  } catch (e) {
+    console.error('Discord callback error:', e)
+    res.redirect(`${BASE_URL}/settings?discord_error=server_error`)
+  }
+})
+
+router.post('/api/auth/discord/unlink', async (req, res) => {
+  const player = await getAuthPlayer(req)
+  if (!player) return res.status(401).json({ error: 'Not authenticated' })
+  await execute('UPDATE players SET discord_id = NULL, discord_username = NULL WHERE id = $1', [player.id])
   res.json({ ok: true })
 })
 
