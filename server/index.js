@@ -749,21 +749,34 @@ app.post('/api/auth/logout', (req, res) => {
 
 // ─── REST API: Competitions CRUD ─────────────────────────
 
-// Compute effective competition status based on dates
-function computeCompStatus(comp) {
+// Compute effective competition status based on dates and persist changes
+async function computeAndSyncCompStatus(comp) {
   const stored = comp.status || 'draft'
   // Don't override active or finished — those are set by auction/admin
   if (stored === 'active' || stored === 'finished') return stored
-  // Auto-detect registration window for draft-status competitions
+
+  const now = new Date()
+  let newStatus = stored
+
   if (stored === 'draft' || stored === 'registration') {
-    const now = new Date()
-    if (comp.registration_start && new Date(comp.registration_start) <= now) {
-      if (!comp.registration_end || new Date(comp.registration_end) > now) {
-        return 'registration'
-      }
+    const regStart = comp.registration_start ? new Date(comp.registration_start) : null
+    const regEnd = comp.registration_end ? new Date(comp.registration_end) : null
+
+    if (regStart && regStart <= now && (!regEnd || regEnd > now)) {
+      newStatus = 'registration'
+    } else if (regEnd && regEnd <= now && stored === 'registration') {
+      // Registration ended, go back to draft (waiting for auction start)
+      newStatus = 'draft'
     }
   }
-  return stored
+
+  // Persist if changed
+  if (newStatus !== stored) {
+    await execute('UPDATE competitions SET status = $1 WHERE id = $2', [newStatus, comp.id])
+    comp.status = newStatus
+  }
+
+  return newStatus
 }
 
 app.get('/api/competitions', async (req, res) => {
@@ -783,9 +796,12 @@ app.get('/api/competitions', async (req, res) => {
     if (c.created_by === player.id) return true
     return false
   })
+  // Sync statuses based on dates
+  for (const c of visible) {
+    await computeAndSyncCompStatus(c)
+  }
   res.json(visible.map(c => ({
     ...c,
-    status: computeCompStatus(c),
     settings: parseCompSettings(c),
     auction_state: parseAuctionState(c),
   })))
@@ -807,9 +823,9 @@ app.get('/api/competitions/:id', async (req, res) => {
       return res.status(404).json({ error: 'Competition not found' })
     }
   }
+  await computeAndSyncCompStatus(comp)
   res.json({
     ...comp,
-    status: computeCompStatus(comp),
     settings: parseCompSettings(comp),
     auction_state: parseAuctionState(comp),
   })
