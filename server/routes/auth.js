@@ -80,7 +80,7 @@ router.get('/api/auth/steam/callback', async (req, res) => {
 
     if (player.is_banned) return res.redirect(`${BASE_URL}/login?error=banned`)
     const token = createSession(player.id)
-    res.redirect(`${BASE_URL}/auth/callback?token=${token}`)
+    res.redirect(`${BASE_URL}/?authToken=${token}`)
   } catch (e) {
     console.error('Steam auth error:', e)
     res.redirect(`${BASE_URL}/login?error=server_error`)
