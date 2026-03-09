@@ -145,6 +145,7 @@ export function useApi() {
     getStreamers: () => request('/api/streamers'),
 
     // Users (global)
+    getPlayerProfile: (id: number) => request(`/api/players/${id}/profile`),
     getUsers: () => request('/api/users'),
     updatePlayer: (id: number, data: Record<string, any>) =>
       request(`/api/players/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

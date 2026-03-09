@@ -37,6 +37,139 @@ router.get('/api/users', async (req, res) => {
   })))
 })
 
+// Public player profile
+router.get('/api/players/:id/profile', async (req, res) => {
+  const playerId = Number(req.params.id)
+  const player = await queryOne('SELECT id, name, steam_id, avatar_url, roles, mmr, info, twitch_username, created_at FROM players WHERE id = $1', [playerId])
+  if (!player) return res.status(404).json({ error: 'Player not found' })
+
+  // Get all competitions this player participated in (as player or captain)
+  const participations = await query(`
+    SELECT
+      c.id AS competition_id, c.name AS competition_name, c.status AS competition_status,
+      cp.roles, cp.mmr AS comp_mmr, cp.drafted, cp.draft_price, cp.draft_round,
+      cap.id AS captain_id, cap.team AS captain_team,
+      drafted_cap.team AS drafted_by_team, drafted_cap.name AS drafted_by_name
+    FROM competition_players cp
+    JOIN competitions c ON c.id = cp.competition_id
+    LEFT JOIN captains cap ON cap.player_id = $1 AND cap.competition_id = c.id
+    LEFT JOIN captains drafted_cap ON drafted_cap.id = cp.drafted_by
+    WHERE cp.player_id = $1
+    ORDER BY c.created_at DESC
+  `, [playerId])
+
+  // Get tournament placements for competitions where player was a captain
+  const captainIds = participations.filter(p => p.captain_id).map(p => p.captain_id)
+  let placements = []
+  if (captainIds.length > 0) {
+    // For each captain entry, find their best tournament result
+    placements = await query(`
+      SELECT
+        cap.id AS captain_id, cap.competition_id, c.name AS competition_name,
+        cap.team,
+        ts.tournament_state
+      FROM captains cap
+      JOIN competitions c ON c.id = cap.competition_id
+      LEFT JOIN LATERAL (
+        SELECT c2.tournament_state FROM competitions c2 WHERE c2.id = cap.competition_id
+      ) ts ON true
+      WHERE cap.id = ANY($1::int[])
+    `, [captainIds])
+  }
+
+  // Compute placement from tournament_state for each captain
+  const tournamentResults = []
+  for (const p of placements) {
+    const ts = p.tournament_state || {}
+    if (!ts.stages || ts.stages.length === 0) continue
+
+    // Check matches to determine placement
+    const matches = await query(`
+      SELECT * FROM matches
+      WHERE competition_id = $1
+      ORDER BY stage, round DESC, match_order
+    `, [p.competition_id])
+
+    // Find finals matches where this captain participated
+    for (const stage of ts.stages) {
+      const stageMatches = matches.filter(m => m.stage === stage.id)
+      if (stageMatches.length === 0) continue
+
+      // Check if captain won the tournament (won the final match)
+      const finalMatch = stageMatches.find(m =>
+        !m.next_match_id && m.winner_captain_id && (m.bracket !== 'lower')
+      )
+
+      let placement = null
+      if (finalMatch) {
+        if (finalMatch.winner_captain_id === p.captain_id) {
+          placement = 1
+        } else if (finalMatch.team1_captain_id === p.captain_id || finalMatch.team2_captain_id === p.captain_id) {
+          placement = 2
+        }
+      }
+
+      // Check for 3rd place (lost in semi-finals for single elim)
+      if (!placement) {
+        const participated = stageMatches.some(m =>
+          m.team1_captain_id === p.captain_id || m.team2_captain_id === p.captain_id
+        )
+        if (participated) {
+          // Count how far they got (highest round reached)
+          const maxRound = Math.max(...stageMatches
+            .filter(m => m.team1_captain_id === p.captain_id || m.team2_captain_id === p.captain_id)
+            .filter(m => m.bracket !== 'lower' && m.bracket !== 'grand_finals')
+            .map(m => m.round)
+            .filter(r => r < 100), 0)
+
+          if (stage.format === 'single_elimination' && stage.totalRounds) {
+            if (maxRound === stage.totalRounds) placement = 2
+            else if (maxRound === stage.totalRounds - 1) placement = 3
+          }
+        }
+      }
+
+      if (placement) {
+        tournamentResults.push({
+          competition_id: p.competition_id,
+          competition_name: p.competition_name,
+          team: p.team,
+          stage_name: stage.name,
+          format: stage.format,
+          placement,
+        })
+      }
+    }
+  }
+
+  res.json({
+    id: player.id,
+    name: player.name,
+    steam_id: player.steam_id || null,
+    avatar_url: player.avatar_url || null,
+    roles: JSON.parse(player.roles || '[]'),
+    mmr: player.mmr,
+    info: player.info || '',
+    twitch_username: player.twitch_username || null,
+    created_at: player.created_at,
+    competitions: participations.map(p => ({
+      competition_id: p.competition_id,
+      competition_name: p.competition_name,
+      competition_status: p.competition_status,
+      roles: JSON.parse(p.roles || '[]'),
+      mmr: p.comp_mmr,
+      was_captain: !!p.captain_id,
+      captain_team: p.captain_team || null,
+      drafted: !!p.drafted,
+      draft_price: p.draft_price || null,
+      draft_round: p.draft_round || null,
+      drafted_by_team: p.drafted_by_team || null,
+      drafted_by_name: p.drafted_by_name || null,
+    })),
+    tournament_results: tournamentResults,
+  })
+})
+
 router.put('/api/players/:id', async (req, res) => {
   const admin = await requirePermission(req, res, 'manage_users')
   if (!admin) return

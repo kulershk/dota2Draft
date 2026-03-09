@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Users, Search, Shield, ShieldOff, ExternalLink, Ban, CheckCircle, LogIn, UserPlus } from 'lucide-vue-next'
+import { Users, Search, ExternalLink, Ban, CheckCircle, LogIn, UserPlus } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
@@ -9,6 +9,7 @@ import ModalOverlay from '@/components/common/ModalOverlay.vue'
 const { t } = useI18n()
 const api = useApi()
 const store = useDraftStore()
+const isDev = import.meta.env.DEV
 
 interface PermGroupRef {
   id: number
@@ -59,19 +60,7 @@ const hasMoreUsers = computed(() => paginatedUsers.value.length < filteredUsers.
 
 watch(searchQuery, () => { usersPage.value = 1 })
 
-const adminConfirmUser = ref<User | null>(null)
 const banConfirmUser = ref<User | null>(null)
-
-function promptToggleAdmin(user: User) {
-  adminConfirmUser.value = user
-}
-
-async function confirmToggleAdmin() {
-  if (!adminConfirmUser.value) return
-  await api.updatePlayer(adminConfirmUser.value.id, { is_admin: !adminConfirmUser.value.is_admin })
-  adminConfirmUser.value = null
-  await fetchUsers()
-}
 
 function promptToggleBan(user: User) {
   banConfirmUser.value = user
@@ -127,7 +116,7 @@ function formatDate(dateStr: string) {
         <p class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">{{ t('banned') }}</p>
         <p class="text-3xl font-bold text-destructive mt-1">{{ users.filter(u => u.is_banned).length }}</p>
       </div>
-      <div class="card p-4 flex items-center gap-3 ml-auto">
+      <div v-if="isDev" class="card p-4 flex items-center gap-3 ml-auto">
         <p class="text-xs font-semibold tracking-wider text-muted-foreground uppercase whitespace-nowrap">{{ t('generateTestUsers') }}</p>
         <input v-model.number="generateCount" type="number" min="1" max="50" class="input-field !h-9 !w-20 text-center" />
         <button class="btn-primary text-sm whitespace-nowrap" :disabled="generating" @click="generateTestUsers">
@@ -194,12 +183,6 @@ function formatDate(dateStr: string) {
               <td class="px-4 py-3 text-muted-foreground text-xs">{{ formatDate(user.created_at) }}</td>
               <td class="px-4 py-3">
                 <div class="flex items-center gap-1">
-                  <button v-if="!user.is_admin" class="btn-ghost p-2" :title="t('makeAdmin')" @click="promptToggleAdmin(user)">
-                    <Shield class="w-4 h-4" />
-                  </button>
-                  <button v-else class="btn-ghost p-2 text-amber-500" :title="t('removeAdmin')" @click="promptToggleAdmin(user)">
-                    <ShieldOff class="w-4 h-4" />
-                  </button>
                   <button v-if="!user.is_banned" class="btn-ghost p-2" :title="t('banUser')" @click="promptToggleBan(user)">
                     <Ban class="w-4 h-4" />
                   </button>
@@ -228,29 +211,6 @@ function formatDate(dateStr: string) {
         <span class="text-xs text-muted-foreground">{{ t('showingAll', { count: filteredUsers.length }) }}</span>
       </div>
     </div>
-
-    <!-- Admin Confirmation Modal -->
-    <ModalOverlay :show="!!adminConfirmUser" @close="adminConfirmUser = null">
-      <div class="px-7 py-6">
-        <h2 class="text-xl font-semibold text-foreground">
-          {{ adminConfirmUser?.is_admin ? t('adminConfirmModal.removeTitle') : t('adminConfirmModal.makeTitle') }}
-        </h2>
-        <p class="text-sm text-muted-foreground mt-2">
-          {{ t('adminConfirmModal.confirmQuestion') }}
-          <span class="font-semibold text-foreground">{{ adminConfirmUser?.is_admin ? t('adminConfirmModal.removeDesc') : t('adminConfirmModal.makeDesc') }}</span>
-          <span class="font-semibold text-foreground">{{ adminConfirmUser?.name }}</span>?
-        </p>
-      </div>
-      <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
-        <button class="btn-primary w-full justify-center" @click="confirmToggleAdmin">
-          <Shield class="w-4 h-4" />
-          {{ adminConfirmUser?.is_admin ? t('removeAdmin') : t('makeAdmin') }}
-        </button>
-        <button class="btn-secondary w-full justify-center" @click="adminConfirmUser = null">
-          {{ t('cancel') }}
-        </button>
-      </div>
-    </ModalOverlay>
 
     <!-- Ban Confirmation Modal -->
     <ModalOverlay :show="!!banConfirmUser" @close="banConfirmUser = null">

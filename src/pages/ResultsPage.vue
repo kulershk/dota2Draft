@@ -81,7 +81,7 @@ function totalSpent(team: TeamResult) {
           <div v-else class="flex flex-col gap-2">
             <div v-for="player in team.players" :key="player.id" class="flex items-center justify-between py-1.5 border-b border-border last:border-0">
               <div class="flex items-center gap-2">
-                <span class="text-sm font-medium text-foreground">{{ player.name }}</span>
+                <router-link :to="{ name: 'player-profile', params: { id: player.id } }" class="text-sm font-medium text-foreground hover:text-primary transition-colors">{{ player.name }}</router-link>
                 <div class="flex flex-wrap gap-1">
                   <RoleBadge v-for="role in sortedRoles(player.roles)" :key="role" :role="role" />
                 </div>

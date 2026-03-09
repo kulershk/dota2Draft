@@ -289,13 +289,15 @@ const isLoggedIn = computed(() => !!store.currentUser.value)
                 <!-- Comment list -->
                 <div v-if="commentsMap[post.id]?.length" class="flex flex-col gap-3 mb-3">
                   <div v-for="comment in commentsMap[post.id]" :key="comment.id" class="flex gap-2.5">
-                    <img v-if="comment.player_avatar" :src="comment.player_avatar" class="w-7 h-7 rounded-full shrink-0 mt-0.5" />
-                    <div v-else class="w-7 h-7 rounded-full bg-secondary flex items-center justify-center text-[10px] font-semibold text-secondary-foreground shrink-0 mt-0.5">
-                      {{ comment.player_name.charAt(0) }}
-                    </div>
+                    <router-link :to="{ name: 'player-profile', params: { id: comment.player_id } }">
+                      <img v-if="comment.player_avatar" :src="comment.player_avatar" class="w-7 h-7 rounded-full shrink-0 mt-0.5" />
+                      <div v-else class="w-7 h-7 rounded-full bg-secondary flex items-center justify-center text-[10px] font-semibold text-secondary-foreground shrink-0 mt-0.5">
+                        {{ comment.player_name.charAt(0) }}
+                      </div>
+                    </router-link>
                     <div class="flex-1 min-w-0">
                       <div class="flex items-center gap-2">
-                        <span class="text-xs font-semibold text-foreground">{{ comment.player_name }}</span>
+                        <router-link :to="{ name: 'player-profile', params: { id: comment.player_id } }" class="text-xs font-semibold text-foreground hover:text-primary transition-colors">{{ comment.player_name }}</router-link>
                         <span class="text-[10px] text-muted-foreground">{{ formatCommentDate(comment.created_at) }}</span>
                         <button
                           v-if="canDeleteComment(comment)"
