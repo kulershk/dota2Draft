@@ -90,6 +90,7 @@ export default {
   navParticipants: 'Dalībnieki',
   navLiveAuction: 'Izsole',
   navResults: 'Rezultāti',
+  navTeams: 'Komandas',
 
   // Competition info page
   registrationLabel: 'Reģistrācija',
@@ -219,6 +220,8 @@ export default {
   // Results page
   draftResults: 'Drafta rezultāti',
   draftResultsSubtitle: 'Galīgie komandu sastāvi pēc izsoles drafta',
+  teams: 'Komandas',
+  teamsSubtitle: 'Komandu sastāvi un drafta rezultāti',
   loadingResults: 'Ielādē rezultātus...',
   captainLabel: 'Kapteinis: {name}',
   noDraftedYet: 'Spēlētāji vēl nav izvēlēti.',
@@ -456,6 +459,7 @@ export default {
   addStageDesc: 'Pievienojiet turnīra posmu. Varat savienot vairākus posmus (piem. Grupu posms, pēc tam Izslēgšana).',
   editStage: 'Rediģēt posmu',
   deleteStage: 'Dzēst posmu',
+  deleteStageDesc: 'Šī darbība dzēsīs šo posmu un visas tā spēles. To nevar atsaukt.',
   stageName: 'Posma nosaukums',
   stageNamePlaceholder: 'piem. Grupu posms, Izslēgšana',
   generateBracket: 'Ģenerēt tabulu',
@@ -479,6 +483,8 @@ export default {
   matchPending: 'Gaidīšana',
   matchLive: 'Tiešraide',
   matchCompleted: 'Pabeigts',
+  showMatches: 'Rādīt spēles',
+  hideMatches: 'Slēpt spēles',
   bye: 'BYE',
   tbd: 'Nav zināms',
   finals: 'Fināls',
@@ -487,6 +493,16 @@ export default {
   roundN: '{n}. kārta',
   winner: 'Uzvarētājs',
   vs: 'pret',
+
+  // Tournament teams
+  noTeamsAvailable: 'Komandas vēl nav pieejamas. Varat izveidot posmu tagad un pievienot komandas vēlāk.',
+  teamsNotAssigned: 'Komandas vēl nav piešķirtas šim posmam.',
+  teamsNotAssignedHint: 'Rediģējiet šo posmu, lai piešķirtu komandas un ģenerētu turnīra koku.',
+  assignTeamsAction: 'Piešķirt komandas',
+  reassignTeamsWarning: 'Mainot komandas, visas spēles tiks ģenerētas no jauna un esošie rezultāti tiks dzēsti.',
+  regenerateBracket: 'Pārģenerēt turnīra koku',
+  regenerateBracketDesc: 'Tiks dzēstas visas esošās spēles un rezultāti šajā posmā, un turnīra koks tiks ģenerēts no jauna ar pašreizējām komandām. Šo darbību nevar atsaukt.',
+  regenerateBracketConfirm: 'Jā, pārģenerēt',
 
   // Competition Streams
   officialStreams: 'Oficiālās translācijas',

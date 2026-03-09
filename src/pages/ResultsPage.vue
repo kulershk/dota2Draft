@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Trophy, Download } from 'lucide-vue-next'
-import { ref, onMounted } from 'vue'
+import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDraftStore } from '@/composables/useDraftStore'
 import RoleBadge from '@/components/common/RoleBadge.vue'
@@ -24,20 +24,17 @@ const store = useDraftStore()
 const results = ref<TeamResult[]>([])
 const loading = ref(true)
 
-onMounted(async () => {
+watch(() => store.currentCompetitionId.value, async (compId) => {
+  if (!compId) return
+  loading.value = true
   try {
-    const compId = store.currentCompetitionId.value
-    if (compId) {
-      results.value = await store.getCompResults(compId)
-    } else {
-      results.value = store.captains.value.map(c => ({ ...c, players: [] }))
-    }
+    results.value = await store.getCompResults(compId)
   } catch {
     results.value = store.captains.value.map(c => ({ ...c, players: [] }))
   } finally {
     loading.value = false
   }
-})
+}, { immediate: true })
 
 function formatGold(amount: number) {
   return amount.toLocaleString() + 'g'
@@ -53,8 +50,8 @@ function totalSpent(team: TeamResult) {
   <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[1440px] mx-auto w-full">
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-semibold text-foreground">{{ t('draftResults') }}</h1>
-        <p class="text-sm text-muted-foreground mt-1">{{ t('draftResultsSubtitle') }}</p>
+        <h1 class="text-2xl font-semibold text-foreground">{{ t('teams') }}</h1>
+        <p class="text-sm text-muted-foreground mt-1">{{ t('teamsSubtitle') }}</p>
       </div>
     </div>
 

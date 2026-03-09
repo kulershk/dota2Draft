@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { computed } from 'vue'
+import { ChevronDown, ChevronUp } from 'lucide-vue-next'
+import { computed, ref } from 'vue'
 
 const { t } = useI18n()
 
@@ -15,31 +16,52 @@ const emit = defineEmits<{
   'edit-match': [match: any]
 }>()
 
+const expandedGroups = ref<Set<string>>(new Set())
+
+function toggleMatches(groupName: string) {
+  const s = new Set(expandedGroups.value)
+  if (s.has(groupName)) s.delete(groupName)
+  else s.add(groupName)
+  expandedGroups.value = s
+}
+
 const groupsList = computed(() => props.tournamentState.groups || [])
 
 // Compute standings per group
 const standings = computed(() => {
   const result: Record<string, any[]> = {}
   for (const group of groupsList.value) {
-    const teamStats: Record<number, { id: number; team: string; avatar: string; w: number; l: number; mw: number; ml: number }> = {}
-    for (const id of group.teamIds) {
-      const cap = props.captains.find(c => c.id === id)
-      teamStats[id] = { id, team: cap?.team || '?', avatar: cap?.avatar_url || '', w: 0, l: 0, mw: 0, ml: 0 }
+    const entries: any[] = []
+    const statsById: Record<number, any> = {}
+
+    for (let ti = 0; ti < group.teamIds.length; ti++) {
+      const id = group.teamIds[ti]
+      if (id == null) {
+        // TBD entry — unique key, no stats
+        entries.push({ key: `tbd-${ti}`, id: null, team: t('tbd'), avatar: '', w: 0, l: 0, mw: 0, ml: 0, isTbd: true })
+      } else {
+        const cap = props.captains.find(c => c.id === id)
+        const entry = { key: id, id, team: cap?.team || '?', avatar: cap?.avatar_url || '', w: 0, l: 0, mw: 0, ml: 0, isTbd: false }
+        entries.push(entry)
+        statsById[id] = entry
+      }
     }
 
     const groupMatches = props.matches.filter(m => m.group_name === group.name)
     for (const m of groupMatches) {
       if (m.status !== 'completed') continue
       if (m.winner_captain_id === m.team1_captain_id) {
-        if (teamStats[m.team1_captain_id]) { teamStats[m.team1_captain_id].w++; teamStats[m.team1_captain_id].mw += m.score1 || 0; teamStats[m.team1_captain_id].ml += m.score2 || 0 }
-        if (teamStats[m.team2_captain_id]) { teamStats[m.team2_captain_id].l++; teamStats[m.team2_captain_id].mw += m.score2 || 0; teamStats[m.team2_captain_id].ml += m.score1 || 0 }
+        if (statsById[m.team1_captain_id]) { statsById[m.team1_captain_id].w++; statsById[m.team1_captain_id].mw += m.score1 || 0; statsById[m.team1_captain_id].ml += m.score2 || 0 }
+        if (statsById[m.team2_captain_id]) { statsById[m.team2_captain_id].l++; statsById[m.team2_captain_id].mw += m.score2 || 0; statsById[m.team2_captain_id].ml += m.score1 || 0 }
       } else if (m.winner_captain_id === m.team2_captain_id) {
-        if (teamStats[m.team2_captain_id]) { teamStats[m.team2_captain_id].w++; teamStats[m.team2_captain_id].mw += m.score2 || 0; teamStats[m.team2_captain_id].ml += m.score1 || 0 }
-        if (teamStats[m.team1_captain_id]) { teamStats[m.team1_captain_id].l++; teamStats[m.team1_captain_id].mw += m.score1 || 0; teamStats[m.team1_captain_id].ml += m.score2 || 0 }
+        if (statsById[m.team2_captain_id]) { statsById[m.team2_captain_id].w++; statsById[m.team2_captain_id].mw += m.score2 || 0; statsById[m.team2_captain_id].ml += m.score1 || 0 }
+        if (statsById[m.team1_captain_id]) { statsById[m.team1_captain_id].l++; statsById[m.team1_captain_id].mw += m.score1 || 0; statsById[m.team1_captain_id].ml += m.score2 || 0 }
       }
     }
 
-    result[group.name] = Object.values(teamStats).sort((a, b) => {
+    // Sort: real teams by wins/diff first, TBD entries at the bottom
+    result[group.name] = entries.sort((a, b) => {
+      if (a.isTbd !== b.isTbd) return a.isTbd ? 1 : -1
       if (b.w !== a.w) return b.w - a.w
       return (b.mw - b.ml) - (a.mw - a.ml)
     })
@@ -88,12 +110,12 @@ function statusText(status: string) {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(team, idx) in standings[group.name]" :key="team.id" class="border-b border-border last:border-0">
+            <tr v-for="(team, idx) in standings[group.name]" :key="team.key" class="border-b border-border last:border-0">
               <td class="px-4 py-2.5 text-muted-foreground">{{ idx + 1 }}</td>
               <td class="px-4 py-2.5">
                 <div class="flex items-center gap-2">
                   <img v-if="team.avatar" :src="team.avatar" class="w-5 h-5 rounded-full" />
-                  <span class="font-medium text-foreground">{{ team.team }}</span>
+                  <span class="font-medium" :class="team.isTbd ? 'text-muted-foreground italic' : 'text-foreground'">{{ team.team }}</span>
                 </div>
               </td>
               <td class="text-center px-4 py-2.5 text-green-600 dark:text-green-400 font-medium">{{ team.w }}</td>
@@ -104,8 +126,18 @@ function statusText(status: string) {
         </table>
       </div>
 
+      <!-- Matches toggle -->
+      <button
+        class="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors self-start"
+        @click="toggleMatches(group.name)"
+      >
+        <component :is="expandedGroups.has(group.name) ? ChevronUp : ChevronDown" class="w-4 h-4" />
+        {{ expandedGroups.has(group.name) ? t('hideMatches') : t('showMatches') }}
+        <span class="text-xs text-muted-foreground/60">({{ matchesByGroup[group.name]?.length || 0 }})</span>
+      </button>
+
       <!-- Matches list -->
-      <div class="flex flex-col gap-2">
+      <div v-if="expandedGroups.has(group.name)" class="flex flex-col gap-2">
         <div
           v-for="match in matchesByGroup[group.name]"
           :key="match.id"

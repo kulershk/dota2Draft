@@ -90,6 +90,7 @@ export default {
   navParticipants: 'Participants',
   navLiveAuction: 'Live Auction',
   navResults: 'Results',
+  navTeams: 'Teams',
 
   // Competition info page
   registrationLabel: 'Registration',
@@ -216,9 +217,11 @@ export default {
   nominatingOnBehalf: 'You are nominating {player} on behalf of {captain}.',
   yesNominate: 'Yes, Nominate',
 
-  // Results page
+  // Results / Teams page
   draftResults: 'Draft Results',
   draftResultsSubtitle: 'Final team compositions from the auction draft',
+  teams: 'Teams',
+  teamsSubtitle: 'Team compositions and draft results',
   loadingResults: 'Loading results...',
   captainLabel: 'Captain: {name}',
   noDraftedYet: 'No players drafted yet.',
@@ -456,6 +459,7 @@ export default {
   addStageDesc: 'Add a tournament stage. You can chain multiple stages (e.g. Group Stage then Playoffs).',
   editStage: 'Edit Stage',
   deleteStage: 'Delete Stage',
+  deleteStageDesc: 'This will delete this stage and all its matches. This cannot be undone.',
   stageName: 'Stage Name',
   stageNamePlaceholder: 'e.g. Group Stage, Playoffs',
   generateBracket: 'Generate Bracket',
@@ -479,6 +483,8 @@ export default {
   matchPending: 'Pending',
   matchLive: 'Live',
   matchCompleted: 'Completed',
+  showMatches: 'Show Matches',
+  hideMatches: 'Hide Matches',
   bye: 'BYE',
   tbd: 'TBD',
   finals: 'Finals',
@@ -487,6 +493,16 @@ export default {
   roundN: 'Round {n}',
   winner: 'Winner',
   vs: 'vs',
+
+  // Tournament teams
+  noTeamsAvailable: 'No teams available yet. You can create the stage now and assign teams later.',
+  teamsNotAssigned: 'Teams have not been assigned to this stage yet.',
+  teamsNotAssignedHint: 'Edit this stage to assign teams and generate the bracket.',
+  assignTeamsAction: 'Assign Teams',
+  reassignTeamsWarning: 'Changing teams will regenerate all matches and reset existing scores.',
+  regenerateBracket: 'Regenerate Bracket',
+  regenerateBracketDesc: 'This will delete all existing matches and scores for this stage and regenerate the bracket with the current team assignments. This action cannot be undone.',
+  regenerateBracketConfirm: 'Yes, Regenerate',
 
   // Competition Streams
   officialStreams: 'Official Streams',

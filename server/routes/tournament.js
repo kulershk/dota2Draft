@@ -67,30 +67,43 @@ export default function createTournamentRouter(io) {
     const stageId = (ts.stages.length > 0 ? Math.max(...ts.stages.map(s => s.id)) : 0) + 1
     const stage = { id: stageId, name: name || `Stage ${stageId}`, format, status: 'pending', bestOf }
 
-    const captainsList = await getCaptains(compId)
+    // Check if any seeds/teams are provided
+    const hasSeeds = seeds && seeds.length > 0
+    const hasRealTeams = hasSeeds && seeds.some(s => s != null)
+    const hasGroupEntries = groups && Array.isArray(groups) && groups.some(g => g.teamIds?.length > 0)
+    const hasRealGroupTeams = hasGroupEntries && groups.some(g => g.teamIds?.some(id => id != null))
 
-    if (format === 'single_elimination') {
-      const teamIds = seeds || captainsList.map(c => c.id)
+    if (format === 'single_elimination' || format === 'double_elimination') {
+      let teamIds = hasSeeds ? seeds : null
+      if (!teamIds) {
+        // No seeds at all — generate empty bracket based on captain count
+        const captains = await getCaptains(compId)
+        const teamCount = Math.max(captains.length, format === 'double_elimination' ? 3 : 2)
+        teamIds = new Array(teamCount).fill(null)
+      }
       if (teamIds.length < 2) return res.status(400).json({ error: 'Need at least 2 teams' })
-      const { bracketSize, totalRounds } = await generateEliminationBracket(compId, stageId, teamIds, bestOf)
-      stage.bracketSize = bracketSize
-      stage.totalRounds = totalRounds
-      stage.status = 'active'
-    } else if (format === 'double_elimination') {
-      const teamIds = seeds || captainsList.map(c => c.id)
-      if (teamIds.length < 3) return res.status(400).json({ error: 'Need at least 3 teams for double elimination' })
-      const { bracketSize, ubRounds, lbTotalRounds } = await generateDoubleEliminationBracket(compId, stageId, teamIds, bestOf)
-      stage.bracketSize = bracketSize
-      stage.ubRounds = ubRounds
-      stage.lbTotalRounds = lbTotalRounds
-      stage.status = 'active'
-    } else {
+      if (format === 'single_elimination') {
+        const { bracketSize, totalRounds } = await generateEliminationBracket(compId, stageId, teamIds, bestOf)
+        stage.bracketSize = bracketSize
+        stage.totalRounds = totalRounds
+      } else {
+        if (teamIds.length < 3) return res.status(400).json({ error: 'Need at least 3 teams for double elimination' })
+        const { bracketSize, ubRounds, lbTotalRounds } = await generateDoubleEliminationBracket(compId, stageId, teamIds, bestOf)
+        stage.bracketSize = bracketSize
+        stage.ubRounds = ubRounds
+        stage.lbTotalRounds = lbTotalRounds
+      }
+      if (hasRealTeams) stage.status = 'active'
+    } else if (hasGroupEntries) {
       if (!groups || !Array.isArray(groups) || groups.length === 0) {
         return res.status(400).json({ error: 'Groups required for group stage' })
       }
       stage.groups = groups
       await generateGroupMatches(compId, stageId, groups, bestOf)
-      stage.status = 'active'
+      if (hasRealGroupTeams) stage.status = 'active'
+    } else if (format === 'group_stage' && groups) {
+      // Store group structure without matches (no teams assigned yet)
+      stage.groups = groups
     }
 
     ts.stages.push(stage)
@@ -115,10 +128,47 @@ export default function createTournamentRouter(io) {
     const stage = ts.stages.find(s => s.id === stageId)
     if (!stage) return res.status(404).json({ error: 'Stage not found' })
 
-    const { name, status } = req.body
+    const { name, status, seeds, groups, bestOf, regenerate } = req.body
     if (name !== undefined) stage.name = name
+    if (bestOf !== undefined) stage.bestOf = bestOf
     if (status !== undefined && ['pending', 'active', 'completed'].includes(status)) {
       stage.status = status
+    }
+
+    // Only regenerate matches when explicitly requested
+    if (regenerate) {
+      const hasNewSeeds = seeds && seeds.length > 0
+      const hasNewRealTeams = hasNewSeeds && seeds.some(s => s != null)
+      const hasNewGroupEntries = groups && Array.isArray(groups) && groups.some(g => g.teamIds?.length > 0)
+      const hasNewRealGroupTeams = hasNewGroupEntries && groups.some(g => g.teamIds?.some(id => id != null))
+
+      if (hasNewSeeds && (stage.format === 'single_elimination' || stage.format === 'double_elimination')) {
+        await execute('DELETE FROM matches WHERE competition_id = $1 AND stage = $2', [compId, stageId])
+        const bo = stage.bestOf || 3
+
+        if (stage.format === 'single_elimination') {
+          if (seeds.length < 2) return res.status(400).json({ error: 'Need at least 2 teams' })
+          const { bracketSize, totalRounds } = await generateEliminationBracket(compId, stageId, seeds, bo)
+          stage.bracketSize = bracketSize
+          stage.totalRounds = totalRounds
+        } else {
+          if (seeds.length < 3) return res.status(400).json({ error: 'Need at least 3 teams for double elimination' })
+          const { bracketSize, ubRounds, lbTotalRounds } = await generateDoubleEliminationBracket(compId, stageId, seeds, bo)
+          stage.bracketSize = bracketSize
+          stage.ubRounds = ubRounds
+          stage.lbTotalRounds = lbTotalRounds
+        }
+        if (hasNewRealTeams) stage.status = 'active'
+      } else if (hasNewGroupEntries && stage.format === 'group_stage') {
+        await execute('DELETE FROM matches WHERE competition_id = $1 AND stage = $2', [compId, stageId])
+        const bo = stage.bestOf || 3
+        stage.groups = groups
+        await generateGroupMatches(compId, stageId, groups, bo)
+        if (hasNewRealGroupTeams) stage.status = 'active'
+      }
+    } else if (stage.format === 'group_stage' && groups) {
+      // Update group structure without regenerating matches
+      stage.groups = groups
     }
 
     await execute('UPDATE competitions SET tournament_state = $1 WHERE id = $2', [JSON.stringify(ts), compId])

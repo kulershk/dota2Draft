@@ -15,7 +15,7 @@ const navItems = computed(() => [
   { label: t('navInfo'), icon: Info, name: 'comp-info' },
   { label: t('navParticipants'), icon: Users, name: 'comp-players' },
   { label: t('navLiveAuction'), icon: Gavel, name: 'comp-auction' },
-  { label: t('navResults'), icon: Trophy, name: 'comp-results' },
+  { label: t('navTeams'), icon: Trophy, name: 'comp-results' },
   { label: t('navTournament'), icon: Swords, name: 'comp-tournament' },
 ])
 

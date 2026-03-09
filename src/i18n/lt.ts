@@ -90,6 +90,7 @@ export default {
   navParticipants: 'Dalyviai',
   navLiveAuction: 'Aukcionas',
   navResults: 'Rezultatai',
+  navTeams: 'Komandos',
 
   // Competition info page
   registrationLabel: 'Registracija',
@@ -219,6 +220,8 @@ export default {
   // Results page
   draftResults: 'Drafto rezultatai',
   draftResultsSubtitle: 'Galutinės komandų sudėtys po aukciono drafto',
+  teams: 'Komandos',
+  teamsSubtitle: 'Komandų sudėtys ir drafto rezultatai',
   loadingResults: 'Kraunami rezultatai...',
   captainLabel: 'Kapitonas: {name}',
   noDraftedYet: 'Žaidėjų dar nepasirinkta.',
@@ -456,6 +459,7 @@ export default {
   addStageDesc: 'Pridėkite turnyro etapą. Galite sujungti kelis etapus (pvz. Grupių etapas, tada Atkrintamosios).',
   editStage: 'Redaguoti etapą',
   deleteStage: 'Ištrinti etapą',
+  deleteStageDesc: 'Tai ištrins šį etapą ir visas jo rungtynes. Šio veiksmo negalima atšaukti.',
   stageName: 'Etapo pavadinimas',
   stageNamePlaceholder: 'pvz. Grupių etapas, Atkrintamosios',
   generateBracket: 'Generuoti lentelę',
@@ -479,6 +483,8 @@ export default {
   matchPending: 'Laukiama',
   matchLive: 'Tiesiogiai',
   matchCompleted: 'Baigta',
+  showMatches: 'Rodyti rungtynes',
+  hideMatches: 'Slėpti rungtynes',
   bye: 'BYE',
   tbd: 'Nežinoma',
   finals: 'Finalas',
@@ -487,6 +493,16 @@ export default {
   roundN: '{n} raundas',
   winner: 'Nugalėtojas',
   vs: 'prieš',
+
+  // Tournament teams
+  noTeamsAvailable: 'Komandų dar nėra. Galite sukurti etapą dabar ir priskirti komandas vėliau.',
+  teamsNotAssigned: 'Komandos dar nepriskirtos šiam etapui.',
+  teamsNotAssignedHint: 'Redaguokite šį etapą, kad priskirtumėte komandas ir sugeneruotumėte tvarkaraštį.',
+  assignTeamsAction: 'Priskirti komandas',
+  reassignTeamsWarning: 'Pakeitus komandas bus sugeneruotos visos rungtynės iš naujo ir ištrinti esami rezultatai.',
+  regenerateBracket: 'Pergeneruoti tvarkaraštį',
+  regenerateBracketDesc: 'Bus ištrintos visos esamos rungtynės ir rezultatai šiame etape, ir tvarkaraštis bus sugeneruotas iš naujo su dabartinėmis komandomis. Šio veiksmo negalima atšaukti.',
+  regenerateBracketConfirm: 'Taip, pergeneruoti',
 
   // Competition Streams
   officialStreams: 'Oficialios transliacijos',
