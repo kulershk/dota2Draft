@@ -29,6 +29,8 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - TWITCH_CLIENT_ID=${TWITCH_CLIENT_ID}
       - TWITCH_CLIENT_SECRET=${TWITCH_CLIENT_SECRET}
+    volumes:
+      - draft_uploads:/app/uploads
     depends_on:
       draft-db:
         condition: service_healthy
@@ -56,6 +58,7 @@ services:
 
 volumes:
   draft_pgdata:
+  draft_uploads:
 
 networks:
   frontend:

@@ -21,14 +21,25 @@ const router = createRouter({
       path: '/admin',
       component: () => import('@/pages/admin/AdminLayout.vue'),
       meta: { requiresAdmin: true },
-      redirect: '/admin/competitions',
+      redirect: () => {
+        const store = useDraftStore()
+        const sections = [
+          { path: '/admin/competitions', perms: ['manage_competitions', 'manage_own_competitions'] },
+          { path: '/admin/users', perms: ['manage_users'] },
+          { path: '/admin/news', perms: ['manage_news'] },
+          { path: '/admin/settings', perms: ['manage_site_settings'] },
+          { path: '/admin/permissions', perms: ['manage_permissions'] },
+        ]
+        const first = sections.find(s => s.perms.some(p => store.hasPerm(p)))
+        return first?.path || '/admin/competitions'
+      },
       children: [
-        { path: 'competitions', name: 'admin-competitions', component: () => import('@/pages/admin/AdminCompetitionsPage.vue') },
-        { path: 'competitions/:compId', name: 'admin-competition-setup', component: () => import('@/pages/admin/AdminCompetitionSetupPage.vue') },
-        { path: 'users', name: 'admin-users', component: () => import('@/pages/admin/AdminUsersPage.vue') },
-        { path: 'news', name: 'admin-news', component: () => import('@/pages/admin/AdminNewsPage.vue') },
-        { path: 'settings', name: 'admin-settings', component: () => import('@/pages/admin/AdminSiteSettingsPage.vue') },
-        { path: 'permissions', name: 'admin-permissions', component: () => import('@/pages/admin/AdminPermissionsPage.vue') },
+        { path: 'competitions', name: 'admin-competitions', meta: { permissions: ['manage_competitions', 'manage_own_competitions'] }, component: () => import('@/pages/admin/AdminCompetitionsPage.vue') },
+        { path: 'competitions/:compId', name: 'admin-competition-setup', meta: { permissions: ['manage_competitions', 'manage_own_competitions'] }, component: () => import('@/pages/admin/AdminCompetitionSetupPage.vue') },
+        { path: 'users', name: 'admin-users', meta: { permissions: ['manage_users'] }, component: () => import('@/pages/admin/AdminUsersPage.vue') },
+        { path: 'news', name: 'admin-news', meta: { permissions: ['manage_news'] }, component: () => import('@/pages/admin/AdminNewsPage.vue') },
+        { path: 'settings', name: 'admin-settings', meta: { permissions: ['manage_site_settings'] }, component: () => import('@/pages/admin/AdminSiteSettingsPage.vue') },
+        { path: 'permissions', name: 'admin-permissions', meta: { permissions: ['manage_permissions'] }, component: () => import('@/pages/admin/AdminPermissionsPage.vue') },
       ],
     },
   ],
@@ -39,6 +50,10 @@ router.beforeEach(async (to) => {
     const store = useDraftStore()
     await store.authReady
     if (!store.canAccessAdmin.value) {
+      return { name: 'home' }
+    }
+    const perms = to.meta.permissions as string[] | undefined
+    if (perms && !perms.some(p => store.hasPerm(p))) {
       return { name: 'home' }
     }
   }

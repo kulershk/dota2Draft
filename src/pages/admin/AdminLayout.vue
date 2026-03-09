@@ -1,18 +1,25 @@
 <script setup lang="ts">
 import { Newspaper, Users, Trophy, ChevronRight, Settings, ShieldCheck } from 'lucide-vue-next'
+import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { useDraftStore } from '@/composables/useDraftStore'
 
 const { t } = useI18n()
 const route = useRoute()
+const store = useDraftStore()
 
-const adminNav = [
-  { labelKey: 'adminCompetitions', icon: Trophy, path: '/admin/competitions' },
-  { labelKey: 'users', icon: Users, path: '/admin/users' },
-  { labelKey: 'newsAnnouncements', icon: Newspaper, path: '/admin/news' },
-  { labelKey: 'siteSettings', icon: Settings, path: '/admin/settings' },
-  { labelKey: 'permissionGroups', icon: ShieldCheck, path: '/admin/permissions' },
+const allNav = [
+  { labelKey: 'adminCompetitions', icon: Trophy, path: '/admin/competitions', permissions: ['manage_competitions', 'manage_own_competitions'] },
+  { labelKey: 'users', icon: Users, path: '/admin/users', permissions: ['manage_users'] },
+  { labelKey: 'newsAnnouncements', icon: Newspaper, path: '/admin/news', permissions: ['manage_news'] },
+  { labelKey: 'siteSettings', icon: Settings, path: '/admin/settings', permissions: ['manage_site_settings'] },
+  { labelKey: 'permissionGroups', icon: ShieldCheck, path: '/admin/permissions', permissions: ['manage_permissions'] },
 ]
+
+const adminNav = computed(() =>
+  allNav.filter(item => item.permissions.some(p => store.hasPerm(p)))
+)
 </script>
 
 <template>

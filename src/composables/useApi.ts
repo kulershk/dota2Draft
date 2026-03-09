@@ -133,6 +133,8 @@ export function useApi() {
     getUsers: () => request('/api/users'),
     updatePlayer: (id: number, data: Record<string, any>) =>
       request(`/api/players/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    impersonateUser: (id: number) =>
+      request(`/api/admin/impersonate/${id}`, { method: 'POST' }),
 
     // News
     getNews: () => request('/api/news'),

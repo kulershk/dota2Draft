@@ -252,6 +252,7 @@ export default {
   removeAdmin: 'Pašalinti admin',
   banUser: 'Užblokuoti',
   unbanUser: 'Atblokuoti',
+  loginAs: 'Prisijungti kaip šis vartotojas',
   noUsersFound: 'Vartotojų nerasta.',
   adminConfirmModal: {
     makeTitle: 'Padaryti administratoriumi',

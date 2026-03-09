@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { Users, Search, Shield, ShieldOff, ExternalLink, Ban, CheckCircle } from 'lucide-vue-next'
+import { Users, Search, Shield, ShieldOff, ExternalLink, Ban, CheckCircle, LogIn } from 'lucide-vue-next'
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
+import { useDraftStore } from '@/composables/useDraftStore'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 
 const { t } = useI18n()
 const api = useApi()
+const store = useDraftStore()
 
 interface PermGroupRef {
   id: number
@@ -73,6 +75,12 @@ async function confirmToggleBan() {
   await api.updatePlayer(banConfirmUser.value.id, { is_banned: !banConfirmUser.value.is_banned })
   banConfirmUser.value = null
   await fetchUsers()
+}
+
+async function impersonateUser(user: User) {
+  const { token } = await api.impersonateUser(user.id)
+  await store.loginWithAuthToken(token)
+  window.location.href = '/'
 }
 
 function formatDate(dateStr: string) {
@@ -167,6 +175,9 @@ function formatDate(dateStr: string) {
                   </button>
                   <button v-else class="btn-ghost p-2 text-red-500" :title="t('unbanUser')" @click="promptToggleBan(user)">
                     <CheckCircle class="w-4 h-4" />
+                  </button>
+                  <button class="btn-ghost p-2" :title="t('loginAs')" @click="impersonateUser(user)">
+                    <LogIn class="w-4 h-4" />
                   </button>
                 </div>
               </td>

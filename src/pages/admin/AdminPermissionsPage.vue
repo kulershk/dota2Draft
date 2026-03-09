@@ -43,7 +43,8 @@ const userGroups = reactive<Record<number, number[]>>({})
 const loadingUserGroups = ref(false)
 
 const permLabels: Record<string, string> = {
-  manage_competitions: 'Manage Competitions',
+  manage_competitions: 'Manage All Competitions',
+  manage_own_competitions: 'Manage Own Competitions',
   manage_users: 'Manage Users',
   manage_news: 'Manage News',
   manage_site_settings: 'Manage Site Settings',

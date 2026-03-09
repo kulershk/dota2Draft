@@ -82,6 +82,7 @@ async function getAuthPlayer(req) {
 
 const ALL_PERMISSIONS = [
   'manage_competitions',
+  'manage_own_competitions',
   'manage_users',
   'manage_news',
   'manage_site_settings',
@@ -118,6 +119,25 @@ async function requirePermission(req, res, permission) {
   const allowed = await hasPermission(player, permission)
   if (!allowed) { res.status(403).json({ error: 'Permission denied' }); return null }
   return player
+}
+
+// Check competition permission: manage_competitions (all) or manage_own_competitions (own only)
+// Also accepts a specific sub-permission (e.g. manage_players, manage_captains) for non-owners
+async function requireCompPermission(req, res, compId, subPermission) {
+  const player = await getAuthPlayer(req)
+  if (!player) { res.status(401).json({ error: 'Not authenticated' }); return null }
+  // Root admin or manage_competitions = full access
+  if (await hasPermission(player, 'manage_competitions')) return player
+  // Check sub-permission (e.g. manage_players, manage_captains)
+  if (subPermission && await hasPermission(player, subPermission)) return player
+  // manage_own_competitions = access only to own competitions
+  if (await hasPermission(player, 'manage_own_competitions')) {
+    if (!compId) return player // creating new competition
+    const comp = await getCompetition(compId)
+    if (comp && comp.created_by === player.id) return player
+  }
+  res.status(403).json({ error: 'Permission denied' })
+  return null
 }
 
 // ─── Competition Helpers ─────────────────────────────────
@@ -759,7 +779,7 @@ app.get('/api/competitions/:id', async (req, res) => {
 })
 
 app.post('/api/competitions', async (req, res) => {
-  const admin = await requirePermission(req, res, 'manage_competitions')
+  const admin = await requireCompPermission(req, res, null)
   if (!admin) return
 
   const { name, description, starts_at, registration_start, registration_end, settings } = req.body
@@ -785,7 +805,7 @@ app.post('/api/competitions', async (req, res) => {
 })
 
 app.put('/api/competitions/:id', async (req, res) => {
-  const admin = await requirePermission(req, res, 'manage_competitions')
+  const admin = await requireCompPermission(req, res, Number(req.params.id))
   if (!admin) return
 
   const comp = await getCompetition(req.params.id)
@@ -816,7 +836,7 @@ app.put('/api/competitions/:id', async (req, res) => {
 })
 
 app.delete('/api/competitions/:id', async (req, res) => {
-  const admin = await requirePermission(req, res, 'manage_competitions')
+  const admin = await requireCompPermission(req, res, Number(req.params.id))
   if (!admin) return
 
   await execute('DELETE FROM competitions WHERE id = $1', [req.params.id])
@@ -881,9 +901,9 @@ app.post('/api/competitions/:compId/players/register', async (req, res) => {
 })
 
 app.put('/api/competitions/:compId/players/:playerId', async (req, res) => {
-  const admin = await requirePermission(req, res, 'manage_players')
-  if (!admin) return
   const compId = Number(req.params.compId)
+  const admin = await requireCompPermission(req, res, compId, 'manage_players')
+  if (!admin) return
   const playerId = Number(req.params.playerId)
 
   const cp = await queryOne(
@@ -919,9 +939,9 @@ app.put('/api/competitions/:compId/players/:playerId', async (req, res) => {
 })
 
 app.delete('/api/competitions/:compId/players/:playerId', async (req, res) => {
-  const admin = await requirePermission(req, res, 'manage_players')
-  if (!admin) return
   const compId = Number(req.params.compId)
+  const admin = await requireCompPermission(req, res, compId, 'manage_players')
+  if (!admin) return
   const playerId = Number(req.params.playerId)
 
   // Remove from competition pool (set in_pool=false, clear draft state)
@@ -941,9 +961,9 @@ app.get('/api/competitions/:compId/captains', async (req, res) => {
 })
 
 app.post('/api/competitions/:compId/captains/promote', async (req, res) => {
-  const admin = await requirePermission(req, res, 'manage_captains')
-  if (!admin) return
   const compId = Number(req.params.compId)
+  const admin = await requireCompPermission(req, res, compId, 'manage_captains')
+  if (!admin) return
 
   const { playerId, team } = req.body
   if (!playerId || !team) return res.status(400).json({ error: 'Player ID and team name required' })
@@ -981,9 +1001,9 @@ app.post('/api/competitions/:compId/captains/promote', async (req, res) => {
 })
 
 app.put('/api/competitions/:compId/captains/:id', async (req, res) => {
-  const admin = await requirePermission(req, res, 'manage_captains')
-  if (!admin) return
   const compId = Number(req.params.compId)
+  const admin = await requireCompPermission(req, res, compId, 'manage_captains')
+  if (!admin) return
 
   const captain = await queryOne('SELECT * FROM captains WHERE id = $1 AND competition_id = $2', [req.params.id, compId])
   if (!captain) return res.status(404).json({ error: 'Captain not found' })
@@ -1047,9 +1067,9 @@ app.delete('/api/competitions/:compId/captains/:id/banner', async (req, res) => 
 })
 
 app.post('/api/competitions/:compId/captains/:id/demote', async (req, res) => {
-  const admin = await requirePermission(req, res, 'manage_captains')
-  if (!admin) return
   const compId = Number(req.params.compId)
+  const admin = await requireCompPermission(req, res, compId, 'manage_captains')
+  if (!admin) return
 
   const captain = await queryOne('SELECT player_id FROM captains WHERE id = $1 AND competition_id = $2', [req.params.id, compId])
   await execute('DELETE FROM captains WHERE id = $1', [req.params.id])
@@ -1098,9 +1118,9 @@ app.get('/api/competitions/:compId/auction/results', async (req, res) => {
 
 // Admin: add user to competition pool
 app.post('/api/competitions/:compId/users/:userId/add-to-pool', async (req, res) => {
-  const admin = await requirePermission(req, res, 'manage_players')
-  if (!admin) return
   const compId = Number(req.params.compId)
+  const admin = await requireCompPermission(req, res, compId, 'manage_players')
+  if (!admin) return
   const userId = Number(req.params.userId)
 
   const player = await queryOne('SELECT * FROM players WHERE id = $1', [userId])
@@ -1127,9 +1147,9 @@ app.post('/api/competitions/:compId/users/:userId/add-to-pool', async (req, res)
 })
 
 app.post('/api/competitions/:compId/users/:userId/remove-from-pool', async (req, res) => {
-  const admin = await requirePermission(req, res, 'manage_players')
-  if (!admin) return
   const compId = Number(req.params.compId)
+  const admin = await requireCompPermission(req, res, compId, 'manage_players')
+  if (!admin) return
   const userId = Number(req.params.userId)
 
   await execute(
@@ -1375,6 +1395,16 @@ app.put('/api/players/:id', async (req, res) => {
     ]
   )
   res.json({ ok: true })
+})
+
+app.post('/api/admin/impersonate/:id', async (req, res) => {
+  const admin = await requirePermission(req, res, 'manage_users')
+  if (!admin) return
+  if (!admin.is_admin) return res.status(403).json({ error: 'Only root admins can impersonate' })
+  const target = await queryOne('SELECT * FROM players WHERE id = $1', [req.params.id])
+  if (!target) return res.status(404).json({ error: 'User not found' })
+  const token = createSession(target.id)
+  res.json({ token })
 })
 
 // ─── REST API: News ──────────────────────────────────────

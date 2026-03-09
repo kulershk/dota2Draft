@@ -252,6 +252,7 @@ export default {
   removeAdmin: 'Remove Admin',
   banUser: 'Ban User',
   unbanUser: 'Unban User',
+  loginAs: 'Login as this user',
   noUsersFound: 'No users found.',
   adminConfirmModal: {
     makeTitle: 'Make Admin',

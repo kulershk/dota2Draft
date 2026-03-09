@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Trophy, Plus, Trash2, Pencil, Calendar, User } from 'lucide-vue-next'
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
@@ -43,6 +43,14 @@ async function deleteCompetition(id: number) {
   await store.fetchCompetitions()
 }
 
+const visibleCompetitions = computed(() => {
+  const all = store.competitions.value
+  if (store.hasPerm('manage_competitions')) return all
+  // manage_own_competitions: only show own
+  const userId = store.currentUser.value?.id
+  return all.filter(c => c.created_by === userId)
+})
+
 function formatDate(dateStr: string) {
   const d = new Date(dateStr)
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
@@ -65,15 +73,15 @@ function formatDate(dateStr: string) {
     <div class="card">
       <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
         <Trophy class="w-5 h-5 text-foreground" />
-        <span class="text-sm font-semibold text-foreground">{{ t('allCompetitions', { count: store.competitions.value.length }) }}</span>
+        <span class="text-sm font-semibold text-foreground">{{ t('allCompetitions', { count: visibleCompetitions.length }) }}</span>
       </div>
 
-      <div v-if="store.competitions.value.length === 0" class="px-4 py-12 text-center text-sm text-muted-foreground">
+      <div v-if="visibleCompetitions.length === 0" class="px-4 py-12 text-center text-sm text-muted-foreground">
         {{ t('noCompetitionsCreate') }}
       </div>
 
       <div v-else class="divide-y divide-border">
-        <div v-for="comp in store.competitions.value" :key="comp.id" class="flex items-center justify-between px-4 py-4 hover:bg-accent/30 transition-colors">
+        <div v-for="comp in visibleCompetitions" :key="comp.id" class="flex items-center justify-between px-4 py-4 hover:bg-accent/30 transition-colors">
           <div class="flex items-center gap-3 min-w-0">
             <div class="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
               <Trophy class="w-5 h-5 text-primary" />

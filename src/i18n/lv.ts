@@ -252,6 +252,7 @@ export default {
   removeAdmin: 'Noņemt admin',
   banUser: 'Bloķēt',
   unbanUser: 'Atbloķēt',
+  loginAs: 'Pieslēgties kā šis lietotājs',
   noUsersFound: 'Lietotāji nav atrasti.',
   adminConfirmModal: {
     makeTitle: 'Padarīt par administratoru',
