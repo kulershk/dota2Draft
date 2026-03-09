@@ -1116,6 +1116,467 @@ app.get('/api/competitions/:compId/auction/results', async (req, res) => {
   res.json(results)
 })
 
+// ─── REST API: Tournament ────────────────────────────────
+
+// Helper: advance winner to next match in bracket (and loser to lower bracket if double elim)
+async function advanceWinner(matchId, winnerId) {
+  const match = await queryOne('SELECT * FROM matches WHERE id = $1', [matchId])
+  if (!match) return
+
+  // Advance winner
+  if (match.next_match_id) {
+    const col = match.next_match_slot === 1 ? 'team1_captain_id' : 'team2_captain_id'
+    await execute(`UPDATE matches SET ${col} = $1 WHERE id = $2`, [winnerId, match.next_match_id])
+  }
+
+  // Advance loser to lower bracket (double elimination)
+  if (match.loser_next_match_id) {
+    const loserId = match.team1_captain_id === winnerId ? match.team2_captain_id : match.team1_captain_id
+    if (loserId) {
+      const col = match.loser_next_match_slot === 1 ? 'team1_captain_id' : 'team2_captain_id'
+      await execute(`UPDATE matches SET ${col} = $1 WHERE id = $2`, [loserId, match.loser_next_match_id])
+      // Auto-complete if the other slot already has a BYE situation (only one team)
+    }
+  }
+}
+
+// Helper: generate elimination bracket matches for a stage
+async function generateEliminationBracket(compId, stageId, teamIds, bestOf) {
+  const n = teamIds.length
+  let bracketSize = 1
+  while (bracketSize < n) bracketSize *= 2
+  const totalRounds = Math.log2(bracketSize)
+
+  const matchesByRound = {}
+  for (let round = totalRounds; round >= 1; round--) {
+    const matchCount = bracketSize / Math.pow(2, round)
+    matchesByRound[round] = []
+    for (let i = 0; i < matchCount; i++) {
+      const m = await queryOne(
+        `INSERT INTO matches (competition_id, stage, round, match_order, best_of, status)
+         VALUES ($1, $2, $3, $4, $5, 'pending') RETURNING id`,
+        [compId, stageId, round, i, bestOf]
+      )
+      matchesByRound[round].push(m.id)
+    }
+  }
+
+  // Link matches
+  for (let round = 1; round < totalRounds; round++) {
+    const ids = matchesByRound[round]
+    for (let i = 0; i < ids.length; i++) {
+      const nextMatchId = matchesByRound[round + 1][Math.floor(i / 2)]
+      const nextSlot = (i % 2) + 1
+      await execute('UPDATE matches SET next_match_id = $1, next_match_slot = $2 WHERE id = $3',
+        [nextMatchId, nextSlot, ids[i]])
+    }
+  }
+
+  // Seed teams into round 1
+  const round1 = matchesByRound[1]
+  for (let i = 0; i < bracketSize; i++) {
+    const captainId = i < n ? teamIds[i] : null
+    const matchIdx = Math.floor(i / 2)
+    const slot = (i % 2) + 1
+    if (captainId) {
+      const col = slot === 1 ? 'team1_captain_id' : 'team2_captain_id'
+      await execute(`UPDATE matches SET ${col} = $1 WHERE id = $2`, [captainId, round1[matchIdx]])
+    }
+  }
+
+  // Handle byes
+  for (const matchId of round1) {
+    const m = await queryOne('SELECT * FROM matches WHERE id = $1', [matchId])
+    if (m.team1_captain_id && !m.team2_captain_id) {
+      await execute("UPDATE matches SET winner_captain_id = $1, status = 'completed', score1 = 1, score2 = 0 WHERE id = $2",
+        [m.team1_captain_id, matchId])
+      await advanceWinner(matchId, m.team1_captain_id)
+    } else if (!m.team1_captain_id && m.team2_captain_id) {
+      await execute("UPDATE matches SET winner_captain_id = $1, status = 'completed', score1 = 0, score2 = 1 WHERE id = $2",
+        [m.team2_captain_id, matchId])
+      await advanceWinner(matchId, m.team2_captain_id)
+    }
+  }
+
+  return { bracketSize, totalRounds }
+}
+
+// Helper: generate group stage matches for a stage
+async function generateGroupMatches(compId, stageId, groups, bestOf) {
+  for (const group of groups) {
+    const teamIds = group.teamIds
+    let order = 0
+    for (let i = 0; i < teamIds.length; i++) {
+      for (let j = i + 1; j < teamIds.length; j++) {
+        await execute(
+          `INSERT INTO matches (competition_id, stage, round, match_order, group_name, team1_captain_id, team2_captain_id, best_of, status)
+           VALUES ($1, $2, 1, $3, $4, $5, $6, $7, 'pending')`,
+          [compId, stageId, order++, group.name, teamIds[i], teamIds[j], bestOf]
+        )
+      }
+    }
+  }
+}
+
+// Helper: generate double elimination bracket (upper + lower + grand finals)
+async function generateDoubleEliminationBracket(compId, stageId, teamIds, bestOf) {
+  const n = teamIds.length
+  let bracketSize = 1
+  while (bracketSize < n) bracketSize *= 2
+  const ubRounds = Math.log2(bracketSize) // upper bracket rounds
+
+  // --- Upper Bracket ---
+  const ubByRound = {}
+  for (let round = ubRounds; round >= 1; round--) {
+    const matchCount = bracketSize / Math.pow(2, round)
+    ubByRound[round] = []
+    for (let i = 0; i < matchCount; i++) {
+      const m = await queryOne(
+        `INSERT INTO matches (competition_id, stage, round, match_order, best_of, status, bracket)
+         VALUES ($1, $2, $3, $4, $5, 'pending', 'upper') RETURNING id`,
+        [compId, stageId, round, i, bestOf]
+      )
+      ubByRound[round].push(m.id)
+    }
+  }
+
+  // Link upper bracket matches (winner advances up)
+  for (let round = 1; round < ubRounds; round++) {
+    const ids = ubByRound[round]
+    for (let i = 0; i < ids.length; i++) {
+      const nextMatchId = ubByRound[round + 1][Math.floor(i / 2)]
+      const nextSlot = (i % 2) + 1
+      await execute('UPDATE matches SET next_match_id = $1, next_match_slot = $2 WHERE id = $3',
+        [nextMatchId, nextSlot, ids[i]])
+    }
+  }
+
+  // --- Lower Bracket ---
+  // Lower bracket has (ubRounds - 1) * 2 rounds for a standard double elim
+  // Round structure: for each UB round (except finals), losers drop down
+  // LB round 1: losers from UB round 1 (bracketSize/2 teams → bracketSize/4 matches)
+  // Then alternating: "minor" rounds (only LB teams) and "major" rounds (LB teams + new UB dropdowns)
+  // Total LB rounds = (ubRounds - 1) * 2
+  const lbTotalRounds = Math.max((ubRounds - 1) * 2, 1)
+  const lbByRound = {}
+
+  // Calculate LB match counts per round
+  // LB round 1: bracketSize/4 matches (losers from UB R1 paired up)
+  // LB round 2: bracketSize/4 matches (LB R1 winners vs UB R2 losers)
+  // LB round 3: bracketSize/8 matches
+  // LB round 4: bracketSize/8 matches (LB R3 winners vs UB R3 losers)
+  // Pattern: odd rounds halve, even rounds stay same as previous odd
+  let lbMatchCount = bracketSize / 4
+  const lbMatchCounts = {}
+  for (let lr = 1; lr <= lbTotalRounds; lr++) {
+    lbMatchCounts[lr] = Math.max(lbMatchCount, 1)
+    if (lr % 2 === 0) {
+      lbMatchCount = Math.max(Math.floor(lbMatchCount / 2), 1)
+    }
+  }
+
+  // Create LB matches
+  for (let lr = 1; lr <= lbTotalRounds; lr++) {
+    lbByRound[lr] = []
+    for (let i = 0; i < lbMatchCounts[lr]; i++) {
+      const m = await queryOne(
+        `INSERT INTO matches (competition_id, stage, round, match_order, best_of, status, bracket)
+         VALUES ($1, $2, $3, $4, $5, 'pending', 'lower') RETURNING id`,
+        [compId, stageId, 100 + lr, i, bestOf]
+      )
+      lbByRound[lr].push(m.id)
+    }
+  }
+
+  // Link LB matches (winner advances within LB)
+  for (let lr = 1; lr < lbTotalRounds; lr++) {
+    const ids = lbByRound[lr]
+    const nextIds = lbByRound[lr + 1]
+    for (let i = 0; i < ids.length; i++) {
+      let nextIdx, nextSlot
+      if (lr % 2 === 1) {
+        // Odd LB round → next round has same count, 1-to-1
+        nextIdx = i
+        nextSlot = 1 // LB survivor goes to slot 1, UB dropout goes to slot 2
+      } else {
+        // Even LB round → next round has half count
+        nextIdx = Math.floor(i / 2)
+        nextSlot = (i % 2) + 1
+      }
+      if (nextIdx < nextIds.length) {
+        await execute('UPDATE matches SET next_match_id = $1, next_match_slot = $2 WHERE id = $3',
+          [nextIds[nextIdx], nextSlot, ids[i]])
+      }
+    }
+  }
+
+  // Link UB losers to LB
+  // UB R1 losers → LB R1 (paired up)
+  if (ubByRound[1]) {
+    const ubR1 = ubByRound[1]
+    for (let i = 0; i < ubR1.length; i++) {
+      const lbIdx = Math.floor(i / 2)
+      const lbSlot = (i % 2) + 1
+      if (lbByRound[1] && lbIdx < lbByRound[1].length) {
+        await execute('UPDATE matches SET loser_next_match_id = $1, loser_next_match_slot = $2 WHERE id = $3',
+          [lbByRound[1][lbIdx], lbSlot, ubR1[i]])
+      }
+    }
+  }
+
+  // UB R2+ losers → LB even rounds (slot 2)
+  for (let ubr = 2; ubr <= ubRounds; ubr++) {
+    const lbTargetRound = (ubr - 1) * 2 // UB R2→LB R2, UB R3→LB R4, etc.
+    if (ubByRound[ubr] && lbByRound[lbTargetRound]) {
+      const ubIds = ubByRound[ubr]
+      const lbIds = lbByRound[lbTargetRound]
+      for (let i = 0; i < ubIds.length && i < lbIds.length; i++) {
+        await execute('UPDATE matches SET loser_next_match_id = $1, loser_next_match_slot = $2 WHERE id = $3',
+          [lbIds[i], 2, ubIds[i]])
+      }
+    }
+  }
+
+  // --- Grand Finals ---
+  const gf = await queryOne(
+    `INSERT INTO matches (competition_id, stage, round, match_order, best_of, status, bracket)
+     VALUES ($1, $2, $3, 0, $4, 'pending', 'grand_finals') RETURNING id`,
+    [compId, stageId, 200, bestOf]
+  )
+
+  // UB finals winner → GF slot 1
+  const ubFinalId = ubByRound[ubRounds][0]
+  await execute('UPDATE matches SET next_match_id = $1, next_match_slot = 1 WHERE id = $2', [gf.id, ubFinalId])
+
+  // LB finals winner → GF slot 2
+  const lbFinalId = lbByRound[lbTotalRounds][0]
+  await execute('UPDATE matches SET next_match_id = $1, next_match_slot = 2 WHERE id = $2', [gf.id, lbFinalId])
+
+  // UB finals loser → LB finals (last LB round, slot 2)
+  await execute('UPDATE matches SET loser_next_match_id = $1, loser_next_match_slot = 2 WHERE id = $2',
+    [lbFinalId, ubFinalId])
+
+  // Seed teams into UB round 1
+  const round1 = ubByRound[1]
+  for (let i = 0; i < bracketSize; i++) {
+    const captainId = i < n ? teamIds[i] : null
+    const matchIdx = Math.floor(i / 2)
+    const slot = (i % 2) + 1
+    if (captainId) {
+      const col = slot === 1 ? 'team1_captain_id' : 'team2_captain_id'
+      await execute(`UPDATE matches SET ${col} = $1 WHERE id = $2`, [captainId, round1[matchIdx]])
+    }
+  }
+
+  // Handle byes in UB round 1
+  for (const matchId of round1) {
+    const m = await queryOne('SELECT * FROM matches WHERE id = $1', [matchId])
+    if (m.team1_captain_id && !m.team2_captain_id) {
+      await execute("UPDATE matches SET winner_captain_id = $1, status = 'completed', score1 = 1, score2 = 0 WHERE id = $2",
+        [m.team1_captain_id, matchId])
+      await advanceWinner(matchId, m.team1_captain_id)
+    } else if (!m.team1_captain_id && m.team2_captain_id) {
+      await execute("UPDATE matches SET winner_captain_id = $1, status = 'completed', score1 = 0, score2 = 1 WHERE id = $2",
+        [m.team2_captain_id, matchId])
+      await advanceWinner(matchId, m.team2_captain_id)
+    }
+  }
+
+  return { bracketSize, ubRounds, lbTotalRounds }
+}
+
+// Get tournament data (public)
+app.get('/api/competitions/:compId/tournament', async (req, res) => {
+  const compId = Number(req.params.compId)
+  const comp = await getCompetition(compId)
+  if (!comp) return res.status(404).json({ error: 'Competition not found' })
+
+  const matches = await query(`
+    SELECT m.*,
+      t1.team AS team1_name, t1.name AS team1_captain, COALESCE(p1.avatar_url, '') AS team1_avatar, t1.banner_url AS team1_banner,
+      t2.team AS team2_name, t2.name AS team2_captain, COALESCE(p2.avatar_url, '') AS team2_avatar, t2.banner_url AS team2_banner,
+      w.team AS winner_name
+    FROM matches m
+    LEFT JOIN captains t1 ON t1.id = m.team1_captain_id
+    LEFT JOIN players p1 ON p1.id = t1.player_id
+    LEFT JOIN captains t2 ON t2.id = m.team2_captain_id
+    LEFT JOIN players p2 ON p2.id = t2.player_id
+    LEFT JOIN captains w ON w.id = m.winner_captain_id
+    WHERE m.competition_id = $1
+    ORDER BY m.stage, m.round, m.match_order
+  `, [compId])
+
+  const games = await query(`
+    SELECT mg.*, w.team AS winner_name
+    FROM match_games mg
+    JOIN matches m ON m.id = mg.match_id
+    LEFT JOIN captains w ON w.id = mg.winner_captain_id
+    WHERE m.competition_id = $1
+    ORDER BY mg.match_id, mg.game_number
+  `, [compId])
+
+  const gamesByMatch = {}
+  for (const g of games) {
+    if (!gamesByMatch[g.match_id]) gamesByMatch[g.match_id] = []
+    gamesByMatch[g.match_id].push(g)
+  }
+
+  res.json({
+    tournament_state: comp.tournament_state || {},
+    matches: matches.map(m => ({ ...m, games: gamesByMatch[m.id] || [] })),
+  })
+})
+
+// Add a stage to the tournament (admin)
+app.post('/api/competitions/:compId/tournament/stages', async (req, res) => {
+  const compId = Number(req.params.compId)
+  const admin = await requireCompPermission(req, res, compId)
+  if (!admin) return
+
+  const comp = await getCompetition(compId)
+  if (!comp) return res.status(404).json({ error: 'Competition not found' })
+
+  const { name, format, groups, bestOf = 3, seeds } = req.body
+  if (!format || !['single_elimination', 'double_elimination', 'group_stage'].includes(format)) {
+    return res.status(400).json({ error: 'Invalid format' })
+  }
+
+  const ts = comp.tournament_state || {}
+  if (!ts.stages) ts.stages = []
+
+  const stageId = (ts.stages.length > 0 ? Math.max(...ts.stages.map(s => s.id)) : 0) + 1
+  const stage = { id: stageId, name: name || `Stage ${stageId}`, format, status: 'pending', bestOf }
+
+  const captainsList = await getCaptains(compId)
+
+  if (format === 'single_elimination') {
+    // Use provided seeds or default order
+    const teamIds = seeds || captainsList.map(c => c.id)
+    if (teamIds.length < 2) return res.status(400).json({ error: 'Need at least 2 teams' })
+    const { bracketSize, totalRounds } = await generateEliminationBracket(compId, stageId, teamIds, bestOf)
+    stage.bracketSize = bracketSize
+    stage.totalRounds = totalRounds
+    stage.status = 'active'
+  } else if (format === 'double_elimination') {
+    const teamIds = seeds || captainsList.map(c => c.id)
+    if (teamIds.length < 3) return res.status(400).json({ error: 'Need at least 3 teams for double elimination' })
+    const { bracketSize, ubRounds, lbTotalRounds } = await generateDoubleEliminationBracket(compId, stageId, teamIds, bestOf)
+    stage.bracketSize = bracketSize
+    stage.ubRounds = ubRounds
+    stage.lbTotalRounds = lbTotalRounds
+    stage.status = 'active'
+  } else {
+    if (!groups || !Array.isArray(groups) || groups.length === 0) {
+      return res.status(400).json({ error: 'Groups required for group stage' })
+    }
+    stage.groups = groups
+    await generateGroupMatches(compId, stageId, groups, bestOf)
+    stage.status = 'active'
+  }
+
+  ts.stages.push(stage)
+  await execute('UPDATE competitions SET tournament_state = $1 WHERE id = $2', [JSON.stringify(ts), compId])
+
+  io.to(`comp:${compId}`).emit('tournament:updated')
+  res.json({ ok: true, stageId })
+})
+
+// Delete a specific stage (admin)
+app.delete('/api/competitions/:compId/tournament/stages/:stageId', async (req, res) => {
+  const compId = Number(req.params.compId)
+  const stageId = Number(req.params.stageId)
+  const admin = await requireCompPermission(req, res, compId)
+  if (!admin) return
+
+  const comp = await getCompetition(compId)
+  if (!comp) return res.status(404).json({ error: 'Competition not found' })
+
+  const ts = comp.tournament_state || {}
+  if (!ts.stages) return res.status(404).json({ error: 'No stages' })
+
+  ts.stages = ts.stages.filter(s => s.id !== stageId)
+  await execute('DELETE FROM matches WHERE competition_id = $1 AND stage = $2', [compId, stageId])
+  await execute('UPDATE competitions SET tournament_state = $1 WHERE id = $2', [JSON.stringify(ts), compId])
+
+  io.to(`comp:${compId}`).emit('tournament:updated')
+  res.json({ ok: true })
+})
+
+// Update match score (admin)
+app.put('/api/competitions/:compId/tournament/matches/:matchId/score', async (req, res) => {
+  const compId = Number(req.params.compId)
+  const matchId = Number(req.params.matchId)
+  const admin = await requireCompPermission(req, res, compId)
+  if (!admin) return
+
+  const match = await queryOne('SELECT * FROM matches WHERE id = $1 AND competition_id = $2', [matchId, compId])
+  if (!match) return res.status(404).json({ error: 'Match not found' })
+
+  const { score1, score2, games, status } = req.body
+
+  let winnerId = null
+  if (score1 != null && score2 != null) {
+    if (score1 > score2) winnerId = match.team1_captain_id
+    else if (score2 > score1) winnerId = match.team2_captain_id
+  }
+
+  const newStatus = status || (winnerId ? 'completed' : match.status)
+
+  await execute(
+    `UPDATE matches SET score1 = $1, score2 = $2, winner_captain_id = $3, status = $4 WHERE id = $5`,
+    [score1 ?? match.score1, score2 ?? match.score2, winnerId, newStatus, matchId]
+  )
+
+  if (games && Array.isArray(games)) {
+    for (const game of games) {
+      await execute(`
+        INSERT INTO match_games (match_id, game_number, winner_captain_id, dotabuff_id, duration_minutes)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (match_id, game_number) DO UPDATE SET
+          winner_captain_id = $3, dotabuff_id = $4, duration_minutes = $5
+      `, [matchId, game.game_number, game.winner_captain_id || null, game.dotabuff_id || null, game.duration_minutes || null])
+    }
+  }
+
+  // Auto-advance winner (and loser in double elimination) in bracket
+  if (winnerId && (match.next_match_id || match.loser_next_match_id)) {
+    await advanceWinner(matchId, winnerId)
+  }
+
+  // Check if stage is completed (all matches in that stage done)
+  const comp = await getCompetition(compId)
+  const ts = comp.tournament_state || {}
+  if (ts.stages) {
+    const stage = ts.stages.find(s => s.id === match.stage)
+    if (stage) {
+      const stageMatches = await query(
+        "SELECT id FROM matches WHERE competition_id = $1 AND stage = $2 AND status != 'completed'",
+        [compId, match.stage]
+      )
+      if (stageMatches.length === 0) {
+        stage.status = 'completed'
+        await execute('UPDATE competitions SET tournament_state = $1 WHERE id = $2', [JSON.stringify(ts), compId])
+      }
+    }
+  }
+
+  io.to(`comp:${compId}`).emit('tournament:updated')
+  res.json({ ok: true })
+})
+
+// Reset entire tournament (admin)
+app.delete('/api/competitions/:compId/tournament', async (req, res) => {
+  const compId = Number(req.params.compId)
+  const admin = await requireCompPermission(req, res, compId)
+  if (!admin) return
+
+  await execute('DELETE FROM matches WHERE competition_id = $1', [compId])
+  await execute("UPDATE competitions SET tournament_state = '{}' WHERE id = $1", [compId])
+
+  io.to(`comp:${compId}`).emit('tournament:updated')
+  res.json({ ok: true })
+})
+
 // Admin: add user to competition pool
 app.post('/api/competitions/:compId/users/:userId/add-to-pool', async (req, res) => {
   const compId = Number(req.params.compId)

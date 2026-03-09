@@ -83,6 +83,17 @@ export function useApi() {
     getCompAuction: (compId: number) => request(`/api/competitions/${compId}/auction`),
     getCompResults: (compId: number) => request(`/api/competitions/${compId}/auction/results`),
 
+    // Tournament
+    getTournament: (compId: number) => request(`/api/competitions/${compId}/tournament`),
+    addTournamentStage: (compId: number, data: { name: string; format: string; groups?: any[]; bestOf?: number; seeds?: number[] }) =>
+      request(`/api/competitions/${compId}/tournament/stages`, { method: 'POST', body: JSON.stringify(data) }),
+    deleteTournamentStage: (compId: number, stageId: number) =>
+      request(`/api/competitions/${compId}/tournament/stages/${stageId}`, { method: 'DELETE' }),
+    updateMatchScore: (compId: number, matchId: number, data: { score1?: number; score2?: number; status?: string; games?: any[] }) =>
+      request(`/api/competitions/${compId}/tournament/matches/${matchId}/score`, { method: 'PUT', body: JSON.stringify(data) }),
+    resetTournament: (compId: number) =>
+      request(`/api/competitions/${compId}/tournament`, { method: 'DELETE' }),
+
     // User self-update
     updateMe: (data: Record<string, any>) =>
       request('/api/auth/me', { method: 'PUT', body: JSON.stringify(data) }),

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Users, Gavel, Trophy, Info } from 'lucide-vue-next'
+import { Users, Gavel, Trophy, Info, Swords } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { watch, onMounted, computed } from 'vue'
 import { useDraftStore } from '@/composables/useDraftStore'
@@ -16,6 +16,7 @@ const navItems = computed(() => [
   { label: t('navParticipants'), icon: Users, name: 'comp-players' },
   { label: t('navLiveAuction'), icon: Gavel, name: 'comp-auction' },
   { label: t('navResults'), icon: Trophy, name: 'comp-results' },
+  { label: t('navTournament'), icon: Swords, name: 'comp-tournament' },
 ])
 
 async function enterCompetition(id: number) {

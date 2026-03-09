@@ -192,6 +192,8 @@ const roleCounts = computed(() => {
   return counts
 })
 
+const tournamentData = ref<{ tournament_state: any; matches: any[] }>({ tournament_state: {}, matches: [] })
+
 const onlineCaptainIds = ref<number[]>([])
 const readyCaptainIds = ref<number[]>([])
 
@@ -270,6 +272,14 @@ export function useDraftStore() {
 
     socket.on('auction:finished', () => {
       auction.status = 'finished'
+    })
+
+    socket.on('tournament:updated', () => {
+      if (currentCompetitionId.value) {
+        api.getTournament(currentCompetitionId.value).then(data => {
+          tournamentData.value = data
+        }).catch(() => {})
+      }
     })
   }
 
@@ -419,6 +429,16 @@ export function useDraftStore() {
     await api.deleteCompPlayer(compId, id)
   }
 
+  async function fetchTournament() {
+    const compId = currentCompetitionId.value
+    if (!compId) return
+    try {
+      tournamentData.value = await api.getTournament(compId)
+    } catch {
+      tournamentData.value = { tournament_state: {}, matches: [] }
+    }
+  }
+
   async function fetchAll() {
     loading.value = true
     try {
@@ -467,6 +487,7 @@ export function useDraftStore() {
     lastSoldMessage,
     undoMessage,
     activityLog,
+    tournamentData,
     availablePlayers,
     roleCounts,
     // Auth
@@ -492,6 +513,7 @@ export function useDraftStore() {
     registerForPool,
     updatePlayer,
     deletePlayer,
+    fetchTournament,
     // Ready
     setReady,
     setUnready,

@@ -179,6 +179,74 @@ export async function initDb() {
     );
   `)
 
+  // ─── Tournament tables ─────────────────────────────────
+  // Add tournament_state column to competitions
+  {
+    const has = await queryOne(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'competitions' AND column_name = 'tournament_state'`
+    )
+    if (!has) await execute(`ALTER TABLE competitions ADD COLUMN tournament_state JSONB NOT NULL DEFAULT '{}'`)
+  }
+
+  await execute(`
+    CREATE TABLE IF NOT EXISTS matches (
+      id SERIAL PRIMARY KEY,
+      competition_id INTEGER NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
+      stage INTEGER NOT NULL DEFAULT 1,
+      round INTEGER NOT NULL DEFAULT 1,
+      match_order INTEGER NOT NULL DEFAULT 0,
+      group_name TEXT DEFAULT NULL,
+      team1_captain_id INTEGER REFERENCES captains(id) ON DELETE SET NULL,
+      team2_captain_id INTEGER REFERENCES captains(id) ON DELETE SET NULL,
+      score1 INTEGER DEFAULT NULL,
+      score2 INTEGER DEFAULT NULL,
+      best_of INTEGER NOT NULL DEFAULT 3,
+      winner_captain_id INTEGER REFERENCES captains(id) ON DELETE SET NULL,
+      next_match_id INTEGER REFERENCES matches(id) ON DELETE SET NULL,
+      next_match_slot INTEGER DEFAULT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      scheduled_at TIMESTAMP DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS match_games (
+      id SERIAL PRIMARY KEY,
+      match_id INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+      game_number INTEGER NOT NULL,
+      winner_captain_id INTEGER REFERENCES captains(id) ON DELETE SET NULL,
+      dotabuff_id TEXT DEFAULT NULL,
+      duration_minutes INTEGER DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(match_id, game_number)
+    );
+  `)
+
+  // Matches table migration: add stage column
+  {
+    const has = await queryOne(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'matches' AND column_name = 'stage'`
+    )
+    if (!has) {
+      const matchesExist = await queryOne(`SELECT 1 FROM information_schema.tables WHERE table_name = 'matches'`)
+      if (matchesExist) await execute('ALTER TABLE matches ADD COLUMN stage INTEGER NOT NULL DEFAULT 1')
+    }
+  }
+
+  // Matches table migration: add bracket + loser advancement columns for double elimination
+  {
+    const has = await queryOne(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'matches' AND column_name = 'bracket'`
+    )
+    if (!has) {
+      const matchesExist = await queryOne(`SELECT 1 FROM information_schema.tables WHERE table_name = 'matches'`)
+      if (matchesExist) {
+        await execute("ALTER TABLE matches ADD COLUMN bracket TEXT DEFAULT NULL")
+        await execute("ALTER TABLE matches ADD COLUMN loser_next_match_id INTEGER REFERENCES matches(id) ON DELETE SET NULL DEFAULT NULL")
+        await execute("ALTER TABLE matches ADD COLUMN loser_next_match_slot INTEGER DEFAULT NULL")
+      }
+    }
+  }
+
   // Ensure competition_players exists (might already from migration)
   await execute(`
     CREATE TABLE IF NOT EXISTS competition_players (
