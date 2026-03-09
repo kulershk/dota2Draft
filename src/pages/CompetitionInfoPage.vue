@@ -116,7 +116,7 @@ async function removeBanner(captain: any) {
           <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium" :class="auctionStatusClass">
             {{ auctionStatus }}
           </span>
-          <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+          <span v-if="displayStatus !== 'registration'" class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
             :class="registrationStatus.open ? 'bg-color-success text-color-success-foreground' : 'bg-accent text-muted-foreground'">
             {{ t('registrationLabel') }} {{ registrationStatus.label }}
           </span>
