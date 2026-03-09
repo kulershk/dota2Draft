@@ -184,7 +184,7 @@ function selectDate(dateStr: string) {
       }
       selecting.value = 'end'
     } else {
-      if (dateOnly(dateStr) <= dateOnly(props.modelStart)) {
+      if (dateOnly(dateStr) < dateOnly(props.modelStart)) {
         const val = props.showTime ? withTime(dateStr, startHour.value, startMinute.value) : dateStr
         emit('update:modelStart', val)
         selecting.value = 'end'
