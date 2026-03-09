@@ -8,6 +8,7 @@ import { useDraftStore } from '@/composables/useDraftStore'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 import InputGroup from '@/components/common/InputGroup.vue'
 import RichTextEditor from '@/components/common/RichTextEditor.vue'
+import DatePicker from '@/components/common/DatePicker.vue'
 
 const { t } = useI18n()
 const api = useApi()
@@ -117,18 +118,23 @@ function formatDate(dateStr: string) {
           <label class="label-text">{{ t('newCompModal.descriptionOptional') }}</label>
           <RichTextEditor v-model="newComp.description" />
         </div>
-        <div class="flex flex-col gap-1.5">
-          <label class="label-text">{{ t('newCompModal.regStart') }}</label>
-          <input type="datetime-local" class="input-field" :value="newComp.registration_start" @input="newComp.registration_start = ($event.target as HTMLInputElement).value" />
-        </div>
-        <div class="flex flex-col gap-1.5">
-          <label class="label-text">{{ t('newCompModal.regEnd') }}</label>
-          <input type="datetime-local" class="input-field" :value="newComp.registration_end" @input="newComp.registration_end = ($event.target as HTMLInputElement).value" />
-        </div>
-        <div class="flex flex-col gap-1.5">
-          <label class="label-text">{{ t('newCompModal.draftStart') }}</label>
-          <input type="datetime-local" class="input-field" :value="newComp.starts_at" @input="newComp.starts_at = ($event.target as HTMLInputElement).value" />
-        </div>
+        <DatePicker
+          mode="range"
+          show-time
+          :start-label="t('newCompModal.regStart')"
+          :end-label="t('newCompModal.regEnd')"
+          :model-start="newComp.registration_start"
+          :model-end="newComp.registration_end"
+          @update:model-start="newComp.registration_start = $event"
+          @update:model-end="newComp.registration_end = $event"
+        />
+        <DatePicker
+          mode="single"
+          show-time
+          :label="t('newCompModal.draftStart')"
+          :model-value="newComp.starts_at"
+          @update:model-value="newComp.starts_at = $event"
+        />
       </div>
       <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
         <button class="btn-primary w-full justify-center" :disabled="!newComp.name" @click="createCompetition">

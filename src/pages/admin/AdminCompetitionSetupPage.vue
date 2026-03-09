@@ -9,6 +9,7 @@ import ModalOverlay from '@/components/common/ModalOverlay.vue'
 import InputGroup from '@/components/common/InputGroup.vue'
 import CaptainAvatar from '@/components/common/CaptainAvatar.vue'
 import RichTextEditor from '@/components/common/RichTextEditor.vue'
+import DatePicker from '@/components/common/DatePicker.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -192,20 +193,23 @@ const readyCount = computed(() => store.readyCaptainIds.value.length)
           <label class="label-text">{{ t('description') }}</label>
           <RichTextEditor v-model="compDescription" />
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div class="flex flex-col gap-1.5">
-            <label class="label-text">{{ t('registrationStart') }}</label>
-            <input type="datetime-local" class="input-field" :value="compRegStart" @input="compRegStart = ($event.target as HTMLInputElement).value" />
-          </div>
-          <div class="flex flex-col gap-1.5">
-            <label class="label-text">{{ t('registrationEnd') }}</label>
-            <input type="datetime-local" class="input-field" :value="compRegEnd" @input="compRegEnd = ($event.target as HTMLInputElement).value" />
-          </div>
-          <div class="flex flex-col gap-1.5">
-            <label class="label-text">{{ t('draftStartDate') }}</label>
-            <input type="datetime-local" class="input-field" :value="compStartsAt" @input="compStartsAt = ($event.target as HTMLInputElement).value" />
-          </div>
-        </div>
+        <DatePicker
+          mode="range"
+          show-time
+          :start-label="t('registrationStart')"
+          :end-label="t('registrationEnd')"
+          :model-start="compRegStart"
+          :model-end="compRegEnd"
+          @update:model-start="compRegStart = $event"
+          @update:model-end="compRegEnd = $event"
+        />
+        <DatePicker
+          mode="single"
+          show-time
+          :label="t('draftStartDate')"
+          :model-value="compStartsAt"
+          @update:model-value="compStartsAt = $event"
+        />
       </div>
     </div>
 
