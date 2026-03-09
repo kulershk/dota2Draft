@@ -28,6 +28,8 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - TWITCH_CLIENT_ID=${TWITCH_CLIENT_ID}
       - TWITCH_CLIENT_SECRET=${TWITCH_CLIENT_SECRET}
+      - DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
+      - DISCORD_CLIENT_SECRET=${DISCORD_CLIENT_SECRET}
     volumes:
       - draft_uploads:/app/uploads
     depends_on:
