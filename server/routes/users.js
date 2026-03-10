@@ -33,6 +33,7 @@ router.get('/api/users', async (req, res) => {
     is_banned: !!p.is_banned,
     twitch_username: p.twitch_username || null,
     created_at: p.created_at,
+    last_online: p.last_online || null,
     permission_groups: groupsByPlayer[p.id] || [],
   })))
 })

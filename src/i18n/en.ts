@@ -259,6 +259,12 @@ export default {
   users: 'Users',
   user: 'User',
   status: 'STATUS',
+  lastOnline: 'LAST ONLINE',
+  never: 'Never',
+  justNow: 'Just now',
+  minutesAgo: '{n}m ago',
+  hoursAgo: '{n}h ago',
+  daysAgo: '{n}d ago',
   joined: 'JOINED',
   rootAdmin: 'Root Admin',
   makeAdmin: 'Make Admin',
@@ -423,6 +429,7 @@ export default {
 
   // Admin: Permission Groups
   permissionGroups: 'Permission Groups',
+  editPermissionGroups: 'Edit permission groups',
   permissionGroupsDesc: 'Create and manage permission groups to control access',
   newGroup: 'New Group',
   noGroupsYet: 'No permission groups yet. Create one to get started.',

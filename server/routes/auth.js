@@ -90,6 +90,7 @@ router.get('/api/auth/steam/callback', async (req, res) => {
 router.get('/api/auth/me', async (req, res) => {
   const player = await getAuthPlayer(req)
   if (!player) return res.status(401).json({ error: 'Not authenticated' })
+  execute('UPDATE players SET last_online = NOW() WHERE id = $1', [player.id]).catch(() => {})
   res.json({
     id: player.id,
     name: player.name,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Users, Search, ExternalLink, Ban, CheckCircle, LogIn, UserPlus } from 'lucide-vue-next'
+import { Users, Search, ExternalLink, Ban, CheckCircle, LogIn, UserPlus, Pencil, ArrowUp, ArrowDown } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
@@ -16,6 +16,12 @@ interface PermGroupRef {
   name: string
 }
 
+interface PermGroup {
+  id: number
+  name: string
+  permissions: string[]
+}
+
 interface User {
   id: number
   name: string
@@ -27,6 +33,7 @@ interface User {
   is_admin: boolean
   is_banned: boolean
   created_at: string
+  last_online: string | null
   permission_groups: PermGroupRef[]
 }
 
@@ -36,15 +43,71 @@ const loading = ref(false)
 const usersPage = ref(1)
 const USERS_PAGE_SIZE = 20
 
+// Permission groups for edit modal
+const allGroups = ref<PermGroup[]>([])
+const editUser = ref<User | null>(null)
+const editUserGroupIds = ref<number[]>([])
+const savingUser = ref(false)
+
 async function fetchUsers() {
   loading.value = true
   try {
-    users.value = await api.getUsers()
+    const [usrs, grps] = await Promise.all([
+      api.getUsers(),
+      api.getPermissionGroups(),
+    ])
+    users.value = usrs
+    allGroups.value = grps
   } finally {
     loading.value = false
   }
 }
 fetchUsers()
+
+async function openEditUser(user: User) {
+  editUser.value = user
+  const groups = await api.getPlayerGroups(user.id)
+  editUserGroupIds.value = groups.map((g: PermGroup) => g.id)
+}
+
+function toggleGroupForUser(groupId: number) {
+  const idx = editUserGroupIds.value.indexOf(groupId)
+  if (idx >= 0) editUserGroupIds.value.splice(idx, 1)
+  else editUserGroupIds.value.push(groupId)
+}
+
+async function saveEditUser() {
+  if (!editUser.value) return
+  savingUser.value = true
+  try {
+    await api.setPlayerGroups(editUser.value.id, editUserGroupIds.value)
+    editUser.value = null
+    await fetchUsers()
+  } finally {
+    savingUser.value = false
+  }
+}
+
+type SortKey = 'id' | 'name' | 'last_online' | 'status' | 'joined'
+const sortKey = ref<SortKey>('id')
+const sortDir = ref<'asc' | 'desc'>('asc')
+
+function toggleSort(key: SortKey) {
+  if (sortKey.value === key) {
+    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortKey.value = key
+    sortDir.value = (key === 'last_online' || key === 'joined') ? 'desc' : 'asc'
+  }
+  usersPage.value = 1
+}
+
+function getUserStatusWeight(u: User): number {
+  if (u.is_banned) return 0
+  if (u.is_admin) return 3
+  if (u.permission_groups.length > 0) return 2
+  return 1
+}
 
 const filteredUsers = computed(() => {
   let list = [...users.value]
@@ -52,6 +115,26 @@ const filteredUsers = computed(() => {
     const q = searchQuery.value.toLowerCase()
     list = list.filter(u => u.name.toLowerCase().includes(q) || u.steam_id?.includes(q))
   }
+  const dir = sortDir.value === 'asc' ? 1 : -1
+  list.sort((a, b) => {
+    switch (sortKey.value) {
+      case 'id':
+        return (a.id - b.id) * dir
+      case 'name':
+        return a.name.localeCompare(b.name) * dir
+      case 'last_online': {
+        const aTime = a.last_online ? new Date(a.last_online).getTime() : 0
+        const bTime = b.last_online ? new Date(b.last_online).getTime() : 0
+        return (aTime - bTime) * dir
+      }
+      case 'status':
+        return (getUserStatusWeight(a) - getUserStatusWeight(b)) * dir
+      case 'joined':
+        return (new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) * dir
+      default:
+        return 0
+    }
+  })
   return list
 })
 
@@ -98,6 +181,23 @@ function formatDate(dateStr: string) {
   const d = new Date(dateStr)
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
 }
+
+function formatRelativeTime(dateStr: string | null) {
+  if (!dateStr) return t('never')
+  const now = Date.now()
+  const then = new Date(dateStr).getTime()
+  const diffMs = now - then
+  const diffSec = Math.floor(diffMs / 1000)
+  const diffMin = Math.floor(diffSec / 60)
+  const diffHr = Math.floor(diffMin / 60)
+  const diffDay = Math.floor(diffHr / 24)
+
+  if (diffMin < 1) return t('justNow')
+  if (diffMin < 60) return t('minutesAgo', { n: diffMin })
+  if (diffHr < 24) return t('hoursAgo', { n: diffHr })
+  if (diffDay < 30) return t('daysAgo', { n: diffDay })
+  return formatDate(dateStr)
+}
 </script>
 
 <template>
@@ -142,10 +242,41 @@ function formatDate(dateStr: string) {
         <table class="w-full text-sm">
           <thead>
             <tr class="border-b border-border bg-accent/50">
-              <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[40px]">#</th>
-              <th class="text-left px-4 py-3 font-medium text-muted-foreground">{{ t('user') }}</th>
-              <th class="text-left px-4 py-3 font-medium text-muted-foreground">{{ t('status') }}</th>
-              <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[100px]">{{ t('joined') }}</th>
+              <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[40px] cursor-pointer select-none hover:text-foreground transition-colors" @click="toggleSort('id')">
+                <span class="flex items-center gap-1">
+                  #
+                  <ArrowUp v-if="sortKey === 'id' && sortDir === 'asc'" class="w-3 h-3" />
+                  <ArrowDown v-else-if="sortKey === 'id' && sortDir === 'desc'" class="w-3 h-3" />
+                </span>
+              </th>
+              <th class="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" @click="toggleSort('name')">
+                <span class="flex items-center gap-1">
+                  {{ t('user') }}
+                  <ArrowUp v-if="sortKey === 'name' && sortDir === 'asc'" class="w-3 h-3" />
+                  <ArrowDown v-else-if="sortKey === 'name' && sortDir === 'desc'" class="w-3 h-3" />
+                </span>
+              </th>
+              <th class="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" @click="toggleSort('status')">
+                <span class="flex items-center gap-1">
+                  {{ t('status') }}
+                  <ArrowUp v-if="sortKey === 'status' && sortDir === 'asc'" class="w-3 h-3" />
+                  <ArrowDown v-else-if="sortKey === 'status' && sortDir === 'desc'" class="w-3 h-3" />
+                </span>
+              </th>
+              <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[100px] cursor-pointer select-none hover:text-foreground transition-colors" @click="toggleSort('last_online')">
+                <span class="flex items-center gap-1">
+                  {{ t('lastOnline') }}
+                  <ArrowUp v-if="sortKey === 'last_online' && sortDir === 'asc'" class="w-3 h-3" />
+                  <ArrowDown v-else-if="sortKey === 'last_online' && sortDir === 'desc'" class="w-3 h-3" />
+                </span>
+              </th>
+              <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[100px] cursor-pointer select-none hover:text-foreground transition-colors" @click="toggleSort('joined')">
+                <span class="flex items-center gap-1">
+                  {{ t('joined') }}
+                  <ArrowUp v-if="sortKey === 'joined' && sortDir === 'asc'" class="w-3 h-3" />
+                  <ArrowDown v-else-if="sortKey === 'joined' && sortDir === 'desc'" class="w-3 h-3" />
+                </span>
+              </th>
               <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[120px]">{{ t('actions') }}</th>
             </tr>
           </thead>
@@ -180,9 +311,13 @@ function formatDate(dateStr: string) {
                   >{{ pg.name }}</span>
                 </div>
               </td>
+              <td class="px-4 py-3 text-muted-foreground text-xs">{{ formatRelativeTime(user.last_online) }}</td>
               <td class="px-4 py-3 text-muted-foreground text-xs">{{ formatDate(user.created_at) }}</td>
               <td class="px-4 py-3">
                 <div class="flex items-center gap-1">
+                  <button class="btn-ghost p-2" :title="t('edit')" @click="openEditUser(user)">
+                    <Pencil class="w-4 h-4" />
+                  </button>
                   <button v-if="!user.is_banned" class="btn-ghost p-2" :title="t('banUser')" @click="promptToggleBan(user)">
                     <Ban class="w-4 h-4" />
                   </button>
@@ -236,6 +371,53 @@ function formatDate(dateStr: string) {
         <button class="btn-secondary w-full justify-center" @click="banConfirmUser = null">
           {{ t('cancel') }}
         </button>
+      </div>
+    </ModalOverlay>
+
+    <!-- Edit User Modal -->
+    <ModalOverlay :show="!!editUser" @close="editUser = null">
+      <div class="border-b border-border px-7 py-6">
+        <div class="flex items-center gap-3">
+          <img v-if="editUser?.avatar_url" :src="editUser.avatar_url" class="w-10 h-10 rounded-full object-cover" />
+          <div v-else class="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-sm font-semibold text-secondary-foreground">
+            {{ editUser?.name.charAt(0) }}
+          </div>
+          <div>
+            <h2 class="text-xl font-semibold text-foreground">{{ editUser?.name }}</h2>
+            <p class="text-xs text-muted-foreground">{{ t('editPermissionGroups') }}</p>
+          </div>
+        </div>
+      </div>
+      <div class="px-7 py-5 max-h-[350px] overflow-y-auto">
+        <label class="block text-xs font-medium text-muted-foreground mb-2">{{ t('permissionGroups') }}</label>
+        <div v-if="allGroups.length === 0" class="text-sm text-muted-foreground py-4 text-center">{{ t('noGroupsYet') }}</div>
+        <div v-else class="flex flex-col gap-2">
+          <label
+            v-for="group in allGroups"
+            :key="group.id"
+            class="flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-colors cursor-pointer"
+            :class="editUserGroupIds.includes(group.id)
+              ? 'bg-primary/10 border-primary/30 text-foreground'
+              : 'border-border text-muted-foreground hover:border-foreground/20'"
+          >
+            <input
+              type="checkbox"
+              :checked="editUserGroupIds.includes(group.id)"
+              class="rounded border-border"
+              @change="toggleGroupForUser(group.id)"
+            />
+            <div>
+              <span class="text-sm font-medium">{{ group.name }}</span>
+              <span class="text-xs text-muted-foreground ml-2">({{ group.permissions.length }} {{ t('permissionsCount') }})</span>
+            </div>
+          </label>
+        </div>
+      </div>
+      <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
+        <button class="btn-primary w-full justify-center" :disabled="savingUser" @click="saveEditUser">
+          {{ savingUser ? t('saving') : t('saveChanges') }}
+        </button>
+        <button class="btn-secondary w-full justify-center" @click="editUser = null">{{ t('cancel') }}</button>
       </div>
     </ModalOverlay>
   </div>

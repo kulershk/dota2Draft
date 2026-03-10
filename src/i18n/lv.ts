@@ -259,6 +259,12 @@ export default {
   users: 'Lietotāji',
   user: 'Lietotājs',
   status: 'STATUSS',
+  lastOnline: 'PĒDĒJOREIZ TIEŠSAISTĒ',
+  never: 'Nekad',
+  justNow: 'Tikko',
+  minutesAgo: 'pirms {n}min',
+  hoursAgo: 'pirms {n}h',
+  daysAgo: 'pirms {n}d',
   joined: 'PIEVIENOJĀS',
   rootAdmin: 'Galvenais admin',
   makeAdmin: 'Padarīt par admin',
@@ -423,6 +429,7 @@ export default {
 
   // Admin: Permission Groups
   permissionGroups: 'Atļauju grupas',
+  editPermissionGroups: 'Rediģēt atļauju grupas',
   permissionGroupsDesc: 'Izveidojiet un pārvaldiet atļauju grupas piekļuves kontrolei',
   newGroup: 'Jauna grupa',
   noGroupsYet: 'Atļauju grupu vēl nav. Izveidojiet jaunu.',

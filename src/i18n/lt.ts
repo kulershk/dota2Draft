@@ -259,6 +259,12 @@ export default {
   users: 'Vartotojai',
   user: 'Vartotojas',
   status: 'BŪSENA',
+  lastOnline: 'PASKUTINĮ KARTĄ PRISIJUNGĖ',
+  never: 'Niekada',
+  justNow: 'Ką tik',
+  minutesAgo: 'prieš {n}min',
+  hoursAgo: 'prieš {n}val',
+  daysAgo: 'prieš {n}d',
   joined: 'PRISIJUNGĖ',
   rootAdmin: 'Pagrindinis admin',
   makeAdmin: 'Padaryti admin',
@@ -423,6 +429,7 @@ export default {
 
   // Admin: Permission Groups
   permissionGroups: 'Teisių grupės',
+  editPermissionGroups: 'Redaguoti teisių grupes',
   permissionGroupsDesc: 'Kurkite ir valdykite teisių grupes prieigos kontrolei',
   newGroup: 'Nauja grupė',
   noGroupsYet: 'Teisių grupių dar nėra. Sukurkite naują.',

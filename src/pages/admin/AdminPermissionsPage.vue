@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ShieldCheck, Plus, Trash2, Save, Users, ChevronDown, ChevronUp, Search } from 'lucide-vue-next'
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ShieldCheck, Plus, Trash2, Save, ChevronDown, ChevronUp } from 'lucide-vue-next'
+import { ref, reactive, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
@@ -14,16 +14,8 @@ interface PermGroup {
   permissions: string[]
 }
 
-interface User {
-  id: number
-  name: string
-  avatar_url: string | null
-  is_admin: boolean
-}
-
 const allPermissions = ref<string[]>([])
 const groups = ref<PermGroup[]>([])
-const users = ref<User[]>([])
 const loading = ref(true)
 
 // Create group modal
@@ -36,27 +28,6 @@ const expandedGroup = ref<number | null>(null)
 const editPerms = reactive<Record<number, string[]>>({})
 const editNames = reactive<Record<number, string>>({})
 const savingGroup = ref<number | null>(null)
-
-// Assign users modal
-const assignGroup = ref<PermGroup | null>(null)
-const userGroups = reactive<Record<number, number[]>>({})
-const loadingUserGroups = ref(false)
-const assignSearchQuery = ref('')
-const assignPage = ref(1)
-const ASSIGN_PAGE_SIZE = 20
-
-const filteredAssignUsers = computed(() => {
-  let list = users.value
-  if (assignSearchQuery.value) {
-    const q = assignSearchQuery.value.toLowerCase()
-    list = list.filter(u => u.name.toLowerCase().includes(q))
-  }
-  return list
-})
-const paginatedAssignUsers = computed(() => filteredAssignUsers.value.slice(0, assignPage.value * ASSIGN_PAGE_SIZE))
-const hasMoreAssignUsers = computed(() => paginatedAssignUsers.value.length < filteredAssignUsers.value.length)
-
-watch(assignSearchQuery, () => { assignPage.value = 1 })
 
 const permLabels: Record<string, string> = {
   manage_competitions: 'Manage All Competitions',
@@ -72,14 +43,12 @@ const permLabels: Record<string, string> = {
 
 onMounted(async () => {
   try {
-    const [perms, grps, usrs] = await Promise.all([
+    const [perms, grps] = await Promise.all([
       api.getAllPermissions(),
       api.getPermissionGroups(),
-      api.getUsers(),
     ])
     allPermissions.value = perms
     groups.value = grps
-    users.value = usrs
   } finally {
     loading.value = false
   }
@@ -133,36 +102,6 @@ async function deleteGroup(id: number) {
   if (expandedGroup.value === id) expandedGroup.value = null
 }
 
-async function openAssign(group: PermGroup) {
-  assignGroup.value = group
-  loadingUserGroups.value = true
-  try {
-    for (const u of users.value) {
-      if (!userGroups[u.id]) {
-        const uGroups = await api.getPlayerGroups(u.id)
-        userGroups[u.id] = uGroups.map((g: PermGroup) => g.id)
-      }
-    }
-  } finally {
-    loadingUserGroups.value = false
-  }
-}
-
-function isUserInGroup(userId: number, groupId: number) {
-  return userGroups[userId]?.includes(groupId) ?? false
-}
-
-async function toggleUserGroup(userId: number, groupId: number) {
-  const current = userGroups[userId] || []
-  let updated: number[]
-  if (current.includes(groupId)) {
-    updated = current.filter(id => id !== groupId)
-  } else {
-    updated = [...current, groupId]
-  }
-  await api.setPlayerGroups(userId, updated)
-  userGroups[userId] = updated
-}
 </script>
 
 <template>
@@ -194,9 +133,6 @@ async function toggleUserGroup(userId: number, groupId: number) {
             <span class="text-xs text-muted-foreground">({{ group.permissions.length }} {{ t('permissionsCount') }})</span>
           </div>
           <div class="flex items-center gap-2">
-            <button class="btn-ghost p-1.5" :title="t('assignUsers')" @click.stop="openAssign(group)">
-              <Users class="w-4 h-4" />
-            </button>
             <button class="btn-ghost p-1.5 text-destructive" :title="t('delete')" @click.stop="deleteGroup(group.id)">
               <Trash2 class="w-3.5 h-3.5" />
             </button>
@@ -282,52 +218,5 @@ async function toggleUserGroup(userId: number, groupId: number) {
       </div>
     </ModalOverlay>
 
-    <!-- Assign Users Modal -->
-    <ModalOverlay :show="!!assignGroup" @close="assignGroup = null; assignSearchQuery = ''">
-      <div class="border-b border-border px-7 py-6">
-        <h2 class="text-xl font-semibold text-foreground">{{ t('assignUsers') }}: {{ assignGroup?.name }}</h2>
-        <p class="text-sm text-muted-foreground mt-1">{{ t('assignUsersDesc') }}</p>
-      </div>
-      <div class="px-7 pt-4 pb-2">
-        <div class="relative">
-          <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input v-model="assignSearchQuery" type="text" :placeholder="t('search')" class="input-field pl-9 w-full" />
-        </div>
-      </div>
-      <div class="px-7 py-2 max-h-[350px] overflow-y-auto">
-        <div v-if="loadingUserGroups" class="text-sm text-muted-foreground py-4 text-center">{{ t('loading') }}</div>
-        <div v-else class="flex flex-col divide-y divide-border">
-          <label
-            v-for="user in paginatedAssignUsers"
-            :key="user.id"
-            class="flex items-center gap-3 py-2.5 cursor-pointer hover:bg-accent/30 px-2 rounded transition-colors"
-          >
-            <input
-              type="checkbox"
-              :checked="isUserInGroup(user.id, assignGroup!.id)"
-              class="rounded border-border"
-              @change="toggleUserGroup(user.id, assignGroup!.id)"
-            />
-            <img v-if="user.avatar_url" :src="user.avatar_url" class="w-7 h-7 rounded-full" />
-            <div v-else class="w-7 h-7 rounded-full bg-secondary flex items-center justify-center text-[10px] font-semibold text-secondary-foreground">
-              {{ user.name.charAt(0) }}
-            </div>
-            <span class="text-sm text-foreground">{{ user.name }}</span>
-            <span v-if="user.is_admin" class="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 font-medium">{{ t('admin') }}</span>
-          </label>
-          <div v-if="filteredAssignUsers.length === 0" class="py-6 text-center text-sm text-muted-foreground">
-            {{ t('noUsersFound') }}
-          </div>
-        </div>
-        <div v-if="hasMoreAssignUsers" class="py-2 text-center">
-          <button class="btn-ghost text-sm text-primary" @click="assignPage++">
-            {{ t('showMore', { remaining: filteredAssignUsers.length - paginatedAssignUsers.length }) }}
-          </button>
-        </div>
-      </div>
-      <div class="px-7 py-4 border-t border-border">
-        <button class="btn-secondary w-full justify-center" @click="assignGroup = null; assignSearchQuery = ''">{{ t('close') }}</button>
-      </div>
-    </ModalOverlay>
   </div>
 </template>
