@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Gavel, Pause, Play, XCircle, Zap, History, Wallet, Users as UsersIcon, AlertCircle, CheckCircle, Circle, Undo2, Search, EyeOff, Eye } from 'lucide-vue-next'
+import { Gavel, Pause, Play, XCircle, Zap, History, Wallet, Users as UsersIcon, AlertCircle, CheckCircle, Circle, Undo2, Search, EyeOff, Eye, RefreshCw } from 'lucide-vue-next'
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDraftStore } from '@/composables/useDraftStore'
@@ -46,6 +46,7 @@ const timerDisplay = computed(() => {
 })
 
 const activeCaptainId = computed(() => store.currentCaptain.value?.id ?? 0)
+const myCaptainLive = computed(() => store.captains.value.find(c => c.id === activeCaptainId.value))
 const bidCooldown = ref(false)
 const canBid = computed(() => !!store.currentCaptain.value && !bidCooldown.value)
 const isLoggedIn = computed(() => !!store.currentUser.value)
@@ -291,16 +292,22 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
 
     <!-- Top Bar -->
     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-      <div>
-        <h1 class="text-xl md:text-2xl font-semibold text-foreground">{{ t('liveAuction') }}</h1>
-        <p class="text-sm text-muted-foreground mt-0.5">
-          <template v-if="isActive || isPaused">
-            {{ t('roundOf', { current: store.auction.currentRound, total: store.auction.totalRounds }) }}
-            <template v-if="store.auction.nominator"> &bull; {{ t('isNominating', { name: store.auction.nominator.name }) }}</template>
-          </template>
-          <template v-else-if="isFinished">{{ t('draftComplete') }}</template>
-          <template v-else>{{ t('allCaptainsMustReady') }}</template>
-        </p>
+      <div class="flex items-center gap-4">
+        <div>
+          <h1 class="text-xl md:text-2xl font-semibold text-foreground">{{ t('liveAuction') }}</h1>
+          <p class="text-sm text-muted-foreground mt-0.5">
+            <template v-if="isActive || isPaused">
+              {{ t('roundOf', { current: store.auction.currentRound, total: store.auction.totalRounds }) }}
+              <template v-if="store.auction.nominator"> &bull; {{ t('isNominating', { name: store.auction.nominator.name }) }}</template>
+            </template>
+            <template v-else-if="isFinished">{{ t('draftComplete') }}</template>
+            <template v-else>{{ t('allCaptainsMustReady') }}</template>
+          </p>
+        </div>
+        <div v-if="myCaptainLive && (isActive || isPaused)" class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/30">
+          <Wallet class="w-4 h-4 text-primary" />
+          <span class="text-lg font-bold font-mono text-primary">{{ formatGold(myCaptainLive.budget) }}</span>
+        </div>
       </div>
       <div class="flex flex-wrap items-center gap-2 md:gap-3" v-if="(isActive || isPaused) && store.isAdmin.value">
         <button v-if="!isPaused" class="btn-outline" @click="store.pauseAuction()">
@@ -308,6 +315,9 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
         </button>
         <button v-else class="btn-primary" @click="store.resumeAuction()">
           <Play class="w-4 h-4" /> {{ t('resume') }}
+        </button>
+        <button v-if="isPaused && store.settings.nominationOrder !== 'normal'" class="btn-outline" @click="store.recheckOrder()">
+          <RefreshCw class="w-4 h-4" /> {{ t('recheckOrder') }}
         </button>
         <button class="btn-outline" @click="store.undoLast()">
           <Undo2 class="w-4 h-4" /> {{ t('undo') }}
@@ -432,7 +442,7 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
                 <thead class="sticky top-0 bg-card">
                   <tr class="border-b border-border bg-accent/50">
                     <th class="text-left px-4 py-2 font-medium text-muted-foreground">{{ t('playerCol') }}</th>
-                    <th class="text-left px-4 py-2 font-medium text-muted-foreground">{{ t('roleCol') }}</th>
+                    <th class="text-left px-4 py-2 font-medium text-muted-foreground">{{ t('rolesCol') }}</th>
                     <th class="text-left px-4 py-2 font-medium text-muted-foreground">{{ t('mmrCol') }}</th>
                     <th v-if="isNominator || store.isAdmin.value" class="text-left px-4 py-2 font-medium text-muted-foreground w-[120px]">{{ t('startBidCol') }}</th>
                     <th v-if="isNominator || store.isAdmin.value" class="text-right px-4 py-2 font-medium text-muted-foreground">{{ t('actionCol') }}</th>
@@ -635,7 +645,7 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
               <thead class="sticky top-0 bg-card">
                 <tr class="border-b border-border bg-accent/50">
                   <th class="text-left px-4 py-2 font-medium text-muted-foreground text-xs">{{ t('playerCol') }}</th>
-                  <th class="text-left px-4 py-2 font-medium text-muted-foreground text-xs">{{ t('roleCol') }}</th>
+                  <th class="text-left px-4 py-2 font-medium text-muted-foreground text-xs">{{ t('rolesCol') }}</th>
                   <th class="text-right px-4 py-2 font-medium text-muted-foreground text-xs">{{ t('mmrCol') }}</th>
                 </tr>
               </thead>

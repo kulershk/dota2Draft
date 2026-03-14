@@ -227,6 +227,13 @@
         }
       }
     },
+    "auction:recheck-order": {
+      "publish": {
+        "summary": "Recalculate nomination order (admin only, while paused/nominating)",
+        "description": "Only available when nominationOrder is not 'normal' (round-robin). Recalculates who should nominate next based on the current nomination strategy.",
+        "message": { "payload": { "type": "null" } }
+      }
+    },
     "auction:pause": {
       "publish": {
         "summary": "Pause the auction (admin only)",

@@ -471,6 +471,29 @@ export function registerAuctionHandlers(socket, io) {
     io.to(`comp:${compId}`).emit('auction:stateChanged', await getFullAuctionState(compId))
   })
 
+  // Auction: Recheck nomination order (admin, while paused)
+  socket.on('auction:recheck-order', async () => {
+    const compId = socketCompetitions.get(socket.id)
+    if (!compId) return
+    if (!await isAdminSocket(socket.id)) return socket.emit('auction:error', { message: 'Admin access required' })
+    const comp = await getCompetition(compId)
+    const state = parseAuctionState(comp)
+    if (state.status !== 'paused' && state.status !== 'nominating') {
+      return socket.emit('auction:error', { message: 'Can only recheck order while paused or nominating' })
+    }
+    const settings = parseCompSettings(comp)
+    if (settings.nominationOrder === 'normal') {
+      return socket.emit('auction:error', { message: 'Round-robin order does not need rechecking' })
+    }
+    const captains = await getCaptains(compId)
+    const currentRound = Number(state.currentRound) || 1
+    const nextNominator = await getNextNominator(compId, currentRound, captains, settings)
+    await setAuctionState(compId, { nominatorId: nextNominator.id })
+    await saveAuctionLog(compId, 'info', `Nomination order rechecked — next: ${nextNominator.name}`)
+    io.to(`comp:${compId}`).emit('auction:log', { type: 'info', message: `Nomination order rechecked — next: ${nextNominator.name}` })
+    io.to(`comp:${compId}`).emit('auction:stateChanged', await getFullAuctionState(compId))
+  })
+
   // Auction: End
   socket.on('auction:end', async () => {
     const compId = socketCompetitions.get(socket.id)

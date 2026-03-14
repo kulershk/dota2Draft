@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import fs from 'fs'
 import { join } from 'path'
+import sharp from 'sharp'
 import { queryOne, execute } from '../db.js'
 import { getAuthPlayer } from '../middleware/auth.js'
 import { requireCompPermission } from '../middleware/permissions.js'
@@ -90,7 +91,20 @@ export default function createCaptainsRouter(io) {
       if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath)
     }
 
-    const bannerUrl = `/uploads/${req.file.filename}`
+    // Resize to 256x256 square (crop to cover)
+    const resizedFilename = `logo_${captainId}_${Date.now()}.png`
+    const resizedPath = join(uploadsDir, resizedFilename)
+    await sharp(req.file.path)
+      .resize(256, 256, { fit: 'cover', position: 'center' })
+      .png()
+      .toFile(resizedPath)
+
+    // Remove the original upload
+    if (req.file.path !== resizedPath) {
+      fs.unlinkSync(req.file.path)
+    }
+
+    const bannerUrl = `/uploads/${resizedFilename}`
     await execute('UPDATE captains SET banner_url = $1 WHERE id = $2', [bannerUrl, captainId])
     io.to(`comp:${compId}`).emit('captains:updated', await getCaptains(compId))
     res.json({ banner_url: bannerUrl })

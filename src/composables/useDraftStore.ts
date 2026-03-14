@@ -503,6 +503,7 @@ export function useDraftStore() {
   function endDraft() { getSocket().emit('auction:end') }
   function undoLast() { getSocket().emit('auction:undo') }
   function resetDraft() { getSocket().emit('auction:reset') }
+  function recheckOrder() { getSocket().emit('auction:recheck-order') }
 
   return {
     // State
@@ -567,6 +568,7 @@ export function useDraftStore() {
     endDraft,
     undoLast,
     resetDraft,
+    recheckOrder,
     // API passthrough
     getCompResults: (compId: number) => useApi().getCompResults(compId),
   }

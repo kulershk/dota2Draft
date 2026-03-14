@@ -134,7 +134,7 @@ async function removeParticipant(playerId: number) {
 
 function promptPromoteParticipant(player: any) {
   promotePlayerId.value = player.id
-  promoteTeam.value = ''
+  promoteTeam.value = `Team ${player.name}`
   showPromote.value = true
 }
 
@@ -585,7 +585,7 @@ async function deleteStream(id: number) {
               v-for="p in filteredPromotable.slice(0, 20)" :key="p.id"
               class="flex items-center gap-2.5 w-full px-3 py-2 text-left hover:bg-accent/30 transition-colors"
               :class="promotePlayerId === p.id ? 'bg-primary/10' : ''"
-              @click="promotePlayerId = p.id"
+              @click="promotePlayerId = p.id; if (!promoteTeam || promoteTeam.startsWith('Team ')) promoteTeam = `Team ${p.name}`"
             >
               <img v-if="p.avatar_url" :src="p.avatar_url" class="w-6 h-6 rounded-full" />
               <div v-else class="w-6 h-6 rounded-full bg-secondary flex items-center justify-center text-[10px] font-semibold text-secondary-foreground">

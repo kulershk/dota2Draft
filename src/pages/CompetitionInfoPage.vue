@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { useApi } from '@/composables/useApi'
+import ImageCropper from '@/components/common/ImageCropper.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -83,17 +84,31 @@ function canEditBanner(captain: any) {
   return captain.player_id === store.currentUser.value.id || store.isAdmin.value
 }
 
-async function uploadBanner(captain: any, event: Event) {
+const showCropper = ref(false)
+const cropFile = ref<File | null>(null)
+const cropCaptainId = ref<number>(0)
+
+function openCropper(captain: any, event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
-  if (!file || !store.currentCompetitionId.value) return
+  if (!file) return
+  cropFile.value = file
+  cropCaptainId.value = captain.id
+  showCropper.value = true
+  input.value = ''
+}
+
+async function handleCrop(blob: Blob) {
+  if (!store.currentCompetitionId.value) return
   uploading.value = true
+  showCropper.value = false
   try {
-    await api.uploadCaptainBanner(store.currentCompetitionId.value, captain.id, file)
+    const file = new File([blob], 'logo.png', { type: 'image/png' })
+    await api.uploadCaptainBanner(store.currentCompetitionId.value, cropCaptainId.value, file)
     await store.fetchCaptains()
   } finally {
     uploading.value = false
-    input.value = ''
+    cropFile.value = null
   }
 }
 
@@ -281,7 +296,7 @@ async function removeBanner(captain: any) {
           <Trophy class="w-5 h-5 text-foreground" />
           <span class="text-sm font-semibold text-foreground">{{ t('captains') }} ({{ captainCount }})</span>
         </div>
-        <div class="p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+        <div class="p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
           <div v-for="captain in store.captains.value" :key="captain.id" class="rounded-lg bg-accent/30 border border-border overflow-hidden">
             <!-- Banner -->
             <div class="relative">
@@ -291,7 +306,7 @@ async function removeBanner(captain: any) {
               <div v-if="canEditBanner(captain)" class="absolute top-1.5 right-1.5 flex gap-1">
                 <label class="p-1 rounded bg-background/80 backdrop-blur-sm cursor-pointer hover:bg-background transition-colors" :title="t('uploadBanner')">
                   <Upload class="w-3.5 h-3.5 text-foreground" />
-                  <input type="file" accept="image/*" class="hidden" @change="uploadBanner(captain, $event)" :disabled="uploading" />
+                  <input type="file" accept="image/*" class="hidden" @change="openCropper(captain, $event)" :disabled="uploading" />
                 </label>
                 <button v-if="captain.banner_url" class="p-1 rounded bg-background/80 backdrop-blur-sm hover:bg-background transition-colors" :title="t('removeBanner')" @click="removeBanner(captain)">
                   <X class="w-3.5 h-3.5 text-destructive" />
@@ -313,5 +328,14 @@ async function removeBanner(captain: any) {
         </div>
       </div>
     </template>
+
+    <ImageCropper
+      :show="showCropper"
+      :image-file="cropFile"
+      :aspect-ratio="1"
+      :output-size="256"
+      @crop="handleCrop"
+      @close="showCropper = false; cropFile = null"
+    />
   </div>
 </template>
