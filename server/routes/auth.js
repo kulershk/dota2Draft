@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { queryOne, execute } from '../db.js'
 import { createSession, getSessionPlayerId, getTokenFromReq, getAuthPlayer } from '../middleware/auth.js'
-import { requirePermission } from '../middleware/permissions.js'
+import { requirePermission, getPlayerPermissions } from '../middleware/permissions.js'
 import { getTwitchAppToken } from '../helpers/twitch.js'
 import { BASE_URL, TWITCH_CLIENT_ID, TWITCH_CLIENT_SECRET, DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET } from '../config.js'
 import { getCompetition } from '../helpers/competition.js'
@@ -91,12 +91,14 @@ router.get('/api/auth/me', async (req, res) => {
   const player = await getAuthPlayer(req)
   if (!player) return res.status(401).json({ error: 'Not authenticated' })
   execute('UPDATE players SET last_online = NOW() WHERE id = $1', [player.id]).catch(() => {})
+  const perms = await getPlayerPermissions(player.id)
   res.json({
     id: player.id,
     name: player.name,
     steam_id: player.steam_id,
     avatar_url: player.avatar_url,
     is_admin: !!player.is_admin,
+    permissions: [...perms],
     roles: JSON.parse(player.roles || '[]'),
     mmr: player.mmr,
     info: player.info || '',
@@ -119,12 +121,14 @@ router.put('/api/auth/me', async (req, res) => {
     ]
   )
   const updated = await queryOne('SELECT * FROM players WHERE id = $1', [player.id])
+  const updatedPerms = await getPlayerPermissions(updated.id)
   res.json({
     id: updated.id,
     name: updated.name,
     steam_id: updated.steam_id,
     avatar_url: updated.avatar_url,
     is_admin: !!updated.is_admin,
+    permissions: [...updatedPerms],
     roles: JSON.parse(updated.roles || '[]'),
     mmr: updated.mmr,
     info: updated.info || '',
