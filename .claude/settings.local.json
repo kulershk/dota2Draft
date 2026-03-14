@@ -17,7 +17,9 @@
       "Bash(docker ps:*)",
       "Bash(docker exec:*)",
       "Bash(docker compose:*)",
-      "Bash(docker restart:*)"
+      "Bash(docker restart:*)",
+      "WebFetch(domain:docs.google.com)",
+      "WebFetch(domain:doc-14-88-sheets.googleusercontent.com)"
     ]
   }
 }
