@@ -51,6 +51,8 @@ const localSettings = reactive({
   allowSteamRegistration: true,
   biddingType: 'default',
   blindTopBidders: 3,
+  blindBidTimer: 30,
+  autoFinish: true,
 })
 
 const promotePlayerId = ref<number | null>(null)
@@ -316,6 +318,7 @@ async function deleteStream(id: number) {
             </select>
             <p class="text-xs text-muted-foreground">{{ localSettings.biddingType === 'blind' ? t('biddingTypeBlindHint') : t('biddingTypeDefaultHint') }}</p>
           </div>
+          <InputGroup v-if="localSettings.biddingType === 'blind'" :label="t('blindBidTimerSeconds')" :model-value="String(localSettings.blindBidTimer)" placeholder="30" @update:model-value="localSettings.blindBidTimer = Number($event)" :hint="t('blindBidTimerHint')" />
           <InputGroup v-if="localSettings.biddingType === 'blind'" :label="t('blindTopBidders')" :model-value="String(localSettings.blindTopBidders)" placeholder="3" @update:model-value="localSettings.blindTopBidders = Number($event)" :hint="t('blindTopBiddersHint')" />
           <div class="flex flex-col gap-1.5">
             <label class="label-text">{{ t('nominationOrder') }}</label>
@@ -332,6 +335,11 @@ async function deleteStream(id: number) {
           <label class="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" class="w-4 h-4 accent-primary" v-model="localSettings.allowSteamRegistration" />
             <span class="text-sm text-foreground">{{ t('allowSelfRegister') }}</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" class="w-4 h-4 accent-primary" v-model="localSettings.autoFinish" />
+            <span class="text-sm text-foreground">{{ t('autoFinishDraft') }}</span>
+            <span class="text-xs text-muted-foreground">{{ t('autoFinishHint') }}</span>
           </label>
         </div>
       </div>

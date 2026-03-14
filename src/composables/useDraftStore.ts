@@ -69,6 +69,8 @@ export interface Settings {
   allowSteamRegistration: boolean
   biddingType: string
   blindTopBidders: number
+  blindBidTimer: number
+  autoFinish: boolean
 }
 
 export interface RevealedBid {
@@ -131,6 +133,8 @@ const settings = reactive<Settings>({
   allowSteamRegistration: true,
   biddingType: 'default',
   blindTopBidders: 3,
+  blindBidTimer: 30,
+  autoFinish: true,
 })
 
 const captains = ref<Captain[]>([])
@@ -395,6 +399,10 @@ export function useDraftStore() {
       Object.assign(settings, comp.settings)
       captains.value = caps
       players.value = plrs
+      // Ensure competition is in the list so currentCompetition resolves
+      const idx = competitions.value.findIndex(c => c.id === comp.id)
+      if (idx >= 0) competitions.value[idx] = comp
+      else competitions.value.push(comp)
     } finally {
       loading.value = false
     }

@@ -76,11 +76,14 @@ const pendingNominateId = ref<number | null>(null)
 const nominateSearch = ref('')
 
 const filteredAvailablePlayers = computed(() => {
-  if (!nominateSearch.value) return store.availablePlayers.value
-  const q = nominateSearch.value.toLowerCase()
-  return store.availablePlayers.value.filter(p =>
-    p.name.toLowerCase().includes(q) || p.roles.some((r: string) => r.toLowerCase().includes(q))
-  )
+  let list = [...store.availablePlayers.value].sort((a, b) => b.mmr - a.mmr)
+  if (nominateSearch.value) {
+    const q = nominateSearch.value.toLowerCase()
+    list = list.filter(p =>
+      p.name.toLowerCase().includes(q) || p.roles.some((r: string) => r.toLowerCase().includes(q))
+    )
+  }
+  return list
 })
 
 function nominatePlayer(playerId: number) {

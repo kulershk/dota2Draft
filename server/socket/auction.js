@@ -16,7 +16,8 @@ export async function startCompBidTimer(compId, io) {
   const comp = await getCompetition(compId)
   const settings = parseCompSettings(comp)
   const state = parseAuctionState(comp)
-  const endTime = Date.now() + settings.bidTimer * 1000
+  const timerSeconds = state.blindPhase ? settings.blindBidTimer : settings.bidTimer
+  const endTime = Date.now() + timerSeconds * 1000
   await setAuctionState(compId, { bidTimerEnd: endTime })
   io.to(`comp:${compId}`).emit('auction:timerUpdate', { bidTimerEnd: endTime })
 
@@ -24,7 +25,7 @@ export async function startCompBidTimer(compId, io) {
     ? () => finalizeBlindPhase(compId, io)
     : () => finalizeCompBid(compId, io)
 
-  const timer = setTimeout(callback, settings.bidTimer * 1000)
+  const timer = setTimeout(callback, timerSeconds * 1000)
   compBidTimers.set(compId, timer)
 }
 
@@ -153,7 +154,8 @@ async function finalizeCompBid(compId, io) {
   )
   const draftedCount = parseInt(draftedRow.count)
 
-  if (draftedCount >= totalPlayers || currentRound >= totalRounds) {
+  const allTeamsFull = draftedCount >= totalPlayers || currentRound >= totalRounds
+  if (allTeamsFull && settings.autoFinish) {
     await setAuctionState(compId, {
       status: 'finished', nominatedPlayerId: '', currentBid: 0, currentBidderId: '',
     })

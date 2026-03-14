@@ -14,6 +14,8 @@ export function parseCompSettings(comp) {
     allowSteamRegistration: s.allowSteamRegistration !== false,
     biddingType: s.biddingType || 'default',
     blindTopBidders: Number(s.blindTopBidders) || 3,
+    blindBidTimer: Number(s.blindBidTimer) || Number(s.bidTimer) || 30,
+    autoFinish: s.autoFinish !== false,
   }
 }
 

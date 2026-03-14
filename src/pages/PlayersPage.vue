@@ -252,7 +252,7 @@ watch(searchQuery, () => { playersPage.value = 1 })
                       <a :href="`https://steamcommunity.com/profiles/${player.steam_id}`" target="_blank" rel="noopener" class="text-[10px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-0.5">
                         Steam <ExternalLink class="w-2.5 h-2.5" />
                       </a>
-                      <a :href="`https://www.dotabuff.com/players/${BigInt(player.steam_id) - BigInt('76561197960265728')}`" target="_blank" rel="noopener" class="text-[10px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-0.5">
+                      <a v-if="player.steam_id && /^\d{10,}$/.test(player.steam_id)" :href="`https://www.dotabuff.com/players/${BigInt(player.steam_id) - BigInt('76561197960265728')}`" target="_blank" rel="noopener" class="text-[10px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-0.5">
                         Dotabuff <ExternalLink class="w-2.5 h-2.5" />
                       </a>
                     </div>
