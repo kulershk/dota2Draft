@@ -5,31 +5,9 @@ import { requirePermission, getPlayerPermissions } from '../middleware/permissio
 import { getTwitchAppToken } from '../helpers/twitch.js'
 import { BASE_URL, TWITCH_CLIENT_ID, TWITCH_CLIENT_SECRET, DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET } from '../config.js'
 import { getCompetition } from '../helpers/competition.js'
+import { fetchSteamProfile } from '../helpers/steam.js'
 
 const router = Router()
-
-// Steam profile fetch helper
-async function fetchSteamProfile(steamId) {
-  let personaName = `Steam_${steamId.slice(-6)}`
-  let avatarUrl = ''
-  const steamApiKey = process.env.STEAM_API_KEY
-  if (steamApiKey) {
-    try {
-      const profileRes = await fetch(
-        `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key=${steamApiKey}&steamids=${steamId}`
-      )
-      const profileData = await profileRes.json()
-      const player = profileData?.response?.players?.[0]
-      if (player) {
-        personaName = player.personaname || personaName
-        avatarUrl = player.avatarfull || player.avatarmedium || player.avatar || ''
-      }
-    } catch (e) {
-      console.error('Failed to fetch Steam profile:', e.message)
-    }
-  }
-  return { personaName, avatarUrl }
-}
 
 router.get('/api/auth/steam', (req, res) => {
   const serverOrigin = `${req.protocol}://${req.get('host')}`

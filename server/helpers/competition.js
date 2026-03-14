@@ -12,6 +12,8 @@ export function parseCompSettings(comp) {
     nominationOrder: s.nominationOrder || 'normal',
     requireAllOnline: s.requireAllOnline !== false,
     allowSteamRegistration: s.allowSteamRegistration !== false,
+    biddingType: s.biddingType || 'default',
+    blindTopBidders: Number(s.blindTopBidders) || 3,
   }
 }
 
@@ -183,6 +185,7 @@ export async function computeAndSyncCompStatus(comp) {
 
 export async function getFullAuctionState(compId) {
   const comp = await getCompetition(compId)
+  if (!comp) return { status: 'idle', currentRound: 0, totalRounds: 0, nominator: null, nominatedPlayer: null, currentBid: 0, currentBidder: null, bidTimerEnd: 0, bidHistory: [], captains: [], players: [], settings: parseCompSettings({}), blindPhase: false, blindBidCount: 0, topBidderIds: [], revealedBids: null }
   const state = parseAuctionState(comp)
   const settings = parseCompSettings(comp)
 
@@ -200,6 +203,16 @@ export async function getFullAuctionState(compId) {
     ? await queryOne('SELECT id, name, team FROM captains WHERE id = $1', [state.currentBidderId])
     : null
   const history = state.currentRound ? await getBidHistory(compId, Number(state.currentRound)) : []
+
+  // Blind bidding: build per-captain view of blind bids
+  const blindPhase = !!state.blindPhase
+  const blindBids = state.blindBids || {}
+  // How many captains have submitted a blind bid (public info)
+  const blindBidCount = Object.keys(blindBids).length
+  // Top bidder IDs after blind phase reveal
+  const topBidderIds = state.topBidderIds || []
+  // Revealed bids (only after blind phase ends)
+  const revealedBids = state.revealedBids || null
 
   return {
     status: state.status || 'idle',
@@ -223,5 +236,10 @@ export async function getFullAuctionState(compId) {
     captains: await getCaptains(compId),
     players: await getCompPlayers(compId),
     settings,
+    // Blind bidding fields
+    blindPhase,
+    blindBidCount,
+    topBidderIds,
+    revealedBids,
   }
 }

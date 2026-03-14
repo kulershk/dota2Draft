@@ -11,7 +11,16 @@ export function initSocket(io) {
   io.on('connection', (socket) => {
     console.log(`Client connected: ${socket.id}`)
 
-    // Auth
+    // Auth from handshake
+    const handshakeToken = socket.handshake.auth?.token
+    if (handshakeToken) {
+      const playerId = getSessionPlayerId(handshakeToken)
+      if (playerId) {
+        socketPlayers.set(socket.id, playerId)
+      }
+    }
+
+    // Auth from explicit event (fallback)
     socket.on('auth', ({ token }) => {
       const playerId = getSessionPlayerId(token)
       if (playerId) {
@@ -26,7 +35,8 @@ export function initSocket(io) {
     })
 
     // Join competition room
-    socket.on('competition:join', async ({ compId }) => {
+    socket.on('competition:join', async ({ competitionId }) => {
+      const compId = competitionId
       if (!compId) return
 
       const prevCompId = socketCompetitions.get(socket.id)

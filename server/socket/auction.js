@@ -1,8 +1,8 @@
-import { queryOne, execute } from '../db.js'
+import { query, queryOne, execute } from '../db.js'
 import {
   getCompetition, parseCompSettings, parseAuctionState, setAuctionState,
   getCaptains, getCompPlayers, getCaptainPlayerCount, getNextNominator,
-  saveAuctionLog, getFullAuctionState,
+  saveAuctionLog, getFullAuctionState, getBidHistory,
 } from '../helpers/competition.js'
 import {
   socketPlayers, socketCompetitions, compOnlineCaptains, compReadyCaptains,
@@ -15,14 +15,100 @@ export async function startCompBidTimer(compId, io) {
   clearCompBidTimer(compId)
   const comp = await getCompetition(compId)
   const settings = parseCompSettings(comp)
+  const state = parseAuctionState(comp)
   const endTime = Date.now() + settings.bidTimer * 1000
   await setAuctionState(compId, { bidTimerEnd: endTime })
   io.to(`comp:${compId}`).emit('auction:timerUpdate', { bidTimerEnd: endTime })
 
-  const timer = setTimeout(() => {
-    finalizeCompBid(compId, io)
-  }, settings.bidTimer * 1000)
+  const callback = state.blindPhase
+    ? () => finalizeBlindPhase(compId, io)
+    : () => finalizeCompBid(compId, io)
+
+  const timer = setTimeout(callback, settings.bidTimer * 1000)
   compBidTimers.set(compId, timer)
+}
+
+async function finalizeBlindPhase(compId, io) {
+  clearCompBidTimer(compId)
+  const comp = await getCompetition(compId)
+  const state = parseAuctionState(comp)
+  const settings = parseCompSettings(comp)
+  const blindBids = state.blindBids || {}
+  const entries = Object.entries(blindBids).map(([cid, amount]) => ({ captainId: Number(cid), amount: Number(amount) }))
+
+  if (entries.length === 0) {
+    // No one bid — nominator wins at minimum bid
+    const nominator = await queryOne('SELECT * FROM captains WHERE id = $1', [state.nominatorId])
+    const bid = nominator && nominator.budget === 0 ? 0 : settings.minimumBid
+    await setAuctionState(compId, {
+      blindPhase: false, blindBids: {}, topBidderIds: [], revealedBids: [],
+      currentBid: bid, currentBidderId: state.nominatorId, status: 'bidding',
+    })
+    await startCompBidTimer(compId, io)
+    io.to(`comp:${compId}`).emit('auction:stateChanged', await getFullAuctionState(compId))
+    return
+  }
+
+  // Sort descending by amount
+  entries.sort((a, b) => b.amount - a.amount)
+
+  // Resolve top N (include ties at the cutoff)
+  const topN = settings.blindTopBidders
+  let cutoffAmount = entries.length > topN ? entries[topN - 1].amount : entries[entries.length - 1].amount
+  const topBidders = entries.filter(e => e.amount >= cutoffAmount)
+  const topBidderIds = topBidders.map(e => e.captainId)
+
+  // Build revealed bids with captain names
+  const captains = await getCaptains(compId)
+  const captainMap = Object.fromEntries(captains.map(c => [c.id, c]))
+  const revealedBids = entries.map(e => ({
+    captainId: e.captainId,
+    captainName: captainMap[e.captainId]?.name || 'Unknown',
+    amount: e.amount,
+    qualified: topBidderIds.includes(e.captainId),
+  }))
+
+  // Log revealed bids
+  const revealMsg = revealedBids.map(b => `${b.captainName}: ${b.amount}g${b.qualified ? ' (qualified)' : ''}`).join(', ')
+  await saveAuctionLog(compId, 'info', `Blind bids revealed: ${revealMsg}`)
+  io.to(`comp:${compId}`).emit('auction:log', { type: 'info', message: `Blind bids revealed: ${revealMsg}` })
+
+  if (topBidders.length === 1) {
+    // Only 1 bidder — they win at their blind bid price, skip open phase
+    const winner = topBidders[0]
+    await setAuctionState(compId, {
+      blindPhase: false, blindBids: {}, topBidderIds: [], revealedBids,
+      currentBid: winner.amount, currentBidderId: winner.captainId,
+    })
+    // Let finalizeCompBid handle the sale
+    finalizeCompBid(compId, io)
+    return
+  }
+
+  // Multiple top bidders — start open bidding from highest blind bid
+  const highestBid = entries[0].amount
+  const highestBidder = entries[0].captainId
+
+  // Insert blind bids into bid_history (ascending so highest gets highest id = shown first)
+  for (const e of [...entries].reverse()) {
+    await execute(
+      'INSERT INTO bid_history (competition_id, round, player_id, captain_id, captain_name, amount) VALUES ($1, $2, $3, $4, $5, $6)',
+      [compId, Number(state.currentRound), Number(state.nominatedPlayerId), e.captainId, captainMap[e.captainId]?.name || '', e.amount]
+    )
+  }
+
+  await setAuctionState(compId, {
+    blindPhase: false, blindBids: {}, topBidderIds, revealedBids,
+    currentBid: highestBid, currentBidderId: highestBidder, status: 'bidding',
+  })
+
+  const topNames = topBidderIds.map(id => captainMap[id]?.name || 'Unknown').join(', ')
+  await saveAuctionLog(compId, 'info', `Open bidding begins at ${highestBid}g — qualified: ${topNames}`)
+  io.to(`comp:${compId}`).emit('auction:log', { type: 'info', message: `Open bidding begins at ${highestBid}g — qualified: ${topNames}` })
+
+  // Start open bid timer (this one resets on each bid like normal)
+  await startCompBidTimer(compId, io)
+  io.to(`comp:${compId}`).emit('auction:stateChanged', await getFullAuctionState(compId))
 }
 
 async function finalizeCompBid(compId, io) {
@@ -85,6 +171,7 @@ async function finalizeCompBid(compId, io) {
       currentBid: 0,
       currentBidderId: '',
       bidTimerEnd: 0,
+      blindPhase: false, blindBids: {}, topBidderIds: [], revealedBids: null,
     })
     io.to(`comp:${compId}`).emit('auction:stateChanged', await getFullAuctionState(compId))
   }
@@ -216,24 +303,79 @@ export function registerAuctionHandlers(socket, io) {
       return socket.emit('auction:error', { message: 'Your team is already full' })
     }
 
-    await setAuctionState(compId, {
-      status: 'bidding',
-      nominatedPlayerId: playerId,
-      currentBid: bid,
-      currentBidderId: state.nominatorId,
-    })
-
     const nominatorName = nominator?.name
-    await execute(
-      'INSERT INTO bid_history (competition_id, round, player_id, captain_id, captain_name, amount) VALUES ($1, $2, $3, $4, $5, $6)',
-      [compId, Number(state.currentRound), playerId, Number(state.nominatorId), nominatorName, bid]
-    )
-
     const player = await queryOne('SELECT name FROM players WHERE id = $1', [playerId])
-    await saveAuctionLog(compId, 'nomination', `${nominatorName} nominated ${player.name} for ${bid}g`)
-    io.to(`comp:${compId}`).emit('auction:log', { type: 'nomination', message: `${nominatorName} nominated ${player.name} for ${bid}g` })
+
+    if (settings.biddingType === 'blind') {
+      // Blind bidding: enter blind phase
+      await setAuctionState(compId, {
+        status: 'bidding',
+        nominatedPlayerId: playerId,
+        currentBid: bid,
+        currentBidderId: state.nominatorId,
+        blindPhase: true,
+        blindBids: {},
+        topBidderIds: [],
+        revealedBids: null,
+      })
+      await saveAuctionLog(compId, 'nomination', `${nominatorName} nominated ${player.name} — blind bidding starts (min ${bid}g)`)
+      io.to(`comp:${compId}`).emit('auction:log', { type: 'nomination', message: `${nominatorName} nominated ${player.name} — blind bidding starts (min ${bid}g)` })
+    } else {
+      // Default bidding
+      await setAuctionState(compId, {
+        status: 'bidding',
+        nominatedPlayerId: playerId,
+        currentBid: bid,
+        currentBidderId: state.nominatorId,
+      })
+      await execute(
+        'INSERT INTO bid_history (competition_id, round, player_id, captain_id, captain_name, amount) VALUES ($1, $2, $3, $4, $5, $6)',
+        [compId, Number(state.currentRound), playerId, Number(state.nominatorId), nominatorName, bid]
+      )
+      await saveAuctionLog(compId, 'nomination', `${nominatorName} nominated ${player.name} for ${bid}g`)
+      io.to(`comp:${compId}`).emit('auction:log', { type: 'nomination', message: `${nominatorName} nominated ${player.name} for ${bid}g` })
+    }
+
     await startCompBidTimer(compId, io)
     io.to(`comp:${compId}`).emit('auction:stateChanged', await getFullAuctionState(compId))
+  })
+
+  // Auction: Blind Bid (sealed bid during blind phase)
+  socket.on('auction:blind-bid', async ({ amount }) => {
+    const compId = socketCompetitions.get(socket.id)
+    if (!compId) return
+    const captainId = await getSocketCaptainId(socket.id, compId)
+    if (!captainId) return socket.emit('auction:error', { message: 'Not authorized to bid' })
+
+    const comp = await getCompetition(compId)
+    const state = parseAuctionState(comp)
+    if (state.status !== 'bidding' || !state.blindPhase) {
+      return socket.emit('auction:error', { message: 'Not in blind bidding phase' })
+    }
+
+    const captain = await queryOne('SELECT * FROM captains WHERE id = $1', [captainId])
+    if (!captain) return socket.emit('auction:error', { message: 'Captain not found' })
+
+    const settings = parseCompSettings(comp)
+    if (await getCaptainPlayerCount(compId, captainId) >= settings.playersPerTeam) {
+      return socket.emit('auction:error', { message: 'Your team is already full' })
+    }
+
+    if (amount < settings.minimumBid) return socket.emit('auction:error', { message: `Minimum bid is ${settings.minimumBid}g` })
+    if (amount > captain.budget) return socket.emit('auction:error', { message: 'Insufficient budget' })
+    if (settings.maxBid > 0 && amount > settings.maxBid) return socket.emit('auction:error', { message: `Max bid is ${settings.maxBid}g` })
+
+    // Store/update blind bid (captains can update before timer ends)
+    const blindBids = state.blindBids || {}
+    blindBids[String(captainId)] = amount
+    await setAuctionState(compId, { blindBids })
+
+    // Notify the captain their bid was received (private)
+    socket.emit('auction:blind-bid-confirmed', { amount })
+
+    // Broadcast updated count (not amounts) — timer does NOT reset
+    const fullState = await getFullAuctionState(compId)
+    io.to(`comp:${compId}`).emit('auction:stateChanged', fullState)
   })
 
   // Auction: Bid
@@ -253,6 +395,17 @@ export function registerAuctionHandlers(socket, io) {
     const state = parseAuctionState(comp)
     if (state.status !== 'bidding') {
       return socket.emit('auction:error', { message: 'Not in bidding phase' })
+    }
+
+    // If in blind phase, reject normal bids
+    if (state.blindPhase) {
+      return socket.emit('auction:error', { message: 'Use blind bid during blind phase' })
+    }
+
+    // If topBidderIds is set (post-blind open phase), only top bidders can bid
+    const topBidderIds = state.topBidderIds || []
+    if (topBidderIds.length > 0 && !topBidderIds.includes(captainId)) {
+      return socket.emit('auction:error', { message: 'You did not qualify from the blind round' })
     }
 
     const captain = await queryOne('SELECT * FROM captains WHERE id = $1', [captainId])
@@ -345,6 +498,7 @@ export function registerAuctionHandlers(socket, io) {
       await execute('DELETE FROM bid_history WHERE competition_id = $1 AND round = $2', [compId, Number(state.currentRound)])
       await setAuctionState(compId, {
         status: 'nominating', nominatedPlayerId: '', currentBid: 0, currentBidderId: '', bidTimerEnd: 0,
+        blindPhase: false, blindBids: {}, topBidderIds: [], revealedBids: null,
       })
       io.to(`comp:${compId}`).emit('auction:undone', { message: `Nomination of ${nominatedPlayer?.name || 'player'} was cancelled` })
       await saveAuctionLog(compId, 'undo', `Undo: nomination of ${nominatedPlayer?.name || 'player'} cancelled`)
@@ -426,6 +580,7 @@ export function registerAuctionHandlers(socket, io) {
     await setAuctionState(compId, {
       status: 'idle', currentRound: 0, nominatorId: '', nominatedPlayerId: '',
       currentBid: 0, currentBidderId: '', bidTimerEnd: 0, totalRounds: 0,
+      blindPhase: false, blindBids: {}, topBidderIds: [], revealedBids: null,
     })
 
     io.to(`comp:${compId}`).emit('captains:ready', getReadyCaptainIds(compId))

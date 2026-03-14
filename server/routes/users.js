@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { query, queryOne, execute } from '../db.js'
 import { createSession } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/permissions.js'
+import { fetchSteamProfile, parseSteamIds } from '../helpers/steam.js'
 
 const router = Router()
 
@@ -202,6 +203,48 @@ router.post('/api/admin/impersonate/:id', async (req, res) => {
   if (!target) return res.status(404).json({ error: 'User not found' })
   const token = createSession(target.id)
   res.json({ token })
+})
+
+// Step 1: Parse input text into resolved Steam IDs
+router.post('/api/admin/parse-steam-ids', async (req, res) => {
+  const admin = await requirePermission(req, res, 'manage_users')
+  if (!admin) return
+
+  const { input } = req.body
+  if (!input || typeof input !== 'string') {
+    return res.status(400).json({ error: 'input text is required' })
+  }
+
+  const steamIds = await parseSteamIds(input)
+  if (steamIds.length === 0) {
+    return res.status(400).json({ error: 'No valid Steam IDs found' })
+  }
+  if (steamIds.length > 100) {
+    return res.status(400).json({ error: 'Maximum 100 users per import' })
+  }
+
+  res.json({ steamIds })
+})
+
+// Step 2: Import a single Steam user by ID
+router.post('/api/admin/import-steam-user', async (req, res) => {
+  const admin = await requirePermission(req, res, 'manage_users')
+  if (!admin) return
+
+  const { steamId } = req.body
+  if (!steamId) return res.status(400).json({ error: 'steamId is required' })
+
+  const existing = await queryOne('SELECT id, name, avatar_url FROM players WHERE steam_id = $1', [steamId])
+  if (existing) {
+    return res.json({ steamId, name: existing.name, avatarUrl: existing.avatar_url, status: 'exists', id: existing.id })
+  }
+
+  const { personaName, avatarUrl } = await fetchSteamProfile(steamId)
+  const player = await queryOne(
+    'INSERT INTO players (name, steam_id, avatar_url) VALUES ($1, $2, $3) RETURNING id, name',
+    [personaName, steamId, avatarUrl]
+  )
+  res.json({ steamId, name: player.name, avatarUrl, status: 'created', id: player.id })
 })
 
 router.post('/api/admin/generate-test-users', async (req, res) => {

@@ -49,6 +49,8 @@ const localSettings = reactive({
   nominationOrder: 'normal',
   requireAllOnline: true,
   allowSteamRegistration: true,
+  biddingType: 'default',
+  blindTopBidders: 3,
 })
 
 const promotePlayerId = ref<number | null>(null)
@@ -306,6 +308,15 @@ async function deleteStream(id: number) {
         <div class="p-4 flex flex-col gap-4">
           <InputGroup :label="t('playersPerTeam')" :model-value="String(localSettings.playersPerTeam)" placeholder="5" @update:model-value="localSettings.playersPerTeam = Number($event)" :hint="t('captainPlusDrafted', { n: localSettings.playersPerTeam })" />
           <InputGroup :label="t('bidTimerSeconds')" :model-value="String(localSettings.bidTimer)" placeholder="30" @update:model-value="localSettings.bidTimer = Number($event)" />
+          <div class="flex flex-col gap-1.5">
+            <label class="label-text">{{ t('biddingType') }}</label>
+            <select class="input-field" :value="localSettings.biddingType" @change="localSettings.biddingType = ($event.target as HTMLSelectElement).value">
+              <option value="default">{{ t('biddingTypeDefault') }}</option>
+              <option value="blind">{{ t('biddingTypeBlind') }}</option>
+            </select>
+            <p class="text-xs text-muted-foreground">{{ localSettings.biddingType === 'blind' ? t('biddingTypeBlindHint') : t('biddingTypeDefaultHint') }}</p>
+          </div>
+          <InputGroup v-if="localSettings.biddingType === 'blind'" :label="t('blindTopBidders')" :model-value="String(localSettings.blindTopBidders)" placeholder="3" @update:model-value="localSettings.blindTopBidders = Number($event)" :hint="t('blindTopBiddersHint')" />
           <div class="flex flex-col gap-1.5">
             <label class="label-text">{{ t('nominationOrder') }}</label>
             <select class="input-field" :value="localSettings.nominationOrder" @change="localSettings.nominationOrder = ($event.target as HTMLSelectElement).value">

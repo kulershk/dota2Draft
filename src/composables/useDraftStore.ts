@@ -67,6 +67,15 @@ export interface Settings {
   nominationOrder: string
   requireAllOnline: boolean
   allowSteamRegistration: boolean
+  biddingType: string
+  blindTopBidders: number
+}
+
+export interface RevealedBid {
+  captainId: number
+  captainName: string
+  amount: number
+  qualified: boolean
 }
 
 export interface AuctionState {
@@ -79,6 +88,10 @@ export interface AuctionState {
   currentBidder: { id: number; name: string; team: string } | null
   bidTimerEnd: number
   bidHistory: BidEntry[]
+  blindPhase: boolean
+  blindBidCount: number
+  topBidderIds: number[]
+  revealedBids: RevealedBid[] | null
 }
 
 export interface CurrentUser {
@@ -116,6 +129,8 @@ const settings = reactive<Settings>({
   nominationOrder: 'normal',
   requireAllOnline: true,
   allowSteamRegistration: true,
+  biddingType: 'default',
+  blindTopBidders: 3,
 })
 
 const captains = ref<Captain[]>([])
@@ -130,6 +145,10 @@ const auction = reactive<AuctionState>({
   currentBidder: null,
   bidTimerEnd: 0,
   bidHistory: [],
+  blindPhase: false,
+  blindBidCount: 0,
+  topBidderIds: [],
+  revealedBids: null,
 })
 
 const currentUser = ref<CurrentUser | null>(null)
@@ -149,6 +168,7 @@ export interface LogEntry {
   message: string
 }
 const activityLog = ref<LogEntry[]>([])
+const myBlindBid = ref<number | null>(null)
 
 // Derived state
 const isAdmin = computed(() => !!currentUser.value?.is_admin)
@@ -239,6 +259,11 @@ export function useDraftStore() {
       auction.currentBidder = data.currentBidder || null
       auction.bidTimerEnd = data.bidTimerEnd || 0
       auction.bidHistory = data.bidHistory || []
+      if (data.status !== 'bidding' || !data.blindPhase) myBlindBid.value = null
+      auction.blindPhase = !!data.blindPhase
+      auction.blindBidCount = data.blindBidCount || 0
+      auction.topBidderIds = data.topBidderIds || []
+      auction.revealedBids = data.revealedBids || null
       if (data.captains) captains.value = data.captains
       if (data.players) players.value = data.players
       if (data.settings) Object.assign(settings, data.settings)
@@ -264,6 +289,10 @@ export function useDraftStore() {
 
     socket.on('auction:logHistory', (entries: LogEntry[]) => {
       activityLog.value = entries
+    })
+
+    socket.on('auction:blind-bid-confirmed', (data: { amount: number }) => {
+      myBlindBid.value = data.amount
     })
 
     socket.on('auction:error', (data: { message: string }) => {
@@ -460,6 +489,7 @@ export function useDraftStore() {
   function startDraft() { getSocket().emit('auction:start') }
   function nominatePlayer(playerId: number, startingBid?: number) { getSocket().emit('auction:nominate', { playerId, startingBid }) }
   function placeBid(amount: number) { getSocket().emit('auction:bid', { amount }) }
+  function submitBlindBid(amount: number) { getSocket().emit('auction:blind-bid', { amount }) }
   function pauseAuction() { getSocket().emit('auction:pause') }
   function resumeAuction() { getSocket().emit('auction:resume') }
   function endDraft() { getSocket().emit('auction:end') }
@@ -488,6 +518,7 @@ export function useDraftStore() {
     lastSoldMessage,
     undoMessage,
     activityLog,
+    myBlindBid,
     tournamentData,
     availablePlayers,
     roleCounts,
@@ -522,6 +553,7 @@ export function useDraftStore() {
     startDraft,
     nominatePlayer,
     placeBid,
+    submitBlindBid,
     pauseAuction,
     resumeAuction,
     endDraft,

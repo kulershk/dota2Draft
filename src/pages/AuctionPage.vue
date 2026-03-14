@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Gavel, Pause, Play, XCircle, Zap, History, Wallet, Users as UsersIcon, AlertCircle, CheckCircle, Circle, Undo2, Search } from 'lucide-vue-next'
+import { Gavel, Pause, Play, XCircle, Zap, History, Wallet, Users as UsersIcon, AlertCircle, CheckCircle, Circle, Undo2, Search, EyeOff, Eye } from 'lucide-vue-next'
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDraftStore } from '@/composables/useDraftStore'
@@ -125,6 +125,23 @@ function toggleReady() {
   } else {
     store.setReady()
   }
+}
+
+// Blind bidding
+const blindBidAmount = ref<number | null>(null)
+const isBlindPhase = computed(() => store.auction.blindPhase)
+const hasSubmittedBlindBid = computed(() => store.myBlindBid.value !== null)
+const isInTopBidders = computed(() => {
+  if (!store.currentCaptain.value) return false
+  return store.auction.topBidderIds.includes(store.currentCaptain.value.id)
+})
+const isOpenPhaseAfterBlind = computed(() => {
+  return !store.auction.blindPhase && store.auction.topBidderIds.length > 0
+})
+
+function submitBlindBid() {
+  if (blindBidAmount.value == null || blindBidAmount.value < store.settings.minimumBid) return
+  store.submitBlindBid(blindBidAmount.value)
 }
 
 const captainRosters = computed(() =>
@@ -454,7 +471,13 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
               <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
                 <Gavel class="w-5 h-5 text-foreground" />
                 <span class="text-sm font-semibold text-foreground">{{ t('currentNomination') }}</span>
-                <span class="badge-bidding ml-2">{{ isPaused ? t('paused') : t('bidding') }}</span>
+                <span v-if="isBlindPhase" class="badge-info ml-2 flex items-center gap-1">
+                  <EyeOff class="w-3 h-3" /> {{ t('blindBidding') }}
+                </span>
+                <span v-else-if="isOpenPhaseAfterBlind" class="badge-bidding ml-2 flex items-center gap-1">
+                  <Eye class="w-3 h-3" /> {{ t('openBidding') }}
+                </span>
+                <span v-else class="badge-bidding ml-2">{{ isPaused ? t('paused') : t('bidding') }}</span>
               </div>
               <div class="p-4 flex flex-col gap-4" v-if="store.auction.nominatedPlayer">
                 <div class="flex flex-col items-center text-center gap-1">
@@ -468,7 +491,22 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
                   </p>
                 </div>
 
-                <div class="grid grid-cols-3 gap-2 md:gap-4">
+                <!-- Blind phase stats -->
+                <div v-if="isBlindPhase" class="grid grid-cols-2 gap-2 md:gap-4">
+                  <div class="rounded border border-border p-2 md:p-3 text-center">
+                    <p class="text-[10px] md:text-xs text-muted-foreground uppercase tracking-wider">{{ t('timeLeft') }}</p>
+                    <p class="text-lg md:text-2xl font-bold font-mono mt-1" :class="timeLeft <= 5 ? 'text-destructive' : 'text-foreground'">{{ timerDisplay }}</p>
+                    <p class="hidden md:block text-xs text-muted-foreground">{{ t('secondsRemaining') }}</p>
+                  </div>
+                  <div class="rounded border border-border p-2 md:p-3 text-center">
+                    <p class="text-[10px] md:text-xs text-muted-foreground uppercase tracking-wider">{{ t('bidsSubmitted') }}</p>
+                    <p class="text-lg md:text-2xl font-bold text-foreground font-mono mt-1">{{ store.auction.blindBidCount }}</p>
+                    <p class="hidden md:block text-xs text-muted-foreground">{{ t('sealed') }}</p>
+                  </div>
+                </div>
+
+                <!-- Normal/open phase stats -->
+                <div v-else class="grid grid-cols-3 gap-2 md:gap-4">
                   <div class="rounded border border-border p-2 md:p-3 text-center">
                     <p class="text-[10px] md:text-xs text-muted-foreground uppercase tracking-wider">{{ t('currentBid') }}</p>
                     <p class="text-lg md:text-2xl font-bold text-primary font-mono mt-1">{{ store.auction.currentBid }}g</p>
@@ -486,27 +524,82 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
                   </div>
                 </div>
 
-                <div class="grid grid-cols-2 md:flex gap-2 md:gap-3" v-if="!isPaused">
+                <!-- Blind bid input (during blind phase) -->
+                <div v-if="isBlindPhase && !isPaused" class="flex flex-col gap-3">
                   <template v-if="store.currentCaptain.value">
-                    <button class="btn-outline justify-center" :disabled="bidCooldown" @click="placeBid(5)">+5g</button>
-                    <button class="btn-outline justify-center" :disabled="bidCooldown" @click="placeBid(10)">+10g</button>
-                    <button class="btn-outline justify-center" :disabled="bidCooldown" @click="placeBid(25)">+25g</button>
-                    <button class="btn-primary justify-center col-span-2 md:flex-1" :disabled="bidCooldown" @click="placeBid(store.settings.bidIncrement)">
-                      <Zap class="w-4 h-4" /> {{ bidCooldown ? t('waitBid') : t('placeBid') }}
-                    </button>
+                    <div v-if="hasSubmittedBlindBid" class="p-3 rounded-lg bg-color-success/10 border border-color-success/30 text-center">
+                      <p class="text-sm font-medium text-color-success">{{ t('blindBidSubmitted') }}</p>
+                      <p class="text-lg font-bold font-mono text-foreground mt-1">{{ store.myBlindBid.value }}g</p>
+                      <p class="text-xs text-muted-foreground mt-1">{{ t('blindBidUpdateHint') }}</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <input
+                        type="number"
+                        class="input-field flex-1 text-center text-lg font-mono"
+                        :placeholder="t('enterBlindBid', { min: store.settings.minimumBid })"
+                        v-model.number="blindBidAmount"
+                        :min="store.settings.minimumBid"
+                      />
+                      <button class="btn-primary px-6 py-2.5" @click="submitBlindBid">
+                        <EyeOff class="w-4 h-4" />
+                        {{ hasSubmittedBlindBid ? t('updateBid') : t('submitBid') }}
+                      </button>
+                    </div>
+                    <p class="text-xs text-muted-foreground text-center">
+                      {{ t('blindBidInfo', { n: store.settings.blindTopBidders }) }}
+                    </p>
+                  </template>
+                  <p v-else class="text-sm text-muted-foreground italic py-2">{{ t('loginAsCaptainBid') }}</p>
+                </div>
+
+                <!-- Revealed bids (after blind phase, before/during open phase) -->
+                <div v-if="store.auction.revealedBids && !isBlindPhase" class="rounded border border-border overflow-hidden">
+                  <div class="flex items-center gap-2 px-3 py-2 bg-accent/50 border-b border-border">
+                    <Eye class="w-4 h-4 text-muted-foreground" />
+                    <span class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{{ t('blindBidResults') }}</span>
+                  </div>
+                  <div class="divide-y divide-border">
+                    <div v-for="(rb, i) in store.auction.revealedBids" :key="i" class="flex items-center justify-between px-3 py-2" :class="rb.qualified ? 'bg-primary/5' : 'opacity-50'">
+                      <div class="flex items-center gap-2">
+                        <span class="text-sm font-medium" :class="rb.qualified ? 'text-foreground' : 'text-muted-foreground'">{{ rb.captainName }}</span>
+                        <span v-if="rb.qualified" class="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">{{ t('qualified') }}</span>
+                      </div>
+                      <span class="text-sm font-mono" :class="rb.qualified ? 'font-bold text-primary' : 'text-muted-foreground'">{{ rb.amount }}g</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Normal bid buttons (non-blind or open phase after blind) -->
+                <div class="grid grid-cols-2 md:flex gap-2 md:gap-3" v-if="!isPaused && !isBlindPhase">
+                  <template v-if="store.currentCaptain.value">
+                    <template v-if="!isOpenPhaseAfterBlind || isInTopBidders">
+                      <button class="btn-outline justify-center" :disabled="bidCooldown" @click="placeBid(5)">+5g</button>
+                      <button class="btn-outline justify-center" :disabled="bidCooldown" @click="placeBid(10)">+10g</button>
+                      <button class="btn-outline justify-center" :disabled="bidCooldown" @click="placeBid(25)">+25g</button>
+                      <button class="btn-primary justify-center col-span-2 md:flex-1" :disabled="bidCooldown" @click="placeBid(store.settings.bidIncrement)">
+                        <Zap class="w-4 h-4" /> {{ bidCooldown ? t('waitBid') : t('placeBid') }}
+                      </button>
+                    </template>
+                    <p v-else class="text-sm text-muted-foreground italic py-2 col-span-2">{{ t('notQualifiedBlind') }}</p>
                   </template>
                   <p v-else class="text-sm text-muted-foreground italic py-2">{{ t('loginAsCaptainBid') }}</p>
                 </div>
               </div>
             </div>
 
-            <!-- Bid History -->
+            <!-- Bid History / Blind Status sidebar -->
             <div class="card md:w-[280px]">
               <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
                 <History class="w-5 h-5 text-foreground" />
-                <span class="text-sm font-semibold text-foreground">{{ t('bidHistory') }}</span>
+                <span class="text-sm font-semibold text-foreground">{{ isBlindPhase ? t('blindBidStatus') : t('bidHistory') }}</span>
               </div>
-              <div class="divide-y divide-border max-h-[200px] md:max-h-[400px] overflow-y-auto">
+              <div v-if="isBlindPhase" class="p-4 text-center">
+                <EyeOff class="w-8 h-8 text-muted-foreground mx-auto mb-3" />
+                <p class="text-sm text-muted-foreground">{{ t('blindBidsHidden') }}</p>
+                <p class="text-2xl font-bold font-mono text-foreground mt-2">{{ store.auction.blindBidCount }}</p>
+                <p class="text-xs text-muted-foreground">{{ t('bidsReceived') }}</p>
+              </div>
+              <div v-else class="divide-y divide-border max-h-[200px] md:max-h-[400px] overflow-y-auto">
                 <div v-for="(bid, i) in store.auction.bidHistory" :key="bid.id || i" class="flex items-center justify-between px-4 py-2.5" :class="i === 0 ? 'bg-primary/5' : ''">
                   <span class="text-sm" :class="i === 0 ? 'font-semibold text-foreground' : 'text-muted-foreground'">
                     {{ bid.captain_name }}

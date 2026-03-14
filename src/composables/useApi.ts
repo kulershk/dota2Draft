@@ -157,6 +157,10 @@ export function useApi() {
       request(`/api/admin/impersonate/${id}`, { method: 'POST' }),
     generateTestUsers: (count: number) =>
       request('/api/admin/generate-test-users', { method: 'POST', body: JSON.stringify({ count }) }),
+    parseSteamIds: (input: string) =>
+      request('/api/admin/parse-steam-ids', { method: 'POST', body: JSON.stringify({ input }) }),
+    importSteamUser: (steamId: string) =>
+      request('/api/admin/import-steam-user', { method: 'POST', body: JSON.stringify({ steamId }) }),
 
     // Competition Streams
     getCompStreams: (compId: number) => request(`/api/competitions/${compId}/streams`),

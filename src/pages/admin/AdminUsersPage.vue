@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Users, Search, ExternalLink, Ban, CheckCircle, LogIn, UserPlus, Pencil, ArrowUp, ArrowDown } from 'lucide-vue-next'
+import { Users, Search, ExternalLink, Ban, CheckCircle, LogIn, UserPlus, Pencil, ArrowUp, ArrowDown, Upload } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
@@ -177,6 +177,56 @@ async function generateTestUsers() {
   }
 }
 
+// Steam import
+const showImportModal = ref(false)
+const importInput = ref('')
+const importing = ref(false)
+const importStep = ref<'input' | 'processing' | 'done'>('input')
+const importTotal = ref(0)
+const importResults = ref<{ steamId: string; name: string; avatarUrl: string; status: string; id: number }[]>([])
+const importError = ref('')
+
+async function importSteamUsers() {
+  if (!importInput.value.trim()) return
+  importing.value = true
+  importStep.value = 'processing'
+  importResults.value = []
+  importError.value = ''
+
+  try {
+    // Step 1: Parse and resolve all Steam IDs
+    const { steamIds } = await api.parseSteamIds(importInput.value)
+    importTotal.value = steamIds.length
+
+    // Step 2: Import one by one
+    for (const steamId of steamIds) {
+      try {
+        const result = await api.importSteamUser(steamId)
+        importResults.value.push(result)
+      } catch (e: any) {
+        importResults.value.push({ steamId, name: '', avatarUrl: '', status: 'error', id: 0 })
+      }
+    }
+
+    importStep.value = 'done'
+    await fetchUsers()
+  } catch (e: any) {
+    importError.value = e.message
+    importStep.value = 'input'
+  } finally {
+    importing.value = false
+  }
+}
+
+function closeImportModal() {
+  showImportModal.value = false
+  importInput.value = ''
+  importResults.value = []
+  importStep.value = 'input'
+  importTotal.value = 0
+  importError.value = ''
+}
+
 function formatDate(dateStr: string) {
   const d = new Date(dateStr)
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
@@ -216,7 +266,13 @@ function formatRelativeTime(dateStr: string | null) {
         <p class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">{{ t('banned') }}</p>
         <p class="text-3xl font-bold text-destructive mt-1">{{ users.filter(u => u.is_banned).length }}</p>
       </div>
-      <div v-if="isDev" class="card p-4 flex items-center gap-3 ml-auto">
+      <div class="card p-4 flex items-center gap-3 ml-auto">
+        <button class="btn-primary text-sm whitespace-nowrap" @click="showImportModal = true">
+          <Upload class="w-4 h-4" />
+          {{ t('importSteamUsers') }}
+        </button>
+      </div>
+      <div v-if="isDev" class="card p-4 flex items-center gap-3">
         <p class="text-xs font-semibold tracking-wider text-muted-foreground uppercase whitespace-nowrap">{{ t('generateTestUsers') }}</p>
         <input v-model.number="generateCount" type="number" min="1" max="50" class="input-field !h-9 !w-20 text-center" />
         <button class="btn-primary text-sm whitespace-nowrap" :disabled="generating" @click="generateTestUsers">
@@ -371,6 +427,80 @@ function formatRelativeTime(dateStr: string | null) {
         <button class="btn-secondary w-full justify-center" @click="banConfirmUser = null">
           {{ t('cancel') }}
         </button>
+      </div>
+    </ModalOverlay>
+
+    <!-- Import Steam Users Modal -->
+    <ModalOverlay :show="showImportModal" @close="closeImportModal">
+      <div class="border-b border-border px-7 py-6">
+        <h2 class="text-xl font-semibold text-foreground">{{ t('importSteamUsers') }}</h2>
+        <p class="text-sm text-muted-foreground mt-1">{{ t('importSteamUsersHint') }}</p>
+      </div>
+      <div class="px-7 py-5 flex flex-col gap-4">
+        <!-- Input step -->
+        <template v-if="importStep === 'input'">
+          <textarea
+            v-model="importInput"
+            class="input-field w-full h-40 font-mono text-xs resize-y"
+            :placeholder="t('importSteamPlaceholder')"
+          ></textarea>
+          <p v-if="importError" class="text-sm text-destructive">{{ importError }}</p>
+        </template>
+
+        <!-- Processing / Done step -->
+        <template v-if="importStep === 'processing' || importStep === 'done'">
+          <!-- Progress bar -->
+          <div class="flex items-center gap-3">
+            <div class="flex-1 h-2 rounded-full bg-accent overflow-hidden">
+              <div class="h-full bg-primary rounded-full transition-all duration-300" :style="{ width: `${importTotal > 0 ? (importResults.length / importTotal) * 100 : 0}%` }"></div>
+            </div>
+            <span class="text-sm font-mono text-muted-foreground flex-shrink-0">{{ importResults.length }}/{{ importTotal }}</span>
+          </div>
+
+          <!-- Results list -->
+          <div class="border border-border rounded-lg divide-y divide-border max-h-[300px] overflow-y-auto">
+            <div v-for="(r, i) in importResults" :key="i" class="flex items-center justify-between px-3 py-2.5">
+              <div class="flex items-center gap-2.5 min-w-0">
+                <img v-if="r.avatarUrl" :src="r.avatarUrl" class="w-7 h-7 rounded-full flex-shrink-0" />
+                <div v-else class="w-7 h-7 rounded-full bg-secondary flex items-center justify-center text-[10px] font-semibold text-secondary-foreground flex-shrink-0">
+                  {{ r.name ? r.name.charAt(0) : '?' }}
+                </div>
+                <div class="min-w-0">
+                  <span class="text-sm font-medium text-foreground truncate block">{{ r.name || r.steamId }}</span>
+                  <span class="text-[10px] text-muted-foreground font-mono">{{ r.steamId }}</span>
+                </div>
+              </div>
+              <span class="text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ml-2" :class="{
+                'bg-color-success/15 text-color-success': r.status === 'created',
+                'bg-accent text-muted-foreground': r.status === 'exists',
+                'bg-red-500/15 text-red-500': r.status === 'error',
+              }">
+                {{ r.status === 'created' ? t('imported') : r.status === 'error' ? t('failed') : t('alreadyExists') }}
+              </span>
+            </div>
+            <!-- Pending placeholders -->
+            <div v-if="importStep === 'processing'" v-for="i in Math.max(0, importTotal - importResults.length)" :key="'pending-' + i" class="flex items-center gap-2.5 px-3 py-2.5">
+              <div class="w-7 h-7 rounded-full bg-accent animate-pulse flex-shrink-0"></div>
+              <div class="h-4 w-32 bg-accent animate-pulse rounded"></div>
+            </div>
+          </div>
+
+          <!-- Summary when done -->
+          <div v-if="importStep === 'done'" class="text-sm text-muted-foreground text-center">
+            {{ t('importSummary', {
+              created: importResults.filter(r => r.status === 'created').length,
+              existing: importResults.filter(r => r.status === 'exists').length,
+              failed: importResults.filter(r => r.status === 'error').length,
+            }) }}
+          </div>
+        </template>
+      </div>
+      <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
+        <button v-if="importStep === 'input'" class="btn-primary w-full justify-center" :disabled="!importInput.trim()" @click="importSteamUsers">
+          <Upload class="w-4 h-4" />
+          {{ t('importUsers') }}
+        </button>
+        <button class="btn-secondary w-full justify-center" :disabled="importStep === 'processing'" @click="closeImportModal">{{ t('close') }}</button>
       </div>
     </ModalOverlay>
 
