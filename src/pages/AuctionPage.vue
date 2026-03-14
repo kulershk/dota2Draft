@@ -670,7 +670,8 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
         <div v-for="roster in captainRosters" :key="roster.id" class="card transition-all" :class="roster.players.length >= store.settings.playersPerTeam ? 'ring-2 ring-green-500 border-green-500' : highlightedCaptainId === roster.id ? 'ring-2 ring-primary border-primary' : ''">
           <div class="flex items-center justify-between px-3 py-2.5 border-b border-border">
             <div class="flex items-center gap-2">
-              <CaptainAvatar :name="roster.name" :online="store.onlineCaptainIds.value.includes(roster.id)" size="sm" />
+              <img v-if="roster.banner_url" :src="roster.banner_url" class="w-8 h-8 rounded object-cover" />
+              <CaptainAvatar v-else :name="roster.name" :online="store.onlineCaptainIds.value.includes(roster.id)" size="sm" />
               <div>
                 <div class="flex items-center gap-1.5">
                   <RankBadge :mmr="roster.mmr" size="sm" />
