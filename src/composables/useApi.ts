@@ -161,6 +161,12 @@ export function useApi() {
       request('/api/admin/parse-steam-ids', { method: 'POST', body: JSON.stringify({ input }) }),
     importSteamUser: (steamId: string) =>
       request('/api/admin/import-steam-user', { method: 'POST', body: JSON.stringify({ steamId }) }),
+    syncSteamUser: (id: number) =>
+      request(`/api/admin/sync-steam-user/${id}`, { method: 'POST' }),
+    syncSteamAll: () =>
+      request('/api/admin/sync-steam-all', { method: 'POST' }),
+    getSteamSyncStatus: () =>
+      request('/api/admin/steam-sync-status'),
 
     // Competition Streams
     getCompStreams: (compId: number) => request(`/api/competitions/${compId}/streams`),

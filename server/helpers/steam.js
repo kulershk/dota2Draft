@@ -20,6 +20,33 @@ export async function fetchSteamProfile(steamId) {
   return { personaName, avatarUrl }
 }
 
+// Fetch up to 100 profiles in a single API call
+export async function fetchSteamProfiles(steamIds) {
+  const steamApiKey = process.env.STEAM_API_KEY
+  if (!steamApiKey || steamIds.length === 0) return new Map()
+
+  const results = new Map()
+  // Steam API allows up to 100 IDs per request
+  for (let i = 0; i < steamIds.length; i += 100) {
+    const batch = steamIds.slice(i, i + 100)
+    try {
+      const res = await fetch(
+        `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key=${steamApiKey}&steamids=${batch.join(',')}`
+      )
+      const data = await res.json()
+      for (const p of (data?.response?.players || [])) {
+        results.set(p.steamid, {
+          personaName: p.personaname || `Steam_${p.steamid.slice(-6)}`,
+          avatarUrl: p.avatarfull || p.avatarmedium || p.avatar || '',
+        })
+      }
+    } catch (e) {
+      console.error('Steam bulk profile fetch error:', e)
+    }
+  }
+  return results
+}
+
 export async function resolveVanityUrl(vanityName) {
   const steamApiKey = process.env.STEAM_API_KEY
   if (!steamApiKey) return null

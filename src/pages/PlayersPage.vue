@@ -308,13 +308,20 @@ watch(searchQuery, () => { playersPage.value = 1 })
           </div>
         </div>
 
-        <div class="flex flex-col gap-2">
+        <div class="flex flex-col gap-1.5">
           <label class="label-text">{{ t('joinModal.roles') }}</label>
-          <div class="flex flex-wrap gap-x-5 gap-y-2">
-            <label v-for="role in allRoles" :key="role" class="flex items-center gap-2 text-sm text-foreground cursor-pointer">
-              <input type="checkbox" :checked="registerRoles.includes(role)" class="w-4 h-4 rounded border-input text-primary focus:ring-primary" @change="toggleRegisterRole(role)" />
-              {{ role }}
-            </label>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="role in allRoles"
+              :key="role"
+              class="px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors"
+              :class="registerRoles.includes(role)
+                ? 'bg-primary/10 border-primary/30 text-foreground'
+                : 'border-border text-muted-foreground hover:border-foreground/20'"
+              @click="toggleRegisterRole(role)"
+            >
+              <RoleBadge :role="roleMap[role] || role" size="sm" />
+            </button>
           </div>
         </div>
         <InputGroup label="MMR" :model-value="registerMmr" placeholder="e.g. 11000" @update:model-value="registerMmr = $event" />
@@ -343,13 +350,20 @@ watch(searchQuery, () => { playersPage.value = 1 })
       </div>
       <div class="px-7 py-5 flex flex-col gap-5">
         <InputGroup label="Player Name" :model-value="editPlayer.name" placeholder="e.g. Miracle-" @update:model-value="editPlayer.name = $event" />
-        <div class="flex flex-col gap-2">
+        <div class="flex flex-col gap-1.5">
           <label class="label-text">Roles (select all that apply)</label>
-          <div class="flex flex-wrap gap-x-5 gap-y-2">
-            <label v-for="role in allRoles" :key="role" class="flex items-center gap-2 text-sm text-foreground cursor-pointer">
-              <input type="checkbox" :checked="editPlayer.roles.includes(role)" class="w-4 h-4 rounded border-input text-primary focus:ring-primary" @change="toggleEditRole(role)" />
-              {{ role }}
-            </label>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="role in allRoles"
+              :key="role"
+              class="px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors"
+              :class="editPlayer.roles.includes(role)
+                ? 'bg-primary/10 border-primary/30 text-foreground'
+                : 'border-border text-muted-foreground hover:border-foreground/20'"
+              @click="toggleEditRole(role)"
+            >
+              <RoleBadge :role="roleMap[role] || role" size="sm" />
+            </button>
           </div>
         </div>
         <InputGroup label="MMR" :model-value="editPlayer.mmr" placeholder="e.g. 11000" @update:model-value="editPlayer.mmr = $event" />

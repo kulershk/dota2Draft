@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Users, Search, ExternalLink, Ban, CheckCircle, LogIn, UserPlus, Pencil, ArrowUp, ArrowDown, Upload } from 'lucide-vue-next'
+import { Users, Search, ExternalLink, Ban, CheckCircle, LogIn, UserPlus, Pencil, ArrowUp, ArrowDown, Upload, RefreshCw } from 'lucide-vue-next'
+import RoleBadge from '@/components/common/RoleBadge.vue'
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
@@ -47,7 +48,10 @@ const USERS_PAGE_SIZE = 20
 const allGroups = ref<PermGroup[]>([])
 const editUser = ref<User | null>(null)
 const editUserGroupIds = ref<number[]>([])
+const editUserMmr = ref(0)
+const editUserRoles = ref<string[]>([])
 const savingUser = ref(false)
+const ALL_ROLES = ['Carry', 'Mid', 'Offlane', 'Pos4', 'Pos5']
 
 async function fetchUsers() {
   loading.value = true
@@ -63,11 +67,20 @@ async function fetchUsers() {
   }
 }
 fetchUsers()
+fetchSyncStatus()
 
 async function openEditUser(user: User) {
   editUser.value = user
+  editUserMmr.value = user.mmr
+  editUserRoles.value = [...(user.roles || [])]
   const groups = await api.getPlayerGroups(user.id)
   editUserGroupIds.value = groups.map((g: PermGroup) => g.id)
+}
+
+function toggleRole(role: string) {
+  const idx = editUserRoles.value.indexOf(role)
+  if (idx >= 0) editUserRoles.value.splice(idx, 1)
+  else editUserRoles.value.push(role)
 }
 
 function toggleGroupForUser(groupId: number) {
@@ -76,11 +89,24 @@ function toggleGroupForUser(groupId: number) {
   else editUserGroupIds.value.push(groupId)
 }
 
+function addGroup(groupId: number) {
+  if (groupId && !editUserGroupIds.value.includes(groupId)) {
+    editUserGroupIds.value.push(groupId)
+  }
+}
+
+const availableGroups = computed(() =>
+  allGroups.value.filter(g => !editUserGroupIds.value.includes(g.id))
+)
+
 async function saveEditUser() {
   if (!editUser.value) return
   savingUser.value = true
   try {
-    await api.setPlayerGroups(editUser.value.id, editUserGroupIds.value)
+    await Promise.all([
+      api.setPlayerGroups(editUser.value.id, editUserGroupIds.value),
+      api.updatePlayer(editUser.value.id, { mmr: editUserMmr.value, roles: editUserRoles.value }),
+    ])
     editUser.value = null
     await fetchUsers()
   } finally {
@@ -227,6 +253,46 @@ function closeImportModal() {
   importError.value = ''
 }
 
+// Steam sync
+const syncing = ref(false)
+const lastSynced = ref<string | null>(null)
+const syncedUsers = ref(0)
+const totalSteamUsers = ref(0)
+
+async function fetchSyncStatus() {
+  try {
+    const data = await api.getSteamSyncStatus()
+    lastSynced.value = data.lastSynced
+    syncedUsers.value = data.syncedUsers
+    totalSteamUsers.value = data.totalSteamUsers
+  } catch {}
+}
+
+async function syncAllProfiles() {
+  syncing.value = true
+  try {
+    await api.syncSteamAll()
+    await Promise.all([fetchUsers(), fetchSyncStatus()])
+  } catch (e: any) {
+    alert(e.message)
+  } finally {
+    syncing.value = false
+  }
+}
+
+async function syncSingleUser(userId: number) {
+  try {
+    const result = await api.syncSteamUser(userId)
+    if (result.status === 'synced') {
+      const user = users.value.find(u => u.id === userId)
+      if (user) {
+        user.name = result.name
+        user.avatar_url = result.avatar_url
+      }
+    }
+  } catch {}
+}
+
 function formatDate(dateStr: string) {
   const d = new Date(dateStr)
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
@@ -257,7 +323,7 @@ function formatRelativeTime(dateStr: string | null) {
       <p class="text-sm text-muted-foreground mt-1">{{ t('steamUsersSubtitle') }}</p>
     </div>
 
-    <div class="flex gap-4">
+    <div class="flex flex-wrap gap-4">
       <div class="card p-4">
         <p class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">{{ t('totalAccounts') }}</p>
         <p class="text-3xl font-bold text-foreground mt-1">{{ users.length }}</p>
@@ -266,7 +332,20 @@ function formatRelativeTime(dateStr: string | null) {
         <p class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">{{ t('banned') }}</p>
         <p class="text-3xl font-bold text-destructive mt-1">{{ users.filter(u => u.is_banned).length }}</p>
       </div>
-      <div class="card p-4 flex items-center gap-3 ml-auto">
+      <div class="card p-4 flex items-center gap-4 ml-auto">
+        <div class="flex flex-col">
+          <p class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">{{ t('steamSync') }}</p>
+          <p class="text-xs text-muted-foreground mt-0.5">
+            <template v-if="lastSynced">{{ t('lastSynced') }}: {{ formatRelativeTime(lastSynced) }}</template>
+            <template v-else>{{ t('neverSynced') }}</template>
+          </p>
+        </div>
+        <button class="btn-outline text-sm whitespace-nowrap" :disabled="syncing" @click="syncAllProfiles">
+          <RefreshCw class="w-4 h-4" :class="syncing ? 'animate-spin' : ''" />
+          {{ syncing ? t('syncing') : t('syncAll') }}
+        </button>
+      </div>
+      <div class="card p-4 flex items-center gap-3">
         <button class="btn-primary text-sm whitespace-nowrap" @click="showImportModal = true">
           <Upload class="w-4 h-4" />
           {{ t('importSteamUsers') }}
@@ -373,6 +452,9 @@ function formatRelativeTime(dateStr: string | null) {
                 <div class="flex items-center gap-1">
                   <button class="btn-ghost p-2" :title="t('edit')" @click="openEditUser(user)">
                     <Pencil class="w-4 h-4" />
+                  </button>
+                  <button v-if="user.steam_id" class="btn-ghost p-2" :title="t('syncProfile')" @click="syncSingleUser(user.id)">
+                    <RefreshCw class="w-4 h-4" />
                   </button>
                   <button v-if="!user.is_banned" class="btn-ghost p-2" :title="t('banUser')" @click="promptToggleBan(user)">
                     <Ban class="w-4 h-4" />
@@ -514,33 +596,61 @@ function formatRelativeTime(dateStr: string | null) {
           </div>
           <div>
             <h2 class="text-xl font-semibold text-foreground">{{ editUser?.name }}</h2>
-            <p class="text-xs text-muted-foreground">{{ t('editPermissionGroups') }}</p>
+            <p class="text-xs text-muted-foreground">{{ t('editUserProfile') }}</p>
           </div>
         </div>
       </div>
-      <div class="px-7 py-5 max-h-[350px] overflow-y-auto">
-        <label class="block text-xs font-medium text-muted-foreground mb-2">{{ t('permissionGroups') }}</label>
-        <div v-if="allGroups.length === 0" class="text-sm text-muted-foreground py-4 text-center">{{ t('noGroupsYet') }}</div>
-        <div v-else class="flex flex-col gap-2">
-          <label
-            v-for="group in allGroups"
-            :key="group.id"
-            class="flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-colors cursor-pointer"
-            :class="editUserGroupIds.includes(group.id)
-              ? 'bg-primary/10 border-primary/30 text-foreground'
-              : 'border-border text-muted-foreground hover:border-foreground/20'"
+      <div class="px-7 py-5 max-h-[450px] overflow-y-auto flex flex-col gap-5">
+        <!-- MMR -->
+        <div class="flex flex-col gap-1.5">
+          <label class="block text-xs font-medium text-muted-foreground">{{ t('mmrCol') }}</label>
+          <input type="number" class="input-field w-full" v-model.number="editUserMmr" placeholder="0" />
+        </div>
+
+        <!-- Roles -->
+        <div class="flex flex-col gap-1.5">
+          <label class="block text-xs font-medium text-muted-foreground">{{ t('rolesCol') }}</label>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="role in ALL_ROLES"
+              :key="role"
+              class="px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors"
+              :class="editUserRoles.includes(role)
+                ? 'bg-primary/10 border-primary/30 text-foreground'
+                : 'border-border text-muted-foreground hover:border-foreground/20'"
+              @click="toggleRole(role)"
+            >
+              <RoleBadge :role="role" size="sm" />
+            </button>
+          </div>
+        </div>
+
+        <!-- Permission Groups -->
+        <div class="flex flex-col gap-1.5">
+          <label class="block text-xs font-medium text-muted-foreground">{{ t('permissionGroups') }}</label>
+          <!-- Assigned groups as tags -->
+          <div v-if="editUserGroupIds.length > 0" class="flex flex-wrap gap-1.5 mb-1">
+            <span
+              v-for="gid in editUserGroupIds"
+              :key="gid"
+              class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-primary/15 text-primary"
+            >
+              {{ allGroups.find(g => g.id === gid)?.name }}
+              <button class="hover:text-destructive transition-colors ml-0.5" @click="toggleGroupForUser(gid)">
+                <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </button>
+            </span>
+          </div>
+          <!-- Dropdown to add -->
+          <select
+            v-if="availableGroups.length > 0"
+            class="input-field w-full"
+            @change="addGroup(Number(($event.target as HTMLSelectElement).value)); ($event.target as HTMLSelectElement).value = ''"
           >
-            <input
-              type="checkbox"
-              :checked="editUserGroupIds.includes(group.id)"
-              class="rounded border-border"
-              @change="toggleGroupForUser(group.id)"
-            />
-            <div>
-              <span class="text-sm font-medium">{{ group.name }}</span>
-              <span class="text-xs text-muted-foreground ml-2">({{ group.permissions.length }} {{ t('permissionsCount') }})</span>
-            </div>
-          </label>
+            <option value="" disabled selected>{{ t('addPermissionGroup') }}</option>
+            <option v-for="g in availableGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
+          </select>
+          <p v-else-if="allGroups.length === 0" class="text-sm text-muted-foreground">{{ t('noGroupsYet') }}</p>
         </div>
       </div>
       <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">

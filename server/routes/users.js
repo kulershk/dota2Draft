@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { query, queryOne, execute } from '../db.js'
 import { createSession } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/permissions.js'
-import { fetchSteamProfile, parseSteamIds } from '../helpers/steam.js'
+import { fetchSteamProfile, fetchSteamProfiles, parseSteamIds } from '../helpers/steam.js'
 
 const router = Router()
 
@@ -35,6 +35,7 @@ router.get('/api/users', async (req, res) => {
     twitch_username: p.twitch_username || null,
     created_at: p.created_at,
     last_online: p.last_online || null,
+    steam_synced_at: p.steam_synced_at || null,
     permission_groups: groupsByPlayer[p.id] || [],
   })))
 })
@@ -245,6 +246,66 @@ router.post('/api/admin/import-steam-user', async (req, res) => {
     [personaName, steamId, avatarUrl]
   )
   res.json({ steamId, name: player.name, avatarUrl, status: 'created', id: player.id })
+})
+
+// Sync a single user's Steam profile
+router.post('/api/admin/sync-steam-user/:id', async (req, res) => {
+  const admin = await requirePermission(req, res, 'manage_users')
+  if (!admin) return
+
+  const player = await queryOne('SELECT id, steam_id, name, avatar_url FROM players WHERE id = $1', [req.params.id])
+  if (!player) return res.status(404).json({ error: 'Player not found' })
+  if (!player.steam_id || !/^\d{10,}$/.test(player.steam_id)) {
+    return res.json({ id: player.id, name: player.name, avatar_url: player.avatar_url, status: 'skipped' })
+  }
+
+  const { personaName, avatarUrl } = await fetchSteamProfile(player.steam_id)
+  await execute(
+    'UPDATE players SET name = $1, avatar_url = $2, steam_synced_at = NOW() WHERE id = $3',
+    [personaName, avatarUrl, player.id]
+  )
+  res.json({ id: player.id, name: personaName, avatar_url: avatarUrl, status: 'synced' })
+})
+
+// Bulk sync all users' Steam profiles
+router.post('/api/admin/sync-steam-all', async (req, res) => {
+  const admin = await requirePermission(req, res, 'manage_users')
+  if (!admin) return
+
+  const players = await query("SELECT id, steam_id FROM players WHERE steam_id IS NOT NULL AND steam_id ~ '^[0-9]{10,}$'")
+  if (players.length === 0) return res.json({ synced: 0, total: 0 })
+
+  const steamIds = players.map(p => p.steam_id)
+  const profiles = await fetchSteamProfiles(steamIds)
+
+  let synced = 0
+  for (const player of players) {
+    const profile = profiles.get(player.steam_id)
+    if (profile) {
+      await execute(
+        'UPDATE players SET name = $1, avatar_url = $2, steam_synced_at = NOW() WHERE id = $3',
+        [profile.personaName, profile.avatarUrl, player.id]
+      )
+      synced++
+    }
+  }
+
+  res.json({ synced, total: players.length })
+})
+
+// Get last sync timestamp
+router.get('/api/admin/steam-sync-status', async (req, res) => {
+  const admin = await requirePermission(req, res, 'manage_users')
+  if (!admin) return
+
+  const row = await queryOne("SELECT MAX(steam_synced_at) as last_synced FROM players")
+  const countRow = await queryOne("SELECT COUNT(*) as total FROM players WHERE steam_id IS NOT NULL AND steam_id ~ '^[0-9]{10,}$'")
+  const syncedRow = await queryOne("SELECT COUNT(*) as synced FROM players WHERE steam_synced_at IS NOT NULL")
+  res.json({
+    lastSynced: row?.last_synced || null,
+    totalSteamUsers: parseInt(countRow?.total || '0'),
+    syncedUsers: parseInt(syncedRow?.synced || '0'),
+  })
 })
 
 router.post('/api/admin/generate-test-users', async (req, res) => {
