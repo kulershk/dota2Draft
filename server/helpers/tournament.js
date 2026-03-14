@@ -82,8 +82,8 @@ export async function generateGroupMatches(compId, stageId, groups, bestOf) {
     for (let i = 0; i < teamIds.length; i++) {
       for (let j = i + 1; j < teamIds.length; j++) {
         await execute(
-          `INSERT INTO matches (competition_id, stage, round, match_order, group_name, team1_captain_id, team2_captain_id, best_of, status)
-           VALUES ($1, $2, 1, $3, $4, $5, $6, $7, 'pending')`,
+          `INSERT INTO matches (competition_id, stage, round, match_order, group_name, team1_captain_id, team2_captain_id, best_of, status, hidden)
+           VALUES ($1, $2, 1, $3, $4, $5, $6, $7, 'pending', true)`,
           [compId, stageId, order++, group.name, teamIds[i], teamIds[j], bestOf]
         )
       }

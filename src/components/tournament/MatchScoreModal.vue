@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { EyeOff } from 'lucide-vue-next'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 
 const { t } = useI18n()
@@ -16,8 +17,12 @@ const emit = defineEmits<{
 
 const bestOf = computed(() => props.match.best_of || 3)
 const games = ref<{ game_number: number; winner_captain_id: number | null; dotabuff_id: string }[]>([])
+const isHidden = ref(false)
+const matchStatus = ref('pending')
 
 onMounted(() => {
+  isHidden.value = !!props.match.hidden
+  matchStatus.value = props.match.status || 'pending'
   // Initialize games from existing data
   const existing = props.match.games || []
   for (let i = 1; i <= bestOf.value; i++) {
@@ -42,8 +47,9 @@ function save() {
   emit('save', {
     score1: score1.value,
     score2: score2.value,
-    status: (score1.value > bestOf.value / 2 || score2.value > bestOf.value / 2) ? 'completed' : 'live',
+    status: matchStatus.value,
     games: games.value.filter(g => g.winner_captain_id || g.dotabuff_id),
+    hidden: isHidden.value,
   })
 }
 </script>
@@ -93,6 +99,20 @@ function save() {
     </div>
 
     <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
+      <div class="flex items-center gap-3">
+        <label class="text-sm text-foreground font-medium">{{ t('statusCol') }}</label>
+        <select class="input-field flex-1" v-model="matchStatus">
+          <option value="pending">{{ t('matchPending') }}</option>
+          <option value="live">{{ t('matchLive') }}</option>
+          <option value="completed">{{ t('matchCompleted') }}</option>
+        </select>
+      </div>
+      <label class="flex items-center gap-2 cursor-pointer py-1">
+        <input type="checkbox" class="w-4 h-4 accent-primary" v-model="isHidden" />
+        <EyeOff class="w-4 h-4 text-muted-foreground" />
+        <span class="text-sm text-foreground">{{ t('hideMatch') }}</span>
+        <span class="text-xs text-muted-foreground">{{ t('hideMatchHint') }}</span>
+      </label>
       <button class="btn-primary w-full justify-center" @click="save">
         {{ t('updateScore') }}
       </button>

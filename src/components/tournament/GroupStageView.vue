@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { ChevronDown, ChevronUp } from 'lucide-vue-next'
+import { ChevronDown, ChevronUp, EyeOff } from 'lucide-vue-next'
 import { computed, ref } from 'vue'
 
 const { t } = useI18n()
@@ -41,7 +41,7 @@ const standings = computed(() => {
         entries.push({ key: `tbd-${ti}`, id: null, team: t('tbd'), avatar: '', w: 0, l: 0, mw: 0, ml: 0, isTbd: true })
       } else {
         const cap = props.captains.find(c => c.id === id)
-        const entry = { key: id, id, team: cap?.team || '?', avatar: cap?.avatar_url || '', w: 0, l: 0, mw: 0, ml: 0, isTbd: false }
+        const entry = { key: id, id, team: cap?.team || '?', avatar: cap?.banner_url || cap?.avatar_url || '', hasBanner: !!cap?.banner_url, w: 0, l: 0, mw: 0, ml: 0, isTbd: false }
         entries.push(entry)
         statsById[id] = entry
       }
@@ -73,7 +73,7 @@ const matchesByGroup = computed(() => {
   const result: Record<string, any[]> = {}
   for (const group of groupsList.value) {
     result[group.name] = props.matches
-      .filter(m => m.group_name === group.name)
+      .filter(m => m.group_name === group.name && (props.isAdmin || !m.hidden))
       .sort((a, b) => a.match_order - b.match_order)
   }
   return result
@@ -114,7 +114,7 @@ function statusText(status: string) {
               <td class="px-4 py-2.5 text-muted-foreground">{{ idx + 1 }}</td>
               <td class="px-4 py-2.5">
                 <div class="flex items-center gap-2">
-                  <img v-if="team.avatar" :src="team.avatar" class="w-5 h-5 rounded-full" />
+                  <img v-if="team.avatar" :src="team.avatar" class="w-5 h-5 object-cover" :class="team.hasBanner ? 'rounded' : 'rounded-full'" />
                   <span class="font-medium" :class="team.isTbd ? 'text-muted-foreground italic' : 'text-foreground'">{{ team.team }}</span>
                 </div>
               </td>
@@ -142,6 +142,7 @@ function statusText(status: string) {
           v-for="match in matchesByGroup[group.name]"
           :key="match.id"
           class="card p-3 flex items-center gap-3 cursor-pointer hover:shadow-sm transition-shadow"
+          :class="match.hidden ? 'opacity-40' : ''"
           @click="isAdmin ? emit('edit-match', match) : null"
         >
           <!-- Team 1 -->
@@ -149,7 +150,7 @@ function statusText(status: string) {
             <span class="text-sm font-medium text-foreground truncate" :class="match.winner_captain_id === match.team1_captain_id ? 'font-bold' : ''">
               {{ match.team1_name || t('tbd') }}
             </span>
-            <img v-if="match.team1_avatar" :src="match.team1_avatar" class="w-5 h-5 rounded-full" />
+            <img v-if="match.team1_banner || match.team1_avatar" :src="match.team1_banner || match.team1_avatar" class="w-5 h-5 object-cover" :class="match.team1_banner ? 'rounded' : 'rounded-full'" />
           </div>
           <!-- Score -->
           <div class="flex items-center gap-1.5 px-3">
@@ -163,11 +164,13 @@ function statusText(status: string) {
           </div>
           <!-- Team 2 -->
           <div class="flex-1 flex items-center gap-2">
-            <img v-if="match.team2_avatar" :src="match.team2_avatar" class="w-5 h-5 rounded-full" />
+            <img v-if="match.team2_banner || match.team2_avatar" :src="match.team2_banner || match.team2_avatar" class="w-5 h-5 object-cover" :class="match.team2_banner ? 'rounded' : 'rounded-full'" />
             <span class="text-sm font-medium text-foreground truncate" :class="match.winner_captain_id === match.team2_captain_id ? 'font-bold' : ''">
               {{ match.team2_name || t('tbd') }}
             </span>
           </div>
+          <!-- Hidden indicator -->
+          <EyeOff v-if="match.hidden && isAdmin" class="w-3.5 h-3.5 text-muted-foreground shrink-0" :title="t('hiddenMatch')" />
           <!-- Status -->
           <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium shrink-0" :class="statusBadge(match.status)">
             {{ statusText(match.status) }}

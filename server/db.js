@@ -274,6 +274,17 @@ export async function initDb() {
     }
   }
 
+  // Matches migration: add hidden column
+  {
+    const has = await queryOne(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'matches' AND column_name = 'hidden'`
+    )
+    if (!has) {
+      const tableExists = await queryOne(`SELECT 1 FROM information_schema.tables WHERE table_name = 'matches'`)
+      if (tableExists) await execute('ALTER TABLE matches ADD COLUMN hidden BOOLEAN DEFAULT FALSE')
+    }
+  }
+
   // Ensure competition_players exists (might already from migration)
   await execute(`
     CREATE TABLE IF NOT EXISTS competition_players (

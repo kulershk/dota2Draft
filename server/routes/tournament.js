@@ -206,7 +206,7 @@ export default function createTournamentRouter(io) {
     const match = await queryOne('SELECT * FROM matches WHERE id = $1 AND competition_id = $2', [matchId, compId])
     if (!match) return res.status(404).json({ error: 'Match not found' })
 
-    const { score1, score2, games, status } = req.body
+    const { score1, score2, games, status, hidden } = req.body
 
     let winnerId = null
     if (score1 != null && score2 != null) {
@@ -215,10 +215,11 @@ export default function createTournamentRouter(io) {
     }
 
     const newStatus = status || (winnerId ? 'completed' : match.status)
+    const newHidden = hidden !== undefined ? hidden : (match.hidden || false)
 
     await execute(
-      `UPDATE matches SET score1 = $1, score2 = $2, winner_captain_id = $3, status = $4 WHERE id = $5`,
-      [score1 ?? match.score1, score2 ?? match.score2, winnerId, newStatus, matchId]
+      `UPDATE matches SET score1 = $1, score2 = $2, winner_captain_id = $3, status = $4, hidden = $5 WHERE id = $6`,
+      [score1 ?? match.score1, score2 ?? match.score2, winnerId, newStatus, newHidden, matchId]
     )
 
     if (games && Array.isArray(games)) {
