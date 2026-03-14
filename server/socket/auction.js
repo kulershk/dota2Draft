@@ -31,6 +31,7 @@ export async function startCompBidTimer(compId, io) {
 async function finalizeBlindPhase(compId, io) {
   clearCompBidTimer(compId)
   const comp = await getCompetition(compId)
+  if (!comp) return
   const state = parseAuctionState(comp)
   const settings = parseCompSettings(comp)
   const blindBids = state.blindBids || {}
@@ -114,6 +115,7 @@ async function finalizeBlindPhase(compId, io) {
 async function finalizeCompBid(compId, io) {
   clearCompBidTimer(compId)
   const comp = await getCompetition(compId)
+  if (!comp) return
   const state = parseAuctionState(comp)
   const settings = parseCompSettings(comp)
 

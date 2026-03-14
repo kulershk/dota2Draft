@@ -18,7 +18,7 @@ export function parseCompSettings(comp) {
 }
 
 export function parseAuctionState(comp) {
-  return comp.auction_state || {}
+  return comp?.auction_state || {}
 }
 
 export async function getCompetition(compId) {

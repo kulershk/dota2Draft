@@ -1,0 +1,753 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Dota 2 Auction Draft API",
+    "description": "REST API for the Dota 2 Auction Draft platform. Manages competitions, players, captains, auctions, tournaments, and user accounts.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    { "url": "/", "description": "Current server" }
+  ],
+  "tags": [
+    { "name": "Auth", "description": "Authentication & user profile" },
+    { "name": "Competitions", "description": "Competition CRUD" },
+    { "name": "Captains", "description": "Captain management" },
+    { "name": "Players", "description": "Competition player pool" },
+    { "name": "Auction", "description": "Auction state & results" },
+    { "name": "Tournament", "description": "Tournament brackets & matches" },
+    { "name": "News", "description": "News posts & comments" },
+    { "name": "Users", "description": "Global user management (admin)" },
+    { "name": "Permissions", "description": "Permission groups" },
+    { "name": "Settings", "description": "Site settings" },
+    { "name": "Streams", "description": "Twitch streams" }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
+    "schemas": {
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "name": { "type": "string" },
+          "steam_id": { "type": "string", "nullable": true },
+          "avatar_url": { "type": "string", "nullable": true },
+          "is_admin": { "type": "boolean" },
+          "permissions": { "type": "array", "items": { "type": "string" } },
+          "roles": { "type": "array", "items": { "type": "string" } },
+          "mmr": { "type": "integer" },
+          "info": { "type": "string" },
+          "twitch_username": { "type": "string", "nullable": true },
+          "discord_username": { "type": "string", "nullable": true }
+        }
+      },
+      "Competition": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "status": { "type": "string", "enum": ["draft", "registration", "active", "finished"] },
+          "is_public": { "type": "boolean" },
+          "starts_at": { "type": "string", "format": "date-time", "nullable": true },
+          "registration_start": { "type": "string", "format": "date-time", "nullable": true },
+          "registration_end": { "type": "string", "format": "date-time", "nullable": true },
+          "settings": { "$ref": "#/components/schemas/CompSettings" },
+          "auction_state": { "type": "object" },
+          "created_by": { "type": "integer", "nullable": true },
+          "created_by_name": { "type": "string", "nullable": true },
+          "created_by_avatar": { "type": "string", "nullable": true },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CompSettings": {
+        "type": "object",
+        "properties": {
+          "playersPerTeam": { "type": "integer", "default": 5 },
+          "bidTimer": { "type": "integer", "default": 30, "description": "Seconds per bid round" },
+          "startingBudget": { "type": "integer", "default": 1000 },
+          "minimumBid": { "type": "integer", "default": 10 },
+          "bidIncrement": { "type": "integer", "default": 5 },
+          "maxBid": { "type": "integer", "default": 0, "description": "0 = no limit" },
+          "nominationOrder": { "type": "string", "enum": ["normal", "lowest_avg", "fewest_then_lowest"] },
+          "requireAllOnline": { "type": "boolean", "default": true },
+          "allowSteamRegistration": { "type": "boolean", "default": true },
+          "biddingType": { "type": "string", "enum": ["default", "blind"], "default": "default" },
+          "blindTopBidders": { "type": "integer", "default": 3 }
+        }
+      },
+      "Captain": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "name": { "type": "string" },
+          "team": { "type": "string" },
+          "budget": { "type": "integer" },
+          "status": { "type": "string" },
+          "mmr": { "type": "integer" },
+          "player_id": { "type": "integer", "nullable": true },
+          "avatar_url": { "type": "string" },
+          "banner_url": { "type": "string", "nullable": true }
+        }
+      },
+      "Player": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "name": { "type": "string" },
+          "roles": { "type": "array", "items": { "type": "string" } },
+          "mmr": { "type": "integer" },
+          "info": { "type": "string" },
+          "drafted": { "type": "boolean" },
+          "drafted_by": { "type": "integer", "nullable": true },
+          "draft_price": { "type": "integer", "nullable": true },
+          "draft_round": { "type": "integer", "nullable": true },
+          "steam_id": { "type": "string", "nullable": true },
+          "avatar_url": { "type": "string", "nullable": true },
+          "is_captain": { "type": "boolean" },
+          "in_pool": { "type": "boolean" }
+        }
+      },
+      "NewsPost": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "title": { "type": "string" },
+          "content": { "type": "string" },
+          "created_by": { "type": "integer" },
+          "created_by_name": { "type": "string" },
+          "created_by_avatar": { "type": "string", "nullable": true },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "PermissionGroup": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "name": { "type": "string" },
+          "permissions": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string" }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/api/auth/steam": {
+      "get": {
+        "tags": ["Auth"],
+        "summary": "Initiate Steam OpenID login",
+        "responses": { "302": { "description": "Redirect to Steam" } }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": ["Auth"],
+        "summary": "Get current user profile",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "User profile", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/User" } } } },
+          "401": { "description": "Not authenticated" }
+        }
+      },
+      "put": {
+        "tags": ["Auth"],
+        "summary": "Update own profile",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "mmr": { "type": "integer" }, "info": { "type": "string" }, "roles": { "type": "array", "items": { "type": "string" } } } } } } },
+        "responses": { "200": { "description": "Updated user", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/User" } } } } }
+      }
+    },
+    "/api/competitions/{compId}/me": {
+      "get": {
+        "tags": ["Auth"],
+        "summary": "Get competition-specific user data",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Competition user data", "content": { "application/json": { "schema": { "type": "object", "properties": { "in_pool": { "type": "boolean" }, "roles": { "type": "array", "items": { "type": "string" } }, "mmr": { "type": "integer" }, "info": { "type": "string" }, "captain": { "type": "object", "nullable": true } } } } } } }
+      }
+    },
+    "/api/auth/claim-admin": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Claim root admin with password",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "password": { "type": "string" } }, "required": ["password"] } } } },
+        "responses": { "200": { "description": "Admin claimed" } }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Logout and invalidate session",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Logged out" } }
+      }
+    },
+    "/api/auth/twitch/link": {
+      "get": {
+        "tags": ["Auth"],
+        "summary": "Get Twitch OAuth link URL",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Link URL", "content": { "application/json": { "schema": { "type": "object", "properties": { "url": { "type": "string" } } } } } } }
+      }
+    },
+    "/api/auth/twitch/unlink": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Unlink Twitch account",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Unlinked" } }
+      }
+    },
+    "/api/auth/discord/link": {
+      "get": {
+        "tags": ["Auth"],
+        "summary": "Get Discord OAuth link URL",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Link URL", "content": { "application/json": { "schema": { "type": "object", "properties": { "url": { "type": "string" } } } } } } }
+      }
+    },
+    "/api/auth/discord/unlink": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Unlink Discord account",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Unlinked" } }
+      }
+    },
+    "/api/competitions": {
+      "get": {
+        "tags": ["Competitions"],
+        "summary": "List all competitions",
+        "responses": { "200": { "description": "Competition list", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Competition" } } } } } }
+      },
+      "post": {
+        "tags": ["Competitions"],
+        "summary": "Create competition",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_competitions permission",
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "name": { "type": "string" }, "description": { "type": "string" }, "starts_at": { "type": "string", "format": "date-time" }, "registration_start": { "type": "string", "format": "date-time" }, "registration_end": { "type": "string", "format": "date-time" }, "settings": { "$ref": "#/components/schemas/CompSettings" } }, "required": ["name"] } } } },
+        "responses": { "200": { "description": "Created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Competition" } } } } }
+      }
+    },
+    "/api/competitions/{id}": {
+      "get": {
+        "tags": ["Competitions"],
+        "summary": "Get competition by ID",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Competition", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Competition" } } } } }
+      },
+      "put": {
+        "tags": ["Competitions"],
+        "summary": "Update competition",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "name": { "type": "string" }, "description": { "type": "string" }, "status": { "type": "string" }, "is_public": { "type": "boolean" }, "settings": { "$ref": "#/components/schemas/CompSettings" } } } } } },
+        "responses": { "200": { "description": "Updated" } }
+      },
+      "delete": {
+        "tags": ["Competitions"],
+        "summary": "Delete competition",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Deleted" } }
+      }
+    },
+    "/api/competitions/{compId}/captains": {
+      "get": {
+        "tags": ["Captains"],
+        "summary": "List captains in competition",
+        "parameters": [{ "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Captain list", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Captain" } } } } } }
+      }
+    },
+    "/api/competitions/{compId}/captains/promote": {
+      "post": {
+        "tags": ["Captains"],
+        "summary": "Promote player to captain",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_captains permission",
+        "parameters": [{ "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "playerId": { "type": "integer" }, "team": { "type": "string" } }, "required": ["playerId", "team"] } } } },
+        "responses": { "200": { "description": "Promoted" } }
+      }
+    },
+    "/api/competitions/{compId}/captains/{id}": {
+      "put": {
+        "tags": ["Captains"],
+        "summary": "Update captain",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "team": { "type": "string" }, "budget": { "type": "integer" } } } } } },
+        "responses": { "200": { "description": "Updated" } }
+      }
+    },
+    "/api/competitions/{compId}/captains/{id}/demote": {
+      "post": {
+        "tags": ["Captains"],
+        "summary": "Demote captain back to player",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "Demoted" } }
+      }
+    },
+    "/api/competitions/{compId}/captains/{id}/banner": {
+      "post": {
+        "tags": ["Captains"],
+        "summary": "Upload captain banner image",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "requestBody": { "content": { "multipart/form-data": { "schema": { "type": "object", "properties": { "banner": { "type": "string", "format": "binary" } } } } } },
+        "responses": { "200": { "description": "Banner URL", "content": { "application/json": { "schema": { "type": "object", "properties": { "banner_url": { "type": "string" } } } } } } }
+      },
+      "delete": {
+        "tags": ["Captains"],
+        "summary": "Delete captain banner",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "Deleted" } }
+      }
+    },
+    "/api/competitions/{compId}/players": {
+      "get": {
+        "tags": ["Players"],
+        "summary": "List players in competition",
+        "parameters": [{ "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Player list", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Player" } } } } } }
+      }
+    },
+    "/api/competitions/{compId}/players/register": {
+      "post": {
+        "tags": ["Players"],
+        "summary": "Register as participant",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "roles": { "type": "array", "items": { "type": "string" } }, "mmr": { "type": "integer" }, "info": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "Registered" } }
+      }
+    },
+    "/api/competitions/{compId}/players/{playerId}": {
+      "put": {
+        "tags": ["Players"],
+        "summary": "Update player in competition",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_players permission",
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "playerId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "name": { "type": "string" }, "roles": { "type": "array", "items": { "type": "string" } }, "mmr": { "type": "integer" }, "info": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "Updated" } }
+      },
+      "delete": {
+        "tags": ["Players"],
+        "summary": "Remove player from competition",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "playerId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "Removed" } }
+      }
+    },
+    "/api/competitions/{compId}/users/{userId}/add-to-pool": {
+      "post": {
+        "tags": ["Players"],
+        "summary": "Admin: add user to competition pool",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "userId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "Added" } }
+      }
+    },
+    "/api/competitions/{compId}/users/{userId}/remove-from-pool": {
+      "post": {
+        "tags": ["Players"],
+        "summary": "Admin: remove user from competition pool",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "userId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "Removed" } }
+      }
+    },
+    "/api/competitions/{compId}/auction": {
+      "get": {
+        "tags": ["Auction"],
+        "summary": "Get full auction state",
+        "parameters": [{ "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Auction state with captains, players, bids, settings" } }
+      }
+    },
+    "/api/competitions/{compId}/auction/results": {
+      "get": {
+        "tags": ["Auction"],
+        "summary": "Get draft results",
+        "parameters": [{ "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Array of captains with their drafted players" } }
+      }
+    },
+    "/api/competitions/{compId}/tournament": {
+      "get": {
+        "tags": ["Tournament"],
+        "summary": "Get tournament state and matches",
+        "parameters": [{ "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Tournament state with matches" } }
+      },
+      "delete": {
+        "tags": ["Tournament"],
+        "summary": "Delete entire tournament",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Deleted" } }
+      }
+    },
+    "/api/competitions/{compId}/tournament/stages": {
+      "post": {
+        "tags": ["Tournament"],
+        "summary": "Create tournament stage",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "name": { "type": "string" }, "format": { "type": "string", "enum": ["single_elimination", "double_elimination", "round_robin", "swiss", "group_stage"] }, "bestOf": { "type": "integer" }, "seeds": { "type": "array", "items": { "type": "integer" } } } } } } },
+        "responses": { "200": { "description": "Created" } }
+      }
+    },
+    "/api/competitions/{compId}/tournament/stages/{stageId}": {
+      "put": {
+        "tags": ["Tournament"],
+        "summary": "Update tournament stage",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "stageId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Updated" } }
+      },
+      "delete": {
+        "tags": ["Tournament"],
+        "summary": "Delete tournament stage",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "stageId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Deleted" } }
+      }
+    },
+    "/api/competitions/{compId}/tournament/matches/{matchId}/score": {
+      "put": {
+        "tags": ["Tournament"],
+        "summary": "Update match score",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "matchId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "score1": { "type": "integer" }, "score2": { "type": "integer" }, "games": { "type": "array" }, "status": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "Updated" } }
+      }
+    },
+    "/api/news": {
+      "get": {
+        "tags": ["News"],
+        "summary": "List news posts",
+        "responses": { "200": { "description": "News list", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/NewsPost" } } } } } }
+      },
+      "post": {
+        "tags": ["News"],
+        "summary": "Create news post",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_news permission",
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "title": { "type": "string" }, "content": { "type": "string" } }, "required": ["title", "content"] } } } },
+        "responses": { "200": { "description": "Created" } }
+      }
+    },
+    "/api/news/{id}": {
+      "put": {
+        "tags": ["News"],
+        "summary": "Update news post",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "title": { "type": "string" }, "content": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "Updated" } }
+      },
+      "delete": {
+        "tags": ["News"],
+        "summary": "Delete news post",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Deleted" } }
+      }
+    },
+    "/api/news/{newsId}/comments": {
+      "get": {
+        "tags": ["News"],
+        "summary": "List comments on news post",
+        "parameters": [{ "name": "newsId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Comments list" } }
+      },
+      "post": {
+        "tags": ["News"],
+        "summary": "Add comment to news post",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "newsId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "content": { "type": "string" } }, "required": ["content"] } } } },
+        "responses": { "200": { "description": "Created" } }
+      }
+    },
+    "/api/news/{newsId}/comments/{commentId}": {
+      "delete": {
+        "tags": ["News"],
+        "summary": "Delete comment",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "newsId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "commentId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "Deleted" } }
+      }
+    },
+    "/api/users": {
+      "get": {
+        "tags": ["Users"],
+        "summary": "List all users",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_users permission",
+        "responses": { "200": { "description": "User list with permission groups" } }
+      }
+    },
+    "/api/players/{id}/profile": {
+      "get": {
+        "tags": ["Users"],
+        "summary": "Get public player profile",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Player profile with competition history and tournament results" } }
+      }
+    },
+    "/api/players/{id}": {
+      "put": {
+        "tags": ["Users"],
+        "summary": "Admin update user",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_users permission",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "name": { "type": "string" }, "roles": { "type": "array", "items": { "type": "string" } }, "mmr": { "type": "integer" }, "info": { "type": "string" }, "is_admin": { "type": "boolean" }, "is_banned": { "type": "boolean" } } } } } },
+        "responses": { "200": { "description": "Updated" } }
+      }
+    },
+    "/api/admin/impersonate/{id}": {
+      "post": {
+        "tags": ["Users"],
+        "summary": "Impersonate user (root admin only)",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Session token", "content": { "application/json": { "schema": { "type": "object", "properties": { "token": { "type": "string" } } } } } } }
+      }
+    },
+    "/api/admin/parse-steam-ids": {
+      "post": {
+        "tags": ["Users"],
+        "summary": "Parse Steam URLs/IDs from text",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "input": { "type": "string" } }, "required": ["input"] } } } },
+        "responses": { "200": { "description": "Resolved Steam IDs", "content": { "application/json": { "schema": { "type": "object", "properties": { "steamIds": { "type": "array", "items": { "type": "string" } } } } } } } }
+      }
+    },
+    "/api/admin/import-steam-user": {
+      "post": {
+        "tags": ["Users"],
+        "summary": "Import single Steam user",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "steamId": { "type": "string" } }, "required": ["steamId"] } } } },
+        "responses": { "200": { "description": "Import result", "content": { "application/json": { "schema": { "type": "object", "properties": { "steamId": { "type": "string" }, "name": { "type": "string" }, "avatarUrl": { "type": "string" }, "status": { "type": "string", "enum": ["created", "exists"] }, "id": { "type": "integer" } } } } } } }
+      }
+    },
+    "/api/admin/sync-steam-user/{id}": {
+      "post": {
+        "tags": ["Users"],
+        "summary": "Sync single user's Steam profile",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Sync result" } }
+      }
+    },
+    "/api/admin/sync-steam-all": {
+      "post": {
+        "tags": ["Users"],
+        "summary": "Bulk sync all Steam profiles",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Sync results", "content": { "application/json": { "schema": { "type": "object", "properties": { "synced": { "type": "integer" }, "total": { "type": "integer" } } } } } } }
+      }
+    },
+    "/api/admin/steam-sync-status": {
+      "get": {
+        "tags": ["Users"],
+        "summary": "Get Steam sync status",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Sync status", "content": { "application/json": { "schema": { "type": "object", "properties": { "lastSynced": { "type": "string", "format": "date-time", "nullable": true }, "totalSteamUsers": { "type": "integer" }, "syncedUsers": { "type": "integer" } } } } } } }
+      }
+    },
+    "/api/permissions/all": {
+      "get": {
+        "tags": ["Permissions"],
+        "summary": "List all available permissions",
+        "responses": { "200": { "description": "Permission keys", "content": { "application/json": { "schema": { "type": "array", "items": { "type": "string" } } } } } }
+      }
+    },
+    "/api/permission-groups": {
+      "get": {
+        "tags": ["Permissions"],
+        "summary": "List permission groups",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Groups", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/PermissionGroup" } } } } } }
+      },
+      "post": {
+        "tags": ["Permissions"],
+        "summary": "Create permission group",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "name": { "type": "string" }, "permissions": { "type": "array", "items": { "type": "string" } } }, "required": ["name"] } } } },
+        "responses": { "200": { "description": "Created" } }
+      }
+    },
+    "/api/permission-groups/{id}": {
+      "put": {
+        "tags": ["Permissions"],
+        "summary": "Update permission group",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Updated" } }
+      },
+      "delete": {
+        "tags": ["Permissions"],
+        "summary": "Delete permission group",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Deleted" } }
+      }
+    },
+    "/api/players/{id}/groups": {
+      "get": {
+        "tags": ["Permissions"],
+        "summary": "Get player's permission groups",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Groups" } }
+      },
+      "put": {
+        "tags": ["Permissions"],
+        "summary": "Set player's permission groups",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "groupIds": { "type": "array", "items": { "type": "integer" } } } } } } },
+        "responses": { "200": { "description": "Updated" } }
+      }
+    },
+    "/api/site-settings": {
+      "get": {
+        "tags": ["Settings"],
+        "summary": "Get site settings",
+        "responses": { "200": { "description": "Site settings" } }
+      },
+      "put": {
+        "tags": ["Settings"],
+        "summary": "Update site settings",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_site_settings permission",
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "site_title": { "type": "string" }, "site_subtitle": { "type": "string" }, "site_discord_url": { "type": "string" }, "site_name": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "Updated" } }
+      }
+    },
+    "/api/site-settings/logo": {
+      "post": {
+        "tags": ["Settings"],
+        "summary": "Upload site logo",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": { "content": { "multipart/form-data": { "schema": { "type": "object", "properties": { "logo": { "type": "string", "format": "binary" } } } } } },
+        "responses": { "200": { "description": "Logo URL" } }
+      },
+      "delete": {
+        "tags": ["Settings"],
+        "summary": "Delete site logo",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Deleted" } }
+      }
+    },
+    "/api/competitions/{compId}/streams": {
+      "get": {
+        "tags": ["Streams"],
+        "summary": "List competition streams",
+        "parameters": [{ "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Stream list" } }
+      },
+      "post": {
+        "tags": ["Streams"],
+        "summary": "Add stream to competition",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "twitch_username": { "type": "string" }, "title": { "type": "string" } }, "required": ["twitch_username"] } } } },
+        "responses": { "200": { "description": "Created" } }
+      }
+    },
+    "/api/competitions/{compId}/streams/live": {
+      "get": {
+        "tags": ["Streams"],
+        "summary": "Get live stream statuses",
+        "parameters": [{ "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Streams with live status" } }
+      }
+    },
+    "/api/competitions/{compId}/streams/{streamId}": {
+      "put": {
+        "tags": ["Streams"],
+        "summary": "Update stream",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "streamId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "Updated" } }
+      },
+      "delete": {
+        "tags": ["Streams"],
+        "summary": "Delete stream",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "streamId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "Deleted" } }
+      }
+    },
+    "/api/streamers": {
+      "get": {
+        "tags": ["Streams"],
+        "summary": "Get live Dota 2 streamers from registered users",
+        "responses": { "200": { "description": "Live streamers list" } }
+      }
+    }
+  }
+}

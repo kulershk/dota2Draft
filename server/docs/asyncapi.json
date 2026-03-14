@@ -1,0 +1,415 @@
+{
+  "asyncapi": "2.6.0",
+  "info": {
+    "title": "Dota 2 Auction Draft — Socket.io Events",
+    "version": "1.0.0",
+    "description": "Real-time Socket.io events for the auction draft platform. All events are scoped to competition rooms (`comp:${compId}`)."
+  },
+  "servers": {
+    "default": {
+      "url": "localhost:3001",
+      "protocol": "socket.io"
+    }
+  },
+  "channels": {
+    "auth": {
+      "publish": {
+        "summary": "Authenticate socket with session token (from handshake or explicit event)",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "token": { "type": "string", "description": "Bearer session token" }
+            }
+          }
+        }
+      }
+    },
+    "auth:success": {
+      "subscribe": {
+        "summary": "Authentication confirmed",
+        "message": { "payload": { "type": "null" } }
+      }
+    },
+    "time:sync": {
+      "publish": {
+        "summary": "Request server time for clock sync",
+        "message": { "payload": { "type": "null" } }
+      },
+      "subscribe": {
+        "summary": "Server time response",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "serverTime": { "type": "integer", "description": "Unix timestamp in ms" }
+            }
+          }
+        }
+      }
+    },
+    "competition:join": {
+      "publish": {
+        "summary": "Join a competition room to receive real-time updates",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "competitionId": { "type": "integer" }
+            },
+            "required": ["competitionId"]
+          }
+        }
+      }
+    },
+    "captain:ready": {
+      "publish": {
+        "summary": "Mark captain as ready to start draft",
+        "description": "Requires captain role in current competition",
+        "message": { "payload": { "type": "null" } }
+      }
+    },
+    "captain:unready": {
+      "publish": {
+        "summary": "Mark captain as not ready",
+        "message": { "payload": { "type": "null" } }
+      }
+    },
+    "captains:ready": {
+      "subscribe": {
+        "summary": "Updated list of ready captain IDs",
+        "message": {
+          "payload": {
+            "type": "array",
+            "items": { "type": "integer" },
+            "description": "Array of captain IDs that are ready"
+          }
+        }
+      }
+    },
+    "captains:online": {
+      "subscribe": {
+        "summary": "Updated list of online captain IDs",
+        "message": {
+          "payload": {
+            "type": "array",
+            "items": { "type": "integer" }
+          }
+        }
+      }
+    },
+    "captains:updated": {
+      "subscribe": {
+        "summary": "Captain data changed (budget, status, etc.)",
+        "message": {
+          "payload": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "integer" },
+                "name": { "type": "string" },
+                "team": { "type": "string" },
+                "budget": { "type": "integer" },
+                "status": { "type": "string" },
+                "mmr": { "type": "integer" },
+                "player_id": { "type": "integer" },
+                "avatar_url": { "type": "string" },
+                "banner_url": { "type": "string", "nullable": true }
+              }
+            }
+          }
+        }
+      }
+    },
+    "players:updated": {
+      "subscribe": {
+        "summary": "Player pool data changed",
+        "message": {
+          "payload": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "integer" },
+                "name": { "type": "string" },
+                "roles": { "type": "array", "items": { "type": "string" } },
+                "mmr": { "type": "integer" },
+                "drafted": { "type": "boolean" },
+                "drafted_by": { "type": "integer", "nullable": true },
+                "draft_price": { "type": "integer", "nullable": true }
+              }
+            }
+          }
+        }
+      }
+    },
+    "settings:updated": {
+      "subscribe": {
+        "summary": "Competition settings changed",
+        "message": {
+          "payload": {
+            "type": "object",
+            "description": "Full CompSettings object"
+          }
+        }
+      }
+    },
+    "auction:start": {
+      "publish": {
+        "summary": "Start the draft (admin only)",
+        "description": "Requires manage_auction permission. Needs ≥2 captains. If requireAllOnline, all captains must be ready.",
+        "message": { "payload": { "type": "null" } }
+      }
+    },
+    "auction:started": {
+      "subscribe": {
+        "summary": "Draft has started",
+        "message": { "payload": { "type": "null" } }
+      }
+    },
+    "auction:nominate": {
+      "publish": {
+        "summary": "Nominate a player for bidding",
+        "description": "Only the current nominator (or admin) can nominate. Status must be 'nominating'.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "playerId": { "type": "integer", "description": "Player to nominate" },
+              "startingBid": { "type": "integer", "description": "Optional custom starting bid" }
+            },
+            "required": ["playerId"]
+          }
+        }
+      }
+    },
+    "auction:bid": {
+      "publish": {
+        "summary": "Place an open bid",
+        "description": "Only captains can bid. In post-blind open phase, only qualified top bidders can bid. Timer resets on each bid.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "amount": { "type": "integer", "description": "Bid amount in gold" }
+            },
+            "required": ["amount"]
+          }
+        }
+      }
+    },
+    "auction:blind-bid": {
+      "publish": {
+        "summary": "Submit a sealed blind bid",
+        "description": "Only during blind bidding phase. Captains can update their bid before timer expires. Timer does NOT reset.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "amount": { "type": "integer", "description": "Blind bid amount in gold" }
+            },
+            "required": ["amount"]
+          }
+        }
+      }
+    },
+    "auction:blind-bid-confirmed": {
+      "subscribe": {
+        "summary": "Blind bid confirmation (private, sent only to the bidding socket)",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "amount": { "type": "integer" }
+            }
+          }
+        }
+      }
+    },
+    "auction:pause": {
+      "publish": {
+        "summary": "Pause the auction (admin only)",
+        "message": { "payload": { "type": "null" } }
+      }
+    },
+    "auction:resume": {
+      "publish": {
+        "summary": "Resume the auction (admin only)",
+        "message": { "payload": { "type": "null" } }
+      }
+    },
+    "auction:end": {
+      "publish": {
+        "summary": "End the draft immediately (admin only)",
+        "message": { "payload": { "type": "null" } }
+      }
+    },
+    "auction:undo": {
+      "publish": {
+        "summary": "Undo last nomination or sale (admin only)",
+        "description": "During bidding: cancels current nomination. During nominating/finished: reverts last sold player.",
+        "message": { "payload": { "type": "null" } }
+      }
+    },
+    "auction:reset": {
+      "publish": {
+        "summary": "Reset entire draft state (admin only)",
+        "description": "Resets all captains to starting budget, clears all drafted players, bid history, and auction logs.",
+        "message": { "payload": { "type": "null" } }
+      }
+    },
+    "auction:stateChanged": {
+      "subscribe": {
+        "summary": "Full auction state update — sent after every state change",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "status": { "type": "string", "enum": ["idle", "nominating", "bidding", "paused", "finished"] },
+              "currentRound": { "type": "integer" },
+              "totalRounds": { "type": "integer" },
+              "nominator": { "type": "object", "nullable": true, "properties": { "id": { "type": "integer" }, "name": { "type": "string" }, "team": { "type": "string" } } },
+              "nominatedPlayer": { "type": "object", "nullable": true },
+              "currentBid": { "type": "integer" },
+              "currentBidder": { "type": "object", "nullable": true, "properties": { "id": { "type": "integer" }, "name": { "type": "string" }, "team": { "type": "string" } } },
+              "bidTimerEnd": { "type": "integer", "description": "Unix timestamp ms when timer expires" },
+              "bidHistory": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "integer" }, "captain_id": { "type": "integer" }, "captain_name": { "type": "string" }, "amount": { "type": "integer" } } } },
+              "blindPhase": { "type": "boolean" },
+              "blindBidCount": { "type": "integer", "description": "Number of blind bids received (no amounts revealed)" },
+              "topBidderIds": { "type": "array", "items": { "type": "integer" }, "description": "Captain IDs qualified from blind round" },
+              "revealedBids": { "type": "array", "nullable": true, "items": { "type": "object", "properties": { "captainId": { "type": "integer" }, "captainName": { "type": "string" }, "amount": { "type": "integer" }, "qualified": { "type": "boolean" } } } },
+              "captains": { "type": "array" },
+              "players": { "type": "array" },
+              "settings": { "type": "object" }
+            }
+          }
+        }
+      }
+    },
+    "auction:timerUpdate": {
+      "subscribe": {
+        "summary": "Bid timer updated",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "bidTimerEnd": { "type": "integer", "description": "Unix timestamp ms" }
+            }
+          }
+        }
+      }
+    },
+    "auction:sold": {
+      "subscribe": {
+        "summary": "Player sold to a captain",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "playerName": { "type": "string" },
+              "captainName": { "type": "string" },
+              "amount": { "type": "integer" }
+            }
+          }
+        }
+      }
+    },
+    "auction:finished": {
+      "subscribe": {
+        "summary": "Draft completed",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "results": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "auction:undone": {
+      "subscribe": {
+        "summary": "Undo action completed",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "message": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "auction:log": {
+      "subscribe": {
+        "summary": "Activity log entry",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string", "enum": ["start", "nomination", "bid", "sold", "pause", "resume", "undo", "end", "info"] },
+              "message": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "auction:logHistory": {
+      "subscribe": {
+        "summary": "Full auction log history (sent on room join)",
+        "message": {
+          "payload": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": { "type": "string" },
+                "message": { "type": "string" },
+                "time": { "type": "integer" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "auction:error": {
+      "subscribe": {
+        "summary": "Error message (private, sent only to the requesting socket)",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "message": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "tournament:updated": {
+      "subscribe": {
+        "summary": "Tournament state changed (client should refetch)",
+        "message": { "payload": { "type": "null" } }
+      }
+    },
+    "news:updated": {
+      "subscribe": {
+        "summary": "News posts changed (global broadcast)",
+        "message": { "payload": { "type": "null" } }
+      }
+    },
+    "news:commented": {
+      "subscribe": {
+        "summary": "New comment on a news post (global broadcast)",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "newsId": { "type": "integer" }
+            }
+          }
+        }
+      }
+    }
+  }
+}
