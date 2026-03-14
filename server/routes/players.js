@@ -127,7 +127,10 @@ export default function createPlayersRouter(io) {
 
     if (existing) {
       if (existing.in_pool) return res.status(409).json({ error: 'Already in pool' })
-      await execute('UPDATE competition_players SET in_pool = true WHERE id = $1', [existing.id])
+      await execute(
+        'UPDATE competition_players SET in_pool = true, mmr = $1, roles = $2, info = $3 WHERE id = $4',
+        [player.mmr, player.roles || '[]', player.info || '', existing.id]
+      )
     } else {
       await execute(
         `INSERT INTO competition_players (competition_id, player_id, roles, mmr, info, in_pool)
