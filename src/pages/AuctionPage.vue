@@ -70,6 +70,10 @@ watch(() => store.auction.bidHistory.length, (newLen, oldLen) => {
 const isNominator = computed(() =>
   store.auction.nominator && store.currentCaptain.value && store.auction.nominator.id === store.currentCaptain.value.id
 )
+const canNominate = computed(() => {
+  if (store.settings.biddingType === 'blind') return store.isAdmin.value
+  return isNominator.value || store.isAdmin.value
+})
 
 const startingPrices = ref<Record<number, number>>({})
 const showNominateConfirm = ref(false)
@@ -316,6 +320,9 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
         <button v-else class="btn-primary" @click="store.resumeAuction()">
           <Play class="w-4 h-4" /> {{ t('resume') }}
         </button>
+        <select v-if="isPaused" class="input-field !h-9 text-sm" :value="store.auction.nominator?.id || ''" @change="store.setNominator(Number(($event.target as HTMLSelectElement).value))">
+          <option v-for="c in store.captains.value" :key="c.id" :value="c.id">{{ c.name }}</option>
+        </select>
         <button v-if="isPaused && store.settings.nominationOrder !== 'normal'" class="btn-outline" @click="store.recheckOrder()">
           <RefreshCw class="w-4 h-4" /> {{ t('recheckOrder') }}
         </button>
@@ -387,7 +394,7 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
         <div v-if="isNominating" class="card">
           <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
             <Gavel class="w-5 h-5 text-foreground" />
-            <span class="text-sm font-semibold text-foreground">{{ (isNominator || store.isAdmin.value) ? t('nominatePlayer') : t('participants') }}</span>
+            <span class="text-sm font-semibold text-foreground">{{ (canNominate) ? t('nominatePlayer') : t('participants') }}</span>
             <span class="badge-info ml-2">{{ t('nominating') }}</span>
             <span class="text-xs text-muted-foreground ml-auto">{{ store.availablePlayers.value.length }} {{ t('remaining') }}</span>
           </div>
@@ -422,9 +429,9 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
                       <MmrDisplay :mmr="player.mmr" />
                     </div>
                   </div>
-                  <button v-if="isNominator || store.isAdmin.value" class="text-xs py-1.5 px-3 flex-shrink-0 ml-2" :class="isNominator ? 'btn-primary' : 'btn-outline border-amber-500 text-amber-500 hover:bg-amber-500/10'" @click="nominatePlayer(player.id)">{{ t('nominate') }}</button>
+                  <button v-if="canNominate" class="text-xs py-1.5 px-3 flex-shrink-0 ml-2" :class="isNominator ? 'btn-primary' : 'btn-outline border-amber-500 text-amber-500 hover:bg-amber-500/10'" @click="nominatePlayer(player.id)">{{ t('nominate') }}</button>
                 </div>
-                <div v-if="isNominator || store.isAdmin.value" class="mt-2">
+                <div v-if="canNominate" class="mt-2">
                   <input
                     type="number"
                     class="input-field w-full text-sm py-1 px-2 h-8"
@@ -444,8 +451,8 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
                     <th class="text-left px-4 py-2 font-medium text-muted-foreground">{{ t('playerCol') }}</th>
                     <th class="text-left px-4 py-2 font-medium text-muted-foreground">{{ t('rolesCol') }}</th>
                     <th class="text-left px-4 py-2 font-medium text-muted-foreground">{{ t('mmrCol') }}</th>
-                    <th v-if="isNominator || store.isAdmin.value" class="text-left px-4 py-2 font-medium text-muted-foreground w-[120px]">{{ t('startBidCol') }}</th>
-                    <th v-if="isNominator || store.isAdmin.value" class="text-right px-4 py-2 font-medium text-muted-foreground">{{ t('actionCol') }}</th>
+                    <th v-if="canNominate" class="text-left px-4 py-2 font-medium text-muted-foreground w-[120px]">{{ t('startBidCol') }}</th>
+                    <th v-if="canNominate" class="text-right px-4 py-2 font-medium text-muted-foreground">{{ t('actionCol') }}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -457,7 +464,7 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
                       </div>
                     </td>
                     <td class="px-4 py-2.5"><MmrDisplay :mmr="player.mmr" /></td>
-                    <td v-if="isNominator || store.isAdmin.value" class="px-4 py-2.5">
+                    <td v-if="canNominate" class="px-4 py-2.5">
                       <input
                         type="number"
                         class="input-field w-full text-sm py-1 px-2"
@@ -466,7 +473,7 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
                         @input="startingPrices[player.id] = Number(($event.target as HTMLInputElement).value) || 0"
                       />
                     </td>
-                    <td v-if="isNominator || store.isAdmin.value" class="px-4 py-2.5 text-right">
+                    <td v-if="canNominate" class="px-4 py-2.5 text-right">
                       <button class="text-xs py-1.5 px-3" :class="isNominator ? 'btn-primary' : 'btn-outline border-amber-500 text-amber-500 hover:bg-amber-500/10'" @click="nominatePlayer(player.id)">{{ t('nominate') }}</button>
                     </td>
                   </tr>

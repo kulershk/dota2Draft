@@ -268,14 +268,18 @@ export function registerAuctionHandlers(socket, io) {
     const comp = await getCompetition(compId)
     const state = parseAuctionState(comp)
 
-    if (!isAdmin && captainId !== Number(state.nominatorId)) {
+    const settings = parseCompSettings(comp)
+
+    if (settings.biddingType === 'blind') {
+      if (!isAdmin) {
+        return socket.emit('auction:error', { message: 'Only admin can nominate in blind bidding mode' })
+      }
+    } else if (!isAdmin && captainId !== Number(state.nominatorId)) {
       return socket.emit('auction:error', { message: 'Not your turn to nominate' })
     }
     if (state.status !== 'nominating') {
       return socket.emit('auction:error', { message: 'Not in nomination phase' })
     }
-
-    const settings = parseCompSettings(comp)
     const onlineIds = getOnlineCaptainIds(compId)
     const allCaptains = await getCaptains(compId)
     const activeCaptains = []
@@ -491,6 +495,24 @@ export function registerAuctionHandlers(socket, io) {
     await setAuctionState(compId, { nominatorId: nextNominator.id })
     await saveAuctionLog(compId, 'info', `Nomination order rechecked — next: ${nextNominator.name}`)
     io.to(`comp:${compId}`).emit('auction:log', { type: 'info', message: `Nomination order rechecked — next: ${nextNominator.name}` })
+    io.to(`comp:${compId}`).emit('auction:stateChanged', await getFullAuctionState(compId))
+  })
+
+  // Auction: Set nominator (admin, while paused/nominating)
+  socket.on('auction:set-nominator', async ({ captainId }) => {
+    const compId = socketCompetitions.get(socket.id)
+    if (!compId) return
+    if (!await isAdminSocket(socket.id)) return socket.emit('auction:error', { message: 'Admin access required' })
+    const comp = await getCompetition(compId)
+    const state = parseAuctionState(comp)
+    if (state.status !== 'paused' && state.status !== 'nominating') {
+      return socket.emit('auction:error', { message: 'Can only change nominator while paused or nominating' })
+    }
+    const captain = await queryOne('SELECT * FROM captains WHERE id = $1 AND competition_id = $2', [captainId, compId])
+    if (!captain) return socket.emit('auction:error', { message: 'Captain not found' })
+    await setAuctionState(compId, { nominatorId: captainId })
+    await saveAuctionLog(compId, 'info', `Nominator changed to ${captain.name} by admin`)
+    io.to(`comp:${compId}`).emit('auction:log', { type: 'info', message: `Nominator changed to ${captain.name} by admin` })
     io.to(`comp:${compId}`).emit('auction:stateChanged', await getFullAuctionState(compId))
   })
 

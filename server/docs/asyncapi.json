@@ -227,6 +227,20 @@
         }
       }
     },
+    "auction:set-nominator": {
+      "publish": {
+        "summary": "Change the current nominator (admin only, while paused/nominating)",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "captainId": { "type": "integer", "description": "Captain ID to set as nominator" }
+            },
+            "required": ["captainId"]
+          }
+        }
+      }
+    },
     "auction:recheck-order": {
       "publish": {
         "summary": "Recalculate nomination order (admin only, while paused/nominating)",

@@ -504,6 +504,7 @@ export function useDraftStore() {
   function undoLast() { getSocket().emit('auction:undo') }
   function resetDraft() { getSocket().emit('auction:reset') }
   function recheckOrder() { getSocket().emit('auction:recheck-order') }
+  function setNominator(captainId: number) { getSocket().emit('auction:set-nominator', { captainId }) }
 
   return {
     // State
@@ -569,6 +570,7 @@ export function useDraftStore() {
     undoLast,
     resetDraft,
     recheckOrder,
+    setNominator,
     // API passthrough
     getCompResults: (compId: number) => useApi().getCompResults(compId),
   }
