@@ -20,7 +20,8 @@
       "Bash(docker restart:*)",
       "WebFetch(domain:docs.google.com)",
       "WebFetch(domain:doc-14-88-sheets.googleusercontent.com)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(npx vitest:*)"
     ]
   }
 }

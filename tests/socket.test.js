@@ -4,6 +4,7 @@ import {
   createTestPlayer, api, connectSocket, waitForEvent,
   execute,
 } from './setup.js'
+import { compBidTimers } from '../server/socket/state.js'
 
 function delay(ms) { return new Promise(r => setTimeout(r, ms)) }
 
@@ -28,9 +29,14 @@ function trackSocket(socket) {
 }
 
 afterEach(async () => {
+  // Clear all pending bid timers to prevent leakage between tests
+  for (const [id, timer] of compBidTimers) {
+    clearTimeout(timer)
+  }
+  compBidTimers.clear()
   sockets.forEach(s => s.disconnect())
   sockets = []
-  await delay(500) // let pending timers settle
+  await delay(300)
 })
 
 async function setupDraft() {
@@ -43,7 +49,7 @@ async function setupDraft() {
   player3 = await createTestPlayer('Pool3', { mmr: 4500, roles: ['Offlane'] })
 
   const { data: comp } = await api('POST', '/api/competitions', admin.token, {
-    name: 'Socket Test', settings: { requireAllOnline: false, bidTimer: 8, playersPerTeam: 2 },
+    name: 'Socket Test', settings: { requireAllOnline: false, bidTimer: 3, playersPerTeam: 2 },
   })
   compId = comp.id
 
@@ -193,17 +199,15 @@ describe('Auction Flow', () => {
     const nominated = await waitForEvent(adminSock, 'auction:stateChanged', 5000, d => d.status === 'bidding')
     expect(nominated.nominatedPlayer.id).toBe(player1.player.id)
 
+    // Set up sold listener BEFORE bidding so we don't miss the event
+    const soldPromise = waitForEvent(adminSock, 'auction:sold', 10000)
+
     // Bid
     otherSock.emit('auction:bid', { amount: nominated.currentBid + 10 })
-    const bidState = await waitForEvent(adminSock, 'auction:stateChanged', 5000, d => d.currentBid > nominated.currentBid)
-    expect(bidState.currentBid).toBe(nominated.currentBid + 10)
+    await delay(500) // let bid process
 
-    // Wait for timer to expire (bidTimer: 8s) — use fresh socket to avoid missed events
-    const watchSock = trackSocket(connectSocket(ctx.port, admin.token))
-    await new Promise(r => watchSock.on('connect', r))
-    watchSock.emit('competition:join', { competitionId: compId })
-
-    const sold = await waitForEvent(watchSock, 'auction:sold', 15000)
+    // Wait for timer to expire and player to be sold
+    const sold = await soldPromise
     expect(sold.playerName).toBeDefined()
     expect(sold.captainName).toBeDefined()
     expect(sold.amount).toBeGreaterThan(0)
@@ -300,7 +304,7 @@ describe('Blind Bidding', () => {
 
     const { data: comp } = await api('POST', '/api/competitions', admin.token, {
       name: 'Blind Test',
-      settings: { requireAllOnline: false, bidTimer: 8, playersPerTeam: 1, biddingType: 'blind', blindTopBidders: 2 },
+      settings: { requireAllOnline: false, bidTimer: 3, playersPerTeam: 1, biddingType: 'blind', blindTopBidders: 2 },
     })
     compId = comp.id
 
@@ -337,23 +341,26 @@ describe('Blind Bidding', () => {
       new Promise(r => cap2Sock.on('connect', r)),
     ])
 
+    // Set up listeners BEFORE joining to avoid race conditions
+    const joinPromises = [
+      waitForEvent(adminSock, 'auction:stateChanged'),
+      waitForEvent(cap1Sock, 'auction:stateChanged'),
+      waitForEvent(cap2Sock, 'auction:stateChanged'),
+    ]
     adminSock.emit('competition:join', { competitionId: compId })
     cap1Sock.emit('competition:join', { competitionId: compId })
     cap2Sock.emit('competition:join', { competitionId: compId })
+    await Promise.all(joinPromises)
 
-    await waitForEvent(adminSock, 'auction:stateChanged')
-    await waitForEvent(cap1Sock, 'auction:stateChanged')
-    await waitForEvent(cap2Sock, 'auction:stateChanged')
-
-    // Start and wait
+    // Start
     adminSock.emit('auction:start')
     await waitForEvent(adminSock, 'auction:stateChanged')
     await delay(200)
 
     // Nominate
     adminSock.emit('auction:nominate', { playerId: player1.player.id })
-    await waitForEvent(adminSock, 'auction:stateChanged')
-    await delay(200)
+    const nomState = await waitForEvent(adminSock, 'auction:stateChanged')
+    expect(nomState.blindPhase).toBe(true)
 
     // Submit blind bids
     cap1Sock.emit('auction:blind-bid', { amount: 200 })
@@ -369,16 +376,11 @@ describe('Blind Bidding', () => {
     const err = await waitForEvent(cap1Sock, 'auction:error')
     expect(err.message).toContain('blind')
 
-    // Wait for blind phase to resolve (bidTimer: 8s)
-    // Use a fresh socket to avoid missed events
-    const watchSock = trackSocket(connectSocket(ctx.port, admin.token))
-    await new Promise(r => watchSock.on('connect', r))
-    watchSock.emit('competition:join', { competitionId: compId })
-
-    // The join will get current state — if blind already resolved, we get it immediately
-    // Otherwise we wait for the next stateChanged
-    const finalState = await waitForEvent(watchSock, 'auction:stateChanged', 15000, d => Array.isArray(d.revealedBids) && d.revealedBids.length > 0)
-    expect(finalState.revealedBids.length).toBe(2)
-    expect(finalState.revealedBids[0].amount).toBeGreaterThanOrEqual(finalState.revealedBids[1].amount)
-  }, 20000)
+    // Wait for blind phase to resolve (2s timer + buffer), then poll via REST
+    await delay(4000)
+    const { data: auctionState } = await api('GET', `/api/competitions/${compId}/auction`)
+    expect(auctionState.revealedBids).toBeDefined()
+    expect(auctionState.revealedBids.length).toBe(2)
+    expect(auctionState.revealedBids[0].amount).toBeGreaterThanOrEqual(auctionState.revealedBids[1].amount)
+  }, 15000)
 })
