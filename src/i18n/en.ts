@@ -198,6 +198,8 @@ export default {
   turnToNominate: "{name}'s turn to nominate",
   selectFromPool: 'Select a player from the pool below.',
   waitingForPick: 'Waiting for them to pick...',
+  adminNominating: 'Admin is nominating',
+  waitingForAdminPick: 'Waiting for admin to nominate a player...',
   nominate: 'Nominate',
   startingBidPlaceholder: 'Starting bid: {amount}g',
   currentNomination: 'Current Nomination',

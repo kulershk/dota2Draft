@@ -198,6 +198,8 @@ export default {
   turnToNominate: '{name} kārta nominēt',
   selectFromPool: 'Izvēlieties spēlētāju no saraksta zemāk.',
   waitingForPick: 'Gaida izvēli...',
+  adminNominating: 'Admins nominē',
+  waitingForAdminPick: 'Gaida, kamēr admins nominē spēlētāju...',
   nominate: 'Nominēt',
   startingBidPlaceholder: 'Sākuma likme: {amount}g',
   currentNomination: 'Pašreizējā nominācija',

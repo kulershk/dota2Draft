@@ -198,6 +198,8 @@ export default {
   turnToNominate: '{name} eilė nominuoti',
   selectFromPool: 'Pasirinkite žaidėją iš sąrašo žemiau.',
   waitingForPick: 'Laukiama pasirinkimo...',
+  adminNominating: 'Adminas nominuoja',
+  waitingForAdminPick: 'Laukiama, kol adminas nominuos žaidėją...',
   nominate: 'Nominuoti',
   startingBidPlaceholder: 'Pradinis statymas: {amount}g',
   currentNomination: 'Dabartinė nominacija',

@@ -70,8 +70,9 @@ watch(() => store.auction.bidHistory.length, (newLen, oldLen) => {
 const isNominator = computed(() =>
   store.auction.nominator && store.currentCaptain.value && store.auction.nominator.id === store.currentCaptain.value.id
 )
+const isBlindMode = computed(() => store.settings.biddingType === 'blind')
 const canNominate = computed(() => {
-  if (store.settings.biddingType === 'blind') return store.isAdmin.value
+  if (isBlindMode.value) return store.isAdmin.value
   return isNominator.value || store.isAdmin.value
 })
 
@@ -302,7 +303,8 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
           <p class="text-sm text-muted-foreground mt-0.5">
             <template v-if="isActive || isPaused">
               {{ t('roundOf', { current: store.auction.currentRound, total: store.auction.totalRounds }) }}
-              <template v-if="store.auction.nominator"> &bull; {{ t('isNominating', { name: store.auction.nominator.name }) }}</template>
+              <template v-if="isBlindMode"> &bull; {{ t('adminNominating') }}</template>
+              <template v-else-if="store.auction.nominator"> &bull; {{ t('isNominating', { name: store.auction.nominator.name }) }}</template>
             </template>
             <template v-else-if="isFinished">{{ t('draftComplete') }}</template>
             <template v-else>{{ t('allCaptainsMustReady') }}</template>
@@ -399,7 +401,17 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
             <span class="text-xs text-muted-foreground ml-auto">{{ store.availablePlayers.value.length }} {{ t('remaining') }}</span>
           </div>
           <div class="p-3 md:p-4">
-            <div v-if="store.auction.nominator" class="flex items-center gap-3 mb-3 md:mb-4 p-3 rounded-lg bg-primary/10 border border-primary/30">
+            <div v-if="isBlindMode" class="flex items-center gap-3 mb-3 md:mb-4 p-3 rounded-lg bg-primary/10 border border-primary/30">
+              <Gavel class="w-8 h-8 text-primary" />
+              <div>
+                <p class="text-sm font-semibold text-primary">{{ t('adminNominating') }}</p>
+                <p class="text-xs text-muted-foreground">
+                  <template v-if="store.isAdmin.value">{{ t('selectFromPool') }}</template>
+                  <template v-else>{{ t('waitingForAdminPick') }}</template>
+                </p>
+              </div>
+            </div>
+            <div v-else-if="store.auction.nominator" class="flex items-center gap-3 mb-3 md:mb-4 p-3 rounded-lg bg-primary/10 border border-primary/30">
               <CaptainAvatar :name="store.auction.nominator.name" :online="store.onlineCaptainIds.value.includes(store.auction.nominator.id)" />
               <div>
                 <p class="text-sm font-semibold text-primary">{{ t('turnToNominate', { name: store.auction.nominator.name }) }}</p>
