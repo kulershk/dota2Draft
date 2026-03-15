@@ -55,16 +55,19 @@ const editUserMmr = ref(0)
 const editUserRoles = ref<string[]>([])
 const savingUser = ref(false)
 const ALL_ROLES = ['Carry', 'Mid', 'Offlane', 'Pos4', 'Pos5']
+const onlinePlayerIds = ref<number[]>([])
 
 async function fetchUsers() {
   loading.value = true
   try {
-    const [usrs, grps] = await Promise.all([
+    const [usrs, grps, online] = await Promise.all([
       api.getUsers(),
       api.getPermissionGroups(),
+      api.getOnlineUsers(),
     ])
     users.value = usrs
     allGroups.value = grps
+    onlinePlayerIds.value = online.onlinePlayerIds || []
   } finally {
     loading.value = false
   }
@@ -424,9 +427,12 @@ function formatRelativeTime(dateStr: string | null) {
               <td class="px-4 py-3 text-muted-foreground">{{ String(i + 1).padStart(2, '0') }}</td>
               <td class="px-4 py-3">
                 <div class="flex items-center gap-2.5">
-                  <img v-if="user.avatar_url" :src="user.avatar_url" class="w-8 h-8 rounded-full object-cover" />
-                  <div v-else class="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-xs font-semibold text-secondary-foreground">
-                    {{ user.name.charAt(0) }}
+                  <div class="relative shrink-0">
+                    <img v-if="user.avatar_url" :src="user.avatar_url" class="w-8 h-8 rounded-full object-cover" />
+                    <div v-else class="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-xs font-semibold text-secondary-foreground">
+                      {{ user.name.charAt(0) }}
+                    </div>
+                    <span v-if="onlinePlayerIds.includes(user.id)" class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-500 border-2 border-card"></span>
                   </div>
                   <div class="flex flex-col">
                     <span class="font-medium text-foreground">{{ user.name }}</span>

@@ -169,6 +169,8 @@ export function useApi() {
       request('/api/admin/sync-steam-all', { method: 'POST' }),
     getSteamSyncStatus: () =>
       request('/api/admin/steam-sync-status'),
+    getOnlineUsers: () =>
+      request('/api/admin/online-users'),
 
     // Competition Streams
     getCompStreams: (compId: number) => request(`/api/competitions/${compId}/streams`),

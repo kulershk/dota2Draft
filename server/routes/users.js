@@ -3,6 +3,7 @@ import { query, queryOne, execute } from '../db.js'
 import { createSession } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/permissions.js'
 import { fetchSteamProfile, fetchSteamProfiles, parseSteamIds } from '../helpers/steam.js'
+import { socketPlayers } from '../socket/state.js'
 
 const router = Router()
 
@@ -311,6 +312,13 @@ router.get('/api/admin/steam-sync-status', async (req, res) => {
     totalSteamUsers: parseInt(countRow?.total || '0'),
     syncedUsers: parseInt(syncedRow?.synced || '0'),
   })
+})
+
+router.get('/api/admin/online-users', async (req, res) => {
+  const admin = await requirePermission(req, res, 'manage_users')
+  if (!admin) return
+  const onlineIds = [...new Set(socketPlayers.values())]
+  res.json({ onlinePlayerIds: onlineIds })
 })
 
 router.post('/api/admin/generate-test-users', async (req, res) => {
