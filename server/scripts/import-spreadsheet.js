@@ -123,18 +123,18 @@ async function main() {
     const roles = scoresToRoles(p.scores)
     const rolesJson = JSON.stringify(roles)
 
-    let player = await queryOne('SELECT id, name FROM players WHERE steam_id = $1', [steamId])
+    let player = await queryOne('SELECT id, name, display_name FROM players WHERE steam_id = $1', [steamId])
     if (player) {
-      await execute('UPDATE players SET mmr = $1, roles = $2 WHERE id = $3', [p.mmr, rolesJson, player.id])
-      console.log(`  UPDATE ${player.name} (id=${player.id}): mmr=${p.mmr}, roles=${roles.join(',')}`)
+      await execute('UPDATE players SET mmr = $1, roles = $2, display_name = $3 WHERE id = $4', [p.mmr, rolesJson, p.name, player.id])
+      console.log(`  UPDATE ${player.name} (id=${player.id}): mmr=${p.mmr}, display_name=${p.name}, roles=${roles.join(',')}`)
       updated++
     } else {
       const { personaName, avatarUrl } = await fetchSteamProfile(steamId)
       player = await queryOne(
-        'INSERT INTO players (name, steam_id, avatar_url, mmr, roles) VALUES ($1, $2, $3, $4, $5) RETURNING id, name',
-        [personaName, steamId, avatarUrl, p.mmr, rolesJson]
+        'INSERT INTO players (name, steam_id, avatar_url, mmr, roles, display_name) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name',
+        [personaName, steamId, avatarUrl, p.mmr, rolesJson, p.name]
       )
-      console.log(`  CREATE ${player.name} (id=${player.id}): mmr=${p.mmr}, roles=${roles.join(',')}`)
+      console.log(`  CREATE ${player.name} (id=${player.id}): mmr=${p.mmr}, display_name=${p.name}, roles=${roles.join(',')}`)
       created++
     }
   }
