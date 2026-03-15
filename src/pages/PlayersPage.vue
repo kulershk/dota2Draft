@@ -14,6 +14,12 @@ const store = useDraftStore()
 const showEditPlayer = ref(false)
 const showRegister = ref(false)
 const searchQuery = ref('')
+const activeRoleFilter = ref<string | null>(null)
+
+function toggleRoleFilter(role: string) {
+  activeRoleFilter.value = activeRoleFilter.value === role ? null : role
+  playersPage.value = 1
+}
 
 // Registration state
 const registerRoles = ref<string[]>([])
@@ -146,6 +152,9 @@ const PLAYERS_PAGE_SIZE = 20
 
 const filteredPlayers = computed(() => {
   let list = [...store.players.value].sort((a, b) => b.mmr - a.mmr)
+  if (activeRoleFilter.value) {
+    list = list.filter(p => p.roles.includes(activeRoleFilter.value!))
+  }
   if (searchQuery.value) {
     const q = searchQuery.value.toLowerCase()
     list = list.filter(p =>
@@ -170,29 +179,13 @@ watch(searchQuery, () => { playersPage.value = 1 })
 
     <!-- Stats Row -->
     <div class="grid grid-cols-3 md:grid-cols-6 gap-3 md:gap-4">
-      <div class="card p-3 md:p-4">
+      <div class="card p-3 md:p-4 cursor-pointer transition-colors" :class="!activeRoleFilter ? 'ring-2 ring-primary' : 'hover:bg-accent/50'" @click="activeRoleFilter = null">
         <p class="text-[10px] md:text-xs font-semibold tracking-wider text-muted-foreground uppercase">{{ t('total') }}</p>
         <p class="text-xl md:text-3xl font-bold text-foreground mt-1">{{ store.players.value.length }}</p>
       </div>
-      <div class="card p-3 md:p-4">
-        <p class="text-[10px] md:text-xs font-semibold tracking-wider text-muted-foreground uppercase">{{ t('carry') }}</p>
-        <p class="text-xl md:text-3xl font-bold text-foreground mt-1">{{ store.roleCounts.value.Carry }}</p>
-      </div>
-      <div class="card p-3 md:p-4">
-        <p class="text-[10px] md:text-xs font-semibold tracking-wider text-muted-foreground uppercase">{{ t('mid') }}</p>
-        <p class="text-xl md:text-3xl font-bold text-foreground mt-1">{{ store.roleCounts.value.Mid }}</p>
-      </div>
-      <div class="card p-3 md:p-4">
-        <p class="text-[10px] md:text-xs font-semibold tracking-wider text-muted-foreground uppercase">{{ t('offlane') }}</p>
-        <p class="text-xl md:text-3xl font-bold text-foreground mt-1">{{ store.roleCounts.value.Offlane }}</p>
-      </div>
-      <div class="card p-3 md:p-4">
-        <p class="text-[10px] md:text-xs font-semibold tracking-wider text-muted-foreground uppercase">{{ t('pos4') }}</p>
-        <p class="text-xl md:text-3xl font-bold text-foreground mt-1">{{ store.roleCounts.value.Pos4 }}</p>
-      </div>
-      <div class="card p-3 md:p-4">
-        <p class="text-[10px] md:text-xs font-semibold tracking-wider text-muted-foreground uppercase">{{ t('pos5') }}</p>
-        <p class="text-xl md:text-3xl font-bold text-foreground mt-1">{{ store.roleCounts.value.Pos5 }}</p>
+      <div v-for="role in ['Carry', 'Mid', 'Offlane', 'Pos4', 'Pos5']" :key="role" class="card p-3 md:p-4 cursor-pointer transition-colors" :class="activeRoleFilter === role ? 'ring-2 ring-primary' : 'hover:bg-accent/50'" @click="toggleRoleFilter(role)">
+        <p class="text-[10px] md:text-xs font-semibold tracking-wider text-muted-foreground uppercase">{{ t(role.toLowerCase()) }}</p>
+        <p class="text-xl md:text-3xl font-bold text-foreground mt-1">{{ store.roleCounts.value[role as keyof typeof store.roleCounts.value] }}</p>
       </div>
     </div>
 
