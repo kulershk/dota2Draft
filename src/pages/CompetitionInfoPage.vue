@@ -296,31 +296,33 @@ async function removeBanner(captain: any) {
           <Trophy class="w-5 h-5 text-foreground" />
           <span class="text-sm font-semibold text-foreground">{{ t('captains') }} ({{ captainCount }})</span>
         </div>
-        <div class="p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-          <div v-for="captain in store.captains.value" :key="captain.id" class="rounded-lg bg-accent/30 border border-border overflow-hidden">
-            <!-- Banner -->
-            <div class="relative">
-              <img v-if="captain.banner_url" :src="captain.banner_url" class="w-full h-24 object-cover" />
-              <div v-else class="w-full h-24 bg-gradient-to-br from-primary/10 to-primary/5"></div>
-              <!-- Upload/remove controls for captain owner or admin -->
-              <div v-if="canEditBanner(captain)" class="absolute top-1.5 right-1.5 flex gap-1">
-                <label class="p-1 rounded bg-background/80 backdrop-blur-sm cursor-pointer hover:bg-background transition-colors" :title="t('uploadBanner')">
-                  <Upload class="w-3.5 h-3.5 text-foreground" />
+        <div class="p-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div v-for="captain in store.captains.value" :key="captain.id" class="rounded-lg bg-accent/30 border border-border overflow-hidden flex">
+            <!-- Logo / Banner (left side, 1:1) -->
+            <div class="relative shrink-0 w-24 aspect-square">
+              <img v-if="captain.banner_url" :src="captain.banner_url" class="w-full h-full object-cover" />
+              <div v-else class="w-full h-full bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
+                <Trophy class="w-6 h-6 text-primary/30" />
+              </div>
+              <!-- Upload/remove controls -->
+              <div v-if="canEditBanner(captain)" class="absolute top-1 right-1 flex flex-col gap-0.5">
+                <label class="p-0.5 rounded bg-background/80 backdrop-blur-sm cursor-pointer hover:bg-background transition-colors" :title="t('uploadBanner')">
+                  <Upload class="w-3 h-3 text-foreground" />
                   <input type="file" accept="image/*" class="hidden" @change="openCropper(captain, $event)" :disabled="uploading" />
                 </label>
-                <button v-if="captain.banner_url" class="p-1 rounded bg-background/80 backdrop-blur-sm hover:bg-background transition-colors" :title="t('removeBanner')" @click="removeBanner(captain)">
-                  <X class="w-3.5 h-3.5 text-destructive" />
+                <button v-if="captain.banner_url" class="p-0.5 rounded bg-background/80 backdrop-blur-sm hover:bg-background transition-colors" :title="t('removeBanner')" @click="removeBanner(captain)">
+                  <X class="w-3 h-3 text-destructive" />
                 </button>
               </div>
             </div>
-            <!-- Captain info -->
-            <div class="flex items-center gap-3 p-3">
-              <img v-if="captain.avatar_url" :src="captain.avatar_url" class="w-9 h-9 rounded-full" />
-              <div v-else class="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
-                {{ captain.name.charAt(0) }}
-              </div>
-              <div class="min-w-0">
-                <p class="text-sm font-semibold text-foreground truncate">{{ captain.team }}</p>
+            <!-- Team name + Captain info (right side) -->
+            <div class="flex flex-col justify-center gap-1.5 p-3 min-w-0">
+              <p class="text-sm font-semibold text-foreground truncate">{{ captain.team }}</p>
+              <div class="flex items-center gap-2">
+                <img v-if="captain.avatar_url" :src="captain.avatar_url" class="w-6 h-6 rounded-full shrink-0" />
+                <div v-else class="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary shrink-0">
+                  {{ captain.name.charAt(0) }}
+                </div>
                 <p class="text-xs text-muted-foreground truncate">{{ captain.name }}</p>
               </div>
             </div>
