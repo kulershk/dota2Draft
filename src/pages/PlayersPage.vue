@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Users, UserPlus, Search, Pencil, Trash2, ExternalLink, LogIn } from 'lucide-vue-next'
+import { Users, UserPlus, Search, Pencil, Trash2, ExternalLink, LogIn, Shield } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDraftStore } from '@/composables/useDraftStore'
@@ -247,7 +247,10 @@ watch(searchQuery, () => { playersPage.value = 1 })
                     {{ player.name.charAt(0) }}
                   </div>
                   <div class="flex flex-col">
-                    <router-link :to="{ name: 'player-profile', params: { id: player.id } }" class="font-medium text-foreground hover:text-primary transition-colors">{{ player.name }}</router-link>
+                    <router-link :to="{ name: 'player-profile', params: { id: player.id } }" class="font-medium text-foreground hover:text-primary transition-colors flex items-center gap-1.5">
+                      <Shield v-if="player.is_captain" class="w-3.5 h-3.5 text-amber-500 flex-shrink-0" :title="t('captainCol')" />
+                      {{ player.name }}
+                    </router-link>
                     <div v-if="player.steam_id" class="flex items-center gap-2 mt-0.5">
                       <a :href="`https://steamcommunity.com/profiles/${player.steam_id}`" target="_blank" rel="noopener" class="text-[10px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-0.5">
                         Steam <ExternalLink class="w-2.5 h-2.5" />
