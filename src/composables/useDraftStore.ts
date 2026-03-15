@@ -99,6 +99,8 @@ export interface AuctionState {
 export interface CurrentUser {
   id: number
   name: string
+  display_name: string | null
+  steam_name: string
   steam_id: string
   avatar_url: string
   is_admin: boolean
@@ -232,6 +234,13 @@ export function useDraftStore() {
     socketInitialized = true
 
     const socket = getSocket()
+
+    // Rejoin competition room on reconnect
+    socket.on('connect', () => {
+      if (currentCompetitionId.value) {
+        socket.emit('competition:join', { competitionId: currentCompetitionId.value })
+      }
+    })
 
     socket.on('settings:updated', (data: Settings) => {
       Object.assign(settings, data)

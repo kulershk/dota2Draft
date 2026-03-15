@@ -8,7 +8,7 @@ export default function createNewsRouter(io) {
 
   router.get('/api/news', async (req, res) => {
     const news = await query(`
-      SELECT n.*, p.name AS created_by_name, p.avatar_url AS created_by_avatar
+      SELECT n.*, COALESCE(p.display_name, p.name) AS created_by_name, p.avatar_url AS created_by_avatar
       FROM news n
       LEFT JOIN players p ON p.id = n.created_by
       ORDER BY n.created_at DESC
@@ -26,7 +26,7 @@ export default function createNewsRouter(io) {
       [title, content, admin.id]
     )
     const post = await queryOne(`
-      SELECT n.*, p.name AS created_by_name, p.avatar_url AS created_by_avatar
+      SELECT n.*, COALESCE(p.display_name, p.name) AS created_by_name, p.avatar_url AS created_by_avatar
       FROM news n LEFT JOIN players p ON p.id = n.created_by WHERE n.id = $1
     `, [result.id])
     io.emit('news:updated')
@@ -45,7 +45,7 @@ export default function createNewsRouter(io) {
     )
     io.emit('news:updated')
     const updated = await queryOne(`
-      SELECT n.*, p.name AS created_by_name, p.avatar_url AS created_by_avatar
+      SELECT n.*, COALESCE(p.display_name, p.name) AS created_by_name, p.avatar_url AS created_by_avatar
       FROM news n LEFT JOIN players p ON p.id = n.created_by WHERE n.id = $1
     `, [req.params.id])
     res.json(updated)
@@ -62,7 +62,7 @@ export default function createNewsRouter(io) {
   // Comments
   router.get('/api/news/:newsId/comments', async (req, res) => {
     const comments = await query(`
-      SELECT c.*, p.name AS player_name, p.avatar_url AS player_avatar
+      SELECT c.*, COALESCE(p.display_name, p.name) AS player_name, p.avatar_url AS player_avatar
       FROM news_comments c
       JOIN players p ON p.id = c.player_id
       WHERE c.news_id = $1
@@ -84,7 +84,7 @@ export default function createNewsRouter(io) {
       [req.params.newsId, player.id, content.trim()]
     )
     const comment = await queryOne(`
-      SELECT c.*, p.name AS player_name, p.avatar_url AS player_avatar
+      SELECT c.*, COALESCE(p.display_name, p.name) AS player_name, p.avatar_url AS player_avatar
       FROM news_comments c JOIN players p ON p.id = c.player_id WHERE c.id = $1
     `, [result.id])
     io.emit('news:commented', { newsId: Number(req.params.newsId) })

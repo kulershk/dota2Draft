@@ -24,7 +24,9 @@ router.get('/api/users', async (req, res) => {
   }
   res.json(rows.map(p => ({
     id: p.id,
-    name: p.name,
+    name: p.display_name || p.name,
+    display_name: p.display_name || null,
+    steam_name: p.name,
     steam_id: p.steam_id || null,
     avatar_url: p.avatar_url || null,
     roles: JSON.parse(p.roles || '[]'),
@@ -43,7 +45,7 @@ router.get('/api/users', async (req, res) => {
 // Public player profile
 router.get('/api/players/:id/profile', async (req, res) => {
   const playerId = Number(req.params.id)
-  const player = await queryOne('SELECT id, name, steam_id, avatar_url, roles, mmr, info, twitch_username, discord_username, created_at FROM players WHERE id = $1', [playerId])
+  const player = await queryOne('SELECT id, name, display_name, steam_id, avatar_url, roles, mmr, info, twitch_username, discord_username, created_at FROM players WHERE id = $1', [playerId])
   if (!player) return res.status(404).json({ error: 'Player not found' })
 
   // Get all competitions this player participated in (as player or captain)
@@ -147,7 +149,9 @@ router.get('/api/players/:id/profile', async (req, res) => {
 
   res.json({
     id: player.id,
-    name: player.name,
+    name: player.display_name || player.name,
+    display_name: player.display_name || null,
+    steam_name: player.name,
     steam_id: player.steam_id || null,
     avatar_url: player.avatar_url || null,
     roles: JSON.parse(player.roles || '[]'),
@@ -180,9 +184,9 @@ router.put('/api/players/:id', async (req, res) => {
 
   const player = await queryOne('SELECT * FROM players WHERE id = $1', [req.params.id])
   if (!player) return res.status(404).json({ error: 'Player not found' })
-  const { name, roles, mmr, info, is_admin, is_banned } = req.body
+  const { name, roles, mmr, info, is_admin, is_banned, display_name } = req.body
   await execute(
-    'UPDATE players SET name = $1, roles = $2, mmr = $3, info = $4, is_admin = $5, is_banned = $6 WHERE id = $7',
+    'UPDATE players SET name = $1, roles = $2, mmr = $3, info = $4, is_admin = $5, is_banned = $6, display_name = $7 WHERE id = $8',
     [
       name ?? player.name,
       roles ? JSON.stringify(roles) : player.roles,
@@ -190,6 +194,7 @@ router.put('/api/players/:id', async (req, res) => {
       info ?? player.info,
       is_admin !== undefined ? is_admin : player.is_admin,
       is_banned !== undefined ? is_banned : !!player.is_banned,
+      display_name !== undefined ? (display_name?.trim() || null) : player.display_name,
       req.params.id,
     ]
   )

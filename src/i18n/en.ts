@@ -464,6 +464,8 @@ export default {
   settingsTitle: 'Settings',
   settingsSubtitle: 'Manage your profile and preferences',
   settingsLoginRequired: 'Please log in to access settings.',
+  displayName: 'Display Name',
+  displayNameHint: 'Leave empty to use your Steam name. This name will be shown everywhere instead of your Steam name.',
   profileInfo: 'Profile Info',
   yourRoles: 'Your Roles',
   aboutYouLabel: 'About You',

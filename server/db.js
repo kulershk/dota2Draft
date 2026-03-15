@@ -69,6 +69,7 @@ export async function initDb() {
     ['discord_id', 'TEXT DEFAULT NULL'],
     ['last_online', 'TIMESTAMP DEFAULT NULL'],
     ['steam_synced_at', 'TIMESTAMP DEFAULT NULL'],
+    ['display_name', 'TEXT DEFAULT NULL'],
   ]) {
     const has = await queryOne(
       `SELECT 1 FROM information_schema.columns WHERE table_name = 'players' AND column_name = $1`, [col]

@@ -35,7 +35,7 @@ export default function createCaptainsRouter(io) {
 
     await queryOne(
       'INSERT INTO captains (competition_id, name, team, budget, status, mmr, player_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
-      [compId, player.name, team, settings.startingBudget, 'Waiting', player.mmr, playerId]
+      [compId, player.display_name || player.name, team, settings.startingBudget, 'Waiting', player.mmr, playerId]
     )
 
     const cp = await queryOne('SELECT id FROM competition_players WHERE competition_id = $1 AND player_id = $2', [compId, playerId])

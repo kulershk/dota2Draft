@@ -463,6 +463,8 @@ export default {
   settingsTitle: 'Настройки',
   settingsSubtitle: 'Управление профилем и предпочтениями',
   settingsLoginRequired: 'Пожалуйста, войдите для доступа к настройкам.',
+  displayName: 'Отображаемое имя',
+  displayNameHint: 'Оставьте пустым, чтобы использовать имя Steam. Это имя будет отображаться везде вместо имени Steam.',
   profileInfo: 'Информация профиля',
   yourRoles: 'Ваши роли',
   aboutYouLabel: 'О вас',

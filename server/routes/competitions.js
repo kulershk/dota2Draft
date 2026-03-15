@@ -9,7 +9,7 @@ const router = Router()
 router.get('/api/competitions', async (req, res) => {
   const player = await getAuthPlayer(req)
   const comps = await query(`
-    SELECT c.*, p.name AS created_by_name, p.avatar_url AS created_by_avatar
+    SELECT c.*, COALESCE(p.display_name, p.name) AS created_by_name, p.avatar_url AS created_by_avatar
     FROM competitions c
     LEFT JOIN players p ON p.id = c.created_by
     ORDER BY c.created_at DESC
@@ -34,7 +34,7 @@ router.get('/api/competitions', async (req, res) => {
 
 router.get('/api/competitions/:id', async (req, res) => {
   const comp = await queryOne(`
-    SELECT c.*, p.name AS created_by_name, p.avatar_url AS created_by_avatar
+    SELECT c.*, COALESCE(p.display_name, p.name) AS created_by_name, p.avatar_url AS created_by_avatar
     FROM competitions c
     LEFT JOIN players p ON p.id = c.created_by
     WHERE c.id = $1
@@ -74,7 +74,7 @@ router.post('/api/competitions', async (req, res) => {
     [name, description || '', starts_at || null, registration_start || null, registration_end || null, JSON.stringify({ ...defaultSettings, ...settings }), admin.id]
   )
   const full = await queryOne(`
-    SELECT c.*, p.name AS created_by_name, p.avatar_url AS created_by_avatar
+    SELECT c.*, COALESCE(p.display_name, p.name) AS created_by_name, p.avatar_url AS created_by_avatar
     FROM competitions c LEFT JOIN players p ON p.id = c.created_by WHERE c.id = $1
   `, [comp.id])
   res.status(201).json({ ...full, settings: parseCompSettings(full) })
@@ -108,7 +108,7 @@ router.put('/api/competitions/:id', async (req, res) => {
   )
 
   const updated = await queryOne(`
-    SELECT c.*, p.name AS created_by_name, p.avatar_url AS created_by_avatar
+    SELECT c.*, COALESCE(p.display_name, p.name) AS created_by_name, p.avatar_url AS created_by_avatar
     FROM competitions c LEFT JOIN players p ON p.id = c.created_by WHERE c.id = $1
   `, [comp.id])
   req.app.get('io').to(`comp:${comp.id}`).emit('settings:updated', parseCompSettings(updated))

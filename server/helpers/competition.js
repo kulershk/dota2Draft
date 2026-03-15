@@ -36,7 +36,7 @@ export async function setAuctionState(compId, updates) {
 
 export async function getCaptains(compId) {
   return await query(`
-    SELECT c.id, c.name, c.team, c.budget, c.status, c.mmr, c.player_id, c.competition_id,
+    SELECT c.id, COALESCE(p.display_name, c.name) as name, c.team, c.budget, c.status, c.mmr, c.player_id, c.competition_id,
            c.banner_url, COALESCE(p.avatar_url, '') as avatar_url
     FROM captains c
     LEFT JOIN players p ON c.player_id = p.id
@@ -51,7 +51,7 @@ export async function getCompPlayers(compId) {
   )).map(r => r.player_id)
 
   const rows = await query(`
-    SELECT cp.*, p.name, p.steam_id, p.avatar_url, p.is_admin
+    SELECT cp.*, COALESCE(p.display_name, p.name) as name, p.steam_id, p.avatar_url, p.is_admin
     FROM competition_players cp
     JOIN players p ON cp.player_id = p.id
     WHERE cp.competition_id = $1
@@ -193,16 +193,16 @@ export async function getFullAuctionState(compId) {
 
   const nominatedPlayer = state.nominatedPlayerId
     ? await queryOne(`
-        SELECT cp.*, p.name, p.steam_id, p.avatar_url
+        SELECT cp.*, COALESCE(p.display_name, p.name) as name, p.steam_id, p.avatar_url
         FROM competition_players cp JOIN players p ON cp.player_id = p.id
         WHERE cp.competition_id = $1 AND cp.player_id = $2
       `, [compId, state.nominatedPlayerId])
     : null
   const nominator = state.nominatorId
-    ? await queryOne('SELECT id, name, team FROM captains WHERE id = $1', [state.nominatorId])
+    ? await queryOne('SELECT c.id, COALESCE(p.display_name, c.name) as name, c.team FROM captains c LEFT JOIN players p ON c.player_id = p.id WHERE c.id = $1', [state.nominatorId])
     : null
   const currentBidder = state.currentBidderId
-    ? await queryOne('SELECT id, name, team FROM captains WHERE id = $1', [state.currentBidderId])
+    ? await queryOne('SELECT c.id, COALESCE(p.display_name, c.name) as name, c.team FROM captains c LEFT JOIN players p ON c.player_id = p.id WHERE c.id = $1', [state.currentBidderId])
     : null
   const history = state.currentRound ? await getBidHistory(compId, Number(state.currentRound)) : []
 

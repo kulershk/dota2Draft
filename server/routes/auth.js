@@ -72,7 +72,9 @@ router.get('/api/auth/me', async (req, res) => {
   const perms = await getPlayerPermissions(player.id)
   res.json({
     id: player.id,
-    name: player.name,
+    name: player.display_name || player.name,
+    display_name: player.display_name || null,
+    steam_name: player.name,
     steam_id: player.steam_id,
     avatar_url: player.avatar_url,
     is_admin: !!player.is_admin,
@@ -88,13 +90,14 @@ router.get('/api/auth/me', async (req, res) => {
 router.put('/api/auth/me', async (req, res) => {
   const player = await getAuthPlayer(req)
   if (!player) return res.status(401).json({ error: 'Not authenticated' })
-  const { mmr, info, roles } = req.body
+  const { mmr, info, roles, display_name } = req.body
   await execute(
-    'UPDATE players SET mmr = $1, info = $2, roles = $3 WHERE id = $4',
+    'UPDATE players SET mmr = $1, info = $2, roles = $3, display_name = $4 WHERE id = $5',
     [
       mmr ?? player.mmr,
       info ?? player.info,
       roles ? JSON.stringify(roles) : player.roles,
+      display_name !== undefined ? (display_name?.trim() || null) : player.display_name,
       player.id,
     ]
   )
@@ -102,7 +105,9 @@ router.put('/api/auth/me', async (req, res) => {
   const updatedPerms = await getPlayerPermissions(updated.id)
   res.json({
     id: updated.id,
-    name: updated.name,
+    name: updated.display_name || updated.name,
+    display_name: updated.display_name || null,
+    steam_name: updated.name,
     steam_id: updated.steam_id,
     avatar_url: updated.avatar_url,
     is_admin: !!updated.is_admin,

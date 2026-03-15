@@ -26,6 +26,8 @@ interface PermGroup {
 interface User {
   id: number
   name: string
+  display_name: string | null
+  steam_name: string
   steam_id: string | null
   avatar_url: string | null
   roles: string[]
@@ -48,6 +50,7 @@ const USERS_PAGE_SIZE = 20
 const allGroups = ref<PermGroup[]>([])
 const editUser = ref<User | null>(null)
 const editUserGroupIds = ref<number[]>([])
+const editUserDisplayName = ref('')
 const editUserMmr = ref(0)
 const editUserRoles = ref<string[]>([])
 const savingUser = ref(false)
@@ -71,6 +74,7 @@ fetchSyncStatus()
 
 async function openEditUser(user: User) {
   editUser.value = user
+  editUserDisplayName.value = user.display_name || ''
   editUserMmr.value = user.mmr
   editUserRoles.value = [...(user.roles || [])]
   const groups = await api.getPlayerGroups(user.id)
@@ -105,7 +109,7 @@ async function saveEditUser() {
   try {
     await Promise.all([
       api.setPlayerGroups(editUser.value.id, editUserGroupIds.value),
-      api.updatePlayer(editUser.value.id, { mmr: editUserMmr.value, roles: editUserRoles.value }),
+      api.updatePlayer(editUser.value.id, { display_name: editUserDisplayName.value, mmr: editUserMmr.value, roles: editUserRoles.value }),
     ])
     editUser.value = null
     await fetchUsers()
@@ -426,8 +430,9 @@ function formatRelativeTime(dateStr: string | null) {
                   </div>
                   <div class="flex flex-col">
                     <span class="font-medium text-foreground">{{ user.name }}</span>
-                    <div v-if="user.steam_id" class="flex items-center gap-2 mt-0.5">
-                      <a :href="`https://steamcommunity.com/profiles/${user.steam_id}`" target="_blank" rel="noopener" class="text-[10px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-0.5">
+                    <div class="flex items-center gap-2 mt-0.5">
+                      <span v-if="user.display_name" class="text-[10px] text-muted-foreground">{{ user.steam_name }}</span>
+                      <a v-if="user.steam_id" :href="`https://steamcommunity.com/profiles/${user.steam_id}`" target="_blank" rel="noopener" class="text-[10px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-0.5">
                         Steam <ExternalLink class="w-2.5 h-2.5" />
                       </a>
                     </div>
@@ -601,6 +606,12 @@ function formatRelativeTime(dateStr: string | null) {
         </div>
       </div>
       <div class="px-7 py-5 max-h-[450px] overflow-y-auto flex flex-col gap-5">
+        <!-- Display Name -->
+        <div class="flex flex-col gap-1.5">
+          <label class="block text-xs font-medium text-muted-foreground">{{ t('displayName') }}</label>
+          <input type="text" class="input-field w-full" v-model="editUserDisplayName" :placeholder="editUser?.steam_name || editUser?.name" maxlength="50" />
+          <p class="text-xs text-muted-foreground">{{ t('displayNameHint') }}</p>
+        </div>
         <!-- MMR -->
         <div class="flex flex-col gap-1.5">
           <label class="block text-xs font-medium text-muted-foreground">{{ t('mmrCol') }}</label>

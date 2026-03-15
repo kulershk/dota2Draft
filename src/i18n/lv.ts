@@ -463,6 +463,8 @@ export default {
   settingsTitle: 'Iestatījumi',
   settingsSubtitle: 'Pārvaldiet savu profilu un preferences',
   settingsLoginRequired: 'Lūdzu, pieslēdzieties, lai piekļūtu iestatījumiem.',
+  displayName: 'Attēlojamais vārds',
+  displayNameHint: 'Atstājiet tukšu, lai izmantotu Steam vārdu. Šis vārds tiks rādīts visur Steam vārda vietā.',
   profileInfo: 'Profila informācija',
   yourRoles: 'Jūsu lomas',
   aboutYouLabel: 'Par jums',

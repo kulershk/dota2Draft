@@ -463,6 +463,8 @@ export default {
   settingsTitle: 'Nustatymai',
   settingsSubtitle: 'Tvarkykite savo profilį ir nuostatas',
   settingsLoginRequired: 'Prisijunkite, kad galėtumėte pasiekti nustatymus.',
+  displayName: 'Rodomas vardas',
+  displayNameHint: 'Palikite tuščią, kad būtų naudojamas Steam vardas. Šis vardas bus rodomas visur vietoj Steam vardo.',
   profileInfo: 'Profilio informacija',
   yourRoles: 'Jūsų rolės',
   aboutYouLabel: 'Apie jus',
