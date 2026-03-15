@@ -14,7 +14,7 @@ const route = useRoute()
 const router = useRouter()
 const store = useDraftStore()
 
-const isDark = ref(localStorage.getItem('draft_theme') === 'dark')
+const isDark = ref(localStorage.getItem('draft_theme') !== 'light')
 
 function toggleTheme() {
   isDark.value = !isDark.value
