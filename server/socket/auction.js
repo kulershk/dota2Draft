@@ -78,6 +78,11 @@ async function finalizeBlindPhase(compId, io) {
   if (topBidders.length === 1) {
     // Only 1 bidder — they win at their blind bid price, skip open phase
     const winner = topBidders[0]
+    // Record the blind bid in bid_history so undo works
+    await execute(
+      'INSERT INTO bid_history (competition_id, round, player_id, captain_id, captain_name, amount) VALUES ($1, $2, $3, $4, $5, $6)',
+      [compId, Number(state.currentRound), Number(state.nominatedPlayerId), winner.captainId, captainMap[winner.captainId]?.name || '', winner.amount]
+    )
     await setAuctionState(compId, {
       blindPhase: false, blindBids: {}, topBidderIds: [], revealedBids,
       currentBid: winner.amount, currentBidderId: winner.captainId,
