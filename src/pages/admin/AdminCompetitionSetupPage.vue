@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Settings, DollarSign, Users, UserPlus, RotateCcw, Play, Pencil, ArrowDown, Wifi, ArrowLeft, Plus, Trash2, Search, Tv } from 'lucide-vue-next'
+import { Settings, DollarSign, Users, UserPlus, RotateCcw, Play, Pencil, ArrowDown, Wifi, ArrowLeft, Plus, Trash2, Search, Tv, Upload } from 'lucide-vue-next'
 import { ref, computed, onMounted, reactive, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
@@ -54,6 +54,54 @@ const localSettings = reactive({
   blindBidTimer: 30,
   autoFinish: true,
 })
+
+// Steam import for participants
+const showImportParticipants = ref(false)
+const importInput = ref('')
+const importing = ref(false)
+const importStep = ref<'input' | 'processing' | 'done'>('input')
+const importTotal = ref(0)
+const importResults = ref<{ steamId: string; name: string; avatarUrl: string; status: string; id: number }[]>([])
+const importError = ref('')
+
+async function importSteamParticipants() {
+  if (!importInput.value.trim()) return
+  importing.value = true
+  importStep.value = 'processing'
+  importResults.value = []
+  importError.value = ''
+
+  try {
+    const { steamIds } = await api.parseSteamIds(importInput.value)
+    importTotal.value = steamIds.length
+
+    for (const steamId of steamIds) {
+      try {
+        const result = await api.importSteamParticipant(compId.value, steamId)
+        importResults.value.push(result)
+      } catch (e: any) {
+        importResults.value.push({ steamId, name: '', avatarUrl: '', status: 'error', id: 0 })
+      }
+    }
+
+    importStep.value = 'done'
+    await store.fetchCompData()
+  } catch (e: any) {
+    importError.value = e.message
+    importStep.value = 'input'
+  } finally {
+    importing.value = false
+  }
+}
+
+function closeImportParticipants() {
+  showImportParticipants.value = false
+  importInput.value = ''
+  importResults.value = []
+  importStep.value = 'input'
+  importTotal.value = 0
+  importError.value = ''
+}
 
 const promotePlayerId = ref<number | null>(null)
 const promoteTeam = ref('')
@@ -496,6 +544,10 @@ async function deleteStream(id: number) {
             <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input v-model="participantTableSearch" type="text" :placeholder="t('search')" class="input-field pl-9 w-44" />
           </div>
+          <button class="btn-outline text-sm" @click="showImportParticipants = true">
+            <Upload class="w-4 h-4" />
+            {{ t('importParticipants') }}
+          </button>
           <button class="btn-primary text-sm" @click="showAddParticipant = true">
             <Plus class="w-4 h-4" />
             {{ t('addParticipant') }}
@@ -701,6 +753,76 @@ async function deleteStream(id: number) {
           {{ t('editCaptainModal.save') }}
         </button>
         <button class="btn-secondary w-full justify-center" @click="showEditCaptain = false">{{ t('cancel') }}</button>
+      </div>
+    </ModalOverlay>
+
+    <!-- Import Participants Modal -->
+    <ModalOverlay :show="showImportParticipants" @close="closeImportParticipants">
+      <div class="border-b border-border px-7 py-6">
+        <h2 class="text-xl font-semibold text-foreground">{{ t('importParticipants') }}</h2>
+        <p class="text-sm text-muted-foreground mt-1">{{ t('importParticipantsHint') }}</p>
+      </div>
+      <div class="px-7 py-5 flex flex-col gap-4">
+        <!-- Input step -->
+        <template v-if="importStep === 'input'">
+          <textarea
+            v-model="importInput"
+            class="input-field w-full h-40 font-mono text-xs resize-y"
+            :placeholder="t('importSteamPlaceholder')"
+          ></textarea>
+          <p v-if="importError" class="text-sm text-destructive">{{ importError }}</p>
+        </template>
+
+        <!-- Processing / Done step -->
+        <template v-if="importStep === 'processing' || importStep === 'done'">
+          <div class="flex items-center gap-3">
+            <div class="flex-1 h-2 rounded-full bg-accent overflow-hidden">
+              <div class="h-full bg-primary rounded-full transition-all duration-300" :style="{ width: `${importTotal > 0 ? (importResults.length / importTotal) * 100 : 0}%` }"></div>
+            </div>
+            <span class="text-sm font-mono text-muted-foreground flex-shrink-0">{{ importResults.length }}/{{ importTotal }}</span>
+          </div>
+
+          <div class="border border-border rounded-lg divide-y divide-border max-h-[300px] overflow-y-auto">
+            <div v-for="(r, i) in importResults" :key="i" class="flex items-center justify-between px-3 py-2.5">
+              <div class="flex items-center gap-2.5 min-w-0">
+                <img v-if="r.avatarUrl" :src="r.avatarUrl" class="w-7 h-7 rounded-full flex-shrink-0" />
+                <div v-else class="w-7 h-7 rounded-full bg-secondary flex items-center justify-center text-[10px] font-semibold text-secondary-foreground flex-shrink-0">
+                  {{ r.name ? r.name.charAt(0) : '?' }}
+                </div>
+                <div class="min-w-0">
+                  <span class="text-sm font-medium text-foreground truncate block">{{ r.name || r.steamId }}</span>
+                  <span class="text-[10px] text-muted-foreground font-mono">{{ r.steamId }}</span>
+                </div>
+              </div>
+              <span class="text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ml-2" :class="{
+                'bg-color-success/15 text-color-success': r.status === 'added',
+                'bg-accent text-muted-foreground': r.status === 'already_in_pool' || r.status === 'captain',
+                'bg-red-500/15 text-red-500': r.status === 'error',
+              }">
+                {{ r.status === 'added' ? t('importParticipantAdded') : r.status === 'already_in_pool' ? t('alreadyExists') : r.status === 'captain' ? t('captainCol') : t('failed') }}
+              </span>
+            </div>
+            <div v-if="importStep === 'processing'" v-for="i in Math.max(0, importTotal - importResults.length)" :key="'pending-' + i" class="flex items-center gap-2.5 px-3 py-2.5">
+              <div class="w-7 h-7 rounded-full bg-accent animate-pulse flex-shrink-0"></div>
+              <div class="h-4 w-32 bg-accent animate-pulse rounded"></div>
+            </div>
+          </div>
+
+          <div v-if="importStep === 'done'" class="text-sm text-muted-foreground text-center">
+            {{ t('importParticipantsSummary', {
+              added: importResults.filter(r => r.status === 'added').length,
+              existing: importResults.filter(r => r.status === 'already_in_pool' || r.status === 'captain').length,
+              failed: importResults.filter(r => r.status === 'error').length,
+            }) }}
+          </div>
+        </template>
+      </div>
+      <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
+        <button v-if="importStep === 'input'" class="btn-primary w-full justify-center" :disabled="!importInput.trim()" @click="importSteamParticipants">
+          <Upload class="w-4 h-4" />
+          {{ t('importParticipants') }}
+        </button>
+        <button class="btn-secondary w-full justify-center" :disabled="importStep === 'processing'" @click="closeImportParticipants">{{ t('close') }}</button>
       </div>
     </ModalOverlay>
   </div>

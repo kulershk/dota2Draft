@@ -80,6 +80,8 @@ export function useApi() {
       request(`/api/competitions/${compId}/users/${userId}/add-to-pool`, { method: 'POST', body: '{}' }),
     removeUserFromCompPool: (compId: number, userId: number) =>
       request(`/api/competitions/${compId}/users/${userId}/remove-from-pool`, { method: 'POST', body: '{}' }),
+    importSteamParticipant: (compId: number, steamId: string) =>
+      request(`/api/competitions/${compId}/import-steam-participants`, { method: 'POST', body: JSON.stringify({ steamId }) }),
 
     // Competition Auction
     getCompAuction: (compId: number) => request(`/api/competitions/${compId}/auction`),

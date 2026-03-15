@@ -1,8 +1,9 @@
 import { Router } from 'express'
-import { queryOne, execute } from '../db.js'
+import { query, queryOne, execute } from '../db.js'
 import { getAuthPlayer } from '../middleware/auth.js'
 import { requireCompPermission } from '../middleware/permissions.js'
 import { getCompetition, getCompPlayers } from '../helpers/competition.js'
+import { parseSteamIds, fetchSteamProfile } from '../helpers/steam.js'
 
 export default function createPlayersRouter(io) {
   const router = Router()
@@ -156,6 +157,63 @@ export default function createPlayersRouter(io) {
 
     io.to(`comp:${compId}`).emit('players:updated', await getCompPlayers(compId))
     res.json({ ok: true })
+  })
+
+  // Import participants from Steam IDs
+  router.post('/api/competitions/:compId/import-steam-participants', async (req, res) => {
+    const compId = Number(req.params.compId)
+    const admin = await requireCompPermission(req, res, compId, 'manage_players')
+    if (!admin) return
+
+    const { steamId } = req.body
+    if (!steamId) return res.status(400).json({ error: 'steamId is required' })
+
+    // Find or create the global player
+    let player = await queryOne('SELECT id, name, avatar_url, roles, mmr, info FROM players WHERE steam_id = $1', [steamId])
+    let userStatus = 'existed'
+
+    if (!player) {
+      const { personaName, avatarUrl } = await fetchSteamProfile(steamId)
+      player = await queryOne(
+        'INSERT INTO players (name, steam_id, avatar_url) VALUES ($1, $2, $3) RETURNING id, name, avatar_url, roles, mmr, info',
+        [personaName, steamId, avatarUrl]
+      )
+      userStatus = 'created'
+    }
+
+    // Check if already a captain
+    const captain = await queryOne(
+      'SELECT id FROM captains WHERE competition_id = $1 AND player_id = $2',
+      [compId, player.id]
+    )
+    if (captain) {
+      return res.json({ steamId, name: player.name, avatarUrl: player.avatar_url, status: 'captain', id: player.id })
+    }
+
+    // Add to competition pool
+    const existing = await queryOne(
+      'SELECT * FROM competition_players WHERE competition_id = $1 AND player_id = $2',
+      [compId, player.id]
+    )
+
+    if (existing) {
+      if (existing.in_pool) {
+        return res.json({ steamId, name: player.name, avatarUrl: player.avatar_url, status: 'already_in_pool', id: player.id })
+      }
+      await execute(
+        'UPDATE competition_players SET in_pool = true, mmr = $1, roles = $2, info = $3 WHERE id = $4',
+        [player.mmr, player.roles || '[]', player.info || '', existing.id]
+      )
+    } else {
+      await execute(
+        `INSERT INTO competition_players (competition_id, player_id, roles, mmr, info, in_pool)
+         VALUES ($1, $2, $3, $4, $5, true)`,
+        [compId, player.id, player.roles || '[]', player.mmr, player.info || '']
+      )
+    }
+
+    io.to(`comp:${compId}`).emit('players:updated', await getCompPlayers(compId))
+    res.json({ steamId, name: player.name, avatarUrl: player.avatar_url, status: 'added', id: player.id })
   })
 
   return router

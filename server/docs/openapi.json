@@ -385,6 +385,50 @@
         "responses": { "200": { "description": "Added" } }
       }
     },
+    "/api/competitions/{compId}/import-steam-participants": {
+      "post": {
+        "tags": ["Players"],
+        "summary": "Import a Steam user and add as competition participant",
+        "description": "Finds or creates a global player by Steam ID, then adds them to the competition participant pool. Used for bulk importing participants from Steam ID lists.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["steamId"],
+                "properties": {
+                  "steamId": { "type": "string", "description": "Steam 64-bit ID" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Import result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "steamId": { "type": "string" },
+                    "name": { "type": "string" },
+                    "avatarUrl": { "type": "string", "nullable": true },
+                    "status": { "type": "string", "enum": ["added", "already_in_pool", "captain"] },
+                    "id": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/competitions/{compId}/users/{userId}/remove-from-pool": {
       "post": {
         "tags": ["Players"],
