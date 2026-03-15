@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Gamepad2, Shield, LogOut, Sun, Moon, Menu, X, Home, LogIn, Lock, Globe, Settings, Swords } from 'lucide-vue-next'
+import { Gamepad2, Shield, LogOut, Sun, Moon, Menu, X, Home, LogIn, Lock, Globe, Settings, Swords, Info } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { onMounted, ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -38,6 +38,7 @@ const languages = [
   { code: 'en', label: 'English' },
   { code: 'lt', label: 'Lietuvių' },
   { code: 'lv', label: 'Latviešu' },
+  { code: 'ru', label: 'Русский' },
 ]
 
 function switchLang(code: string) {
@@ -153,6 +154,10 @@ async function handleClaimAdmin() {
             <Swords class="w-3.5 h-3.5" />
             {{ t('competitions') }}
           </router-link>
+          <router-link to="/how-it-works" class="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors" :class="route.path === '/how-it-works' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'">
+            <Info class="w-3.5 h-3.5" />
+            {{ t('howItWorksTitle') }}
+          </router-link>
         </div>
         <!-- Right: User info + actions -->
         <div class="flex items-center gap-2">
@@ -217,6 +222,10 @@ async function handleClaimAdmin() {
         <router-link to="/competitions" class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-sidebar-foreground hover:bg-accent" @click="mobileMenuOpen = false">
           <Swords class="w-[18px] h-[18px]" />
           {{ t('competitions') }}
+        </router-link>
+        <router-link to="/how-it-works" class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-sidebar-foreground hover:bg-accent" @click="mobileMenuOpen = false">
+          <Info class="w-[18px] h-[18px]" />
+          {{ t('howItWorksTitle') }}
         </router-link>
         <router-link v-if="isLoggedIn" to="/settings" class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-sidebar-foreground hover:bg-accent" @click="mobileMenuOpen = false">
           <Settings class="w-[18px] h-[18px]" />
