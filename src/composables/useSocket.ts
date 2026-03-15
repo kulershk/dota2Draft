@@ -8,11 +8,11 @@ export function getSocket(): Socket {
     const token = localStorage.getItem('draft_auth_token') || ''
     socket = io({ auth: { token } })
     // Sync time with server
-    socket.on('server:time', (serverTime: number) => {
-      serverTimeOffset = serverTime - Date.now()
+    socket.on('time:sync', (data: { serverTime: number }) => {
+      serverTimeOffset = data.serverTime - Date.now()
     })
     socket.on('connect', () => {
-      socket!.emit('server:ping')
+      socket!.emit('time:sync')
     })
   }
   return socket
