@@ -76,7 +76,7 @@ function statusClass(match: any) {
             :key="match.id"
             class="card border-l-4 overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
             :class="statusClass(match)"
-            @click="isAdmin && match.team1_captain_id && match.team2_captain_id ? emit('edit-match', match) : null"
+            @click="match.team1_captain_id && match.team2_captain_id ? emit('edit-match', match) : null"
           >
             <!-- Team 1 -->
             <div class="flex items-center justify-between px-3 py-2 border-b border-border/50"

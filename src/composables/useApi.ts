@@ -99,6 +99,24 @@ export function useApi() {
       request(`/api/competitions/${compId}/tournament/matches/${matchId}/score`, { method: 'PUT', body: JSON.stringify(data) }),
     resetTournament: (compId: number) =>
       request(`/api/competitions/${compId}/tournament`, { method: 'DELETE' }),
+    getMatchGameStats: (compId: number, matchId: number, gameNumber: number) =>
+      request(`/api/competitions/${compId}/tournament/matches/${matchId}/games/${gameNumber}/stats`),
+    refetchMatchGameStats: (compId: number, matchId: number, gameNumber: number) =>
+      request(`/api/competitions/${compId}/tournament/matches/${matchId}/games/${gameNumber}/refetch`, { method: 'POST' }),
+
+    // Fantasy
+    getFantasy: (compId: number) => request(`/api/competitions/${compId}/fantasy`),
+    getFantasyLeaderboard: (compId: number) => request(`/api/competitions/${compId}/fantasy/leaderboard`),
+    createFantasyStage: (compId: number, data: { name: string; matchIds: number[] }) =>
+      request(`/api/competitions/${compId}/fantasy/stages`, { method: 'POST', body: JSON.stringify(data) }),
+    updateFantasyStage: (compId: number, stageId: number, data: Record<string, any>) =>
+      request(`/api/competitions/${compId}/fantasy/stages/${stageId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteFantasyStage: (compId: number, stageId: number) =>
+      request(`/api/competitions/${compId}/fantasy/stages/${stageId}`, { method: 'DELETE' }),
+    saveFantasyPicks: (compId: number, stageId: number, picks: Record<string, number>) =>
+      request(`/api/competitions/${compId}/fantasy/stages/${stageId}/picks`, { method: 'PUT', body: JSON.stringify(picks) }),
+    getFantasyTopPicks: (compId: number, stageId: number) =>
+      request(`/api/competitions/${compId}/fantasy/stages/${stageId}/top-picks`),
 
     // User self-update
     updateMe: (data: Record<string, any>) =>

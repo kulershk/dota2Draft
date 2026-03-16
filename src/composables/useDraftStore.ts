@@ -57,6 +57,23 @@ export interface BidEntry {
   amount: number
 }
 
+export interface FantasyRoleScoring {
+  kill: number; death: number; assist: number; lastHit: number; deny: number
+  gpm: number; xpm: number; heroDamage: number; towerDamage: number; heroHealing: number
+  obsPlaced: number; senPlaced: number; obsKilled: number; senKilled: number
+  campsStacked: number; stuns: number; teamfight: number; towerKill: number
+  roshanKill: number; firstBlood: number; runePickup: number
+  tripleKill: number; ultraKill: number; rampage: number; courierKill: number
+}
+
+export interface FantasyScoring {
+  carry: FantasyRoleScoring
+  mid: FantasyRoleScoring
+  offlane: FantasyRoleScoring
+  pos4: FantasyRoleScoring
+  pos5: FantasyRoleScoring
+}
+
 export interface Settings {
   playersPerTeam: number
   bidTimer: number
@@ -71,6 +88,8 @@ export interface Settings {
   blindTopBidders: number
   blindBidTimer: number
   autoFinish: boolean
+  fantasyEnabled: boolean
+  fantasyScoring: FantasyScoring
 }
 
 export interface RevealedBid {
@@ -137,6 +156,8 @@ const settings = reactive<Settings>({
   blindTopBidders: 3,
   blindBidTimer: 30,
   autoFinish: true,
+  fantasyEnabled: false,
+  fantasyScoring: {} as any,
 })
 
 const captains = ref<Captain[]>([])
@@ -220,6 +241,7 @@ const roleCounts = computed(() => {
 })
 
 const tournamentData = ref<{ tournament_state: any; matches: any[] }>({ tournament_state: {}, matches: [] })
+const fantasyData = ref<{ stages: any[]; myPicks: Record<number, Record<string, number>> }>({ stages: [], myPicks: {} })
 
 const onlineCaptainIds = ref<number[]>([])
 const readyCaptainIds = ref<number[]>([])
@@ -321,6 +343,14 @@ export function useDraftStore() {
       if (currentCompetitionId.value) {
         api.getTournament(currentCompetitionId.value).then(data => {
           tournamentData.value = data
+        }).catch(() => {})
+      }
+    })
+
+    socket.on('fantasy:updated', () => {
+      if (currentCompetitionId.value) {
+        api.getFantasy(currentCompetitionId.value).then(data => {
+          fantasyData.value = data
         }).catch(() => {})
       }
     })
@@ -486,6 +516,16 @@ export function useDraftStore() {
     }
   }
 
+  async function fetchFantasy() {
+    const compId = currentCompetitionId.value
+    if (!compId) return
+    try {
+      fantasyData.value = await api.getFantasy(compId)
+    } catch {
+      fantasyData.value = { stages: [], myPicks: {} }
+    }
+  }
+
   async function fetchAll() {
     loading.value = true
     try {
@@ -539,6 +579,7 @@ export function useDraftStore() {
     activityLog,
     myBlindBid,
     tournamentData,
+    fantasyData,
     availablePlayers,
     roleCounts,
     // Auth
@@ -565,6 +606,7 @@ export function useDraftStore() {
     updatePlayer,
     deletePlayer,
     fetchTournament,
+    fetchFantasy,
     // Ready
     setReady,
     setUnready,

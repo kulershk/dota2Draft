@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Settings, DollarSign, Users, UserPlus, RotateCcw, Play, Pencil, ArrowDown, Wifi, ArrowLeft, Plus, Trash2, Search, Tv, Upload } from 'lucide-vue-next'
+import { Settings, DollarSign, Users, UserPlus, RotateCcw, Play, Pencil, ArrowDown, Wifi, ArrowLeft, Plus, Trash2, Search, Tv, Upload, Swords } from 'lucide-vue-next'
 import { ref, computed, onMounted, reactive, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
@@ -10,6 +10,7 @@ import InputGroup from '@/components/common/InputGroup.vue'
 import CaptainAvatar from '@/components/common/CaptainAvatar.vue'
 import RichTextEditor from '@/components/common/RichTextEditor.vue'
 import DatePicker from '@/components/common/DatePicker.vue'
+import { getDefaultFantasyScoring } from '@/utils/fantasyDefaults'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -53,7 +54,23 @@ const localSettings = reactive({
   blindTopBidders: 3,
   blindBidTimer: 30,
   autoFinish: true,
+  fantasyEnabled: false,
+  fantasyScoring: getDefaultFantasyScoring(),
 })
+
+const showFantasyScoring = ref(false)
+const fantasyRoles = ['carry', 'mid', 'offlane', 'pos4', 'pos5'] as const
+const fantasyStats = [
+  'kill', 'death', 'assist', 'lastHit', 'deny', 'gpm', 'xpm',
+  'heroDamage', 'towerDamage', 'heroHealing',
+  'obsPlaced', 'senPlaced', 'obsKilled', 'senKilled',
+  'campsStacked', 'stuns', 'teamfight', 'towerKill', 'roshanKill',
+  'firstBlood', 'runePickup', 'tripleKill', 'ultraKill', 'rampage', 'courierKill',
+] as const
+
+function resetFantasyDefaults() {
+  localSettings.fantasyScoring = getDefaultFantasyScoring()
+}
 
 // Steam import for participants
 const showImportParticipants = ref(false)
@@ -402,6 +419,57 @@ async function deleteStream(id: number) {
           <InputGroup :label="t('minimumStartingBid')" :model-value="String(localSettings.minimumBid)" placeholder="10" @update:model-value="localSettings.minimumBid = Number($event)" />
           <InputGroup :label="t('bidIncrementLabel')" :model-value="String(localSettings.bidIncrement)" placeholder="5" @update:model-value="localSettings.bidIncrement = Number($event)" />
           <InputGroup :label="t('maxBidNoLimit')" :model-value="String(localSettings.maxBid)" placeholder="0" @update:model-value="localSettings.maxBid = Number($event)" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Fantasy Scoring -->
+    <div class="card">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-border">
+        <div class="flex items-center gap-2">
+          <Swords class="w-5 h-5 text-foreground" />
+          <span class="text-sm font-semibold text-foreground">{{ t('fantasyScoring') }}</span>
+        </div>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" class="w-4 h-4 accent-primary" v-model="localSettings.fantasyEnabled" />
+          <span class="text-sm text-foreground">{{ t('enabled') }}</span>
+        </label>
+      </div>
+      <div v-if="localSettings.fantasyEnabled" class="p-4 flex flex-col gap-4">
+        <div class="flex items-center justify-between">
+          <button class="text-xs text-primary hover:underline" @click="showFantasyScoring = !showFantasyScoring">
+            {{ showFantasyScoring ? t('hideMultipliers') : t('showMultipliers') }}
+          </button>
+          <button v-if="showFantasyScoring" class="text-xs text-muted-foreground hover:text-foreground" @click="resetFantasyDefaults">
+            {{ t('resetDefaults') }}
+          </button>
+        </div>
+
+        <div v-if="showFantasyScoring" class="overflow-x-auto">
+          <table class="w-full text-xs border-collapse">
+            <thead>
+              <tr class="border-b border-border">
+                <th class="text-left py-2 px-2 text-muted-foreground font-medium sticky left-0 bg-background">{{ t('stat') }}</th>
+                <th v-for="role in fantasyRoles" :key="role" class="text-center py-2 px-2 text-muted-foreground font-medium min-w-[70px]">
+                  {{ t('fantasyRole_' + role) }}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="stat in fantasyStats" :key="stat" class="border-b border-border/30 hover:bg-accent/20">
+                <td class="py-1.5 px-2 text-foreground font-medium sticky left-0 bg-background">{{ t('fantasyStat_' + stat) }}</td>
+                <td v-for="role in fantasyRoles" :key="role" class="text-center px-1">
+                  <input
+                    type="number"
+                    step="any"
+                    class="w-16 px-1.5 py-1 text-center text-xs rounded border border-border bg-background text-foreground focus:border-primary focus:outline-none"
+                    :value="localSettings.fantasyScoring[role]?.[stat]"
+                    @input="localSettings.fantasyScoring[role][stat] = Number(($event.target as HTMLInputElement).value)"
+                  />
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

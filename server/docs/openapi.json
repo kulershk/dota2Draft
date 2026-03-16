@@ -15,6 +15,7 @@
     { "name": "Players", "description": "Competition player pool" },
     { "name": "Auction", "description": "Auction state & results" },
     { "name": "Tournament", "description": "Tournament brackets & matches" },
+    { "name": "Fantasy", "description": "Fantasy league stages, picks, and leaderboard" },
     { "name": "News", "description": "News posts & comments" },
     { "name": "Users", "description": "Global user management (admin)" },
     { "name": "Permissions", "description": "Permission groups" },
@@ -514,7 +515,103 @@
           { "name": "matchId", "in": "path", "required": true, "schema": { "type": "integer" } }
         ],
         "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "score1": { "type": "integer" }, "score2": { "type": "integer" }, "games": { "type": "array" }, "status": { "type": "string" } } } } } },
-        "responses": { "200": { "description": "Updated" } }
+        "responses": { "200": { "description": "Updated. Also auto-fetches OpenDota stats for games with dotabuff_id." } }
+      }
+    },
+    "/api/competitions/{compId}/tournament/matches/{matchId}/games/{gameNumber}/stats": {
+      "get": {
+        "tags": ["Tournament"],
+        "summary": "Get player stats for a match game",
+        "description": "Returns OpenDota player stats (kills, deaths, assists, wards, multi-kills, etc.) for a specific game in a match.",
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "matchId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "gameNumber", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "Player stats array" } }
+      }
+    },
+    "/api/competitions/{compId}/tournament/matches/{matchId}/games/{gameNumber}/refetch": {
+      "post": {
+        "tags": ["Tournament"],
+        "summary": "Refetch OpenDota stats for a match game",
+        "description": "Re-fetches player stats from OpenDota API for the given game. Requires admin permission. Useful if the match replay was not yet parsed on first fetch.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "matchId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "gameNumber", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Stats refetched successfully" },
+          "400": { "description": "No match ID set for this game" },
+          "404": { "description": "Match or game not found" }
+        }
+      }
+    },
+    "/api/competitions/{compId}/fantasy": {
+      "get": {
+        "tags": ["Fantasy"],
+        "summary": "Get fantasy stages and user picks",
+        "description": "Returns all fantasy stages with match assignments and the current user's picks (if authenticated).",
+        "parameters": [{ "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Fantasy stages and picks" } }
+      }
+    },
+    "/api/competitions/{compId}/fantasy/leaderboard": {
+      "get": {
+        "tags": ["Fantasy"],
+        "summary": "Get fantasy leaderboard",
+        "description": "Returns fantasy points leaderboard for active/completed stages.",
+        "parameters": [{ "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Leaderboard with users and points per stage" } }
+      }
+    },
+    "/api/competitions/{compId}/fantasy/stages": {
+      "post": {
+        "tags": ["Fantasy"],
+        "summary": "Create fantasy stage",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "name": { "type": "string" }, "matchIds": { "type": "array", "items": { "type": "integer" } } }, "required": ["name"] } } } },
+        "responses": { "200": { "description": "Stage created" } }
+      }
+    },
+    "/api/competitions/{compId}/fantasy/stages/{stageId}": {
+      "put": {
+        "tags": ["Fantasy"],
+        "summary": "Update fantasy stage",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "stageId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "name": { "type": "string" }, "status": { "type": "string", "enum": ["pending", "active", "completed"] }, "matchIds": { "type": "array", "items": { "type": "integer" } } } } } } },
+        "responses": { "200": { "description": "Stage updated" } }
+      },
+      "delete": {
+        "tags": ["Fantasy"],
+        "summary": "Delete fantasy stage",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "stageId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "Stage deleted" } }
+      }
+    },
+    "/api/competitions/{compId}/fantasy/stages/{stageId}/picks": {
+      "put": {
+        "tags": ["Fantasy"],
+        "summary": "Save fantasy picks for a stage",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Save user's player picks for each role. Stage must be in 'pending' status. All 5 roles required, no duplicate players.",
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "stageId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "carry": { "type": "integer" }, "mid": { "type": "integer" }, "offlane": { "type": "integer" }, "pos4": { "type": "integer" }, "pos5": { "type": "integer" } }, "required": ["carry", "mid", "offlane", "pos4", "pos5"] } } } },
+        "responses": { "200": { "description": "Picks saved" }, "400": { "description": "Picks locked or validation error" } }
       }
     },
     "/api/news": {

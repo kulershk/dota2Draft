@@ -143,7 +143,7 @@ function statusText(status: string) {
           :key="match.id"
           class="card p-3 flex items-center gap-3 cursor-pointer hover:shadow-sm transition-shadow"
           :class="match.hidden ? 'opacity-40' : ''"
-          @click="isAdmin ? emit('edit-match', match) : null"
+          @click="emit('edit-match', match)"
         >
           <!-- Team 1 -->
           <div class="flex-1 flex items-center justify-end gap-2">

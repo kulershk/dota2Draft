@@ -19,6 +19,7 @@ const router = createRouter({
         { path: 'auction', name: 'comp-auction', component: () => import('@/pages/AuctionPage.vue') },
         { path: 'results', name: 'comp-results', component: () => import('@/pages/ResultsPage.vue') },
         { path: 'tournament', name: 'comp-tournament', component: () => import('@/pages/TournamentPage.vue') },
+        { path: 'fantasy', name: 'comp-fantasy', component: () => import('@/pages/FantasyPage.vue') },
       ],
     },
     {

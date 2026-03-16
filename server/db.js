@@ -286,6 +286,78 @@ export async function initDb() {
     }
   }
 
+  // Match game player stats (OpenDota parsed data)
+  await execute(`
+    CREATE TABLE IF NOT EXISTS match_game_player_stats (
+      id SERIAL PRIMARY KEY,
+      match_game_id INTEGER NOT NULL REFERENCES match_games(id) ON DELETE CASCADE,
+      account_id BIGINT NOT NULL,
+      player_name TEXT DEFAULT '',
+      hero_id INTEGER DEFAULT 0,
+      kills INTEGER DEFAULT 0,
+      deaths INTEGER DEFAULT 0,
+      assists INTEGER DEFAULT 0,
+      last_hits INTEGER DEFAULT 0,
+      denies INTEGER DEFAULT 0,
+      gpm INTEGER DEFAULT 0,
+      xpm INTEGER DEFAULT 0,
+      hero_damage INTEGER DEFAULT 0,
+      tower_damage INTEGER DEFAULT 0,
+      hero_healing INTEGER DEFAULT 0,
+      net_worth INTEGER DEFAULT 0,
+      level INTEGER DEFAULT 0,
+      multi_kills JSONB DEFAULT '{}',
+      kill_streaks JSONB DEFAULT '{}',
+      obs_placed INTEGER DEFAULT 0,
+      sen_placed INTEGER DEFAULT 0,
+      observer_kills INTEGER DEFAULT 0,
+      sentry_kills INTEGER DEFAULT 0,
+      camps_stacked INTEGER DEFAULT 0,
+      stuns REAL DEFAULT 0,
+      teamfight_participation REAL DEFAULT 0,
+      towers_killed INTEGER DEFAULT 0,
+      roshans_killed INTEGER DEFAULT 0,
+      firstblood_claimed INTEGER DEFAULT 0,
+      rune_pickups INTEGER DEFAULT 0,
+      courier_kills INTEGER DEFAULT 0,
+      win INTEGER DEFAULT 0,
+      is_radiant BOOLEAN DEFAULT FALSE,
+      duration_seconds INTEGER DEFAULT 0,
+      UNIQUE(match_game_id, account_id)
+    )
+  `)
+
+  // Fantasy league tables
+  await execute(`
+    CREATE TABLE IF NOT EXISTS fantasy_stages (
+      id SERIAL PRIMARY KEY,
+      competition_id INTEGER NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      stage_order INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `)
+
+  await execute(`
+    CREATE TABLE IF NOT EXISTS fantasy_stage_matches (
+      fantasy_stage_id INTEGER NOT NULL REFERENCES fantasy_stages(id) ON DELETE CASCADE,
+      match_id INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+      PRIMARY KEY (fantasy_stage_id, match_id)
+    )
+  `)
+
+  await execute(`
+    CREATE TABLE IF NOT EXISTS fantasy_picks (
+      id SERIAL PRIMARY KEY,
+      fantasy_stage_id INTEGER NOT NULL REFERENCES fantasy_stages(id) ON DELETE CASCADE,
+      player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      role TEXT NOT NULL,
+      pick_player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      UNIQUE(fantasy_stage_id, player_id, role)
+    )
+  `)
+
   // Ensure competition_players exists (might already from migration)
   await execute(`
     CREATE TABLE IF NOT EXISTS competition_players (

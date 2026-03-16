@@ -9,6 +9,7 @@ import BracketView from '@/components/tournament/BracketView.vue'
 import DoubleEliminationView from '@/components/tournament/DoubleEliminationView.vue'
 import GroupStageView from '@/components/tournament/GroupStageView.vue'
 import MatchScoreModal from '@/components/tournament/MatchScoreModal.vue'
+import MatchDetailsModal from '@/components/tournament/MatchDetailsModal.vue'
 
 const { t } = useI18n()
 const api = useApi()
@@ -21,6 +22,7 @@ const showEditStage = ref(false)
 const showDeleteStage = ref(false)
 const deleteStageId = ref<number | null>(null)
 const editingMatch = ref<any>(null)
+const viewingMatch = ref<any>(null)
 const activeStageId = ref<number | null>(null)
 
 // Edit stage form
@@ -522,7 +524,7 @@ function stageStatusClass(stage: any) {
           :matches="stageMatches"
           :tournament-state="activeStage"
           :is-admin="isCompAdmin"
-          @edit-match="editingMatch = $event"
+          @edit-match="isCompAdmin ? (editingMatch = $event) : (viewingMatch = $event)"
         />
 
         <!-- Double elimination view -->
@@ -531,7 +533,7 @@ function stageStatusClass(stage: any) {
           :matches="stageMatches"
           :tournament-state="activeStage"
           :is-admin="isCompAdmin"
-          @edit-match="editingMatch = $event"
+          @edit-match="isCompAdmin ? (editingMatch = $event) : (viewingMatch = $event)"
         />
 
         <!-- Group stage view -->
@@ -541,7 +543,7 @@ function stageStatusClass(stage: any) {
           :tournament-state="activeStage"
           :captains="store.captains.value"
           :is-admin="isCompAdmin"
-          @edit-match="editingMatch = $event"
+          @edit-match="isCompAdmin ? (editingMatch = $event) : (viewingMatch = $event)"
         />
       </div>
     </template>
@@ -869,12 +871,19 @@ function stageStatusClass(stage: any) {
       </div>
     </ModalOverlay>
 
-    <!-- Match Score Modal -->
+    <!-- Match Score Modal (admin) -->
     <MatchScoreModal
       v-if="editingMatch"
       :match="editingMatch"
       @close="editingMatch = null"
       @save="saveMatchScore(editingMatch.id, $event)"
+    />
+
+    <!-- Match Details Modal (everyone) -->
+    <MatchDetailsModal
+      v-if="viewingMatch"
+      :match="viewingMatch"
+      @close="viewingMatch = null"
     />
   </div>
 </template>

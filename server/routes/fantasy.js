@@ -1,0 +1,355 @@
+import { Router } from 'express'
+import { query, queryOne, execute } from '../db.js'
+import { getAuthPlayer } from '../middleware/auth.js'
+import { requireCompPermission } from '../middleware/permissions.js'
+import { getCompetition, parseCompSettings } from '../helpers/competition.js'
+import { getStagePoints, getStageTopPicks } from '../helpers/fantasy.js'
+
+export default function createFantasyRouter(io) {
+  const router = Router()
+
+  // Get all fantasy data for a competition
+  router.get('/api/competitions/:compId/fantasy', async (req, res) => {
+    try {
+      const compId = Number(req.params.compId)
+      if (!compId) return res.status(400).json({ error: 'Invalid competition ID' })
+      const comp = await getCompetition(compId)
+      if (!comp) return res.status(404).json({ error: 'Competition not found' })
+
+      const stages = await query(
+        'SELECT * FROM fantasy_stages WHERE competition_id = $1 ORDER BY stage_order, id',
+        [compId]
+      )
+
+      // Get match assignments for each stage
+      const stageIds = stages.map(s => s.id)
+      let matchAssignments = []
+      if (stageIds.length > 0) {
+        matchAssignments = await query(
+          'SELECT * FROM fantasy_stage_matches WHERE fantasy_stage_id = ANY($1)',
+          [stageIds]
+        )
+      }
+
+      for (const stage of stages) {
+        stage.match_ids = matchAssignments
+          .filter(a => a.fantasy_stage_id === stage.id)
+          .map(a => a.match_id)
+      }
+
+      // Get current user's picks
+      let myPicks = {}
+      const player = await getAuthPlayer(req)
+      if (player && stageIds.length > 0) {
+        const picks = await query(
+          'SELECT * FROM fantasy_picks WHERE fantasy_stage_id = ANY($1) AND player_id = $2',
+          [stageIds, player.id]
+        )
+        for (const p of picks) {
+          if (!myPicks[p.fantasy_stage_id]) myPicks[p.fantasy_stage_id] = {}
+          myPicks[p.fantasy_stage_id][p.role] = p.pick_player_id
+        }
+      }
+
+      // Count participants per stage
+      let participantCounts = {}
+      if (stageIds.length > 0) {
+        const counts = await query(
+          `SELECT fantasy_stage_id, COUNT(DISTINCT player_id) as count
+           FROM fantasy_picks WHERE fantasy_stage_id = ANY($1) GROUP BY fantasy_stage_id`,
+          [stageIds]
+        )
+        for (const c of counts) {
+          participantCounts[c.fantasy_stage_id] = Number(c.count)
+        }
+      }
+
+      for (const stage of stages) {
+        stage.participant_count = participantCounts[stage.id] || 0
+      }
+
+      res.json({ stages, myPicks })
+    } catch (e) {
+      console.error('Fantasy GET error:', e.message)
+      res.status(500).json({ error: 'Internal error' })
+    }
+  })
+
+  // Get fantasy leaderboard
+  router.get('/api/competitions/:compId/fantasy/leaderboard', async (req, res) => {
+    try {
+      const compId = Number(req.params.compId)
+      if (!compId) return res.status(400).json({ error: 'Invalid competition ID' })
+      const comp = await getCompetition(compId)
+      if (!comp) return res.status(404).json({ error: 'Competition not found' })
+
+      const settings = parseCompSettings(comp)
+      const stages = await query(
+        "SELECT * FROM fantasy_stages WHERE competition_id = $1 AND status IN ('active', 'completed') ORDER BY stage_order, id",
+        [compId]
+      )
+
+      if (stages.length === 0) return res.json({ stages: [], users: [] })
+
+      const allUserPoints = {}
+
+      for (const stage of stages) {
+        const stagePoints = await getStagePoints(stage.id, settings.fantasyScoring)
+        for (const [playerId, data] of Object.entries(stagePoints)) {
+          if (!allUserPoints[playerId]) {
+            allUserPoints[playerId] = { stages: {}, total: 0 }
+          }
+          allUserPoints[playerId].stages[stage.id] = data
+          allUserPoints[playerId].total += data.total
+        }
+      }
+
+      for (const uid in allUserPoints) {
+        allUserPoints[uid].total = Math.round(allUserPoints[uid].total * 100) / 100
+      }
+
+      const playerIds = Object.keys(allUserPoints).map(Number)
+      let playerInfo = []
+      if (playerIds.length > 0) {
+        playerInfo = await query(
+          `SELECT id, COALESCE(display_name, name) AS name, avatar_url FROM players WHERE id = ANY($1)`,
+          [playerIds]
+        )
+      }
+
+      const users = playerInfo.map(p => ({
+        playerId: p.id,
+        name: p.name,
+        avatar: p.avatar_url,
+        stages: allUserPoints[p.id]?.stages || {},
+        total: allUserPoints[p.id]?.total || 0,
+      })).sort((a, b) => b.total - a.total)
+
+      res.json({ stages, users })
+    } catch (e) {
+      console.error('Fantasy leaderboard error:', e.message)
+      res.status(500).json({ error: 'Internal error' })
+    }
+  })
+
+  // Create fantasy stage
+  router.post('/api/competitions/:compId/fantasy/stages', async (req, res) => {
+    try {
+      const compId = Number(req.params.compId)
+      if (!compId) return res.status(400).json({ error: 'Invalid competition ID' })
+      const admin = await requireCompPermission(req, res, compId)
+      if (!admin) return
+
+      const { name, matchIds = [] } = req.body
+      if (!name) return res.status(400).json({ error: 'Name is required' })
+
+      // Validate matches belong to this competition and aren't already assigned
+      if (matchIds.length > 0) {
+        const assigned = await query(`
+          SELECT fsm.match_id FROM fantasy_stage_matches fsm
+          JOIN fantasy_stages fs ON fs.id = fsm.fantasy_stage_id
+          WHERE fs.competition_id = $1
+        `, [compId])
+        const assignedIds = new Set(assigned.map(a => a.match_id))
+        const conflicts = matchIds.filter(id => assignedIds.has(id))
+        if (conflicts.length > 0) {
+          return res.status(400).json({ error: 'Some matches are already assigned to another stage' })
+        }
+
+        const validMatches = await query(
+          'SELECT id FROM matches WHERE id = ANY($1) AND competition_id = $2',
+          [matchIds, compId]
+        )
+        if (validMatches.length !== matchIds.length) {
+          return res.status(400).json({ error: 'Some matches do not belong to this competition' })
+        }
+      }
+
+      // Get next order
+      const last = await queryOne(
+        'SELECT MAX(stage_order) as max_order FROM fantasy_stages WHERE competition_id = $1',
+        [compId]
+      )
+      const order = (last?.max_order ?? -1) + 1
+
+      const stage = await queryOne(
+        'INSERT INTO fantasy_stages (competition_id, name, stage_order) VALUES ($1, $2, $3) RETURNING *',
+        [compId, name, order]
+      )
+
+      // Assign matches
+      for (const matchId of matchIds) {
+        await execute(
+          'INSERT INTO fantasy_stage_matches (fantasy_stage_id, match_id) VALUES ($1, $2)',
+          [stage.id, matchId]
+        )
+      }
+
+      io.to(`comp:${compId}`).emit('fantasy:updated')
+      res.json({ ok: true, stage })
+    } catch (e) {
+      console.error('Fantasy create stage error:', e.message)
+      res.status(500).json({ error: 'Internal error' })
+    }
+  })
+
+  // Update fantasy stage
+  router.put('/api/competitions/:compId/fantasy/stages/:stageId', async (req, res) => {
+    try {
+      const compId = Number(req.params.compId)
+      const stageId = Number(req.params.stageId)
+      if (!compId || !stageId) return res.status(400).json({ error: 'Invalid IDs' })
+      const admin = await requireCompPermission(req, res, compId)
+      if (!admin) return
+
+      const stage = await queryOne(
+        'SELECT * FROM fantasy_stages WHERE id = $1 AND competition_id = $2',
+        [stageId, compId]
+      )
+      if (!stage) return res.status(404).json({ error: 'Stage not found' })
+
+      const { name, status, matchIds } = req.body
+
+      if (name !== undefined) {
+        await execute('UPDATE fantasy_stages SET name = $1 WHERE id = $2', [name, stageId])
+      }
+
+      if (status !== undefined && ['pending', 'active', 'completed'].includes(status)) {
+        await execute('UPDATE fantasy_stages SET status = $1 WHERE id = $2', [status, stageId])
+      }
+
+      if (matchIds !== undefined) {
+        const assigned = await query(`
+          SELECT fsm.match_id FROM fantasy_stage_matches fsm
+          JOIN fantasy_stages fs ON fs.id = fsm.fantasy_stage_id
+          WHERE fs.competition_id = $1 AND fs.id != $2
+        `, [compId, stageId])
+        const assignedIds = new Set(assigned.map(a => a.match_id))
+        const conflicts = matchIds.filter(id => assignedIds.has(id))
+        if (conflicts.length > 0) {
+          return res.status(400).json({ error: 'Some matches are already assigned to another stage' })
+        }
+
+        await execute('DELETE FROM fantasy_stage_matches WHERE fantasy_stage_id = $1', [stageId])
+        for (const matchId of matchIds) {
+          await execute(
+            'INSERT INTO fantasy_stage_matches (fantasy_stage_id, match_id) VALUES ($1, $2)',
+            [stageId, matchId]
+          )
+        }
+      }
+
+      io.to(`comp:${compId}`).emit('fantasy:updated')
+      res.json({ ok: true })
+    } catch (e) {
+      console.error('Fantasy update stage error:', e.message)
+      res.status(500).json({ error: 'Internal error' })
+    }
+  })
+
+  // Delete fantasy stage
+  router.delete('/api/competitions/:compId/fantasy/stages/:stageId', async (req, res) => {
+    try {
+      const compId = Number(req.params.compId)
+      const stageId = Number(req.params.stageId)
+      if (!compId || !stageId) return res.status(400).json({ error: 'Invalid IDs' })
+      const admin = await requireCompPermission(req, res, compId)
+      if (!admin) return
+
+      const stage = await queryOne(
+        'SELECT id FROM fantasy_stages WHERE id = $1 AND competition_id = $2',
+        [stageId, compId]
+      )
+      if (!stage) return res.status(404).json({ error: 'Stage not found' })
+
+      await execute('DELETE FROM fantasy_stages WHERE id = $1', [stageId])
+
+      io.to(`comp:${compId}`).emit('fantasy:updated')
+      res.json({ ok: true })
+    } catch (e) {
+      console.error('Fantasy delete stage error:', e.message)
+      res.status(500).json({ error: 'Internal error' })
+    }
+  })
+
+  // Save fantasy picks
+  router.put('/api/competitions/:compId/fantasy/stages/:stageId/picks', async (req, res) => {
+    try {
+      const compId = Number(req.params.compId)
+      const stageId = Number(req.params.stageId)
+      if (!compId || !stageId) return res.status(400).json({ error: 'Invalid IDs' })
+      const player = await getAuthPlayer(req)
+      if (!player) return res.status(401).json({ error: 'Not authenticated' })
+
+      const stage = await queryOne(
+        'SELECT * FROM fantasy_stages WHERE id = $1 AND competition_id = $2',
+        [stageId, compId]
+      )
+      if (!stage) return res.status(404).json({ error: 'Stage not found' })
+      if (stage.status !== 'pending') {
+        return res.status(400).json({ error: 'Picks are locked for this stage' })
+      }
+
+      const roles = ['carry', 'mid', 'offlane', 'pos4', 'pos5']
+      const picks = req.body
+
+      for (const role of roles) {
+        if (!picks[role]) return res.status(400).json({ error: `Missing pick for ${role}` })
+      }
+
+      const pickPlayerIds = roles.map(r => picks[r])
+      if (new Set(pickPlayerIds).size !== 5) {
+        return res.status(400).json({ error: 'Cannot pick the same player for multiple roles' })
+      }
+
+      const compPlayers = await query(
+        'SELECT player_id FROM competition_players WHERE competition_id = $1 AND player_id = ANY($2)',
+        [compId, pickPlayerIds]
+      )
+      if (compPlayers.length !== 5) {
+        return res.status(400).json({ error: 'Some players do not belong to this competition' })
+      }
+
+      for (const role of roles) {
+        await execute(`
+          INSERT INTO fantasy_picks (fantasy_stage_id, player_id, role, pick_player_id)
+          VALUES ($1, $2, $3, $4)
+          ON CONFLICT (fantasy_stage_id, player_id, role) DO UPDATE SET pick_player_id = $4
+        `, [stageId, player.id, role, picks[role]])
+      }
+
+      io.to(`comp:${compId}`).emit('fantasy:updated')
+      res.json({ ok: true })
+    } catch (e) {
+      console.error('Fantasy save picks error:', e.message)
+      res.status(500).json({ error: 'Internal error' })
+    }
+  })
+
+  // Get top picks for a stage (all players ranked by points per role)
+  router.get('/api/competitions/:compId/fantasy/stages/:stageId/top-picks', async (req, res) => {
+    try {
+      const compId = Number(req.params.compId)
+      const stageId = Number(req.params.stageId)
+      if (!compId || !stageId) return res.status(400).json({ error: 'Invalid IDs' })
+
+      const comp = await getCompetition(compId)
+      if (!comp) return res.status(404).json({ error: 'Competition not found' })
+
+      const stage = await queryOne(
+        'SELECT * FROM fantasy_stages WHERE id = $1 AND competition_id = $2',
+        [stageId, compId]
+      )
+      if (!stage) return res.status(404).json({ error: 'Stage not found' })
+
+      const settings = parseCompSettings(comp)
+      const topPicks = await getStageTopPicks(stageId, compId, settings.fantasyScoring)
+      res.json(topPicks)
+    } catch (e) {
+      console.error('Fantasy top picks error:', e.message)
+      res.status(500).json({ error: 'Internal error' })
+    }
+  })
+
+  return router
+}

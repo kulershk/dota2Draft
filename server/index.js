@@ -16,6 +16,7 @@ import createPlayersRouter from './routes/players.js'
 import createCaptainsRouter from './routes/captains.js'
 import auctionRoutes from './routes/auction.js'
 import createTournamentRouter from './routes/tournament.js'
+import createFantasyRouter from './routes/fantasy.js'
 import streamRoutes from './routes/streams.js'
 import permissionRoutes from './routes/permissions.js'
 import settingRoutes from './routes/settings.js'
@@ -60,6 +61,7 @@ app.use(createPlayersRouter(io))
 app.use(createCaptainsRouter(io))
 app.use(auctionRoutes)
 app.use(createTournamentRouter(io))
+app.use(createFantasyRouter(io))
 app.use(streamRoutes)
 app.use(permissionRoutes)
 app.use(settingRoutes)

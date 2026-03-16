@@ -3,6 +3,7 @@ import { query, queryOne, execute } from '../db.js'
 import { requireCompPermission } from '../middleware/permissions.js'
 import { getCompetition, getCaptains } from '../helpers/competition.js'
 import { advanceWinner, generateEliminationBracket, generateGroupMatches, generateDoubleEliminationBracket } from '../helpers/tournament.js'
+import { fetchAndSaveGameStats } from '../helpers/opendota.js'
 
 export default function createTournamentRouter(io) {
   const router = Router()
@@ -40,6 +41,26 @@ export default function createTournamentRouter(io) {
     for (const g of games) {
       if (!gamesByMatch[g.match_id]) gamesByMatch[g.match_id] = []
       gamesByMatch[g.match_id].push(g)
+    }
+
+    // Check which games have stats
+    const gameIds = games.map(g => g.id)
+    let statsCountMap = {}
+    if (gameIds.length > 0) {
+      const statsCounts = await query(
+        `SELECT match_game_id, COUNT(*) as count FROM match_game_player_stats WHERE match_game_id = ANY($1) GROUP BY match_game_id`,
+        [gameIds]
+      )
+      for (const sc of statsCounts) {
+        statsCountMap[sc.match_game_id] = Number(sc.count)
+      }
+    }
+
+    // Attach has_stats flag to each game
+    for (const matchId in gamesByMatch) {
+      for (const g of gamesByMatch[matchId]) {
+        g.has_stats = (statsCountMap[g.id] || 0) > 0
+      }
     }
 
     res.json({
@@ -233,6 +254,25 @@ export default function createTournamentRouter(io) {
       }
     }
 
+    // Auto-fetch OpenDota stats for games with dotabuff_id
+    if (games && Array.isArray(games)) {
+      for (const game of games) {
+        if (game.dotabuff_id) {
+          const mg = await queryOne(
+            'SELECT id FROM match_games WHERE match_id = $1 AND game_number = $2',
+            [matchId, game.game_number]
+          )
+          if (mg) {
+            try {
+              await fetchAndSaveGameStats(mg.id, game.dotabuff_id)
+            } catch (e) {
+              console.error(`OpenDota fetch failed for game ${game.game_number}:`, e.message)
+            }
+          }
+        }
+      }
+    }
+
     if (winnerId && (match.next_match_id || match.loser_next_match_id)) {
       await advanceWinner(matchId, winnerId)
     }
@@ -255,6 +295,50 @@ export default function createTournamentRouter(io) {
 
     io.to(`comp:${compId}`).emit('tournament:updated')
     res.json({ ok: true })
+  })
+
+  // Get stats for a specific match game
+  router.get('/api/competitions/:compId/tournament/matches/:matchId/games/:gameNumber/stats', async (req, res) => {
+    const compId = Number(req.params.compId)
+    const matchId = Number(req.params.matchId)
+    const gameNumber = Number(req.params.gameNumber)
+
+    const match = await queryOne('SELECT id FROM matches WHERE id = $1 AND competition_id = $2', [matchId, compId])
+    if (!match) return res.status(404).json({ error: 'Match not found' })
+
+    const mg = await queryOne('SELECT id FROM match_games WHERE match_id = $1 AND game_number = $2', [matchId, gameNumber])
+    if (!mg) return res.json({ stats: [] })
+
+    const stats = await query(
+      'SELECT * FROM match_game_player_stats WHERE match_game_id = $1 ORDER BY is_radiant DESC, account_id',
+      [mg.id]
+    )
+    res.json({ stats })
+  })
+
+  // Refetch OpenDota stats for a specific match game
+  router.post('/api/competitions/:compId/tournament/matches/:matchId/games/:gameNumber/refetch', async (req, res) => {
+    const compId = Number(req.params.compId)
+    const matchId = Number(req.params.matchId)
+    const gameNumber = Number(req.params.gameNumber)
+    const admin = await requireCompPermission(req, res, compId)
+    if (!admin) return
+
+    const match = await queryOne('SELECT id FROM matches WHERE id = $1 AND competition_id = $2', [matchId, compId])
+    if (!match) return res.status(404).json({ error: 'Match not found' })
+
+    let mg = await queryOne('SELECT id, dotabuff_id FROM match_games WHERE match_id = $1 AND game_number = $2', [matchId, gameNumber])
+    if (!mg) return res.status(400).json({ error: 'Save the match score first before refetching stats' })
+    if (!mg.dotabuff_id) return res.status(400).json({ error: 'No match ID set for this game' })
+
+    try {
+      const result = await fetchAndSaveGameStats(mg.id, mg.dotabuff_id)
+      if (result.error) return res.status(404).json({ error: result.error })
+      io.to(`comp:${compId}`).emit('tournament:updated')
+      res.json({ ok: true, ...result })
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to fetch from OpenDota: ' + e.message })
+    }
   })
 
   router.delete('/api/competitions/:compId/tournament', async (req, res) => {
