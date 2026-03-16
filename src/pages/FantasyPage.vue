@@ -14,6 +14,7 @@ const loading = ref(true)
 const activeTab = ref<'picks' | 'leaderboard' | 'rules'>('picks')
 const leaderboard = ref<{ stages: any[]; users: any[] }>({ stages: [], users: [] })
 const loadingLeaderboard = ref(false)
+const expandedUserId = ref<number | null>(null)
 
 // Admin stage modal
 const showStageModal = ref(false)
@@ -57,10 +58,32 @@ const assignedMatchIds = computed(() => {
   return ids
 })
 
-// Competition players for picking
-const compPlayers = computed(() => {
+// All pickable players (drafted + captains) grouped by team
+const teamGroupedPlayers = computed(() => {
   const players = (store.players.value || []) as any[]
-  return players.filter(p => p.drafted === 1 || p.drafted === true)
+  const captains = (store.captains.value || []) as any[]
+  const groups: { captain: any; players: any[] }[] = []
+
+  for (const cap of captains) {
+    const teamPlayers: any[] = []
+    // Add captain themselves if they have a player_id
+    if (cap.player_id) {
+      const capPlayer = players.find(p => p.id === cap.player_id)
+      if (capPlayer) {
+        teamPlayers.push({ ...capPlayer, _isCaptain: true })
+      }
+    }
+    // Add drafted players for this captain
+    for (const p of players) {
+      if (p.drafted_by === cap.id && p.id !== cap.player_id) {
+        teamPlayers.push(p)
+      }
+    }
+    if (teamPlayers.length > 0) {
+      groups.push({ captain: cap, players: teamPlayers })
+    }
+  }
+  return groups
 })
 
 // Current stage picks as object
@@ -68,10 +91,15 @@ function getStagePicks(stageId: number): Record<string, number> {
   return myPicks.value[stageId] || {}
 }
 
-// Get player info by id
+// Get player info by id (checks players and captains)
 function getPlayerInfo(playerId: number): any {
   const all = (store.players.value || []) as any[]
-  return all.find(p => p.player_id === playerId || p.id === playerId)
+  const found = all.find(p => p.player_id === playerId || p.id === playerId)
+  if (found) return found
+  // Check captains
+  const cap = (store.captains.value || []).find((c: any) => c.player_id === playerId)
+  if (cap) return { id: cap.player_id, name: cap.name, avatar_url: cap.avatar_url }
+  return null
 }
 
 async function loadAll() {
@@ -173,12 +201,19 @@ function openPick(stageId: number, role: string) {
   showPickModal.value = true
 }
 
-const filteredPickPlayers = computed(() => {
+const filteredTeamGroups = computed(() => {
   const q = pickSearch.value.toLowerCase()
-  return compPlayers.value.filter((p: any) => {
-    const name = (p.name || '').toLowerCase()
-    return name.includes(q)
-  })
+  const result: { captain: any; players: any[] }[] = []
+  for (const group of teamGroupedPlayers.value) {
+    const filtered = group.players.filter((p: any) => {
+      const name = (p.name || '').toLowerCase()
+      return name.includes(q)
+    })
+    if (filtered.length > 0) {
+      result.push({ captain: group.captain, players: filtered })
+    }
+  }
+  return result
 })
 
 // Players already picked in other slots for this stage
@@ -462,22 +497,63 @@ function matchLabel(match: any) {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(user, idx) in leaderboard.users" :key="user.playerId" class="border-b border-border/30 hover:bg-accent/20">
-              <td class="py-3 px-4 font-medium text-muted-foreground">
-                <Trophy v-if="idx === 0" class="w-4 h-4 text-yellow-500 inline" />
-                <span v-else>{{ idx + 1 }}</span>
-              </td>
-              <td class="py-3 px-4">
-                <div class="flex items-center gap-2">
-                  <img v-if="user.avatar" :src="user.avatar" class="w-6 h-6 rounded-full" />
-                  <span class="font-medium text-foreground">{{ user.name }}</span>
-                </div>
-              </td>
-              <td v-for="stage in leaderboard.stages" :key="stage.id" class="text-center py-3 px-4">
-                {{ user.stages[stage.id]?.total?.toFixed(1) || '-' }}
-              </td>
-              <td class="text-center py-3 px-4 font-bold text-primary">{{ user.total.toFixed(1) }}</td>
-            </tr>
+            <template v-for="(user, idx) in leaderboard.users" :key="user.playerId">
+              <tr
+                class="border-b border-border/30 hover:bg-accent/20 cursor-pointer"
+                @click="expandedUserId = expandedUserId === user.playerId ? null : user.playerId"
+              >
+                <td class="py-3 px-4 font-medium text-muted-foreground">
+                  <Trophy v-if="idx === 0" class="w-4 h-4 text-yellow-500 inline" />
+                  <span v-else>{{ idx + 1 }}</span>
+                </td>
+                <td class="py-3 px-4">
+                  <div class="flex items-center gap-2">
+                    <img v-if="user.avatar" :src="user.avatar" class="w-6 h-6 rounded-full" />
+                    <span class="font-medium text-foreground">{{ user.name }}</span>
+                  </div>
+                </td>
+                <td v-for="stage in leaderboard.stages" :key="stage.id" class="text-center py-3 px-4">
+                  {{ user.stages[stage.id]?.total?.toFixed(1) || '-' }}
+                </td>
+                <td class="text-center py-3 px-4 font-bold text-primary">{{ user.total.toFixed(1) }}</td>
+              </tr>
+              <!-- Expanded picks -->
+              <tr v-if="expandedUserId === user.playerId">
+                <td :colspan="3 + leaderboard.stages.length" class="p-0">
+                  <div class="bg-accent/20 px-4 py-3">
+                    <table class="w-full text-xs">
+                      <thead>
+                        <tr class="border-b border-border/30">
+                          <th class="text-left py-1.5 px-2 text-muted-foreground font-medium">{{ t('fantasyPickRole') }}</th>
+                          <th v-for="stage in leaderboard.stages" :key="stage.id" class="text-center py-1.5 px-2 text-muted-foreground font-medium" colspan="1">
+                            {{ stage.name }}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="role in roles" :key="role" class="border-b border-border/20">
+                          <td class="py-1.5 px-2 font-medium text-foreground">{{ t('fantasyRole_' + role) }}</td>
+                          <td v-for="stage in leaderboard.stages" :key="stage.id" class="text-center py-1.5 px-2">
+                            <div v-if="user.stages[stage.id]?.picks?.[role]" class="flex items-center justify-center gap-1.5">
+                              <img
+                                v-if="user.stages[stage.id].picks[role].avatar"
+                                :src="user.stages[stage.id].picks[role].avatar"
+                                class="w-5 h-5 rounded-full"
+                              />
+                              <span class="text-foreground truncate max-w-[80px]">{{ user.stages[stage.id].picks[role].name }}</span>
+                              <span class="font-bold ml-1" :class="user.stages[stage.id].picks[role].points >= 0 ? 'text-primary' : 'text-red-500'">
+                                {{ user.stages[stage.id].picks[role].points.toFixed(1) }}
+                              </span>
+                            </div>
+                            <span v-else class="text-muted-foreground">-</span>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </td>
+              </tr>
+            </template>
           </tbody>
         </table>
       </div>
@@ -613,21 +689,36 @@ function matchLabel(match: any) {
       </div>
       <div class="px-7 py-4">
         <input class="input-field w-full mb-3" v-model="pickSearch" :placeholder="t('search')" />
-        <div class="flex flex-col gap-1 max-h-[400px] overflow-y-auto">
-          <button
-            v-for="player in filteredPickPlayers" :key="player.id"
-            class="flex items-center gap-3 px-3 py-2 rounded hover:bg-accent/30 text-left transition-colors"
-            :class="{ 'opacity-40 cursor-not-allowed': pickedPlayerIds.has(player.id) }"
-            :disabled="pickedPlayerIds.has(player.id)"
-            @click="selectPlayer(player.id)"
-          >
-            <img v-if="player.avatar_url" :src="player.avatar_url" class="w-8 h-8 rounded-full" />
-            <div class="flex flex-col">
-              <span class="text-sm font-medium text-foreground">{{ player.name }}</span>
-              <span class="text-[10px] text-muted-foreground">MMR: {{ player.mmr || '?' }}</span>
+        <div class="flex flex-col gap-0.5 max-h-[400px] overflow-y-auto">
+          <template v-for="(group, gIdx) in filteredTeamGroups" :key="group.captain.id">
+            <!-- Team divider -->
+            <div v-if="gIdx > 0" class="border-t border-border my-1"></div>
+            <!-- Team header -->
+            <div class="flex items-center gap-2 px-3 py-1.5">
+              <img v-if="group.captain.banner_url || group.captain.avatar_url" :src="group.captain.banner_url || group.captain.avatar_url" class="w-4 h-4 object-cover" :class="group.captain.banner_url ? 'rounded' : 'rounded-full'" />
+              <span class="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{{ group.captain.team }}</span>
             </div>
-          </button>
-          <div v-if="filteredPickPlayers.length === 0" class="text-xs text-muted-foreground text-center py-4">
+            <!-- Team players -->
+            <template v-for="(player, pIdx) in group.players" :key="player.id">
+              <div v-if="pIdx > 0" class="border-t border-border/30 mx-3"></div>
+              <button
+                class="flex items-center gap-3 px-3 py-2 rounded hover:bg-accent/30 text-left transition-colors"
+                :class="{ 'opacity-40 cursor-not-allowed': pickedPlayerIds.has(player.id) }"
+                :disabled="pickedPlayerIds.has(player.id)"
+                @click="selectPlayer(player.id)"
+              >
+                <img v-if="player.avatar_url" :src="player.avatar_url" class="w-7 h-7 rounded-full" />
+                <div class="flex flex-col flex-1 min-w-0">
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-sm font-medium text-foreground truncate">{{ player.name }}</span>
+                    <span v-if="player._isCaptain" class="text-[9px] font-bold text-primary px-1 py-0.5 rounded bg-primary/10">C</span>
+                  </div>
+                  <span class="text-[10px] text-muted-foreground">MMR: {{ player.mmr || '?' }}</span>
+                </div>
+              </button>
+            </template>
+          </template>
+          <div v-if="filteredTeamGroups.length === 0" class="text-xs text-muted-foreground text-center py-4">
             {{ t('noPlayersFound') }}
           </div>
         </div>

@@ -641,6 +641,7 @@ export default {
   showTopPicks: 'Show Top Picks',
   hideTopPicks: 'Hide Top Picks',
   picked: 'picked',
+  fantasyPickRole: 'Role',
   fantasyRules: 'Rules',
   fantasyRulesTitle: 'Fantasy Scoring Multipliers',
   fantasyRulesDesc: 'Points are calculated by multiplying each stat by the role multiplier. Different roles reward different stats.',

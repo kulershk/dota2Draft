@@ -640,6 +640,7 @@ export default {
   showTopPicks: 'Rodyti geriausius',
   hideTopPicks: 'Slėpti geriausius',
   picked: 'pasirinktas',
+  fantasyPickRole: 'Vaidmuo',
   fantasyRules: 'Taisyklės',
   fantasyRulesTitle: 'Fantasy taškų daugikliai',
   fantasyRulesDesc: 'Taškai apskaičiuojami dauginant kiekvieną statistiką iš vaidmens daugiklio. Skirtingi vaidmenys apdovanoja skirtingas statistikas.',

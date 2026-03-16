@@ -640,6 +640,7 @@ export default {
   showTopPicks: 'Rādīt labākos',
   hideTopPicks: 'Slēpt labākos',
   picked: 'izvēlēts',
+  fantasyPickRole: 'Loma',
   fantasyRules: 'Noteikumi',
   fantasyRulesTitle: 'Fantasy punktu reizinātāji',
   fantasyRulesDesc: 'Punkti tiek aprēķināti, reizinot katru statistiku ar lomas reizinātāju. Dažādas lomas atalgo dažādas statistikas.',

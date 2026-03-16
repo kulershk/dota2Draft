@@ -640,6 +640,7 @@ export default {
   showTopPicks: 'Показать лучших',
   hideTopPicks: 'Скрыть лучших',
   picked: 'выбран',
+  fantasyPickRole: 'Роль',
   fantasyRules: 'Правила',
   fantasyRulesTitle: 'Множители очков Fantasy',
   fantasyRulesDesc: 'Очки рассчитываются путём умножения каждой статистики на множитель роли. Разные роли вознаграждают разные статистики.',
