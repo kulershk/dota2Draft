@@ -30,6 +30,7 @@ export function parseCompSettings(comp) {
     autoFinish: s.autoFinish !== false,
     fantasyEnabled: !!s.fantasyEnabled,
     fantasyScoring: s.fantasyScoring || getDefaultFantasyScoring(),
+    fantasyRepeatPenalty: s.fantasyRepeatPenalty != null ? Number(s.fantasyRepeatPenalty) : 0.15,
   }
 }
 

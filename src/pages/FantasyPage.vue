@@ -34,6 +34,8 @@ const pickSearch = ref('')
 const compId = store.currentCompetitionId
 const stages = computed(() => store.fantasyData.value?.stages || [])
 const myPicks = computed(() => store.fantasyData.value?.myPicks || {})
+const myRepeats = computed(() => store.fantasyData.value?.myRepeats || {})
+const repeatPenalty = computed(() => store.fantasyData.value?.repeatPenalty ?? 0)
 const isAdmin = computed(() =>
   store.hasPerm('manage_competitions') ||
   (store.hasPerm('manage_own_competitions') && store.currentCompetition.value?.created_by === store.currentUser.value?.id)
@@ -89,6 +91,12 @@ const teamGroupedPlayers = computed(() => {
 // Current stage picks as object
 function getStagePicks(stageId: number): Record<string, number> {
   return myPicks.value[stageId] || {}
+}
+
+function isRepeatPick(stageId: number, playerId: number): boolean {
+  const repeats = myRepeats.value[stageId]
+  if (!repeats) return false
+  return repeats.includes(playerId)
 }
 
 // Get player info by id (checks players and captains)
@@ -413,6 +421,11 @@ function matchLabel(match: any) {
                   {{ getPlayerInfo(getStagePicks(stage.id)[role])?.name || '?' }}
                 </span>
                 <span
+                  v-if="repeatPenalty > 0 && isRepeatPick(stage.id, getStagePicks(stage.id)[role])"
+                  class="text-[9px] font-bold text-amber-500 px-1 py-0.5 rounded bg-amber-500/10"
+                  :title="t('repeatPenaltyLabel', { pct: Math.round(repeatPenalty * 100) })"
+                >-{{ Math.round(repeatPenalty * 100) }}%</span>
+                <span
                   v-if="stage.status !== 'pending' && getMyRolePoints(stage.id, role) != null"
                   class="text-xs font-bold"
                   :class="(getMyRolePoints(stage.id, role) ?? 0) >= 0 ? 'text-primary' : 'text-red-500'"
@@ -541,6 +554,7 @@ function matchLabel(match: any) {
                                 class="w-5 h-5 rounded-full"
                               />
                               <span class="text-foreground truncate max-w-[80px]">{{ user.stages[stage.id].picks[role].name }}</span>
+                              <span v-if="user.stages[stage.id].picks[role].repeated" class="text-[8px] font-bold text-amber-500">-{{ Math.round(repeatPenalty * 100) }}%</span>
                               <span class="font-bold ml-1" :class="user.stages[stage.id].picks[role].points >= 0 ? 'text-primary' : 'text-red-500'">
                                 {{ user.stages[stage.id].picks[role].points.toFixed(1) }}
                               </span>
@@ -607,6 +621,7 @@ function matchLabel(match: any) {
           <p>{{ t('fantasyRule3') }}</p>
           <p>{{ t('fantasyRule4') }}</p>
           <p>{{ t('fantasyRule5') }}</p>
+          <p v-if="repeatPenalty > 0" class="text-amber-500 font-medium">{{ t('fantasyRule6', { pct: Math.round(repeatPenalty * 100) }) }}</p>
         </div>
       </div>
     </template>

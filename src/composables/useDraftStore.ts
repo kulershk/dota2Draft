@@ -90,6 +90,7 @@ export interface Settings {
   autoFinish: boolean
   fantasyEnabled: boolean
   fantasyScoring: FantasyScoring
+  fantasyRepeatPenalty: number
 }
 
 export interface RevealedBid {
@@ -158,6 +159,7 @@ const settings = reactive<Settings>({
   autoFinish: true,
   fantasyEnabled: false,
   fantasyScoring: {} as any,
+  fantasyRepeatPenalty: 0.15,
 })
 
 const captains = ref<Captain[]>([])
@@ -241,7 +243,7 @@ const roleCounts = computed(() => {
 })
 
 const tournamentData = ref<{ tournament_state: any; matches: any[] }>({ tournament_state: {}, matches: [] })
-const fantasyData = ref<{ stages: any[]; myPicks: Record<number, Record<string, number>> }>({ stages: [], myPicks: {} })
+const fantasyData = ref<{ stages: any[]; myPicks: Record<number, Record<string, number>>; myRepeats: Record<number, number[]>; repeatPenalty: number }>({ stages: [], myPicks: {}, myRepeats: {}, repeatPenalty: 0 })
 
 const onlineCaptainIds = ref<number[]>([])
 const readyCaptainIds = ref<number[]>([])

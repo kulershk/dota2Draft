@@ -56,6 +56,7 @@ const localSettings = reactive({
   autoFinish: true,
   fantasyEnabled: false,
   fantasyScoring: getDefaultFantasyScoring(),
+  fantasyRepeatPenalty: 0.15,
 })
 
 const showFantasyScoring = ref(false)
@@ -436,6 +437,21 @@ async function deleteStream(id: number) {
         </label>
       </div>
       <div v-if="localSettings.fantasyEnabled" class="p-4 flex flex-col gap-4">
+        <div class="flex flex-col gap-1.5">
+          <label class="label-text">{{ t('repeatPenalty') }}</label>
+          <div class="flex items-center gap-3">
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              max="1"
+              class="input-field w-24"
+              :value="localSettings.fantasyRepeatPenalty"
+              @input="localSettings.fantasyRepeatPenalty = Number(($event.target as HTMLInputElement).value)"
+            />
+            <span class="text-xs text-muted-foreground flex-1">{{ t('repeatPenaltyHint', { pct: Math.round((localSettings.fantasyRepeatPenalty || 0) * 100) }) }}</span>
+          </div>
+        </div>
         <div class="flex items-center justify-between">
           <button class="text-xs text-primary hover:underline" @click="showFantasyScoring = !showFantasyScoring">
             {{ showFantasyScoring ? t('hideMultipliers') : t('showMultipliers') }}

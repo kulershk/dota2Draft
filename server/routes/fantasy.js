@@ -39,6 +39,7 @@ export default function createFantasyRouter(io) {
 
       // Get current user's picks
       let myPicks = {}
+      let myRepeats = {} // { stageId: Set<pickPlayerId> }
       const player = await getAuthPlayer(req)
       if (player && stageIds.length > 0) {
         const picks = await query(
@@ -49,7 +50,23 @@ export default function createFantasyRouter(io) {
           if (!myPicks[p.fantasy_stage_id]) myPicks[p.fantasy_stage_id] = {}
           myPicks[p.fantasy_stage_id][p.role] = p.pick_player_id
         }
+
+        // Compute repeats: for each stage, find picks that were also in the previous stage
+        const sortedStages = [...stages].sort((a, b) => a.stage_order - b.stage_order)
+        for (let i = 1; i < sortedStages.length; i++) {
+          const prevPicks = myPicks[sortedStages[i - 1].id]
+          const curPicks = myPicks[sortedStages[i].id]
+          if (!prevPicks || !curPicks) continue
+          const prevPlayerIds = new Set(Object.values(prevPicks))
+          const repeats = []
+          for (const pid of Object.values(curPicks)) {
+            if (prevPlayerIds.has(pid)) repeats.push(pid)
+          }
+          if (repeats.length > 0) myRepeats[sortedStages[i].id] = repeats
+        }
       }
+
+      const settings = parseCompSettings(comp)
 
       // Count participants per stage
       let participantCounts = {}
@@ -68,7 +85,7 @@ export default function createFantasyRouter(io) {
         stage.participant_count = participantCounts[stage.id] || 0
       }
 
-      res.json({ stages, myPicks })
+      res.json({ stages, myPicks, myRepeats, repeatPenalty: settings.fantasyRepeatPenalty })
     } catch (e) {
       console.error('Fantasy GET error:', e.message)
       res.status(500).json({ error: 'Internal error' })
@@ -94,7 +111,7 @@ export default function createFantasyRouter(io) {
       const allUserPoints = {}
 
       for (const stage of stages) {
-        const stagePoints = await getStagePoints(stage.id, settings.fantasyScoring)
+        const stagePoints = await getStagePoints(stage.id, settings.fantasyScoring, settings.fantasyRepeatPenalty)
         for (const [playerId, data] of Object.entries(stagePoints)) {
           if (!allUserPoints[playerId]) {
             allUserPoints[playerId] = { stages: {}, total: 0 }
