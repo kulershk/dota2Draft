@@ -39,6 +39,22 @@ services:
       frontend:
       draft-internal:
 
+  draft-lobbybot:
+    container_name: draft-lobbybot
+    build:
+      context: ../../lobbybot
+      dockerfile: Dockerfile
+    image: draft_lobbybot_image
+    restart: always
+    environment:
+      - WS_URL=ws://draft:3001/ws/lobbybot
+      - BOT_SERVICE_TOKEN=${BOT_SERVICE_TOKEN}
+      - GOLANG_PROTOBUF_REGISTRATION_CONFLICT=warn
+    depends_on:
+      - draft
+    networks:
+      draft-internal:
+
   draft-db:
     image: postgres:16-alpine
     container_name: draft-db
