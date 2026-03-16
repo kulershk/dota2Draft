@@ -57,6 +57,11 @@ const localSettings = reactive({
   fantasyEnabled: false,
   fantasyScoring: getDefaultFantasyScoring(),
   fantasyRepeatPenalty: 0.15,
+  lobbyGameMode: 2,
+  lobbyServerRegion: 3,
+  lobbyAutoAssignTeams: true,
+  lobbyLeagueId: 0,
+  lobbyDotaTvDelay: 1,
 })
 
 const showFantasyScoring = ref(false)
@@ -309,7 +314,7 @@ async function deleteStream(id: number) {
 </script>
 
 <template>
-  <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[1200px] mx-auto w-full">
+  <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[1200px] w-full">
     <div class="flex items-center gap-3">
       <button class="btn-ghost p-2" @click="router.push('/admin/competitions')">
         <ArrowLeft class="w-4 h-4" />
@@ -421,6 +426,57 @@ async function deleteStream(id: number) {
           <InputGroup :label="t('bidIncrementLabel')" :model-value="String(localSettings.bidIncrement)" placeholder="5" @update:model-value="localSettings.bidIncrement = Number($event)" />
           <InputGroup :label="t('maxBidNoLimit')" :model-value="String(localSettings.maxBid)" placeholder="0" @update:model-value="localSettings.maxBid = Number($event)" />
         </div>
+      </div>
+    </div>
+
+    <!-- Lobby Settings -->
+    <div class="card">
+      <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
+        <Swords class="w-5 h-5 text-foreground" />
+        <span class="text-sm font-semibold text-foreground">{{ t('lobbySettings') }}</span>
+      </div>
+      <div class="p-4 flex flex-col gap-4">
+        <div class="flex flex-col gap-1.5">
+          <label class="label-text">{{ t('lobbyGameMode') }}</label>
+          <select class="input-field" :value="localSettings.lobbyGameMode" @change="localSettings.lobbyGameMode = Number(($event.target as HTMLSelectElement).value)">
+            <option :value="2">{{ t('gameModeCM') }}</option>
+            <option :value="1">{{ t('gameModeAP') }}</option>
+            <option :value="22">{{ t('gameModeAD') }}</option>
+            <option :value="3">{{ t('gameModeRD') }}</option>
+            <option :value="4">{{ t('gameModeSD') }}</option>
+            <option :value="5">{{ t('gameModeAR') }}</option>
+            <option :value="16">{{ t('gameModeCD') }}</option>
+            <option :value="23">{{ t('gameModeTurbo') }}</option>
+          </select>
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <label class="label-text">{{ t('lobbyServerRegion') }}</label>
+          <select class="input-field" :value="localSettings.lobbyServerRegion" @change="localSettings.lobbyServerRegion = Number(($event.target as HTMLSelectElement).value)">
+            <option :value="3">{{ t('regionEUWest') }}</option>
+            <option :value="8">{{ t('regionEUEast') }}</option>
+            <option :value="1">{{ t('regionUSEast') }}</option>
+            <option :value="0">{{ t('regionUSWest') }}</option>
+            <option :value="5">{{ t('regionSEAsia') }}</option>
+            <option :value="7">{{ t('regionAustralia') }}</option>
+            <option :value="9">{{ t('regionSAmerica') }}</option>
+            <option :value="10">{{ t('regionRussia') }}</option>
+          </select>
+        </div>
+        <InputGroup :label="t('lobbyLeagueId')" :model-value="String(localSettings.lobbyLeagueId)" placeholder="0" @update:model-value="localSettings.lobbyLeagueId = Number($event)" :hint="t('lobbyLeagueIdHint')" />
+        <div class="flex flex-col gap-1.5">
+          <label class="label-text">{{ t('lobbyDotaTvDelay') }}</label>
+          <select class="input-field" :value="localSettings.lobbyDotaTvDelay" @change="localSettings.lobbyDotaTvDelay = Number(($event.target as HTMLSelectElement).value)">
+            <option :value="0">{{ t('dotaTvNone') }}</option>
+            <option :value="1">{{ t('dotaTv10min') }}</option>
+            <option :value="2">{{ t('dotaTv5min') }}</option>
+            <option :value="3">{{ t('dotaTv2min') }}</option>
+          </select>
+        </div>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" class="w-4 h-4 accent-primary" v-model="localSettings.lobbyAutoAssignTeams" />
+          <span class="text-sm text-foreground">{{ t('lobbyAutoAssignTeams') }}</span>
+        </label>
+        <p class="text-xs text-muted-foreground">{{ t('lobbyAutoAssignTeamsHint') }}</p>
       </div>
     </div>
 

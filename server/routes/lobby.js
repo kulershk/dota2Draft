@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { query, queryOne } from '../db.js'
+import { query, queryOne, execute } from '../db.js'
 import { requirePermission, requireCompPermission } from '../middleware/permissions.js'
 import { botPool } from '../services/botPool.js'
 
@@ -50,6 +50,28 @@ export default function createLobbyRouter(io) {
       res.json(botPool.getBotLogs(Number(req.params.botId)))
     } catch (e) {
       res.status(500).json({ error: e.message })
+    }
+  })
+
+  router.post('/api/admin/bots/:botId/free', async (req, res) => {
+    try {
+      const admin = await requirePermission(req, res, 'manage_bots')
+      if (!admin) return
+      const botId = Number(req.params.botId)
+      // Cancel any active lobbies for this bot
+      const activeLobbies = await query(
+        "SELECT id FROM match_lobbies WHERE bot_id = $1 AND status NOT IN ('completed', 'cancelled', 'error')",
+        [botId]
+      )
+      for (const lobby of activeLobbies) {
+        await botPool.cancelLobby(lobby.id)
+      }
+      // Force bot status to available
+      await execute("UPDATE lobby_bots SET status = 'available' WHERE id = $1", [botId])
+      if (io) io.emit('bot:statusChanged', { botId, status: 'available' })
+      res.json({ ok: true })
+    } catch (e) {
+      res.status(400).json({ error: e.message })
     }
   })
 

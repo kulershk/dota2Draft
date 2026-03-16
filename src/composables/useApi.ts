@@ -132,6 +132,8 @@ export function useApi() {
       request(`/api/admin/bots/${id}/disconnect`, { method: 'POST' }),
     submitSteamGuard: (id: number, code: string) =>
       request(`/api/admin/bots/${id}/steam-guard`, { method: 'POST', body: JSON.stringify({ code }) }),
+    freeBusyBot: (id: number) =>
+      request(`/api/admin/bots/${id}/free`, { method: 'POST' }),
 
     // Lobby Management
     createLobby: (compId: number, matchId: number, gameNumber: number, data?: Record<string, any>) =>

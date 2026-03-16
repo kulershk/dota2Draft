@@ -324,7 +324,7 @@ function formatRelativeTime(dateStr: string | null) {
 </script>
 
 <template>
-  <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[1200px] mx-auto w-full">
+  <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[1200px] w-full">
     <div>
       <h1 class="text-2xl font-semibold text-foreground">{{ t('steamUsers') }}</h1>
       <p class="text-sm text-muted-foreground mt-1">{{ t('steamUsersSubtitle') }}</p>

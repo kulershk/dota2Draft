@@ -31,6 +31,19 @@ services:
       draft-dev-db:
         condition: service_healthy
 
+  draft-lobbybot:
+    container_name: draft-dev-lobbybot
+    build:
+      context: ../../lobbybot
+      dockerfile: Dockerfile
+    environment:
+      - WS_URL=ws://draft-dev-app:3001/ws/lobbybot
+      - BOT_SERVICE_TOKEN=${BOT_SERVICE_TOKEN}
+      - GOLANG_PROTOBUF_REGISTRATION_CONFLICT=warn
+    depends_on:
+      - draft-app
+    restart: unless-stopped
+
   draft-dev-db:
     image: postgres:16-alpine
     container_name: draft-dev-db

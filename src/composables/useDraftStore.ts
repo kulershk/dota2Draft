@@ -91,6 +91,11 @@ export interface Settings {
   fantasyEnabled: boolean
   fantasyScoring: FantasyScoring
   fantasyRepeatPenalty: number
+  lobbyGameMode: number
+  lobbyServerRegion: number
+  lobbyAutoAssignTeams: boolean
+  lobbyLeagueId: number
+  lobbyDotaTvDelay: number
 }
 
 export interface RevealedBid {
@@ -160,6 +165,11 @@ const settings = reactive<Settings>({
   fantasyEnabled: false,
   fantasyScoring: {} as any,
   fantasyRepeatPenalty: 0.15,
+  lobbyGameMode: 2,
+  lobbyServerRegion: 3,
+  lobbyAutoAssignTeams: true,
+  lobbyLeagueId: 0,
+  lobbyDotaTvDelay: 1,
 })
 
 const captains = ref<Captain[]>([])

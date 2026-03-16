@@ -1,6 +1,7 @@
 import express from 'express'
 import { createServer } from 'http'
 import { Server } from 'socket.io'
+import { WebSocketServer } from 'ws'
 import cors from 'cors'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
@@ -81,8 +82,26 @@ app.get('*', (req, res) => {
 
 // Initialize DB and start server
 const PORT = process.env.PORT || 3001
+// WebSocket server for Go lobby bot service
+const botWss = new WebSocketServer({ noServer: true })
+server.on('upgrade', (req, socket, head) => {
+  const url = new URL(req.url, `http://${req.headers.host}`)
+  if (url.pathname === '/ws/lobbybot') {
+    const token = url.searchParams.get('token')
+    const expected = process.env.BOT_SERVICE_TOKEN
+    if (expected && token !== expected) {
+      socket.destroy()
+      return
+    }
+    botWss.handleUpgrade(req, socket, head, (ws) => {
+      botWss.emit('connection', ws, req)
+    })
+  }
+  // Let Socket.io handle its own upgrades (don't destroy)
+})
+
 initDb().then(async () => {
-  await botPool.init(io)
+  await botPool.init(io, botWss)
   server.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`)
   })

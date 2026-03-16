@@ -31,6 +31,11 @@ export function parseCompSettings(comp) {
     fantasyEnabled: !!s.fantasyEnabled,
     fantasyScoring: s.fantasyScoring || getDefaultFantasyScoring(),
     fantasyRepeatPenalty: s.fantasyRepeatPenalty != null ? Number(s.fantasyRepeatPenalty) : 0.15,
+    lobbyGameMode: Number(s.lobbyGameMode) || 2,
+    lobbyServerRegion: Number(s.lobbyServerRegion) || 3,
+    lobbyAutoAssignTeams: s.lobbyAutoAssignTeams !== false,
+    lobbyLeagueId: Number(s.lobbyLeagueId) || 0,
+    lobbyDotaTvDelay: Number(s.lobbyDotaTvDelay) || 1,
   }
 }
 

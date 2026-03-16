@@ -365,6 +365,8 @@ export async function initDb() {
       username TEXT NOT NULL UNIQUE,
       password TEXT NOT NULL,
       refresh_token TEXT DEFAULT NULL,
+      sentry_hash TEXT DEFAULT NULL,
+      login_key TEXT DEFAULT NULL,
       display_name TEXT DEFAULT '',
       steam_id TEXT DEFAULT NULL,
       status TEXT NOT NULL DEFAULT 'offline',
@@ -394,6 +396,26 @@ export async function initDb() {
       UNIQUE(match_id, game_number)
     )
   `)
+
+  // lobby_bots migration: add sentry_hash and login_key
+  {
+    const has = await queryOne(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'lobby_bots' AND column_name = 'sentry_hash'`
+    )
+    if (!has) {
+      const tableExists = await queryOne(`SELECT 1 FROM information_schema.tables WHERE table_name = 'lobby_bots'`)
+      if (tableExists) await execute('ALTER TABLE lobby_bots ADD COLUMN sentry_hash TEXT DEFAULT NULL')
+    }
+  }
+  {
+    const has = await queryOne(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'lobby_bots' AND column_name = 'login_key'`
+    )
+    if (!has) {
+      const tableExists = await queryOne(`SELECT 1 FROM information_schema.tables WHERE table_name = 'lobby_bots'`)
+      if (tableExists) await execute('ALTER TABLE lobby_bots ADD COLUMN login_key TEXT DEFAULT NULL')
+    }
+  }
 
   // Ensure competition_players exists (might already from migration)
   await execute(`

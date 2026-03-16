@@ -1,417 +1,251 @@
 import { query, queryOne, execute } from '../db.js'
-import { LobbyBot } from './lobbyBot.js'
 import { fetchAndSaveGameStats } from '../helpers/opendota.js'
 
 class BotPool {
   constructor() {
-    this.bots = new Map() // botId -> LobbyBot instance
-    this.activeLobbies = new Map() // lobbyDbId -> { bot, matchId, gameNumber, compId, lobbyUpdateHandler }
     this.io = null
+    this.goWs = null
     this.botLogs = new Map() // botId -> [{ time, message }]
   }
 
-  _log(botId, message) {
-    const entry = { time: new Date().toISOString(), message }
+  async init(io, wss) {
+    this.io = io
+
+    // Reset all bot statuses on restart
+    await execute("UPDATE lobby_bots SET status = 'offline'")
+    const bots = await query('SELECT * FROM lobby_bots')
+    console.log(`Bot pool initialized with ${bots.length} bot account(s)`)
+
+    // Handle Go service WS connections
+    if (wss) {
+      wss.on('connection', (ws) => {
+        console.log('Go lobby bot service connected')
+        this.goWs = ws
+
+        ws.on('message', (raw) => {
+          try {
+            const msg = JSON.parse(raw.toString())
+            this._handleGoMessage(msg)
+          } catch (e) {
+            console.error('Invalid message from Go service:', e.message)
+          }
+        })
+
+        ws.on('close', () => {
+          console.log('Go lobby bot service disconnected')
+          this.goWs = null
+        })
+
+        ws.on('error', (err) => {
+          console.error('Go WS error:', err.message)
+        })
+      })
+    }
+  }
+
+  _sendToGo(type_, data) {
+    if (!this.goWs || this.goWs.readyState !== 1) {
+      throw new Error('Lobby bot service not connected')
+    }
+    this.goWs.send(JSON.stringify({ type: type_, data }))
+  }
+
+  async _handleGoMessage(msg) {
+    const { type, data } = msg
+    try {
+      switch (type) {
+        case 'hello':
+          console.log('Go service hello:', data?.version)
+          await this._sendSync()
+          break
+
+        case 'bot_status':
+          await this._onBotStatus(data)
+          break
+
+        case 'bot_log':
+          this._onBotLog(data)
+          break
+
+        case 'lobby_status':
+          await this._onLobbyStatus(data)
+          break
+
+        case 'player_joined':
+        case 'player_left':
+          await this._onPlayerUpdate(data, type)
+          break
+
+        case 'game_started':
+          await this._onGameStarted(data)
+          break
+
+        case 'lobby_error':
+          await this._onLobbyError(data)
+          break
+
+        default:
+          console.log('Unknown message from Go:', type)
+      }
+    } catch (e) {
+      console.error(`Error handling Go message ${type}:`, e.message)
+    }
+  }
+
+  async _sendSync() {
+    const bots = await query('SELECT * FROM lobby_bots')
+    const activeLobbies = await query(
+      "SELECT * FROM match_lobbies WHERE status IN ('creating', 'waiting', 'launching')"
+    )
+    this._sendToGo('sync', {
+      bots: bots.map(b => ({
+        botId: String(b.id),
+        username: b.username,
+        password: b.password,
+        refreshToken: b.refresh_token || '',
+        sentryHash: b.sentry_hash || '',
+        loginKey: b.login_key || '',
+      })),
+      lobbies: activeLobbies.map(l => ({
+        lobbyId: String(l.id),
+        gameName: l.game_name,
+        password: l.password,
+        serverRegion: l.server_region,
+        players: l.players_expected || [],
+      })),
+    })
+  }
+
+  async _onBotStatus(data) {
+    const botId = Number(data.botId)
+    const updates = { status: data.status }
+    if (data.steamId) updates.steam_id = data.steamId
+    if (data.displayName) updates.display_name = data.displayName
+    if (data.error) updates.error_message = data.error
+    else updates.error_message = null
+    if (data.refreshToken) updates.refresh_token = data.refreshToken
+    if (data.sentryHash) updates.sentry_hash = data.sentryHash
+    if (data.loginKey) updates.login_key = data.loginKey
+
+    const setClauses = Object.keys(updates).map((k, i) => `${k} = $${i + 1}`).join(', ')
+    const values = [...Object.values(updates), botId]
+    await execute(`UPDATE lobby_bots SET ${setClauses} WHERE id = $${values.length}`, values)
+
+    if (this.io) {
+      this.io.emit('bot:statusChanged', { botId, status: data.status, errorMessage: data.error || null })
+    }
+  }
+
+  _onBotLog(data) {
+    const botId = Number(data.botId)
+    const entry = { time: new Date().toISOString(), message: data.message }
     if (!this.botLogs.has(botId)) this.botLogs.set(botId, [])
     const logs = this.botLogs.get(botId)
     logs.push(entry)
-    if (logs.length > 50) logs.shift() // keep last 50
-    console.log(`[Bot ${botId}] ${message}`)
-    if (this.io) this.io.emit('bot:log', { botId, ...entry })
-  }
-
-  getBotLogs(botId) {
-    return this.botLogs.get(botId) || []
-  }
-
-  async init(io) {
-    this.io = io
-    // Load bots from DB but don't auto-connect (admin connects manually)
-    const bots = await query('SELECT * FROM lobby_bots')
-    for (const bot of bots) {
-      // Reset status to offline on restart
-      await execute('UPDATE lobby_bots SET status = $1 WHERE id = $2', ['offline', bot.id])
-    }
-    console.log(`Bot pool initialized with ${bots.length} bot account(s)`)
-  }
-
-  async addBot(username, password) {
-    const existing = await queryOne('SELECT id FROM lobby_bots WHERE username = $1', [username])
-    if (existing) throw new Error('Bot account already exists')
-
-    const bot = await queryOne(
-      'INSERT INTO lobby_bots (username, password) VALUES ($1, $2) RETURNING *',
-      [username, password]
-    )
-    return bot
-  }
-
-  async removeBot(botId) {
-    const instance = this.bots.get(botId)
-    if (instance) {
-      instance.disconnect()
-      this.bots.delete(botId)
-    }
-    await execute('DELETE FROM lobby_bots WHERE id = $1', [botId])
-  }
-
-  async connectBot(botId) {
-    const botRow = await queryOne('SELECT * FROM lobby_bots WHERE id = $1', [botId])
-    if (!botRow) throw new Error('Bot not found')
-
-    // Disconnect existing instance if any
-    const existing = this.bots.get(botId)
-    if (existing) {
-      existing.disconnect()
-      this.bots.delete(botId)
-    }
-
-    await execute('UPDATE lobby_bots SET status = $1, error_message = NULL WHERE id = $2', ['connecting', botId])
-    this._broadcastBotStatus(botId, 'connecting')
-    this._log(botId, `Connecting as ${botRow.username}...`)
-
-    const instance = new LobbyBot(botId, botRow.username, botRow.password, botRow.refresh_token)
-
-    instance.on('steamGuard', (domain) => {
-      this._log(botId, `Steam Guard code required${domain ? ` (email: ${domain})` : ' (authenticator)'}`)
-      execute('UPDATE lobby_bots SET status = $1 WHERE id = $2', ['awaiting_guard', botId])
-      this._broadcastBotStatus(botId, 'awaiting_guard')
-      if (this.io) this.io.emit('bot:steamGuardRequired', { botId, username: botRow.username })
-    })
-
-    instance.on('steamLoggedOn', async () => {
-      const steamId = instance.steamClient?.steamID?.toString() || null
-      this._log(botId, `Logged into Steam (${steamId}). Connecting to Dota 2 GC...`)
-      await execute(
-        'UPDATE lobby_bots SET status = $1, steam_id = $2, error_message = NULL WHERE id = $3',
-        ['connecting_gc', steamId, botId]
-      )
-      this._broadcastBotStatus(botId, 'connecting_gc')
-    })
-
-    instance.on('refreshToken', async (token) => {
-      this._log(botId, 'Refresh token saved')
-      await execute('UPDATE lobby_bots SET refresh_token = $1 WHERE id = $2', [token, botId])
-    })
-
-    instance.on('ready', async () => {
-      const steamId = instance.steamClient?.steamID?.toString() || null
-      const displayName = instance.steamClient?.accountInfo?.name || botRow.username
-      this._log(botId, `Dota 2 GC ready! Bot is available.`)
-      await execute(
-        'UPDATE lobby_bots SET status = $1, steam_id = $2, display_name = $3, error_message = NULL WHERE id = $4',
-        ['available', steamId, displayName, botId]
-      )
-      this._broadcastBotStatus(botId, 'available')
-    })
-
-    instance.on('error', async (err) => {
-      this._log(botId, `Error: ${err.message}`)
-      await execute('UPDATE lobby_bots SET status = $1, error_message = $2 WHERE id = $3', ['error', err.message, botId])
-      this._broadcastBotStatus(botId, 'error', err.message)
-    })
-
-    instance.on('disconnected', async () => {
-      this._log(botId, 'Disconnected from Steam')
-      await execute('UPDATE lobby_bots SET status = $1 WHERE id = $2', ['offline', botId])
-      this._broadcastBotStatus(botId, 'offline')
-    })
-
-    instance.on('gcDisconnected', () => {
-      this._log(botId, 'Dota 2 GC disconnected')
-    })
-
-    this.bots.set(botId, instance)
-
-    try {
-      await instance.login()
-    } catch (err) {
-      // Steam Guard will be handled via event, other errors are real failures
-      if (!instance._steamGuardResolver) {
-        await execute('UPDATE lobby_bots SET status = $1, error_message = $2 WHERE id = $3', ['error', err.message, botId])
-        this._broadcastBotStatus(botId, 'error', err.message)
-        throw err
-      }
-    }
-  }
-
-  async disconnectBot(botId) {
-    const instance = this.bots.get(botId)
-    if (instance) {
-      instance.disconnect()
-      this.bots.delete(botId)
-    }
-    await execute('UPDATE lobby_bots SET status = $1 WHERE id = $2', ['offline', botId])
-    this._broadcastBotStatus(botId, 'offline')
-  }
-
-  async submitSteamGuard(botId, code) {
-    const instance = this.bots.get(botId)
-    if (!instance) throw new Error('Bot not connected')
-    instance.submitSteamGuardCode(code)
-  }
-
-  getAvailableBot() {
-    for (const [botId, instance] of this.bots) {
-      if (instance.gcReady && !instance.currentLobbyId) {
-        return { botId, instance }
-      }
-    }
-    return null
-  }
-
-  async getBotStatuses() {
-    return await query('SELECT id, username, display_name, steam_id, status, error_message, last_used_at, created_at FROM lobby_bots ORDER BY id')
-  }
-
-  async createLobby(compId, matchId, gameNumber, options = {}) {
-    // Check for existing lobby
-    const existingLobby = await queryOne(
-      "SELECT * FROM match_lobbies WHERE match_id = $1 AND game_number = $2 AND status NOT IN ('completed', 'cancelled', 'error')",
-      [matchId, gameNumber]
-    )
-    if (existingLobby) throw new Error('A lobby already exists for this game')
-
-    // Find available bot
-    const available = this.getAvailableBot()
-    if (!available) throw new Error('No available bots. Add more bot accounts or wait for a bot to finish.')
-
-    const { botId, instance } = available
-
-    // Resolve players for both teams
-    const match = await queryOne(`
-      SELECT m.*, t1.player_id AS t1_player_id, t2.player_id AS t2_player_id,
-             t1.team AS team1_name, t2.team AS team2_name
-      FROM matches m
-      LEFT JOIN captains t1 ON t1.id = m.team1_captain_id
-      LEFT JOIN captains t2 ON t2.id = m.team2_captain_id
-      WHERE m.id = $1
-    `, [matchId])
-    if (!match) throw new Error('Match not found')
-
-    const playersExpected = []
-
-    // Get team 1 players (captain + drafted)
-    if (match.team1_captain_id) {
-      const t1Players = await query(`
-        SELECT p.steam_id, COALESCE(p.display_name, p.name) AS name
-        FROM competition_players cp
-        JOIN players p ON cp.player_id = p.id
-        WHERE cp.competition_id = $1 AND cp.drafted_by = $2 AND cp.drafted = 1
-      `, [compId, match.team1_captain_id])
-      // Add captain
-      if (match.t1_player_id) {
-        const cap = await queryOne('SELECT steam_id, COALESCE(display_name, name) AS name FROM players WHERE id = $1', [match.t1_player_id])
-        if (cap?.steam_id) playersExpected.push({ steam_id: cap.steam_id, name: cap.name, team: 'radiant' })
-      }
-      for (const p of t1Players) {
-        if (p.steam_id && !playersExpected.some(e => e.steam_id === p.steam_id)) {
-          playersExpected.push({ steam_id: p.steam_id, name: p.name, team: 'radiant' })
-        }
-      }
-    }
-
-    // Get team 2 players (captain + drafted)
-    if (match.team2_captain_id) {
-      const t2Players = await query(`
-        SELECT p.steam_id, COALESCE(p.display_name, p.name) AS name
-        FROM competition_players cp
-        JOIN players p ON cp.player_id = p.id
-        WHERE cp.competition_id = $1 AND cp.drafted_by = $2 AND cp.drafted = 1
-      `, [compId, match.team2_captain_id])
-      if (match.t2_player_id) {
-        const cap = await queryOne('SELECT steam_id, COALESCE(display_name, name) AS name FROM players WHERE id = $1', [match.t2_player_id])
-        if (cap?.steam_id) playersExpected.push({ steam_id: cap.steam_id, name: cap.name, team: 'dire' })
-      }
-      for (const p of t2Players) {
-        if (p.steam_id && !playersExpected.some(e => e.steam_id === p.steam_id)) {
-          playersExpected.push({ steam_id: p.steam_id, name: p.name, team: 'dire' })
-        }
-      }
-    }
-
-    const gameName = options.game_name || `${match.team1_name || 'Team 1'} vs ${match.team2_name || 'Team 2'} - Game ${gameNumber}`
-    const password = options.password || Math.random().toString(36).slice(2, 8)
-
-    // Create DB record
-    const lobby = await queryOne(`
-      INSERT INTO match_lobbies (match_id, game_number, competition_id, bot_id, status, server_region, game_name, password, players_expected)
-      VALUES ($1, $2, $3, $4, 'creating', $5, $6, $7, $8) RETURNING *
-    `, [matchId, gameNumber, compId, botId, options.server_region ?? 3, gameName, password, JSON.stringify(playersExpected)])
-
-    await execute('UPDATE lobby_bots SET status = $1, last_used_at = NOW() WHERE id = $2', ['busy', botId])
-    this._broadcastBotStatus(botId, 'busy')
-
-    // Create lobby asynchronously
-    this._runLobby(lobby.id, instance, playersExpected, gameName, password, options.server_region ?? 3, compId, matchId, gameNumber)
-
-    return { ...lobby, players_expected: playersExpected }
-  }
-
-  async _runLobby(lobbyDbId, bot, playersExpected, gameName, password, serverRegion, compId, matchId, gameNumber) {
-    try {
-      this._log(bot.botId, `Creating lobby "${gameName}" (region: ${serverRegion})`)
-      await bot.createLobby({ game_name: gameName, password, server_region: serverRegion })
-      this._log(bot.botId, `Lobby created. Password: ${password}`)
-
-      await execute("UPDATE match_lobbies SET status = 'waiting', updated_at = NOW() WHERE id = $1", [lobbyDbId])
-      this._broadcastLobbyStatus(compId, matchId, gameNumber, 'waiting')
-
-      // Invite all players
-      const steamIds = playersExpected.map(p => p.steam_id).filter(Boolean)
-      this._log(bot.botId, `Inviting ${steamIds.length} players...`)
-      bot.invitePlayers(steamIds)
-
-      // Monitor lobby updates
-      const lobbyHandler = async (lobbyData) => {
-        try {
-          await this._handleLobbyUpdate(lobbyDbId, lobbyData, bot, compId, matchId, gameNumber, playersExpected, lobbyHandler)
-        } catch (e) {
-          console.error('Lobby update handler error:', e.message)
-        }
-      }
-      bot.onLobbyUpdate(lobbyHandler)
-
-      // Store reference for cleanup
-      this.activeLobbies.set(lobbyDbId, { bot, matchId, gameNumber, compId, lobbyHandler })
-
-    } catch (err) {
-      console.error('Failed to create lobby:', err.message)
-      await execute("UPDATE match_lobbies SET status = 'error', error_message = $1, updated_at = NOW() WHERE id = $2", [err.message, lobbyDbId])
-      await execute("UPDATE lobby_bots SET status = 'available' WHERE id = $1", [bot.botId])
-      this._broadcastLobbyStatus(compId, matchId, gameNumber, 'error', err.message)
-      this._broadcastBotStatus(bot.botId, 'available')
-    }
-  }
-
-  async _handleLobbyUpdate(lobbyDbId, lobbyData, bot, compId, matchId, gameNumber, playersExpected, lobbyHandler) {
-    // Parse who has joined
-    const members = lobbyData.all_members || lobbyData.members || []
-    const playersJoined = []
-    for (const member of members) {
-      const steamId = member.id?.toString() || member.steam_id?.toString()
-      if (!steamId) continue
-      const team = member.team === 0 ? 'radiant' : member.team === 1 ? 'dire' : 'spectator'
-      const expected = playersExpected.find(p => p.steam_id === steamId)
-      playersJoined.push({
-        steam_id: steamId,
-        name: expected?.name || 'Unknown',
-        team,
-        slot: member.slot,
-      })
-    }
-
-    await execute(
-      "UPDATE match_lobbies SET players_joined = $1, updated_at = NOW() WHERE id = $2",
-      [JSON.stringify(playersJoined), lobbyDbId]
-    )
-
-    // Broadcast update
+    if (logs.length > 50) logs.shift()
+    console.log(`[Bot ${botId}] ${data.message}`)
     if (this.io) {
-      this.io.to(`comp:${compId}`).emit('lobby:statusUpdate', {
-        matchId, gameNumber, status: 'waiting', playersJoined, playersExpected,
+      this.io.emit('bot:log', { botId, ...entry })
+    }
+  }
+
+  async _onLobbyStatus(data) {
+    const lobbyId = Number(data.lobbyId)
+    await execute(
+      "UPDATE match_lobbies SET status = $1, players_joined = $2, updated_at = NOW() WHERE id = $3",
+      [data.status, JSON.stringify(data.playersJoined || []), lobbyId]
+    )
+    const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyId])
+    if (lobby && this.io) {
+      this.io.to(`comp:${lobby.competition_id}`).emit('lobby:statusUpdate', {
+        matchId: lobby.match_id,
+        gameNumber: lobby.game_number,
+        status: data.status,
+        playersJoined: data.playersJoined,
       })
     }
+  }
 
-    this._log(bot.botId, `Lobby update: ${playersJoined.filter(p => p.team === 'radiant' || p.team === 'dire').length}/${playersExpected.length} players in slots`)
-
-    // Check if match_id is available (game started)
-    const dotaMatchId = lobbyData.match_id?.toString()
-    if (dotaMatchId && dotaMatchId !== '0') {
-      this._log(bot.botId, `Game started! Match ID: ${dotaMatchId}`)
-      await execute(
-        "UPDATE match_lobbies SET status = 'active', dota_match_id = $1, updated_at = NOW() WHERE id = $2",
-        [dotaMatchId, lobbyDbId]
-      )
-
-      // Save to match_games
-      const mg = await queryOne(
-        'SELECT id FROM match_games WHERE match_id = $1 AND game_number = $2',
-        [matchId, gameNumber]
-      )
-      if (mg) {
-        await execute('UPDATE match_games SET dotabuff_id = $1 WHERE id = $2', [dotaMatchId, mg.id])
-      } else {
-        await execute(
-          'INSERT INTO match_games (match_id, game_number, dotabuff_id) VALUES ($1, $2, $3) ON CONFLICT (match_id, game_number) DO UPDATE SET dotabuff_id = $3',
-          [matchId, gameNumber, dotaMatchId]
-        )
-      }
-
-      this._broadcastLobbyStatus(compId, matchId, gameNumber, 'active')
-      if (this.io) {
-        this.io.to(`comp:${compId}`).emit('lobby:matchIdCaptured', { matchId, gameNumber, dotaMatchId })
-        this.io.to(`comp:${compId}`).emit('tournament:updated')
-      }
-
-      // Leave lobby and free bot
-      this._log(bot.botId, `Match ID ${dotaMatchId} saved. Leaving lobby...`)
-      bot.offLobbyUpdate(lobbyHandler)
-      this.activeLobbies.delete(lobbyDbId)
-      await bot.leaveLobby()
-      this._log(bot.botId, 'Left lobby. Bot available for next match.')
-      await execute("UPDATE lobby_bots SET status = 'available' WHERE id = $1", [bot.botId])
-      await execute("UPDATE match_lobbies SET status = 'completed', updated_at = NOW() WHERE id = $1", [lobbyDbId])
-      this._broadcastBotStatus(bot.botId, 'available')
-      this._broadcastLobbyStatus(compId, matchId, gameNumber, 'completed')
-
-      // Schedule OpenDota fetch (delay for parsing)
-      this._scheduleStatsFetch(matchId, gameNumber, dotaMatchId)
-      return
-    }
-
-    // Auto-launch when all expected players joined
-    const expectedSteamIds = new Set(playersExpected.map(p => p.steam_id))
-    const joinedSteamIds = new Set(playersJoined.filter(p => p.team === 'radiant' || p.team === 'dire').map(p => p.steam_id))
-    const allJoined = [...expectedSteamIds].every(id => joinedSteamIds.has(id))
-
-    if (allJoined && expectedSteamIds.size >= 2) {
-      this._log(bot.botId, 'All players joined! Auto-launching game...')
-      await this._launchLobby(lobbyDbId)
+  async _onPlayerUpdate(data, type) {
+    const lobbyId = Number(data.lobbyId)
+    const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyId])
+    if (lobby && this.io) {
+      this.io.to(`comp:${lobby.competition_id}`).emit('lobby:statusUpdate', {
+        matchId: lobby.match_id,
+        gameNumber: lobby.game_number,
+        status: lobby.status,
+        event: type,
+        steamId: data.steamId,
+      })
     }
   }
 
-  async _launchLobby(lobbyDbId) {
-    const active = this.activeLobbies.get(lobbyDbId)
-    if (!active) return
+  async _onGameStarted(data) {
+    const lobbyId = Number(data.lobbyId)
+    const dotaMatchId = data.matchId
 
-    const { bot, compId, matchId, gameNumber } = active
+    // Update lobby
+    await execute(
+      "UPDATE match_lobbies SET status = 'completed', dota_match_id = $1, updated_at = NOW() WHERE id = $2",
+      [dotaMatchId, lobbyId]
+    )
 
-    try {
-      await execute("UPDATE match_lobbies SET status = 'launching', updated_at = NOW() WHERE id = $1", [lobbyDbId])
-      this._broadcastLobbyStatus(compId, matchId, gameNumber, 'launching')
-      await bot.launchLobby()
-      // match_id will come via the lobbyUpdate handler
-    } catch (err) {
-      console.error('Failed to launch lobby:', err.message)
-      await execute("UPDATE match_lobbies SET error_message = $1, updated_at = NOW() WHERE id = $2", [err.message, lobbyDbId])
-    }
-  }
+    const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyId])
+    if (!lobby) return
 
-  async forceLaunch(lobbyDbId) {
-    await this._launchLobby(lobbyDbId)
-  }
+    // Save to match_games
+    await execute(
+      `INSERT INTO match_games (match_id, game_number, dotabuff_id)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (match_id, game_number) DO UPDATE SET dotabuff_id = $3`,
+      [lobby.match_id, lobby.game_number, dotaMatchId]
+    )
 
-  async cancelLobby(lobbyDbId) {
-    const active = this.activeLobbies.get(lobbyDbId)
-    const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyDbId])
-    if (!lobby) throw new Error('Lobby not found')
-
-    if (active) {
-      const { bot, compId, matchId, gameNumber, lobbyHandler } = active
-      bot.offLobbyUpdate(lobbyHandler)
-      this.activeLobbies.delete(lobbyDbId)
-      try { await bot.destroyLobby() } catch {}
-      await execute("UPDATE lobby_bots SET status = 'available' WHERE id = $1", [bot.botId])
-      this._broadcastBotStatus(bot.botId, 'available')
-      this._broadcastLobbyStatus(compId, matchId, gameNumber, 'cancelled')
+    // Free the bot
+    if (lobby.bot_id) {
+      await execute("UPDATE lobby_bots SET status = 'available', last_used_at = NOW() WHERE id = $1", [lobby.bot_id])
+      this._onBotLog({ botId: String(lobby.bot_id), message: `Match ID ${dotaMatchId} captured. Bot available.` })
     }
 
-    await execute("UPDATE match_lobbies SET status = 'cancelled', updated_at = NOW() WHERE id = $1", [lobbyDbId])
+    // Broadcast
+    if (this.io) {
+      this.io.to(`comp:${lobby.competition_id}`).emit('lobby:matchIdCaptured', {
+        matchId: lobby.match_id,
+        gameNumber: lobby.game_number,
+        dotaMatchId,
+      })
+      this.io.to(`comp:${lobby.competition_id}`).emit('tournament:updated')
+    }
+
+    // Schedule OpenDota stats fetch
+    this._scheduleStatsFetch(lobby.match_id, lobby.game_number, dotaMatchId)
+  }
+
+  async _onLobbyError(data) {
+    const lobbyId = Number(data.lobbyId)
+    await execute(
+      "UPDATE match_lobbies SET status = 'error', error_message = $1, updated_at = NOW() WHERE id = $2",
+      [data.error, lobbyId]
+    )
+    const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyId])
+    if (!lobby) return
+
+    // Free the bot
+    if (lobby.bot_id) {
+      await execute("UPDATE lobby_bots SET status = 'available' WHERE id = $1", [lobby.bot_id])
+    }
+
+    if (this.io) {
+      this.io.to(`comp:${lobby.competition_id}`).emit('lobby:statusUpdate', {
+        matchId: lobby.match_id,
+        gameNumber: lobby.game_number,
+        status: 'error',
+        errorMessage: data.error,
+      })
+    }
   }
 
   _scheduleStatsFetch(matchId, gameNumber, dotaMatchId) {
-    // Try at 5min, 10min, 15min
     const delays = [5 * 60 * 1000, 10 * 60 * 1000, 15 * 60 * 1000]
     for (const delay of delays) {
       setTimeout(async () => {
@@ -425,22 +259,169 @@ class BotPool {
             console.log(`Stats fetched for match ${dotaMatchId} (delay: ${delay / 1000}s)`)
           }
         } catch (e) {
-          console.log(`Stats fetch attempt for ${dotaMatchId} at ${delay / 1000}s: ${e.message}`)
+          console.log(`Stats fetch attempt for ${dotaMatchId}: ${e.message}`)
         }
       }, delay)
     }
   }
 
-  _broadcastBotStatus(botId, status, errorMessage = null) {
-    if (this.io) {
-      this.io.emit('bot:statusChanged', { botId, status, errorMessage })
-    }
+  // ── Public API (called by lobby.js routes) ──
+
+  getBotLogs(botId) {
+    return this.botLogs.get(botId) || []
   }
 
-  _broadcastLobbyStatus(compId, matchId, gameNumber, status, errorMessage = null) {
-    if (this.io) {
-      this.io.to(`comp:${compId}`).emit('lobby:statusUpdate', { matchId, gameNumber, status, errorMessage })
+  async getBotStatuses() {
+    return await query('SELECT id, username, display_name, steam_id, status, error_message, last_used_at, created_at FROM lobby_bots ORDER BY id')
+  }
+
+  async addBot(username, password) {
+    const existing = await queryOne('SELECT id FROM lobby_bots WHERE username = $1', [username])
+    if (existing) throw new Error('Bot account already exists')
+    const bot = await queryOne(
+      'INSERT INTO lobby_bots (username, password) VALUES ($1, $2) RETURNING *',
+      [username, password]
+    )
+    try {
+      this._sendToGo('add_bot', { botId: String(bot.id), username, password })
+    } catch {}
+    return bot
+  }
+
+  async removeBot(botId) {
+    try {
+      this._sendToGo('disconnect_bot', { botId: String(botId) })
+    } catch {}
+    await execute('DELETE FROM lobby_bots WHERE id = $1', [botId])
+  }
+
+  async connectBot(botId) {
+    const bot = await queryOne('SELECT * FROM lobby_bots WHERE id = $1', [botId])
+    if (!bot) throw new Error('Bot not found')
+    await execute("UPDATE lobby_bots SET status = 'connecting', error_message = NULL WHERE id = $1", [botId])
+    if (this.io) this.io.emit('bot:statusChanged', { botId, status: 'connecting' })
+    this._sendToGo('connect_bot', {
+      botId: String(botId),
+      username: bot.username,
+      password: bot.password,
+      refreshToken: bot.refresh_token || '',
+      sentryHash: bot.sentry_hash || '',
+      loginKey: bot.login_key || '',
+    })
+  }
+
+  async disconnectBot(botId) {
+    this._sendToGo('disconnect_bot', { botId: String(botId) })
+    await execute("UPDATE lobby_bots SET status = 'offline' WHERE id = $1", [botId])
+    if (this.io) this.io.emit('bot:statusChanged', { botId, status: 'offline' })
+  }
+
+  async submitSteamGuard(botId, code) {
+    this._sendToGo('steam_guard', { botId: String(botId), code })
+  }
+
+  async createLobby(compId, matchId, gameNumber, options = {}) {
+    // Check for active lobby
+    const activeLobby = await queryOne(
+      "SELECT * FROM match_lobbies WHERE match_id = $1 AND game_number = $2 AND status NOT IN ('completed', 'cancelled', 'error')",
+      [matchId, gameNumber]
+    )
+    if (activeLobby) throw new Error('A lobby already exists for this game')
+
+    // Clean up old finished lobbies so we can reuse the unique constraint
+    await execute(
+      "DELETE FROM match_lobbies WHERE match_id = $1 AND game_number = $2 AND status IN ('completed', 'cancelled', 'error')",
+      [matchId, gameNumber]
+    )
+
+    // Find available bot
+    const availableBot = await queryOne("SELECT id FROM lobby_bots WHERE status = 'available' ORDER BY last_used_at NULLS FIRST LIMIT 1")
+    if (!availableBot) throw new Error('No available bots')
+
+    // Resolve players
+    const match = await queryOne(`
+      SELECT m.*, t1.player_id AS t1_player_id, t2.player_id AS t2_player_id,
+             t1.team AS team1_name, t2.team AS team2_name
+      FROM matches m
+      LEFT JOIN captains t1 ON t1.id = m.team1_captain_id
+      LEFT JOIN captains t2 ON t2.id = m.team2_captain_id
+      WHERE m.id = $1
+    `, [matchId])
+    if (!match) throw new Error('Match not found')
+
+    const playersExpected = []
+    for (const [captainId, playerIdField, team] of [
+      [match.team1_captain_id, 't1_player_id', 'radiant'],
+      [match.team2_captain_id, 't2_player_id', 'dire'],
+    ]) {
+      if (!captainId) continue
+      // Captain
+      if (match[playerIdField]) {
+        const cap = await queryOne('SELECT steam_id, COALESCE(display_name, name) AS name FROM players WHERE id = $1', [match[playerIdField]])
+        if (cap?.steam_id) playersExpected.push({ steam_id: cap.steam_id, name: cap.name, team })
+      }
+      // Drafted players
+      const drafted = await query(`
+        SELECT p.steam_id, COALESCE(p.display_name, p.name) AS name
+        FROM competition_players cp JOIN players p ON cp.player_id = p.id
+        WHERE cp.competition_id = $1 AND cp.drafted_by = $2 AND cp.drafted = 1
+      `, [compId, captainId])
+      for (const p of drafted) {
+        if (p.steam_id && !playersExpected.some(e => e.steam_id === p.steam_id)) {
+          playersExpected.push({ steam_id: p.steam_id, name: p.name, team })
+        }
+      }
     }
+
+    // Get competition settings for lobby config
+    const comp = await queryOne('SELECT settings FROM competitions WHERE id = $1', [compId])
+    const compSettings = comp?.settings || {}
+    const serverRegion = options.server_region ?? compSettings.lobbyServerRegion ?? 3
+    const gameMode = options.game_mode ?? compSettings.lobbyGameMode ?? 2
+    const autoAssignTeams = compSettings.lobbyAutoAssignTeams !== false
+    const leagueId = compSettings.lobbyLeagueId || 0
+    const dotaTvDelay = compSettings.lobbyDotaTvDelay ?? 1
+
+    const gameName = options.game_name || `${match.team1_name || 'Team 1'} vs ${match.team2_name || 'Team 2'} - Game ${gameNumber}`
+    const password = options.password || Math.random().toString(36).slice(2, 8)
+
+    const lobby = await queryOne(`
+      INSERT INTO match_lobbies (match_id, game_number, competition_id, bot_id, status, server_region, game_name, password, players_expected)
+      VALUES ($1, $2, $3, $4, 'creating', $5, $6, $7, $8) RETURNING *
+    `, [matchId, gameNumber, compId, availableBot.id, serverRegion, gameName, password, JSON.stringify(playersExpected)])
+
+    await execute("UPDATE lobby_bots SET status = 'busy', last_used_at = NOW() WHERE id = $1", [availableBot.id])
+
+    // Send to Go service
+    this._sendToGo('create_lobby', {
+      lobbyId: String(lobby.id),
+      gameName,
+      password,
+      serverRegion,
+      gameMode,
+      autoAssignTeams,
+      leagueId,
+      dotaTvDelay,
+      players: playersExpected.map(p => ({ steamId: p.steam_id, name: p.name, team: p.team })),
+    })
+
+    return { ...lobby, players_expected: playersExpected }
+  }
+
+  async forceLaunch(lobbyDbId) {
+    this._sendToGo('force_launch', { lobbyId: String(lobbyDbId) })
+  }
+
+  async cancelLobby(lobbyDbId) {
+    const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyDbId])
+    if (!lobby) throw new Error('Lobby not found')
+
+    this._sendToGo('cancel_lobby', { lobbyId: String(lobbyDbId) })
+
+    if (lobby.bot_id) {
+      await execute("UPDATE lobby_bots SET status = 'available' WHERE id = $1", [lobby.bot_id])
+    }
+    await execute("UPDATE match_lobbies SET status = 'cancelled', updated_at = NOW() WHERE id = $1", [lobbyDbId])
   }
 }
 
