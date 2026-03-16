@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { EyeOff, RefreshCw, ChevronDown, ChevronUp } from 'lucide-vue-next'
+import { EyeOff, RefreshCw, ChevronDown, ChevronUp, Gamepad2, Play, X } from 'lucide-vue-next'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
@@ -107,6 +107,58 @@ async function refetchStats(gameNumber: number) {
 function getMultiKillCount(multiKills: Record<string, number>, key: string): number {
   return multiKills?.[key] || 0
 }
+
+// Lobby management
+const lobbyStatuses = ref<Record<number, any>>({})
+const creatingLobby = ref<Record<number, boolean>>({})
+
+async function createLobby(gameNumber: number) {
+  const cId = compId.value
+  if (!cId) return
+  creatingLobby.value[gameNumber] = true
+  try {
+    const result = await api.createLobby(cId, props.match.id, gameNumber)
+    lobbyStatuses.value[gameNumber] = result
+  } catch (e: any) {
+    console.error('Create lobby failed:', e.message)
+  } finally {
+    creatingLobby.value[gameNumber] = false
+  }
+}
+
+async function forceLaunchLobby(gameNumber: number) {
+  const cId = compId.value
+  if (!cId) return
+  try {
+    await api.forceLaunchLobby(cId, props.match.id, gameNumber)
+  } catch {}
+}
+
+async function cancelLobby(gameNumber: number) {
+  const cId = compId.value
+  if (!cId) return
+  try {
+    await api.cancelLobby(cId, props.match.id, gameNumber)
+    lobbyStatuses.value[gameNumber] = null
+  } catch {}
+}
+
+async function fetchLobbyStatus(gameNumber: number) {
+  const cId = compId.value
+  if (!cId) return
+  try {
+    const data = await api.getLobbyStatus(cId, props.match.id, gameNumber)
+    if (data.lobby) lobbyStatuses.value[gameNumber] = data.lobby
+  } catch {}
+}
+
+// Fetch lobby status for all games on mount
+onMounted(() => {
+  // Already runs game init above, now also check lobbies
+  for (const g of games.value) {
+    fetchLobbyStatus(g.game_number)
+  }
+})
 </script>
 
 <template>
@@ -152,6 +204,43 @@ function getMultiKillCount(multiKills: Record<string, number>, key: string): num
             :placeholder="t('dotabuffId')"
           />
 
+          <!-- Lobby actions -->
+          <template v-if="store.isAdmin && match.team1_captain_id && match.team2_captain_id">
+            <button
+              v-if="!lobbyStatuses[game.game_number] || lobbyStatuses[game.game_number]?.status === 'cancelled' || lobbyStatuses[game.game_number]?.status === 'error'"
+              class="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              :class="{ 'animate-pulse': creatingLobby[game.game_number] }"
+              :disabled="creatingLobby[game.game_number]"
+              :title="t('createLobby')"
+              @click="createLobby(game.game_number)"
+            >
+              <Gamepad2 class="w-4 h-4" />
+            </button>
+            <template v-else-if="lobbyStatuses[game.game_number]?.status === 'waiting'">
+              <button
+                class="p-1.5 rounded-md text-green-500 hover:bg-green-500/10 transition-colors"
+                :title="t('forceLaunch')"
+                @click="forceLaunchLobby(game.game_number)"
+              >
+                <Play class="w-4 h-4" />
+              </button>
+              <button
+                class="p-1.5 rounded-md text-red-500 hover:bg-red-500/10 transition-colors"
+                :title="t('cancelLobby')"
+                @click="cancelLobby(game.game_number)"
+              >
+                <X class="w-4 h-4" />
+              </button>
+            </template>
+            <span
+              v-else-if="lobbyStatuses[game.game_number]"
+              class="text-[10px] font-medium px-1.5 py-0.5 rounded"
+              :class="lobbyStatuses[game.game_number].status === 'completed' ? 'bg-green-500/10 text-green-500'
+                : lobbyStatuses[game.game_number].status === 'active' ? 'bg-amber-500/10 text-amber-500'
+                : 'bg-accent text-muted-foreground'"
+            >{{ lobbyStatuses[game.game_number].status }}</span>
+          </template>
+
           <!-- Stats actions -->
           <button
             v-if="game.has_stats || (gameStats[game.game_number]?.length)"
@@ -171,6 +260,15 @@ function getMultiKillCount(multiKills: Record<string, number>, key: string): num
           >
             <RefreshCw class="w-4 h-4" />
           </button>
+        </div>
+
+        <!-- Lobby info -->
+        <div v-if="lobbyStatuses[game.game_number] && lobbyStatuses[game.game_number].status === 'waiting'" class="border-t border-border/50 px-3 py-2 flex items-center gap-3 text-xs">
+          <span class="text-muted-foreground">{{ t('lobbyPassword') }}:</span>
+          <code class="text-foreground font-mono bg-accent px-2 py-0.5 rounded">{{ lobbyStatuses[game.game_number].password }}</code>
+          <span class="text-muted-foreground ml-auto">
+            {{ (lobbyStatuses[game.game_number].players_joined || []).length }}/{{ (lobbyStatuses[game.game_number].players_expected || []).length }}
+          </span>
         </div>
 
         <!-- Stats panel -->

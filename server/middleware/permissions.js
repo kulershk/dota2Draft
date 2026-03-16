@@ -12,6 +12,7 @@ export const ALL_PERMISSIONS = [
   'manage_players',
   'manage_auction',
   'manage_permissions',
+  'manage_bots',
 ]
 
 export async function getPlayerPermissions(playerId) {

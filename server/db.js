@@ -358,6 +358,43 @@ export async function initDb() {
     )
   `)
 
+  // Lobby bot pool
+  await execute(`
+    CREATE TABLE IF NOT EXISTS lobby_bots (
+      id SERIAL PRIMARY KEY,
+      username TEXT NOT NULL UNIQUE,
+      password TEXT NOT NULL,
+      refresh_token TEXT DEFAULT NULL,
+      display_name TEXT DEFAULT '',
+      steam_id TEXT DEFAULT NULL,
+      status TEXT NOT NULL DEFAULT 'offline',
+      error_message TEXT DEFAULT NULL,
+      last_used_at TIMESTAMP DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `)
+
+  await execute(`
+    CREATE TABLE IF NOT EXISTS match_lobbies (
+      id SERIAL PRIMARY KEY,
+      match_id INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+      game_number INTEGER NOT NULL DEFAULT 1,
+      competition_id INTEGER NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
+      bot_id INTEGER REFERENCES lobby_bots(id) ON DELETE SET NULL,
+      status TEXT NOT NULL DEFAULT 'creating',
+      server_region INTEGER DEFAULT 3,
+      game_name TEXT DEFAULT '',
+      password TEXT DEFAULT '',
+      players_joined JSONB DEFAULT '[]',
+      players_expected JSONB DEFAULT '[]',
+      error_message TEXT DEFAULT NULL,
+      dota_match_id TEXT DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(match_id, game_number)
+    )
+  `)
+
   // Ensure competition_players exists (might already from migration)
   await execute(`
     CREATE TABLE IF NOT EXISTS competition_players (

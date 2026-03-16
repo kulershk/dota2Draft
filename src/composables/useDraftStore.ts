@@ -524,7 +524,7 @@ export function useDraftStore() {
     try {
       fantasyData.value = await api.getFantasy(compId)
     } catch {
-      fantasyData.value = { stages: [], myPicks: {} }
+      fantasyData.value = { stages: [], myPicks: {}, myRepeats: {}, repeatPenalty: 0 }
     }
   }
 

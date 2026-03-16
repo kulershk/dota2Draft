@@ -17,6 +17,8 @@ import createCaptainsRouter from './routes/captains.js'
 import auctionRoutes from './routes/auction.js'
 import createTournamentRouter from './routes/tournament.js'
 import createFantasyRouter from './routes/fantasy.js'
+import createLobbyRouter from './routes/lobby.js'
+import { botPool } from './services/botPool.js'
 import streamRoutes from './routes/streams.js'
 import permissionRoutes from './routes/permissions.js'
 import settingRoutes from './routes/settings.js'
@@ -62,6 +64,7 @@ app.use(createCaptainsRouter(io))
 app.use(auctionRoutes)
 app.use(createTournamentRouter(io))
 app.use(createFantasyRouter(io))
+app.use(createLobbyRouter(io))
 app.use(streamRoutes)
 app.use(permissionRoutes)
 app.use(settingRoutes)
@@ -78,7 +81,8 @@ app.get('*', (req, res) => {
 
 // Initialize DB and start server
 const PORT = process.env.PORT || 3001
-initDb().then(() => {
+initDb().then(async () => {
+  await botPool.init(io)
   server.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`)
   })

@@ -118,6 +118,31 @@ export function useApi() {
     getFantasyTopPicks: (compId: number, stageId: number) =>
       request(`/api/competitions/${compId}/fantasy/stages/${stageId}/top-picks`),
 
+    // Lobby Bots
+    getBots: () => request('/api/admin/bots'),
+    addBot: (data: { username: string; password: string }) =>
+      request('/api/admin/bots', { method: 'POST', body: JSON.stringify(data) }),
+    deleteBot: (id: number) =>
+      request(`/api/admin/bots/${id}`, { method: 'DELETE' }),
+    getBotLogs: (id: number) =>
+      request(`/api/admin/bots/${id}/logs`),
+    connectBot: (id: number) =>
+      request(`/api/admin/bots/${id}/connect`, { method: 'POST' }),
+    disconnectBot: (id: number) =>
+      request(`/api/admin/bots/${id}/disconnect`, { method: 'POST' }),
+    submitSteamGuard: (id: number, code: string) =>
+      request(`/api/admin/bots/${id}/steam-guard`, { method: 'POST', body: JSON.stringify({ code }) }),
+
+    // Lobby Management
+    createLobby: (compId: number, matchId: number, gameNumber: number, data?: Record<string, any>) =>
+      request(`/api/competitions/${compId}/tournament/matches/${matchId}/games/${gameNumber}/lobby`, { method: 'POST', body: JSON.stringify(data || {}) }),
+    getLobbyStatus: (compId: number, matchId: number, gameNumber: number) =>
+      request(`/api/competitions/${compId}/tournament/matches/${matchId}/games/${gameNumber}/lobby`),
+    forceLaunchLobby: (compId: number, matchId: number, gameNumber: number) =>
+      request(`/api/competitions/${compId}/tournament/matches/${matchId}/games/${gameNumber}/lobby/launch`, { method: 'POST' }),
+    cancelLobby: (compId: number, matchId: number, gameNumber: number) =>
+      request(`/api/competitions/${compId}/tournament/matches/${matchId}/games/${gameNumber}/lobby/cancel`, { method: 'POST' }),
+
     // User self-update
     updateMe: (data: Record<string, any>) =>
       request('/api/auth/me', { method: 'PUT', body: JSON.stringify(data) }),
