@@ -568,6 +568,7 @@ export default {
   groupStandings: 'Турнирная таблица',
   team: 'Команда',
   wins: 'В',
+  draws: 'Н',
   losses: 'П',
   points: 'Очки',
   matchPending: 'Ожидание',

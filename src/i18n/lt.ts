@@ -568,6 +568,7 @@ export default {
   groupStandings: 'Grupių lentelė',
   team: 'Komanda',
   wins: 'P',
+  draws: 'L',
   losses: 'Pr',
   points: 'Tšk',
   matchPending: 'Laukiama',

@@ -569,6 +569,7 @@ export default {
   groupStandings: 'Group Standings',
   team: 'Team',
   wins: 'W',
+  draws: 'D',
   losses: 'L',
   points: 'Pts',
   matchPending: 'Pending',

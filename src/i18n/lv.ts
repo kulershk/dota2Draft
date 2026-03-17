@@ -568,6 +568,7 @@ export default {
   groupStandings: 'Grupu tabula',
   team: 'Komanda',
   wins: 'U',
+  draws: 'N',
   losses: 'Z',
   points: 'Pk',
   matchPending: 'Gaidīšana',

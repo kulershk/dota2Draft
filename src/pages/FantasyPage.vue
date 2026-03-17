@@ -543,7 +543,7 @@ function matchLabel(match: any) {
                     <span class="font-medium text-foreground">{{ user.name }}</span>
                   </div>
                 </td>
-                <td v-for="stage in leaderboard.stages" :key="stage.id" class="text-center py-3 px-4">
+                <td v-for="stage in leaderboard.stages" :key="stage.id" class="text-center py-3 px-4 text-foreground">
                   {{ user.stages[stage.id]?.total?.toFixed(1) || '-' }}
                 </td>
                 <td class="text-center py-3 px-4 font-bold text-primary">{{ user.total.toFixed(1) }}</td>

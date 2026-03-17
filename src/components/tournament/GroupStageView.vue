@@ -37,11 +37,10 @@ const standings = computed(() => {
     for (let ti = 0; ti < group.teamIds.length; ti++) {
       const id = group.teamIds[ti]
       if (id == null) {
-        // TBD entry — unique key, no stats
-        entries.push({ key: `tbd-${ti}`, id: null, team: t('tbd'), avatar: '', w: 0, l: 0, mw: 0, ml: 0, isTbd: true })
+        entries.push({ key: `tbd-${ti}`, id: null, team: t('tbd'), avatar: '', w: 0, d: 0, l: 0, mw: 0, ml: 0, pts: 0, isTbd: true })
       } else {
         const cap = props.captains.find(c => c.id === id)
-        const entry = { key: id, id, team: cap?.team || '?', avatar: cap?.banner_url || cap?.avatar_url || '', hasBanner: !!cap?.banner_url, w: 0, l: 0, mw: 0, ml: 0, isTbd: false }
+        const entry = { key: id, id, team: cap?.team || '?', avatar: cap?.banner_url || cap?.avatar_url || '', hasBanner: !!cap?.banner_url, w: 0, d: 0, l: 0, mw: 0, ml: 0, pts: 0, isTbd: false }
         entries.push(entry)
         statsById[id] = entry
       }
@@ -50,19 +49,27 @@ const standings = computed(() => {
     const groupMatches = props.matches.filter(m => m.group_name === group.name)
     for (const m of groupMatches) {
       if (m.status !== 'completed') continue
+      const s1 = m.score1 || 0
+      const s2 = m.score2 || 0
       if (m.winner_captain_id === m.team1_captain_id) {
-        if (statsById[m.team1_captain_id]) { statsById[m.team1_captain_id].w++; statsById[m.team1_captain_id].mw += m.score1 || 0; statsById[m.team1_captain_id].ml += m.score2 || 0 }
-        if (statsById[m.team2_captain_id]) { statsById[m.team2_captain_id].l++; statsById[m.team2_captain_id].mw += m.score2 || 0; statsById[m.team2_captain_id].ml += m.score1 || 0 }
+        // Team 1 won
+        if (statsById[m.team1_captain_id]) { statsById[m.team1_captain_id].w++; statsById[m.team1_captain_id].pts += 2; statsById[m.team1_captain_id].mw += s1; statsById[m.team1_captain_id].ml += s2 }
+        if (statsById[m.team2_captain_id]) { statsById[m.team2_captain_id].l++; statsById[m.team2_captain_id].mw += s2; statsById[m.team2_captain_id].ml += s1 }
       } else if (m.winner_captain_id === m.team2_captain_id) {
-        if (statsById[m.team2_captain_id]) { statsById[m.team2_captain_id].w++; statsById[m.team2_captain_id].mw += m.score2 || 0; statsById[m.team2_captain_id].ml += m.score1 || 0 }
-        if (statsById[m.team1_captain_id]) { statsById[m.team1_captain_id].l++; statsById[m.team1_captain_id].mw += m.score1 || 0; statsById[m.team1_captain_id].ml += m.score2 || 0 }
+        // Team 2 won
+        if (statsById[m.team2_captain_id]) { statsById[m.team2_captain_id].w++; statsById[m.team2_captain_id].pts += 2; statsById[m.team2_captain_id].mw += s2; statsById[m.team2_captain_id].ml += s1 }
+        if (statsById[m.team1_captain_id]) { statsById[m.team1_captain_id].l++; statsById[m.team1_captain_id].mw += s1; statsById[m.team1_captain_id].ml += s2 }
+      } else if (s1 === s2 && s1 > 0) {
+        // Draw (e.g. Bo2 ending 1-1)
+        if (statsById[m.team1_captain_id]) { statsById[m.team1_captain_id].d++; statsById[m.team1_captain_id].pts += 1; statsById[m.team1_captain_id].mw += s1; statsById[m.team1_captain_id].ml += s2 }
+        if (statsById[m.team2_captain_id]) { statsById[m.team2_captain_id].d++; statsById[m.team2_captain_id].pts += 1; statsById[m.team2_captain_id].mw += s2; statsById[m.team2_captain_id].ml += s1 }
       }
     }
 
-    // Sort: real teams by wins/diff first, TBD entries at the bottom
+    // Sort: real teams by points, then game diff, TBD at bottom
     result[group.name] = entries.sort((a, b) => {
       if (a.isTbd !== b.isTbd) return a.isTbd ? 1 : -1
-      if (b.w !== a.w) return b.w - a.w
+      if (b.pts !== a.pts) return b.pts - a.pts
       return (b.mw - b.ml) - (a.mw - a.ml)
     })
   }
@@ -105,6 +112,7 @@ function statusText(status: string) {
               <th class="text-left px-4 py-2.5 font-medium text-muted-foreground">#</th>
               <th class="text-left px-4 py-2.5 font-medium text-muted-foreground">{{ t('team') }}</th>
               <th class="text-center px-4 py-2.5 font-medium text-muted-foreground">{{ t('wins') }}</th>
+              <th class="text-center px-4 py-2.5 font-medium text-muted-foreground">{{ t('draws') }}</th>
               <th class="text-center px-4 py-2.5 font-medium text-muted-foreground">{{ t('losses') }}</th>
               <th class="text-center px-4 py-2.5 font-medium text-muted-foreground">{{ t('points') }}</th>
             </tr>
@@ -119,8 +127,9 @@ function statusText(status: string) {
                 </div>
               </td>
               <td class="text-center px-4 py-2.5 text-green-600 dark:text-green-400 font-medium">{{ team.w }}</td>
+              <td class="text-center px-4 py-2.5 text-muted-foreground font-medium">{{ team.d }}</td>
               <td class="text-center px-4 py-2.5 text-red-500 font-medium">{{ team.l }}</td>
-              <td class="text-center px-4 py-2.5 font-bold text-foreground">{{ team.w * 3 }}</td>
+              <td class="text-center px-4 py-2.5 font-bold text-foreground">{{ team.pts }}</td>
             </tr>
           </tbody>
         </table>
