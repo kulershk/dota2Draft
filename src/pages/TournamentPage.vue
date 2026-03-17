@@ -24,7 +24,7 @@ const deleteStageId = ref<number | null>(null)
 const editingMatch = ref<any>(null)
 const viewingMatch = ref<any>(null)
 const activeStageId = ref<number | null>(null)
-const showHidden = ref(true)
+const showHidden = ref(localStorage.getItem('tournament_showHidden') !== 'false')
 
 // Edit stage form
 const editStageName = ref('')
@@ -498,7 +498,7 @@ function stageStatusClass(stage: any) {
       <div v-if="activeStage">
         <!-- Admin: edit/delete this stage -->
         <div v-if="isCompAdmin" class="flex justify-end gap-2 mb-2">
-          <button class="btn-ghost text-xs" :class="showHidden ? '' : 'text-primary'" @click="showHidden = !showHidden">
+          <button class="btn-ghost text-xs" :class="showHidden ? '' : 'text-primary'" @click="showHidden = !showHidden; localStorage.setItem('tournament_showHidden', String(showHidden))">
             <EyeOff class="w-3 h-3" />
             {{ showHidden ? t('previewAsPlayer') : t('showHiddenMatches') }}
           </button>
