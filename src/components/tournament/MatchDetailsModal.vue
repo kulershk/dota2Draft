@@ -270,6 +270,7 @@ function winnerName(game: any) {
                 <span v-if="lobbyStatuses[g.game_number]?.status === 'creating'" class="text-xs text-muted-foreground animate-pulse">{{ t('lobbyCreating') }}</span>
                 <span v-else-if="lobbyStatuses[g.game_number]?.status === 'active'" class="text-xs font-medium text-green-500">{{ t('lobbyActive') }}</span>
                 <span v-else-if="lobbyStatuses[g.game_number]?.status === 'launching'" class="text-xs font-medium text-amber-500">{{ t('lobbyLaunching') }}</span>
+                <span v-else-if="lobbyStatuses[g.game_number]?.status === 'cointoss'" class="text-xs font-medium text-amber-500">{{ t('lobbyCoinToss') }}</span>
               </div>
 
               <!-- Phase 1: Ready check to create lobby -->
@@ -383,6 +384,14 @@ function winnerName(game: any) {
                     </span>
                   </button>
                 </div>
+              </div>
+
+              <!-- Phase 3: In progress (coin toss / launching / active) -->
+              <div v-else-if="['cointoss', 'launching', 'active'].includes(lobbyStatuses[g.game_number]?.status)" class="p-4 flex flex-col items-center gap-2">
+                <div class="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin"></div>
+                <span class="text-sm font-medium text-foreground">
+                  {{ lobbyStatuses[g.game_number]?.status === 'cointoss' ? t('lobbyCoinToss') : lobbyStatuses[g.game_number]?.status === 'active' ? t('lobbyActive') : t('lobbyLaunching') }}
+                </span>
               </div>
             </div>
           </template>

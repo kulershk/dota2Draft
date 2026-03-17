@@ -454,6 +454,23 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 
 	b.log(fmt.Sprintf("  State: %s → %s (matchID: %d)", oldState.String(), lobbyState.String(), matchID))
 
+	// Report state changes to Node so frontend can track lobby phase
+	if lobbyState != oldState && b.activeLobbyID != "" {
+		statusName := ""
+		switch lobbyState {
+		case gcccm.CSODOTALobby_SERVERSETUP:
+			statusName = "cointoss"
+		case gcccm.CSODOTALobby_RUN:
+			statusName = "active"
+		}
+		if statusName != "" {
+			b.send("lobby_status", protocol.LobbyStatusEvent{
+				LobbyID: b.activeLobbyID,
+				Status:  statusName,
+			})
+		}
+	}
+
 	// Detect match ID assigned
 	if matchID != 0 && (oldLobby == nil || oldLobby.GetMatchId() == 0) {
 		b.log(fmt.Sprintf("Match ID assigned: %d", matchID))
