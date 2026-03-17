@@ -116,7 +116,6 @@ function statusText(status: string) {
               <th class="text-left px-4 py-2.5 font-medium text-muted-foreground">#</th>
               <th class="text-left px-4 py-2.5 font-medium text-muted-foreground">{{ t('team') }}</th>
               <th class="text-center px-4 py-2.5 font-medium text-muted-foreground">{{ t('wins') }}</th>
-              <th class="text-center px-4 py-2.5 font-medium text-muted-foreground">{{ t('draws') }}</th>
               <th class="text-center px-4 py-2.5 font-medium text-muted-foreground">{{ t('losses') }}</th>
               <th class="text-center px-4 py-2.5 font-medium text-muted-foreground">{{ t('points') }}</th>
             </tr>
@@ -130,9 +129,8 @@ function statusText(status: string) {
                   <span class="font-medium" :class="team.isTbd ? 'text-muted-foreground italic' : 'text-foreground'">{{ team.team }}</span>
                 </div>
               </td>
-              <td class="text-center px-4 py-2.5 text-green-600 dark:text-green-400 font-medium">{{ team.w }}</td>
-              <td class="text-center px-4 py-2.5 text-muted-foreground font-medium">{{ team.d }}</td>
-              <td class="text-center px-4 py-2.5 text-red-500 font-medium">{{ team.l }}</td>
+              <td class="text-center px-4 py-2.5 text-green-600 dark:text-green-400 font-medium">{{ team.mw }}</td>
+              <td class="text-center px-4 py-2.5 text-red-500 font-medium">{{ team.ml }}</td>
               <td class="text-center px-4 py-2.5 font-bold text-foreground">{{ team.pts }}</td>
             </tr>
           </tbody>
