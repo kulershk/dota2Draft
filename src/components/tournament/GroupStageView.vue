@@ -16,13 +16,17 @@ const emit = defineEmits<{
   'edit-match': [match: any]
 }>()
 
-const expandedGroups = ref<Set<string>>(new Set())
+const collapsedGroups = ref<Set<string>>(new Set())
 
 function toggleMatches(groupName: string) {
-  const s = new Set(expandedGroups.value)
+  const s = new Set(collapsedGroups.value)
   if (s.has(groupName)) s.delete(groupName)
   else s.add(groupName)
-  expandedGroups.value = s
+  collapsedGroups.value = s
+}
+
+function isGroupExpanded(groupName: string) {
+  return !collapsedGroups.value.has(groupName)
 }
 
 const groupsList = computed(() => props.tournamentState.groups || [])
@@ -140,13 +144,13 @@ function statusText(status: string) {
         class="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors self-start"
         @click="toggleMatches(group.name)"
       >
-        <component :is="expandedGroups.has(group.name) ? ChevronUp : ChevronDown" class="w-4 h-4" />
-        {{ expandedGroups.has(group.name) ? t('hideMatches') : t('showMatches') }}
+        <component :is="isGroupExpanded(group.name) ? ChevronUp : ChevronDown" class="w-4 h-4" />
+        {{ isGroupExpanded(group.name) ? t('hideMatches') : t('showMatches') }}
         <span class="text-xs text-muted-foreground/60">({{ matchesByGroup[group.name]?.length || 0 }})</span>
       </button>
 
       <!-- Matches list -->
-      <div v-if="expandedGroups.has(group.name)" class="flex flex-col gap-2">
+      <div v-if="isGroupExpanded(group.name)" class="flex flex-col gap-2">
         <div
           v-for="match in matchesByGroup[group.name]"
           :key="match.id"
