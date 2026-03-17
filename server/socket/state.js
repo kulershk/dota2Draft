@@ -9,6 +9,8 @@ export const compReadyCaptains = new Map()   // compId -> Set<captainId>
 export const compBidTimers = new Map()       // compId -> timeout
 export const compLastBidTime = new Map()     // compId -> timestamp
 export const BID_COOLDOWN_MS = 300
+export const matchReadyCaptains = new Map()  // `${matchId}:${gameNumber}` -> Set<captainId>
+export const matchLaunchReadyCaptains = new Map()  // `${matchId}:${gameNumber}` -> Set<captainId>
 
 export function getOnlineCaptainIds(compId) {
   const map = compOnlineCaptains.get(compId)
@@ -36,6 +38,54 @@ export async function getSocketCaptainId(socketId, compId) {
     'SELECT id FROM captains WHERE player_id = $1 AND competition_id = $2', [playerId, compId]
   )
   return captain?.id || null
+}
+
+export function getMatchReadyKey(matchId, gameNumber) {
+  return `${matchId}:${gameNumber}`
+}
+
+export function getMatchReadyCaptainIds(matchId, gameNumber) {
+  const key = getMatchReadyKey(matchId, gameNumber)
+  const set = matchReadyCaptains.get(key)
+  return set ? [...set] : []
+}
+
+export function setMatchCaptainReady(matchId, gameNumber, captainId) {
+  const key = getMatchReadyKey(matchId, gameNumber)
+  if (!matchReadyCaptains.has(key)) matchReadyCaptains.set(key, new Set())
+  matchReadyCaptains.get(key).add(captainId)
+}
+
+export function setMatchCaptainUnready(matchId, gameNumber, captainId) {
+  const key = getMatchReadyKey(matchId, gameNumber)
+  matchReadyCaptains.get(key)?.delete(captainId)
+}
+
+export function clearMatchReady(matchId, gameNumber) {
+  const key = getMatchReadyKey(matchId, gameNumber)
+  matchReadyCaptains.delete(key)
+}
+
+export function getLaunchReadyCaptainIds(matchId, gameNumber) {
+  const key = getMatchReadyKey(matchId, gameNumber)
+  const set = matchLaunchReadyCaptains.get(key)
+  return set ? [...set] : []
+}
+
+export function setLaunchCaptainReady(matchId, gameNumber, captainId) {
+  const key = getMatchReadyKey(matchId, gameNumber)
+  if (!matchLaunchReadyCaptains.has(key)) matchLaunchReadyCaptains.set(key, new Set())
+  matchLaunchReadyCaptains.get(key).add(captainId)
+}
+
+export function setLaunchCaptainUnready(matchId, gameNumber, captainId) {
+  const key = getMatchReadyKey(matchId, gameNumber)
+  matchLaunchReadyCaptains.get(key)?.delete(captainId)
+}
+
+export function clearLaunchReady(matchId, gameNumber) {
+  const key = getMatchReadyKey(matchId, gameNumber)
+  matchLaunchReadyCaptains.delete(key)
 }
 
 export function clearCompBidTimer(compId) {

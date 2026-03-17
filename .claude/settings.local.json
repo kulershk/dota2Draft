@@ -57,7 +57,11 @@
       "Bash(gh api:*)",
       "Bash(cd lobbybot:*)",
       "Bash(dir:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(find . -path */dota_gcmessages_common_match_management* -name *.go)",
+      "Read(//c/Users/kuler/Desktop/Stuff/draft/lobbybot/**)",
+      "Bash(2)",
+      "Bash(go build:*)"
     ]
   }
 }

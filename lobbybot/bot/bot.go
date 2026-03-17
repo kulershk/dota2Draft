@@ -51,9 +51,14 @@ type Bot struct {
 	sentryHash       steam.SentryHash
 	loginKey         string
 	activeLobbyID    string // lobby DB ID for event routing
-	expectedTeams    map[uint64]string // steamID64 → "radiant"/"dire"
-	lastLobby        *gcccm.CSODOTALobby // last known lobby state for diffing
-	lobbyCacheCancel func() // cancel the lobby cache watcher
+	expectedTeams         map[uint64]string // steamID64 → "radiant"/"dire"
+	gameStartedCh         chan struct{} // signals when game has started
+	lastLobby             *gcccm.CSODOTALobby // last known lobby state for diffing
+	lobbyCacheCancel      func() // cancel the lobby cache watcher
+	expectedRadiantTeamId int
+	expectedDireTeamId    int
+	detectedRadiantTeamId int
+	detectedDireTeamId    int
 }
 
 func NewBot(id, username, password, refreshToken string, send SendFunc) *Bot {
@@ -64,8 +69,9 @@ func NewBot(id, username, password, refreshToken string, send SendFunc) *Bot {
 		RefreshToken: refreshToken,
 		Status:       StatusOffline,
 		send:         send,
-		guardCh:      make(chan string, 1),
-		cancelCh:     make(chan struct{}, 1),
+		guardCh:       make(chan string, 1),
+		cancelCh:      make(chan struct{}, 1),
+		gameStartedCh: make(chan struct{}, 1),
 	}
 }
 
@@ -96,6 +102,7 @@ func (b *Bot) Connect() {
 	b.setStatus(StatusConnecting)
 
 	b.steamClient = steam.NewClient()
+	b.steamClient.ConnectionTimeout = 10 * time.Second
 	go b.handleSteamEvents()
 
 	b.log("Connecting to Steam network...")
@@ -379,6 +386,11 @@ func (b *Bot) handleLobbyCacheEvent(event *socache.CacheEvent) {
 }
 
 func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
+	// Skip if bot has already left the lobby
+	if b.activeLobbyID == "" {
+		return
+	}
+
 	newMembers := newLobby.GetAllMembers()
 	matchID := newLobby.GetMatchId()
 
@@ -412,6 +424,25 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 		}
 	}
 
+	// Detect team IDs from lobby team details
+	teamDetails := newLobby.GetTeamDetails()
+	if len(teamDetails) >= 2 {
+		radiantId := int(teamDetails[0].GetTeamId())
+		direId := int(teamDetails[1].GetTeamId())
+		if radiantId != b.detectedRadiantTeamId || direId != b.detectedDireTeamId {
+			b.detectedRadiantTeamId = radiantId
+			b.detectedDireTeamId = direId
+			if radiantId != 0 || direId != 0 {
+				b.log(fmt.Sprintf("Team IDs detected — Radiant: %d, Dire: %d", radiantId, direId))
+				b.send("lobby_team_ids", protocol.LobbyTeamIdsEvent{
+					LobbyID:       b.activeLobbyID,
+					RadiantTeamId: radiantId,
+					DireTeamId:    direId,
+				})
+			}
+		}
+	}
+
 	// Detect game started
 	if matchID != 0 && (oldLobby == nil || oldLobby.GetMatchId() == 0) {
 		b.log(fmt.Sprintf("Game started! Match ID: %d", matchID))
@@ -419,6 +450,11 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 			LobbyID: b.activeLobbyID,
 			MatchID: fmt.Sprintf("%d", matchID),
 		})
+		// Signal runLobby to exit and free the bot
+		select {
+		case b.gameStartedCh <- struct{}{}:
+		default:
+		}
 	}
 
 	// Log current lobby roster
@@ -442,11 +478,14 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 				continue
 			}
 
+			// Convert 64-bit Steam ID to 32-bit account ID for the kick API
+			accountID := uint32(playerID - 76561197960265728)
+
 			expectedTeam, known := b.expectedTeams[playerID]
 			if !known {
 				b.log(fmt.Sprintf("ENFORCE: Unknown player %d on %s — kicking to unassigned",
 					playerID, teamName(currentTeam)))
-				b.dotaClient.KickLobbyMemberFromTeam(uint32(playerID))
+				b.dotaClient.KickLobbyMemberFromTeam(accountID)
 				continue
 			}
 
@@ -459,16 +498,19 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 			if wrongTeam {
 				b.log(fmt.Sprintf("ENFORCE: Player %d on %s but expected %s — kicking to unassigned",
 					playerID, teamName(currentTeam), expectedTeam))
-				b.dotaClient.KickLobbyMemberFromTeam(uint32(playerID))
+				b.dotaClient.KickLobbyMemberFromTeam(accountID)
 			} else {
 				b.log(fmt.Sprintf("ENFORCE: Player %d on %s — correct", playerID, teamName(currentTeam)))
 			}
 		}
 	}
 
-	// Report joined players to Node.js
+	// Report joined players to Node.js (exclude the bot itself)
 	var joined []protocol.LobbyPlayer
 	for _, m := range newMembers {
+		if b.steamClient != nil && m.GetId() == b.steamClient.SteamId().ToUint64() {
+			continue
+		}
 		team := teamName(m.GetTeam())
 		joined = append(joined, protocol.LobbyPlayer{
 			SteamID: fmt.Sprintf("%d", m.GetId()),
@@ -513,40 +555,100 @@ func (b *Bot) SetBusy(busy bool) {
 	b.send("bot_status", protocol.BotStatusEvent{BotID: b.ID, Status: status})
 }
 
+func (b *Bot) SetExpectedTeamIds(radiant, dire int) {
+	b.expectedRadiantTeamId = radiant
+	b.expectedDireTeamId = dire
+}
+
+func (b *Bot) GetDetectedTeamIds() (int, int) {
+	return b.detectedRadiantTeamId, b.detectedDireTeamId
+}
+
+func (b *Bot) GameStartedCh() <-chan struct{} {
+	return b.gameStartedCh
+}
+
 func (b *Bot) GetDotaClient() *dota2.Dota2 {
 	return b.dotaClient
 }
 
-func (b *Bot) CreatePracticeLobby(gameName, password string, serverRegion, gameModeInt, leagueId, dotaTvDelay int) error {
+type LobbyOptions struct {
+	ServerRegion      int
+	GameMode          int
+	LeagueId          int
+	DotaTvDelay       int
+	Cheats            bool
+	AllowSpectating   bool
+	PauseSetting      int
+	SelectionPriority int
+	CmPick            int
+	PenaltyRadiant    int
+	PenaltyDire       int
+	SeriesType        int
+	RadiantName       string
+	DireName          string
+}
+
+func (b *Bot) CreatePracticeLobby(gameName, password string, opts LobbyOptions) error {
 	if b.dotaClient == nil {
 		return fmt.Errorf("dota client not connected")
 	}
 
-	gameMode := uint32(gameModeInt)
+	gameMode := uint32(opts.GameMode)
 	visibility := gcccm.DOTALobbyVisibility_DOTALobbyVisibility_Friends
-	region := uint32(serverRegion)
-	allowCheats := false
+	region := uint32(opts.ServerRegion)
+	allowCheats := opts.Cheats
 	fillBots := false
-	allowSpectating := true
+	allowSpectating := opts.AllowSpectating
+	pauseSetting := gcccm.LobbyDotaPauseSetting(opts.PauseSetting)
+	selectionPriority := gcccm.DOTASelectionPriorityRules(opts.SelectionPriority)
+	cmPick := gcccm.DOTA_CM_PICK(opts.CmPick)
+
+	// Team details (index 0 = Radiant, index 1 = Dire)
+	var teamDetails []*gcccm.CLobbyTeamDetails
+	radiantName := opts.RadiantName
+	direName := opts.DireName
+	if radiantName != "" || direName != "" {
+		teamDetails = []*gcccm.CLobbyTeamDetails{
+			{TeamName: &radiantName},
+			{TeamName: &direName},
+		}
+	}
 
 	details := &gcccm.CMsgPracticeLobbySetDetails{
-		GameName:        &gameName,
-		PassKey:         &password,
-		ServerRegion:    &region,
-		GameMode:        &gameMode,
-		Visibility:      &visibility,
-		AllowCheats:     &allowCheats,
-		FillWithBots:    &fillBots,
-		AllowSpectating: &allowSpectating,
+		GameName:               &gameName,
+		PassKey:                &password,
+		ServerRegion:           &region,
+		GameMode:               &gameMode,
+		Visibility:             &visibility,
+		AllowCheats:            &allowCheats,
+		FillWithBots:           &fillBots,
+		AllowSpectating:        &allowSpectating,
+		PauseSetting:           &pauseSetting,
+		SelectionPriorityRules: &selectionPriority,
+		CmPick:                 &cmPick,
+		TeamDetails:            teamDetails,
 	}
 
-	if leagueId > 0 {
-		lid := uint32(leagueId)
+	if opts.LeagueId > 0 {
+		lid := uint32(opts.LeagueId)
 		details.Leagueid = &lid
 	}
-	if dotaTvDelay >= 0 {
-		delay := gcccm.LobbyDotaTVDelay(dotaTvDelay)
+	if opts.DotaTvDelay >= 0 {
+		delay := gcccm.LobbyDotaTVDelay(opts.DotaTvDelay)
 		details.DotaTvDelay = &delay
+	}
+	if opts.PenaltyRadiant > 0 {
+		p := uint32(opts.PenaltyRadiant)
+		details.PenaltyLevelRadiant = &p
+	}
+	if opts.PenaltyDire > 0 {
+		p := uint32(opts.PenaltyDire)
+		details.PenaltyLevelDire = &p
+	}
+	if opts.SeriesType > 0 {
+		st := uint32(opts.SeriesType)
+		details.SeriesType = &st
 	}
 
 	// Create lobby and wait for GC confirmation
@@ -627,6 +729,13 @@ func (b *Bot) LaunchLobby() {
 }
 
 func (b *Bot) LeaveLobby() {
+	b.mu.Lock()
+	if b.lobbyCacheCancel != nil {
+		b.lobbyCacheCancel()
+		b.lobbyCacheCancel = nil
+	}
+	b.mu.Unlock()
+	b.lastLobby = nil
 	if b.dotaClient != nil {
 		b.dotaClient.LeaveLobby()
 	}

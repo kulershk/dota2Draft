@@ -15,8 +15,8 @@ export default function createTournamentRouter(io) {
 
     const matches = await query(`
       SELECT m.*,
-        t1.team AS team1_name, t1.name AS team1_captain, COALESCE(p1.avatar_url, '') AS team1_avatar, t1.banner_url AS team1_banner,
-        t2.team AS team2_name, t2.name AS team2_captain, COALESCE(p2.avatar_url, '') AS team2_avatar, t2.banner_url AS team2_banner,
+        t1.team AS team1_name, t1.name AS team1_captain, COALESCE(p1.avatar_url, '') AS team1_avatar, t1.banner_url AS team1_banner, t1.dota_team_id AS team1_dota_id,
+        t2.team AS team2_name, t2.name AS team2_captain, COALESCE(p2.avatar_url, '') AS team2_avatar, t2.banner_url AS team2_banner, t2.dota_team_id AS team2_dota_id,
         w.team AS winner_name
       FROM matches m
       LEFT JOIN captains t1 ON t1.id = m.team1_captain_id

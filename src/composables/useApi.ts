@@ -144,6 +144,8 @@ export function useApi() {
       request(`/api/competitions/${compId}/tournament/matches/${matchId}/games/${gameNumber}/lobby/launch`, { method: 'POST' }),
     cancelLobby: (compId: number, matchId: number, gameNumber: number) =>
       request(`/api/competitions/${compId}/tournament/matches/${matchId}/games/${gameNumber}/lobby/cancel`, { method: 'POST' }),
+    resetLobby: (compId: number, matchId: number, gameNumber: number) =>
+      request(`/api/competitions/${compId}/tournament/matches/${matchId}/games/${gameNumber}/lobby/reset`, { method: 'POST' }),
 
     // User self-update
     updateMe: (data: Record<string, any>) =>

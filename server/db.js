@@ -105,6 +105,12 @@ export async function initDb() {
     if (!hasBanner) {
       await execute('ALTER TABLE captains ADD COLUMN banner_url TEXT DEFAULT NULL')
     }
+    const hasDotaTeamId = await queryOne(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'captains' AND column_name = 'dota_team_id'`
+    )
+    if (!hasDotaTeamId) {
+      await execute('ALTER TABLE captains ADD COLUMN dota_team_id INTEGER DEFAULT NULL')
+    }
   }
 
   // ─── Competitions system ───────────────────────────────
@@ -448,6 +454,7 @@ async function createFreshCompetitionTables() {
       mmr INTEGER NOT NULL DEFAULT 0,
       player_id INTEGER REFERENCES players(id) ON DELETE SET NULL,
       banner_url TEXT DEFAULT NULL,
+      dota_team_id INTEGER DEFAULT NULL,
       created_at TIMESTAMP DEFAULT NOW()
     );
 

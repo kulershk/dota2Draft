@@ -550,9 +550,16 @@ export function useDraftStore() {
     }
   }
 
-  // Ready up
+  // Ready up (auction)
   function setReady() { getSocket().emit('captain:ready') }
   function setUnready() { getSocket().emit('captain:unready') }
+
+  // Match ready
+  function matchReady(matchId: number, gameNumber: number) { getSocket().emit('match:ready', { matchId, gameNumber }) }
+  function matchUnready(matchId: number, gameNumber: number) { getSocket().emit('match:unready', { matchId, gameNumber }) }
+  function matchLaunchReady(matchId: number, gameNumber: number) { getSocket().emit('match:launchReady', { matchId, gameNumber }) }
+  function matchLaunchUnready(matchId: number, gameNumber: number) { getSocket().emit('match:launchUnready', { matchId, gameNumber }) }
+  function getMatchReadyState(matchId: number, gameNumber: number) { getSocket().emit('match:getReadyState', { matchId, gameNumber }) }
 
   // Auction actions via socket
   function startDraft() { getSocket().emit('auction:start') }
@@ -622,6 +629,11 @@ export function useDraftStore() {
     // Ready
     setReady,
     setUnready,
+    matchReady,
+    matchUnready,
+    matchLaunchReady,
+    matchLaunchUnready,
+    getMatchReadyState,
     // Auction
     startDraft,
     nominatePlayer,

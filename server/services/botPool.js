@@ -80,6 +80,10 @@ class BotPool {
           await this._onGameStarted(data)
           break
 
+        case 'lobby_team_ids':
+          await this._onLobbyTeamIds(data)
+          break
+
         case 'lobby_error':
           await this._onLobbyError(data)
           break
@@ -183,6 +187,7 @@ class BotPool {
   async _onGameStarted(data) {
     const lobbyId = Number(data.lobbyId)
     const dotaMatchId = data.matchId
+    console.log(`[Lobby] Game started: lobbyId=${lobbyId}, matchId=${dotaMatchId}`)
 
     // Update lobby
     await execute(
@@ -209,6 +214,11 @@ class BotPool {
 
     // Broadcast
     if (this.io) {
+      this.io.to(`comp:${lobby.competition_id}`).emit('lobby:statusUpdate', {
+        matchId: lobby.match_id,
+        gameNumber: lobby.game_number,
+        status: 'completed',
+      })
       this.io.to(`comp:${lobby.competition_id}`).emit('lobby:matchIdCaptured', {
         matchId: lobby.match_id,
         gameNumber: lobby.game_number,
@@ -219,6 +229,47 @@ class BotPool {
 
     // Schedule OpenDota stats fetch
     this._scheduleStatsFetch(lobby.match_id, lobby.game_number, dotaMatchId)
+  }
+
+  async _onLobbyTeamIds(data) {
+    const lobbyId = Number(data.lobbyId)
+    const radiantTeamId = data.radiantTeamId || 0
+    const direTeamId = data.direTeamId || 0
+
+    const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyId])
+    if (!lobby) return
+
+    const match = await queryOne(`
+      SELECT m.team1_captain_id, m.team2_captain_id
+      FROM matches m WHERE m.id = $1
+    `, [lobby.match_id])
+    if (!match) return
+
+    // Save team IDs to captains if not already set (first game)
+    if (radiantTeamId && match.team1_captain_id) {
+      const cap = await queryOne('SELECT dota_team_id FROM captains WHERE id = $1', [match.team1_captain_id])
+      if (cap && !cap.dota_team_id) {
+        await execute('UPDATE captains SET dota_team_id = $1 WHERE id = $2', [radiantTeamId, match.team1_captain_id])
+        console.log(`[Lobby] Saved Radiant dota_team_id=${radiantTeamId} for captain ${match.team1_captain_id}`)
+      }
+    }
+    if (direTeamId && match.team2_captain_id) {
+      const cap = await queryOne('SELECT dota_team_id FROM captains WHERE id = $1', [match.team2_captain_id])
+      if (cap && !cap.dota_team_id) {
+        await execute('UPDATE captains SET dota_team_id = $1 WHERE id = $2', [direTeamId, match.team2_captain_id])
+        console.log(`[Lobby] Saved Dire dota_team_id=${direTeamId} for captain ${match.team2_captain_id}`)
+      }
+    }
+
+    // Broadcast to frontend
+    if (this.io) {
+      this.io.to(`comp:${lobby.competition_id}`).emit('lobby:teamIds', {
+        matchId: lobby.match_id,
+        gameNumber: lobby.game_number,
+        radiantTeamId,
+        direTeamId,
+      })
+    }
   }
 
   async _onLobbyError(data) {
@@ -341,7 +392,8 @@ class BotPool {
     // Resolve players
     const match = await queryOne(`
       SELECT m.*, t1.player_id AS t1_player_id, t2.player_id AS t2_player_id,
-             t1.team AS team1_name, t2.team AS team2_name
+             t1.team AS team1_name, t2.team AS team2_name,
+             t1.dota_team_id AS team1_dota_id, t2.dota_team_id AS team2_dota_id
       FROM matches m
       LEFT JOIN captains t1 ON t1.id = m.team1_captain_id
       LEFT JOIN captains t2 ON t2.id = m.team2_captain_id
@@ -381,6 +433,14 @@ class BotPool {
     const autoAssignTeams = compSettings.lobbyAutoAssignTeams !== false
     const leagueId = compSettings.lobbyLeagueId || 0
     const dotaTvDelay = compSettings.lobbyDotaTvDelay ?? 1
+    const cheats = !!compSettings.lobbyCheats
+    const allowSpectating = compSettings.lobbyAllowSpectating !== false
+    const pauseSetting = compSettings.lobbyPauseSetting || 0
+    const selectionPriority = compSettings.lobbySelectionPriority || 0
+    const cmPick = compSettings.lobbyCmPick || 0
+    const penaltyRadiant = compSettings.lobbyPenaltyRadiant || 0
+    const penaltyDire = compSettings.lobbyPenaltyDire || 0
+    const seriesType = compSettings.lobbySeriesType || 0
 
     const gameName = options.game_name || `${match.team1_name || 'Team 1'} vs ${match.team2_name || 'Team 2'} - Game ${gameNumber}`
     const password = options.password || Math.random().toString(36).slice(2, 8)
@@ -392,6 +452,8 @@ class BotPool {
 
     await execute("UPDATE lobby_bots SET status = 'busy', last_used_at = NOW() WHERE id = $1", [availableBot.id])
 
+    console.log('[Lobby] Settings from DB:', { cheats, allowSpectating, pauseSetting, selectionPriority, cmPick, penaltyRadiant, penaltyDire, seriesType })
+
     // Send to Go service
     this._sendToGo('create_lobby', {
       lobbyId: String(lobby.id),
@@ -402,6 +464,18 @@ class BotPool {
       autoAssignTeams,
       leagueId,
       dotaTvDelay,
+      cheats,
+      allowSpectating,
+      pauseSetting,
+      selectionPriority,
+      cmPick,
+      penaltyRadiant,
+      penaltyDire,
+      seriesType,
+      radiantName: match.team1_name || '',
+      direName: match.team2_name || '',
+      expectedRadiantTeamId: match.team1_dota_id || 0,
+      expectedDireTeamId: match.team2_dota_id || 0,
       players: playersExpected.map(p => ({ steamId: p.steam_id, name: p.name, team: p.team })),
     })
 
@@ -409,6 +483,15 @@ class BotPool {
   }
 
   async forceLaunch(lobbyDbId) {
+    await execute("UPDATE match_lobbies SET status = 'launching', updated_at = NOW() WHERE id = $1", [lobbyDbId])
+    const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyDbId])
+    if (lobby && this.io) {
+      this.io.to(`comp:${lobby.competition_id}`).emit('lobby:statusUpdate', {
+        matchId: lobby.match_id,
+        gameNumber: lobby.game_number,
+        status: 'launching',
+      })
+    }
     this._sendToGo('force_launch', { lobbyId: String(lobbyDbId) })
   }
 

@@ -36,6 +36,14 @@ export function parseCompSettings(comp) {
     lobbyAutoAssignTeams: s.lobbyAutoAssignTeams !== false,
     lobbyLeagueId: Number(s.lobbyLeagueId) || 0,
     lobbyDotaTvDelay: Number(s.lobbyDotaTvDelay) || 1,
+    lobbyCheats: !!s.lobbyCheats,
+    lobbyAllowSpectating: s.lobbyAllowSpectating !== false,
+    lobbyPauseSetting: Number(s.lobbyPauseSetting) || 0,
+    lobbySelectionPriority: Number(s.lobbySelectionPriority) || 0,
+    lobbyCmPick: Number(s.lobbyCmPick) || 0,
+    lobbyPenaltyRadiant: Number(s.lobbyPenaltyRadiant) || 0,
+    lobbyPenaltyDire: Number(s.lobbyPenaltyDire) || 0,
+    lobbySeriesType: Number(s.lobbySeriesType) || 0,
   }
 }
 

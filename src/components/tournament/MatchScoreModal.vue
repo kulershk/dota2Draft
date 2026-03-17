@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { EyeOff, RefreshCw, ChevronDown, ChevronUp, Gamepad2, Play, X } from 'lucide-vue-next'
+import { EyeOff, RefreshCw, ChevronDown, ChevronUp, Gamepad2, Play, X, Check, RotateCcw } from 'lucide-vue-next'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
+import { getSocket } from '@/composables/useSocket'
 
 const { t } = useI18n()
 const api = useApi()
@@ -57,7 +58,7 @@ function save() {
     score1: score1.value,
     score2: score2.value,
     status: matchStatus.value,
-    games: games.value.filter(g => g.winner_captain_id || g.dotabuff_id),
+    games: games.value,
     hidden: isHidden.value,
   })
 }
@@ -143,6 +144,15 @@ async function cancelLobby(gameNumber: number) {
   } catch {}
 }
 
+async function resetLobby(gameNumber: number) {
+  const cId = compId.value
+  if (!cId) return
+  try {
+    await api.resetLobby(cId, props.match.id, gameNumber)
+    lobbyStatuses.value = { ...lobbyStatuses.value, [gameNumber]: null }
+  } catch {}
+}
+
 async function fetchLobbyStatus(gameNumber: number) {
   const cId = compId.value
   if (!cId) return
@@ -152,12 +162,137 @@ async function fetchLobbyStatus(gameNumber: number) {
   } catch {}
 }
 
+// Match ready state
+const matchReadyState = ref<Record<number, number[]>>({})
+
+function onReadyState(data: any) {
+  if (data.matchId !== props.match.id) return
+  matchReadyState.value[data.gameNumber] = data.readyCaptainIds || []
+  if (data.lobbyCreated) fetchLobbyStatus(data.gameNumber)
+}
+
+function isTeamReady(gameNumber: number, captainId: number) {
+  return (matchReadyState.value[gameNumber] || []).includes(captainId)
+}
+
+const myCaptainId = computed(() => store.currentCaptain.value?.id || null)
+const isCaptainInMatch = computed(() => {
+  if (!myCaptainId.value) return false
+  return props.match.team1_captain_id === myCaptainId.value || props.match.team2_captain_id === myCaptainId.value
+})
+
+function isMyReady(gameNumber: number) {
+  return myCaptainId.value && (matchReadyState.value[gameNumber] || []).includes(myCaptainId.value)
+}
+
+function toggleReady(gameNumber: number) {
+  if (isMyReady(gameNumber)) {
+    store.matchUnready(props.match.id, gameNumber)
+  } else {
+    store.matchReady(props.match.id, gameNumber)
+  }
+}
+
+// Launch ready (phase 2)
+const launchReadyState = ref<Record<number, number[]>>({})
+
+function isLaunchTeamReady(gameNumber: number, captainId: number) {
+  return (launchReadyState.value[gameNumber] || []).includes(captainId)
+}
+
+function isMyLaunchReady(gameNumber: number) {
+  return myCaptainId.value && (launchReadyState.value[gameNumber] || []).includes(myCaptainId.value)
+}
+
+function toggleLaunchReady(gameNumber: number) {
+  if (isMyLaunchReady(gameNumber)) {
+    store.matchLaunchUnready(props.match.id, gameNumber)
+  } else {
+    store.matchLaunchReady(props.match.id, gameNumber)
+  }
+}
+
+function allPlayersJoined(gameNumber: number) {
+  const lobby = lobbyStatuses.value[gameNumber]
+  if (!lobby) return false
+  const expected = (lobby.players_expected || []).length
+  const joined = (lobby.players_joined || []).length
+  if (expected === 0 || joined < expected) return false
+  // Both teams must have a Dota team selected
+  const teamIds = lobbyTeamIds.value[gameNumber]
+  if (!teamIds || !teamIds.radiant || !teamIds.dire) return false
+  // If saved team IDs exist, they must match
+  if (props.match.team1_dota_id && teamIds.radiant !== props.match.team1_dota_id) return false
+  if (props.match.team2_dota_id && teamIds.dire !== props.match.team2_dota_id) return false
+  return true
+}
+
+function getPlayerStatuses(gameNumber: number) {
+  const lobby = lobbyStatuses.value[gameNumber]
+  if (!lobby) return []
+  const expected = lobby.players_expected || []
+  const joined = lobby.players_joined || []
+  return expected.map((p: any) => {
+    const j = joined.find((j: any) => j.steamId === p.steam_id || j.SteamID === p.steam_id)
+    return {
+      name: p.name,
+      steamId: p.steam_id,
+      expectedTeam: p.team, // "radiant" or "dire"
+      joined: !!j,
+      actualTeam: j?.team || j?.Team || null,
+      correctTeam: j ? (j.team || j.Team) === p.team : false,
+    }
+  })
+}
+
+// Detected Dota team IDs from lobby
+const lobbyTeamIds = ref<Record<number, { radiant: number; dire: number }>>({})
+
+function onLobbyTeamIds(data: any) {
+  if (Number(data.matchId) !== Number(props.match.id)) return
+  lobbyTeamIds.value = { ...lobbyTeamIds.value, [data.gameNumber]: { radiant: data.radiantTeamId || 0, dire: data.direTeamId || 0 } }
+}
+
+function onLaunchReadyState(data: any) {
+  if (data.matchId !== props.match.id) return
+  launchReadyState.value[data.gameNumber] = data.readyCaptainIds || []
+}
+
+function onLobbyStatusUpdate(data: any) {
+  if (Number(data.matchId) !== Number(props.match.id)) return
+  if (!data.status) {
+    // Lobby was reset/deleted
+    const copy = { ...lobbyStatuses.value }
+    delete copy[data.gameNumber]
+    lobbyStatuses.value = copy
+  } else {
+    lobbyStatuses.value = { ...lobbyStatuses.value, [data.gameNumber]: { ...(lobbyStatuses.value[data.gameNumber] || {}), status: data.status, ...(data.playersJoined ? { players_joined: data.playersJoined } : {}) } }
+  }
+  if (data.status !== 'waiting') {
+    launchReadyState.value = { ...launchReadyState.value, [data.gameNumber]: [] }
+  }
+}
+
+const sock = getSocket()
+
 // Fetch lobby status for all games on mount
 onMounted(() => {
-  // Already runs game init above, now also check lobbies
+  sock.on('match:readyState', onReadyState)
+  sock.on('match:launchReadyState', onLaunchReadyState)
+  sock.on('lobby:statusUpdate', onLobbyStatusUpdate)
+  sock.on('lobby:teamIds', onLobbyTeamIds)
+  // Already runs game init above, now also check lobbies and ready state
   for (const g of games.value) {
     fetchLobbyStatus(g.game_number)
+    store.getMatchReadyState(props.match.id, g.game_number)
   }
+})
+
+onUnmounted(() => {
+  sock.off('match:readyState', onReadyState)
+  sock.off('match:launchReadyState', onLaunchReadyState)
+  sock.off('lobby:statusUpdate', onLobbyStatusUpdate)
+  sock.off('lobby:teamIds', onLobbyTeamIds)
 })
 </script>
 
@@ -232,13 +367,22 @@ onMounted(() => {
                 <X class="w-4 h-4" />
               </button>
             </template>
-            <span
-              v-else-if="lobbyStatuses[game.game_number]"
-              class="text-[10px] font-medium px-1.5 py-0.5 rounded"
-              :class="lobbyStatuses[game.game_number].status === 'completed' ? 'bg-green-500/10 text-green-500'
-                : lobbyStatuses[game.game_number].status === 'active' ? 'bg-amber-500/10 text-amber-500'
-                : 'bg-accent text-muted-foreground'"
-            >{{ lobbyStatuses[game.game_number].status }}</span>
+            <template v-else-if="lobbyStatuses[game.game_number]">
+              <span
+                class="text-[10px] font-medium px-1.5 py-0.5 rounded"
+                :class="lobbyStatuses[game.game_number].status === 'completed' ? 'bg-green-500/10 text-green-500'
+                  : lobbyStatuses[game.game_number].status === 'active' ? 'bg-amber-500/10 text-amber-500'
+                  : lobbyStatuses[game.game_number].status === 'launching' ? 'bg-amber-500/10 text-amber-500'
+                  : 'bg-accent text-muted-foreground'"
+              >{{ lobbyStatuses[game.game_number].status }}</span>
+              <button
+                class="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                :title="t('resetLobby')"
+                @click="resetLobby(game.game_number)"
+              >
+                <RotateCcw class="w-3.5 h-3.5" />
+              </button>
+            </template>
           </template>
 
           <!-- Stats actions -->
@@ -262,13 +406,97 @@ onMounted(() => {
           </button>
         </div>
 
-        <!-- Lobby info -->
+        <!-- Ready state -->
+        <div v-if="match.team1_captain_id && match.team2_captain_id && !game.winner_captain_id && (!lobbyStatuses[game.game_number] || ['cancelled', 'error'].includes(lobbyStatuses[game.game_number]?.status))"
+          class="border-t border-border/50 px-3 py-2 flex items-center gap-2 text-xs">
+          <span class="text-muted-foreground">{{ t('matchReadyUp') }}:</span>
+          <span class="flex items-center gap-1 px-1.5 py-0.5 rounded-full font-medium"
+            :class="isTeamReady(game.game_number, match.team1_captain_id) ? 'bg-green-500/15 text-green-500' : 'bg-accent text-muted-foreground'">
+            <Check v-if="isTeamReady(game.game_number, match.team1_captain_id)" class="w-3 h-3" />
+            {{ match.team1_name || 'Team 1' }}
+          </span>
+          <span class="flex items-center gap-1 px-1.5 py-0.5 rounded-full font-medium"
+            :class="isTeamReady(game.game_number, match.team2_captain_id) ? 'bg-green-500/15 text-green-500' : 'bg-accent text-muted-foreground'">
+            <Check v-if="isTeamReady(game.game_number, match.team2_captain_id)" class="w-3 h-3" />
+            {{ match.team2_name || 'Team 2' }}
+          </span>
+          <button
+            v-if="isCaptainInMatch"
+            class="ml-auto px-2.5 py-1 rounded-md text-xs font-medium transition-colors"
+            :class="isMyReady(game.game_number)
+              ? 'bg-green-500 text-white hover:bg-green-600'
+              : 'bg-primary text-primary-foreground hover:bg-primary/90'"
+            @click="toggleReady(game.game_number)"
+          >
+            <span class="flex items-center gap-1">
+              <Check v-if="isMyReady(game.game_number)" class="w-3 h-3" />
+              {{ isMyReady(game.game_number) ? t('matchReadyLabel') : t('matchReadyUp') }}
+            </span>
+          </button>
+        </div>
+
+        <!-- Lobby info + launch ready -->
         <div v-if="lobbyStatuses[game.game_number] && lobbyStatuses[game.game_number].status === 'waiting'" class="border-t border-border/50 px-3 py-2 flex items-center gap-3 text-xs">
           <span class="text-muted-foreground">{{ t('lobbyPassword') }}:</span>
           <code class="text-foreground font-mono bg-accent px-2 py-0.5 rounded">{{ lobbyStatuses[game.game_number].password }}</code>
-          <span class="text-muted-foreground ml-auto">
+          <span class="text-muted-foreground">
             {{ (lobbyStatuses[game.game_number].players_joined || []).length }}/{{ (lobbyStatuses[game.game_number].players_expected || []).length }}
           </span>
+          <span class="flex items-center gap-1 px-1.5 py-0.5 rounded-full font-medium text-[10px]"
+            :class="isLaunchTeamReady(game.game_number, match.team1_captain_id) ? 'bg-green-500/15 text-green-500' : 'bg-accent text-muted-foreground'">
+            <Check v-if="isLaunchTeamReady(game.game_number, match.team1_captain_id)" class="w-2.5 h-2.5" />
+            {{ match.team1_name || 'T1' }}
+          </span>
+          <span class="flex items-center gap-1 px-1.5 py-0.5 rounded-full font-medium text-[10px]"
+            :class="isLaunchTeamReady(game.game_number, match.team2_captain_id) ? 'bg-green-500/15 text-green-500' : 'bg-accent text-muted-foreground'">
+            <Check v-if="isLaunchTeamReady(game.game_number, match.team2_captain_id)" class="w-2.5 h-2.5" />
+            {{ match.team2_name || 'T2' }}
+          </span>
+          <button
+            v-if="isCaptainInMatch"
+            class="ml-auto px-2.5 py-1 rounded-md text-xs font-medium transition-colors"
+            :disabled="!allPlayersJoined(game.game_number)"
+            :class="!allPlayersJoined(game.game_number)
+              ? 'bg-accent text-muted-foreground cursor-not-allowed'
+              : isMyLaunchReady(game.game_number)
+                ? 'bg-green-500 text-white hover:bg-green-600'
+                : 'bg-primary text-primary-foreground hover:bg-primary/90'"
+            @click="toggleLaunchReady(game.game_number)"
+          >
+            <span class="flex items-center gap-1">
+              <Check v-if="isMyLaunchReady(game.game_number)" class="w-3 h-3" />
+              {{ isMyLaunchReady(game.game_number) ? t('matchReadyLabel') : t('matchLaunchReady') }}
+            </span>
+          </button>
+        </div>
+        <!-- Player join status + team IDs -->
+        <div v-if="lobbyStatuses[game.game_number] && lobbyStatuses[game.game_number].status === 'waiting' && (lobbyStatuses[game.game_number].players_expected || []).length > 0"
+          class="border-t border-border/50 px-3 py-2 flex flex-col gap-1.5">
+          <div class="flex flex-wrap gap-x-3 gap-y-1">
+            <div v-for="p in getPlayerStatuses(game.game_number)" :key="p.steamId" class="flex items-center gap-1 text-[10px]">
+              <span class="w-1.5 h-1.5 rounded-full" :class="p.joined ? (p.correctTeam ? 'bg-green-500' : 'bg-amber-500') : 'bg-muted-foreground/30'"></span>
+              <span :class="p.joined ? 'text-foreground' : 'text-muted-foreground'">{{ p.name }}</span>
+              <span v-if="p.joined && !p.correctTeam" class="text-amber-500">({{ p.actualTeam }})</span>
+            </div>
+          </div>
+          <div v-if="lobbyTeamIds[game.game_number] && (lobbyTeamIds[game.game_number].radiant || lobbyTeamIds[game.game_number].dire)" class="flex gap-3 text-[10px]">
+            <span class="flex items-center gap-1">
+              <span class="text-muted-foreground">Radiant:</span>
+              <span :class="match.team1_dota_id && lobbyTeamIds[game.game_number].radiant !== match.team1_dota_id ? 'text-red-500 font-semibold' : 'text-foreground'">
+                {{ lobbyTeamIds[game.game_number].radiant || t('noTeamSet') }}
+              </span>
+              <Check v-if="!match.team1_dota_id || lobbyTeamIds[game.game_number].radiant === match.team1_dota_id" class="w-2.5 h-2.5 text-green-500" />
+              <X v-else class="w-2.5 h-2.5 text-red-500" />
+            </span>
+            <span class="flex items-center gap-1">
+              <span class="text-muted-foreground">Dire:</span>
+              <span :class="match.team2_dota_id && lobbyTeamIds[game.game_number].dire !== match.team2_dota_id ? 'text-red-500 font-semibold' : 'text-foreground'">
+                {{ lobbyTeamIds[game.game_number].dire || t('noTeamSet') }}
+              </span>
+              <Check v-if="!match.team2_dota_id || lobbyTeamIds[game.game_number].dire === match.team2_dota_id" class="w-2.5 h-2.5 text-green-500" />
+              <X v-else class="w-2.5 h-2.5 text-red-500" />
+            </span>
+          </div>
         </div>
 
         <!-- Stats panel -->

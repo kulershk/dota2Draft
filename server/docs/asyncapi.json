@@ -87,6 +87,70 @@
         }
       }
     },
+    "match:ready": {
+      "publish": {
+        "summary": "Captain marks ready for a match game",
+        "description": "When both captains are ready, lobby is auto-created if a bot is available",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "matchId": { "type": "integer" },
+              "gameNumber": { "type": "integer" }
+            },
+            "required": ["matchId", "gameNumber"]
+          }
+        }
+      }
+    },
+    "match:unready": {
+      "publish": {
+        "summary": "Captain unreadies for a match game",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "matchId": { "type": "integer" },
+              "gameNumber": { "type": "integer" }
+            },
+            "required": ["matchId", "gameNumber"]
+          }
+        }
+      }
+    },
+    "match:getReadyState": {
+      "publish": {
+        "summary": "Request current match ready state",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "matchId": { "type": "integer" },
+              "gameNumber": { "type": "integer" }
+            },
+            "required": ["matchId", "gameNumber"]
+          }
+        }
+      }
+    },
+    "match:readyState": {
+      "subscribe": {
+        "summary": "Broadcast match ready state for a game",
+        "description": "Sent to competition room when captains ready/unready. May include lobbyCreated or noBotAvailable flags.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "matchId": { "type": "integer" },
+              "gameNumber": { "type": "integer" },
+              "readyCaptainIds": { "type": "array", "items": { "type": "integer" } },
+              "lobbyCreated": { "type": "boolean" },
+              "noBotAvailable": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
     "captains:online": {
       "subscribe": {
         "summary": "Updated list of online captain IDs",

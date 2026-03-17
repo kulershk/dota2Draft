@@ -143,6 +143,20 @@ export default function createLobbyRouter(io) {
         [matchId, gameNumber]
       )
       if (!lobby) return res.json({ lobby: null })
+      // Auto-fix stale status: if we have a match ID, lobby is completed
+      if (lobby.dota_match_id && lobby.status !== 'completed') {
+        lobby.status = 'completed'
+        await execute("UPDATE match_lobbies SET status = 'completed' WHERE id = $1", [lobby.id])
+      }
+      // Auto-fix: if bot is no longer busy and lobby is still waiting/launching, mark as error
+      if ((lobby.status === 'waiting' || lobby.status === 'launching') && lobby.bot_id) {
+        const bot = await queryOne('SELECT status FROM lobby_bots WHERE id = $1', [lobby.bot_id])
+        if (bot && bot.status === 'available') {
+          lobby.status = 'error'
+          lobby.error_message = 'Bot disconnected from lobby'
+          await execute("UPDATE match_lobbies SET status = 'error', error_message = 'Bot disconnected from lobby' WHERE id = $1", [lobby.id])
+        }
+      }
       res.json({ lobby })
     } catch (e) {
       res.status(500).json({ error: e.message })
@@ -187,6 +201,33 @@ export default function createLobbyRouter(io) {
       if (!lobby) return res.status(404).json({ error: 'No active lobby found' })
 
       await botPool.cancelLobby(lobby.id)
+      res.json({ ok: true })
+    } catch (e) {
+      res.status(400).json({ error: e.message })
+    }
+  })
+
+  router.post('/api/competitions/:compId/tournament/matches/:matchId/games/:gameNumber/lobby/reset', async (req, res) => {
+    try {
+      const compId = Number(req.params.compId)
+      const matchId = Number(req.params.matchId)
+      const gameNumber = Number(req.params.gameNumber)
+
+      const admin = await requireCompPermission(req, res, compId)
+      if (!admin) return
+
+      // Delete all lobbies for this game
+      await execute(
+        'DELETE FROM match_lobbies WHERE match_id = $1 AND game_number = $2',
+        [matchId, gameNumber]
+      )
+
+      if (io) {
+        io.to(`comp:${compId}`).emit('lobby:statusUpdate', {
+          matchId, gameNumber, status: null,
+        })
+      }
+
       res.json({ ok: true })
     } catch (e) {
       res.status(400).json({ error: e.message })

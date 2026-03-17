@@ -13,15 +13,27 @@ import (
 type SendFunc func(msgType string, data interface{}) error
 
 type Lobby struct {
-	ID              string
-	GameName        string
-	Password        string
-	ServerRegion    int
-	GameMode        int
-	AutoAssignTeams bool
-	LeagueID        int
-	DotaTvDelay     int
-	ExpectedPlayers []protocol.LobbyPlayer
+	ID                  string
+	GameName            string
+	Password            string
+	ServerRegion        int
+	GameMode            int
+	AutoAssignTeams     bool
+	LeagueID            int
+	DotaTvDelay         int
+	Cheats              bool
+	AllowSpectating     bool
+	PauseSetting        int
+	SelectionPriority   int
+	CmPick              int
+	PenaltyRadiant      int
+	PenaltyDire         int
+	SeriesType          int
+	RadiantName           string
+	DireName              string
+	ExpectedRadiantTeamId int
+	ExpectedDireTeamId    int
+	ExpectedPlayers       []protocol.LobbyPlayer
 	JoinedPlayers   []protocol.LobbyPlayer
 	Bot             *bot.Bot
 	Status          string
@@ -69,15 +81,27 @@ func (m *Manager) CreateLobby(cmd protocol.CreateLobbyCmd) error {
 	}
 
 	lobby := &Lobby{
-		ID:              cmd.LobbyID,
-		GameName:        cmd.GameName,
-		Password:        cmd.Password,
-		ServerRegion:    cmd.ServerRegion,
-		GameMode:        gameMode,
-		AutoAssignTeams: cmd.AutoAssignTeams,
-		LeagueID:        cmd.LeagueID,
-		DotaTvDelay:     cmd.DotaTvDelay,
-		ExpectedPlayers: cmd.Players,
+		ID:                cmd.LobbyID,
+		GameName:          cmd.GameName,
+		Password:          cmd.Password,
+		ServerRegion:      cmd.ServerRegion,
+		GameMode:          gameMode,
+		AutoAssignTeams:   cmd.AutoAssignTeams,
+		LeagueID:          cmd.LeagueID,
+		DotaTvDelay:       cmd.DotaTvDelay,
+		Cheats:            cmd.Cheats,
+		AllowSpectating:   cmd.AllowSpectating,
+		PauseSetting:      cmd.PauseSetting,
+		SelectionPriority: cmd.SelectionPriority,
+		CmPick:            cmd.CmPick,
+		PenaltyRadiant:    cmd.PenaltyRadiant,
+		PenaltyDire:       cmd.PenaltyDire,
+		SeriesType:        cmd.SeriesType,
+		RadiantName:           cmd.RadiantName,
+		DireName:              cmd.DireName,
+		ExpectedRadiantTeamId: cmd.ExpectedRadiantTeamId,
+		ExpectedDireTeamId:    cmd.ExpectedDireTeamId,
+		ExpectedPlayers:       cmd.Players,
 		Bot:             b,
 		Status:          "creating",
 		cancel:          cancel,
@@ -101,13 +125,29 @@ func (m *Manager) runLobby(ctx context.Context, lobby *Lobby) {
 		log.Printf("[Lobby %s] %s", lobby.ID, msg)
 	}
 
-	// Set active lobby ID and expected team assignments on bot
+	// Set active lobby ID, expected team assignments, and expected team IDs on bot
 	lobby.Bot.SetActiveLobbyID(lobby.ID)
 	lobby.Bot.SetExpectedTeams(lobby.ExpectedPlayers)
+	lobby.Bot.SetExpectedTeamIds(lobby.ExpectedRadiantTeamId, lobby.ExpectedDireTeamId)
 
 	botLog(fmt.Sprintf("Creating lobby '%s' (region: %d, mode: %d)", lobby.GameName, lobby.ServerRegion, lobby.GameMode))
 
-	err := lobby.Bot.CreatePracticeLobby(lobby.GameName, lobby.Password, lobby.ServerRegion, lobby.GameMode, lobby.LeagueID, lobby.DotaTvDelay)
+	err := lobby.Bot.CreatePracticeLobby(lobby.GameName, lobby.Password, bot.LobbyOptions{
+		ServerRegion:      lobby.ServerRegion,
+		GameMode:          lobby.GameMode,
+		LeagueId:          lobby.LeagueID,
+		DotaTvDelay:       lobby.DotaTvDelay,
+		Cheats:            lobby.Cheats,
+		AllowSpectating:   lobby.AllowSpectating,
+		PauseSetting:      lobby.PauseSetting,
+		SelectionPriority: lobby.SelectionPriority,
+		CmPick:            lobby.CmPick,
+		PenaltyRadiant:    lobby.PenaltyRadiant,
+		PenaltyDire:       lobby.PenaltyDire,
+		SeriesType:        lobby.SeriesType,
+		RadiantName:       lobby.RadiantName,
+		DireName:          lobby.DireName,
+	})
 	if err != nil {
 		botLog(fmt.Sprintf("Failed to create lobby: %v", err))
 		m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobby.ID, Error: err.Error()})
@@ -137,12 +177,12 @@ func (m *Manager) runLobby(ctx context.Context, lobby *Lobby) {
 	botLog("Lobby ready. Waiting for players to join...")
 	botLog("(Lobby state updates are tracked via GC events)")
 
-	// Wait for cancel or timeout (45 min max)
-	// The bot's event loop handles player joins and game_started via ClientStateChanged
+	// Wait for game start, cancel, or timeout (45 min max)
 	select {
+	case <-lobby.Bot.GameStartedCh():
+		botLog("Game started — leaving lobby and freeing bot")
 	case <-ctx.Done():
 		botLog("Lobby cancelled")
-		return
 	case <-time.After(45 * time.Minute):
 		botLog("Lobby timed out after 45 minutes")
 		m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobby.ID, Error: "Lobby timed out"})
@@ -194,6 +234,31 @@ func (m *Manager) ForceLaunch(lobbyID string) error {
 	}
 
 	log.Printf("[Lobby %s] Force launching", lobbyID)
+
+	// Validate team IDs — both sides must have a team selected
+	detRadiant, detDire := lobby.Bot.GetDetectedTeamIds()
+	if detRadiant == 0 {
+		errMsg := "Radiant has no team selected"
+		m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobbyID, Error: errMsg})
+		return fmt.Errorf(errMsg)
+	}
+	if detDire == 0 {
+		errMsg := "Dire has no team selected"
+		m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobbyID, Error: errMsg})
+		return fmt.Errorf(errMsg)
+	}
+	// Validate against expected team IDs (saved from first game)
+	if lobby.ExpectedRadiantTeamId != 0 && detRadiant != lobby.ExpectedRadiantTeamId {
+		errMsg := fmt.Sprintf("Wrong Radiant team: expected %d, got %d", lobby.ExpectedRadiantTeamId, detRadiant)
+		m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobbyID, Error: errMsg})
+		return fmt.Errorf(errMsg)
+	}
+	if lobby.ExpectedDireTeamId != 0 && detDire != lobby.ExpectedDireTeamId {
+		errMsg := fmt.Sprintf("Wrong Dire team: expected %d, got %d", lobby.ExpectedDireTeamId, detDire)
+		m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobbyID, Error: errMsg})
+		return fmt.Errorf(errMsg)
+	}
+
 	m.send("bot_log", protocol.BotLogEvent{
 		BotID:   lobby.Bot.ID,
 		Message: "Force launching game...",

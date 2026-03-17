@@ -1,0 +1,9 @@
+@echo off
+echo Stopping all containers...
+cd /d "%~dp0"
+docker compose down
+echo Rebuilding lobbybot...
+docker compose build --no-cache draft-lobbybot
+echo Starting all containers...
+docker compose up -d
+echo Done.

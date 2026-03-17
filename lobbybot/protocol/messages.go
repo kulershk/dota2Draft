@@ -41,15 +41,27 @@ type LobbyPlayer struct {
 }
 
 type CreateLobbyCmd struct {
-	LobbyID          string        `json:"lobbyId"`
-	GameName         string        `json:"gameName"`
-	Password         string        `json:"password"`
-	ServerRegion     int           `json:"serverRegion"`
-	GameMode         int           `json:"gameMode"`
-	AutoAssignTeams  bool          `json:"autoAssignTeams"`
-	LeagueID         int           `json:"leagueId"`
-	DotaTvDelay      int           `json:"dotaTvDelay"`
-	Players          []LobbyPlayer `json:"players"`
+	LobbyID             string        `json:"lobbyId"`
+	GameName            string        `json:"gameName"`
+	Password            string        `json:"password"`
+	ServerRegion        int           `json:"serverRegion"`
+	GameMode            int           `json:"gameMode"`
+	AutoAssignTeams     bool          `json:"autoAssignTeams"`
+	LeagueID            int           `json:"leagueId"`
+	DotaTvDelay         int           `json:"dotaTvDelay"`
+	Cheats              bool          `json:"cheats"`
+	AllowSpectating     bool          `json:"allowSpectating"`
+	PauseSetting        int           `json:"pauseSetting"`
+	SelectionPriority   int           `json:"selectionPriority"`
+	CmPick              int           `json:"cmPick"`
+	PenaltyRadiant      int           `json:"penaltyRadiant"`
+	PenaltyDire         int           `json:"penaltyDire"`
+	SeriesType          int           `json:"seriesType"`
+	RadiantName         string        `json:"radiantName"`
+	DireName            string        `json:"direName"`
+	ExpectedRadiantTeamId int         `json:"expectedRadiantTeamId"`
+	ExpectedDireTeamId    int         `json:"expectedDireTeamId"`
+	Players             []LobbyPlayer `json:"players"`
 }
 
 type CancelLobbyCmd struct {
@@ -104,6 +116,12 @@ type PlayerLeftEvent struct {
 type GameStartedEvent struct {
 	LobbyID string `json:"lobbyId"`
 	MatchID string `json:"matchId"`
+}
+
+type LobbyTeamIdsEvent struct {
+	LobbyID        string `json:"lobbyId"`
+	RadiantTeamId  int    `json:"radiantTeamId"`
+	DireTeamId     int    `json:"direTeamId"`
 }
 
 type LobbyErrorEvent struct {

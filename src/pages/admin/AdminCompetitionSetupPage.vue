@@ -20,6 +20,7 @@ const store = useDraftStore()
 
 const compId = computed(() => Number(route.params.compId))
 
+const activeTab = ref('settings')
 const showPromote = ref(false)
 const showEditCaptain = ref(false)
 const showResetConfirm = ref(false)
@@ -62,6 +63,14 @@ const localSettings = reactive({
   lobbyAutoAssignTeams: true,
   lobbyLeagueId: 0,
   lobbyDotaTvDelay: 1,
+  lobbyCheats: false,
+  lobbyAllowSpectating: true,
+  lobbyPauseSetting: 0,
+  lobbySelectionPriority: 0,
+  lobbyCmPick: 0,
+  lobbyPenaltyRadiant: 0,
+  lobbyPenaltyDire: 0,
+  lobbySeriesType: 0,
 })
 
 const showFantasyScoring = ref(false)
@@ -325,6 +334,20 @@ async function deleteStream(id: number) {
       </div>
     </div>
 
+    <!-- Tabs -->
+    <div class="flex gap-1 border-b border-border overflow-x-auto">
+      <button v-for="tab in ['settings', 'lobby', 'fantasy', 'captains', 'other']" :key="tab"
+        class="px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px"
+        :class="activeTab === tab ? 'text-primary border-primary' : 'text-muted-foreground border-transparent hover:text-foreground hover:border-border'"
+        @click="activeTab = tab"
+      >
+        {{ t('tab_' + tab) }}
+      </button>
+    </div>
+
+    <!-- Tab: Settings -->
+    <template v-if="activeTab === 'settings'">
+
     <!-- Competition Info -->
     <div class="card">
       <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
@@ -429,6 +452,18 @@ async function deleteStream(id: number) {
       </div>
     </div>
 
+    <!-- Save -->
+    <div class="flex justify-end">
+      <button class="btn-outline text-sm" :disabled="saving" @click="saveAll">
+        {{ saving ? t('saving') : t('saveSettings') }}
+      </button>
+    </div>
+
+    </template>
+
+    <!-- Tab: Lobby -->
+    <template v-if="activeTab === 'lobby'">
+
     <!-- Lobby Settings -->
     <div class="card">
       <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
@@ -439,13 +474,19 @@ async function deleteStream(id: number) {
         <div class="flex flex-col gap-1.5">
           <label class="label-text">{{ t('lobbyGameMode') }}</label>
           <select class="input-field" :value="localSettings.lobbyGameMode" @change="localSettings.lobbyGameMode = Number(($event.target as HTMLSelectElement).value)">
-            <option :value="2">{{ t('gameModeCM') }}</option>
             <option :value="1">{{ t('gameModeAP') }}</option>
-            <option :value="22">{{ t('gameModeAD') }}</option>
+            <option :value="2">{{ t('gameModeCM') }}</option>
             <option :value="3">{{ t('gameModeRD') }}</option>
             <option :value="4">{{ t('gameModeSD') }}</option>
             <option :value="5">{{ t('gameModeAR') }}</option>
+            <option :value="8">{{ t('gameModeReverseCM') }}</option>
+            <option :value="11">{{ t('gameModeMO') }}</option>
+            <option :value="12">{{ t('gameModeLP') }}</option>
             <option :value="16">{{ t('gameModeCD') }}</option>
+            <option :value="18">{{ t('gameModeABD') }}</option>
+            <option :value="20">{{ t('gameModeARDM') }}</option>
+            <option :value="21">{{ t('gameMode1v1') }}</option>
+            <option :value="22">{{ t('gameModeAD') }}</option>
             <option :value="23">{{ t('gameModeTurbo') }}</option>
           </select>
         </div>
@@ -477,8 +518,65 @@ async function deleteStream(id: number) {
           <span class="text-sm text-foreground">{{ t('lobbyAutoAssignTeams') }}</span>
         </label>
         <p class="text-xs text-muted-foreground">{{ t('lobbyAutoAssignTeamsHint') }}</p>
+        <div class="flex flex-col gap-1.5">
+          <label class="label-text">{{ t('lobbySelectionPriority') }}</label>
+          <select class="input-field" :value="localSettings.lobbySelectionPriority" @change="localSettings.lobbySelectionPriority = Number(($event.target as HTMLSelectElement).value)">
+            <option :value="0">{{ t('selectionPriorityManual') }}</option>
+            <option :value="1">{{ t('selectionPriorityAutomatic') }}</option>
+          </select>
+          <p class="text-xs text-muted-foreground">{{ t('lobbySelectionPriorityHint') }}</p>
+        </div>
+        <div v-if="localSettings.lobbySelectionPriority === 0" class="flex flex-col gap-1.5">
+          <label class="label-text">{{ t('lobbyCmPick') }}</label>
+          <select class="input-field" :value="localSettings.lobbyCmPick" @change="localSettings.lobbyCmPick = Number(($event.target as HTMLSelectElement).value)">
+            <option :value="0">{{ t('cmPickRandom') }}</option>
+            <option :value="1">{{ t('cmPickRadiant') }}</option>
+            <option :value="2">{{ t('cmPickDire') }}</option>
+          </select>
+        </div>
+        <div class="flex flex-col md:flex-row gap-4">
+          <InputGroup class="flex-1" :label="t('lobbyPenaltyRadiant')" :model-value="String(localSettings.lobbyPenaltyRadiant)" placeholder="0" @update:model-value="localSettings.lobbyPenaltyRadiant = Number($event)" />
+          <InputGroup class="flex-1" :label="t('lobbyPenaltyDire')" :model-value="String(localSettings.lobbyPenaltyDire)" placeholder="0" @update:model-value="localSettings.lobbyPenaltyDire = Number($event)" />
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <label class="label-text">{{ t('lobbyPauseSetting') }}</label>
+          <select class="input-field" :value="localSettings.lobbyPauseSetting" @change="localSettings.lobbyPauseSetting = Number(($event.target as HTMLSelectElement).value)">
+            <option :value="0">{{ t('pauseUnlimited') }}</option>
+            <option :value="1">{{ t('pauseLimited') }}</option>
+            <option :value="2">{{ t('pauseDisabled') }}</option>
+          </select>
+        </div>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" class="w-4 h-4 accent-primary" v-model="localSettings.lobbyAllowSpectating" />
+          <span class="text-sm text-foreground">{{ t('lobbyAllowSpectating') }}</span>
+        </label>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" class="w-4 h-4 accent-primary" v-model="localSettings.lobbyCheats" />
+          <span class="text-sm text-foreground">{{ t('lobbyCheats') }}</span>
+        </label>
+        <div class="flex flex-col gap-1.5">
+          <label class="label-text">{{ t('lobbySeriesType') }}</label>
+          <select class="input-field" :value="localSettings.lobbySeriesType" @change="localSettings.lobbySeriesType = Number(($event.target as HTMLSelectElement).value)">
+            <option :value="0">{{ t('seriesNone') }}</option>
+            <option :value="1">{{ t('seriesBo2') }}</option>
+            <option :value="2">{{ t('seriesBo3') }}</option>
+            <option :value="3">{{ t('seriesBo5') }}</option>
+          </select>
+        </div>
       </div>
     </div>
+
+    <!-- Save -->
+    <div class="flex justify-end">
+      <button class="btn-outline text-sm" :disabled="saving" @click="saveAll">
+        {{ saving ? t('saving') : t('saveSettings') }}
+      </button>
+    </div>
+
+    </template>
+
+    <!-- Tab: Fantasy -->
+    <template v-if="activeTab === 'fantasy'">
 
     <!-- Fantasy Scoring -->
     <div class="card">
@@ -553,6 +651,12 @@ async function deleteStream(id: number) {
       </button>
     </div>
 
+    </template>
+
+    <!-- Tab: Captains & Participants -->
+    <!-- Tab: Other -->
+    <template v-if="activeTab === 'other'">
+
     <!-- Official Streams -->
     <div class="card">
       <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-3 border-b border-border">
@@ -603,6 +707,11 @@ async function deleteStream(id: number) {
         </div>
       </div>
     </div>
+
+    </template>
+
+    <!-- Tab: Captains & Participants -->
+    <template v-if="activeTab === 'captains'">
 
     <!-- Captains -->
     <div class="card">
@@ -758,6 +867,8 @@ async function deleteStream(id: number) {
         {{ t('startDraft') }}
       </button>
     </div>
+
+    </template>
 
     <!-- Promote Modal -->
     <ModalOverlay :show="showPromote" @close="showPromote = false; promoteSearchQuery = ''">
