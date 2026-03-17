@@ -445,14 +445,31 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 		}
 	}
 
-	// Detect game started
+	// Detect match ID assigned (SERVERSETUP — coin toss phase)
 	if matchID != 0 && (oldLobby == nil || oldLobby.GetMatchId() == 0) {
-		b.log(fmt.Sprintf("Game started! Match ID: %d", matchID))
+		b.log(fmt.Sprintf("Match ID assigned: %d (state: %s)", matchID, newLobby.GetState().String()))
 		b.send("game_started", protocol.GameStartedEvent{
 			LobbyID: b.activeLobbyID,
 			MatchID: fmt.Sprintf("%d", matchID),
 		})
-		// Signal runLobby to exit and free the bot
+	}
+
+	// Auto-launch again after coin toss (SERVERSETUP with match ID → need to start game)
+	lobbyState := newLobby.GetState()
+	oldState := gcccm.CSODOTALobby_UI
+	if oldLobby != nil {
+		oldState = oldLobby.GetState()
+	}
+	if lobbyState == gcccm.CSODOTALobby_SERVERSETUP && oldState != gcccm.CSODOTALobby_SERVERSETUP && matchID != 0 {
+		b.log("Lobby in SERVERSETUP with match ID — launching game after coin toss...")
+		if b.dotaClient != nil {
+			b.dotaClient.LaunchLobby()
+		}
+	}
+
+	// Only signal bot to leave when game is actually running
+	if lobbyState == gcccm.CSODOTALobby_RUN && (oldLobby == nil || oldLobby.GetState() != gcccm.CSODOTALobby_RUN) {
+		b.log("Game is now running — leaving lobby")
 		select {
 		case b.gameStartedCh <- struct{}{}:
 		default:

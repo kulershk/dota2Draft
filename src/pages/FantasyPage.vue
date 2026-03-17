@@ -242,10 +242,6 @@ async function selectPlayer(playerId: number) {
   const currentPicks = { ...getStagePicks(pickStageId.value) }
   currentPicks[pickRole.value] = playerId
 
-  // Only save if all 5 roles are filled, otherwise update local state
-  const roles = ['carry', 'mid', 'offlane', 'pos4', 'pos5']
-  const allFilled = roles.every(r => currentPicks[r])
-
   // Update local state immediately
   if (!store.fantasyData.value.myPicks[pickStageId.value]) {
     store.fantasyData.value.myPicks[pickStageId.value] = {}
@@ -253,8 +249,25 @@ async function selectPlayer(playerId: number) {
   store.fantasyData.value.myPicks[pickStageId.value][pickRole.value] = playerId
   showPickModal.value = false
 
-  if (allFilled) {
-    await api.saveFantasyPicks(cId, pickStageId.value, currentPicks)
+  // Save to server immediately (partial picks are OK)
+  try {
+    await api.saveFantasyPick(cId, pickStageId.value, pickRole.value, playerId)
+  } catch (e: any) {
+    console.error('Failed to save pick:', e.message)
+  }
+}
+
+async function clearPick(stageId: number, role: string) {
+  const cId = compId.value
+  if (!cId) return
+  // Update local state
+  if (store.fantasyData.value.myPicks[stageId]) {
+    delete store.fantasyData.value.myPicks[stageId][role]
+  }
+  try {
+    await api.clearFantasyPick(cId, stageId, role)
+  } catch (e: any) {
+    console.error('Failed to clear pick:', e.message)
   }
 }
 
@@ -435,6 +448,11 @@ function matchLabel(match: any) {
                   class="text-[10px] text-primary hover:underline"
                   @click="openPick(stage.id, role)"
                 >{{ t('changePick') }}</button>
+                <button
+                  v-if="stage.status === 'pending'"
+                  class="text-[10px] text-destructive hover:underline"
+                  @click="clearPick(stage.id, role)"
+                >{{ t('clear') }}</button>
                 <Lock v-else class="w-3 h-3 text-muted-foreground" />
               </div>
               <button

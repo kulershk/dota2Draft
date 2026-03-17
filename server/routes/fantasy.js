@@ -343,6 +343,87 @@ export default function createFantasyRouter(io) {
     }
   })
 
+  // Save a single fantasy pick
+  router.put('/api/competitions/:compId/fantasy/stages/:stageId/pick', async (req, res) => {
+    try {
+      const compId = Number(req.params.compId)
+      const stageId = Number(req.params.stageId)
+      if (!compId || !stageId) return res.status(400).json({ error: 'Invalid IDs' })
+      const player = await getAuthPlayer(req)
+      if (!player) return res.status(401).json({ error: 'Not authenticated' })
+
+      const stage = await queryOne(
+        'SELECT * FROM fantasy_stages WHERE id = $1 AND competition_id = $2',
+        [stageId, compId]
+      )
+      if (!stage) return res.status(404).json({ error: 'Stage not found' })
+      if (stage.status !== 'pending') {
+        return res.status(400).json({ error: 'Picks are locked for this stage' })
+      }
+
+      const { role, playerId } = req.body
+      const roles = ['carry', 'mid', 'offlane', 'pos4', 'pos5']
+      if (!roles.includes(role)) return res.status(400).json({ error: 'Invalid role' })
+      if (!playerId) return res.status(400).json({ error: 'Player ID required' })
+
+      // Verify player belongs to this competition
+      const compPlayer = await queryOne(
+        'SELECT player_id FROM competition_players WHERE competition_id = $1 AND player_id = $2',
+        [compId, playerId]
+      )
+      if (!compPlayer) return res.status(400).json({ error: 'Player not in this competition' })
+
+      // Check player isn't already picked for another role in this stage
+      const existing = await queryOne(
+        'SELECT role FROM fantasy_picks WHERE fantasy_stage_id = $1 AND player_id = $2 AND pick_player_id = $3 AND role != $4',
+        [stageId, player.id, playerId, role]
+      )
+      if (existing) return res.status(400).json({ error: `Player already picked as ${existing.role}` })
+
+      await execute(`
+        INSERT INTO fantasy_picks (fantasy_stage_id, player_id, role, pick_player_id)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (fantasy_stage_id, player_id, role) DO UPDATE SET pick_player_id = $4
+      `, [stageId, player.id, role, playerId])
+
+      res.json({ ok: true })
+    } catch (e) {
+      console.error('Fantasy save pick error:', e.message)
+      res.status(500).json({ error: 'Internal error' })
+    }
+  })
+
+  // Clear a single fantasy pick
+  router.delete('/api/competitions/:compId/fantasy/stages/:stageId/pick/:role', async (req, res) => {
+    try {
+      const compId = Number(req.params.compId)
+      const stageId = Number(req.params.stageId)
+      const role = req.params.role
+      if (!compId || !stageId) return res.status(400).json({ error: 'Invalid IDs' })
+      const player = await getAuthPlayer(req)
+      if (!player) return res.status(401).json({ error: 'Not authenticated' })
+
+      const stage = await queryOne(
+        'SELECT * FROM fantasy_stages WHERE id = $1 AND competition_id = $2',
+        [stageId, compId]
+      )
+      if (!stage) return res.status(404).json({ error: 'Stage not found' })
+      if (stage.status !== 'pending') {
+        return res.status(400).json({ error: 'Picks are locked for this stage' })
+      }
+
+      await execute(
+        'DELETE FROM fantasy_picks WHERE fantasy_stage_id = $1 AND player_id = $2 AND role = $3',
+        [stageId, player.id, role]
+      )
+
+      res.json({ ok: true })
+    } catch (e) {
+      console.error('Fantasy clear pick error:', e.message)
+      res.status(500).json({ error: 'Internal error' })
+    }
+  })
+
   // Get top picks for a stage (all players ranked by points per role)
   router.get('/api/competitions/:compId/fantasy/stages/:stageId/top-picks', async (req, res) => {
     try {
