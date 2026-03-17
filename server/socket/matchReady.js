@@ -1,4 +1,4 @@
-import { queryOne, query } from '../db.js'
+import { queryOne, query, execute } from '../db.js'
 import {
   socketPlayers, socketCompetitions,
   getMatchReadyCaptainIds, setMatchCaptainReady, setMatchCaptainUnready, clearMatchReady,
@@ -24,6 +24,19 @@ async function getMatchCaptain(socketId, compId, matchId) {
   return { captain, match }
 }
 
+async function isNextGame(matchId, gameNumber) {
+  // Check that all previous games have a winner
+  const prevGames = await query(
+    'SELECT game_number FROM match_games WHERE match_id = $1 AND game_number < $2 AND winner_captain_id IS NOT NULL',
+    [matchId, gameNumber]
+  )
+  // All games from 1 to gameNumber-1 must have winners
+  for (let i = 1; i < gameNumber; i++) {
+    if (!prevGames.some(g => g.game_number === i)) return false
+  }
+  return true
+}
+
 export function registerMatchReadyHandlers(socket, io) {
   // Phase 1: Ready up to create lobby
   socket.on('match:ready', async ({ matchId, gameNumber }) => {
@@ -33,6 +46,9 @@ export function registerMatchReadyHandlers(socket, io) {
     const result = await getMatchCaptain(socket.id, compId, matchId)
     if (!result) return
     const { captain, match } = result
+
+    // Can only ready for the next unplayed game
+    if (!(await isNextGame(matchId, gameNumber))) return
 
     setMatchCaptainReady(matchId, gameNumber, captain.id)
 

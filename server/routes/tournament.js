@@ -245,12 +245,25 @@ export default function createTournamentRouter(io) {
 
     if (games && Array.isArray(games)) {
       for (const game of games) {
+        const newDotabuffId = game.dotabuff_id || null
+
+        // If dotabuff_id is being cleared, delete associated stats
+        if (!newDotabuffId) {
+          const existing = await queryOne(
+            'SELECT id, dotabuff_id FROM match_games WHERE match_id = $1 AND game_number = $2',
+            [matchId, game.game_number]
+          )
+          if (existing && existing.dotabuff_id) {
+            await execute('DELETE FROM match_game_player_stats WHERE match_game_id = $1', [existing.id])
+          }
+        }
+
         await execute(`
           INSERT INTO match_games (match_id, game_number, winner_captain_id, dotabuff_id, duration_minutes)
           VALUES ($1, $2, $3, $4, $5)
           ON CONFLICT (match_id, game_number) DO UPDATE SET
             winner_captain_id = $3, dotabuff_id = $4, duration_minutes = $5
-        `, [matchId, game.game_number, game.winner_captain_id || null, game.dotabuff_id || null, game.duration_minutes || null])
+        `, [matchId, game.game_number, game.winner_captain_id || null, newDotabuffId, game.duration_minutes || null])
       }
     }
 

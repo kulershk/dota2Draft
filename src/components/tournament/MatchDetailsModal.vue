@@ -259,7 +259,7 @@ function winnerName(game: any) {
       <!-- Match Ready Section -->
       <div v-if="isCaptainInMatch && bothTeamsAssigned && match.status !== 'completed'" class="flex flex-col gap-3">
         <div v-for="g in allGames" :key="'ready-' + g.game_number" class="flex flex-col gap-2">
-          <template v-if="!g.winner_captain_id">
+          <template v-if="!g.winner_captain_id && g.game_number === nextGameNumber">
             <div class="flex items-center justify-between p-3 rounded-lg border border-border bg-accent/20">
               <div class="flex items-center gap-3">
                 <span class="text-xs font-semibold text-muted-foreground">{{ t('game') }} {{ g.game_number }}</span>

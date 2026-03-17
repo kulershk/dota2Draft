@@ -60,7 +60,7 @@ router.get('/api/players/:id/profile', async (req, res) => {
     JOIN competitions c ON c.id = cp.competition_id
     LEFT JOIN captains cap ON cap.player_id = $1 AND cap.competition_id = c.id
     LEFT JOIN captains drafted_cap ON drafted_cap.id = cp.drafted_by
-    WHERE cp.player_id = $1
+    WHERE cp.player_id = $1 AND c.is_public = true
     ORDER BY c.created_at DESC
   `, [playerId])
 
@@ -79,7 +79,7 @@ router.get('/api/players/:id/profile', async (req, res) => {
       LEFT JOIN LATERAL (
         SELECT c2.tournament_state FROM competitions c2 WHERE c2.id = cap.competition_id
       ) ts ON true
-      WHERE cap.id = ANY($1::int[])
+      WHERE cap.id = ANY($1::int[]) AND c.is_public = true
     `, [captainIds])
   }
 

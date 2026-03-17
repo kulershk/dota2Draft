@@ -46,6 +46,12 @@ onMounted(() => {
 
 const score1 = computed(() => games.value.filter(g => g.winner_captain_id === props.match.team1_captain_id).length)
 const score2 = computed(() => games.value.filter(g => g.winner_captain_id === props.match.team2_captain_id).length)
+const nextGameNumber = computed(() => {
+  for (const g of games.value) {
+    if (!g.winner_captain_id) return g.game_number
+  }
+  return null
+})
 const compId = store.currentCompetitionId
 
 function setGameWinner(idx: number, captainId: number | null) {
@@ -356,7 +362,7 @@ onUnmounted(() => {
           />
 
           <!-- Lobby actions -->
-          <template v-if="store.isAdmin && match.team1_captain_id && match.team2_captain_id">
+          <template v-if="store.isAdmin && match.team1_captain_id && match.team2_captain_id && game.game_number === nextGameNumber">
             <button
               v-if="!lobbyStatuses[game.game_number] || lobbyStatuses[game.game_number]?.status === 'cancelled' || lobbyStatuses[game.game_number]?.status === 'error'"
               class="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
@@ -423,7 +429,7 @@ onUnmounted(() => {
         </div>
 
         <!-- Ready state -->
-        <div v-if="match.team1_captain_id && match.team2_captain_id && !game.winner_captain_id && (!lobbyStatuses[game.game_number] || ['cancelled', 'error'].includes(lobbyStatuses[game.game_number]?.status))"
+        <div v-if="match.team1_captain_id && match.team2_captain_id && !game.winner_captain_id && game.game_number === nextGameNumber && (!lobbyStatuses[game.game_number] || ['cancelled', 'error'].includes(lobbyStatuses[game.game_number]?.status))"
           class="border-t border-border/50 px-3 py-2 flex items-center gap-2 text-xs">
           <span class="text-muted-foreground">{{ t('matchReadyUp') }}:</span>
           <span class="flex items-center gap-1 px-1.5 py-0.5 rounded-full font-medium"
