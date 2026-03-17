@@ -758,6 +758,8 @@ export default {
   matchReadyUp: 'Gatavs',
   matchReadyLabel: 'Gatavs!',
   matchLaunchReady: 'Sākt',
+  matchReadyDesc: 'Abiem kapteiņiem jāapstiprina gatavība, lai izveidotu spēles telpu.',
+  lobbyLaunching: 'Palaiž...',
   resetLobby: 'Atiestatīt lobiju',
   forceLaunchConfirm: 'Vai tiešām vēlaties piespiedu kārtā sākt spēli? Pārliecinieties, ka visi nosacījumi ir izpildīti.',
   createLobbyConfirm: 'Tiks izveidota Dota 2 spēles telpa un uzaicināti visi paredzētie spēlētāji.',

@@ -762,6 +762,8 @@ export default {
   matchReadyUp: 'Ready',
   matchReadyLabel: 'Ready!',
   matchLaunchReady: 'Launch',
+  matchReadyDesc: 'Both captains must ready up to create the lobby.',
+  lobbyLaunching: 'Launching...',
   resetLobby: 'Reset Lobby',
   forceLaunchConfirm: 'Are you sure you want to force launch this game? Check that all requirements are met before proceeding.',
   createLobbyConfirm: 'This will create a Dota 2 lobby for this game and invite all expected players.',

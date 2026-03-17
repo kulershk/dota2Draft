@@ -758,6 +758,8 @@ export default {
   matchReadyUp: 'Pasiruošęs',
   matchReadyLabel: 'Pasiruošęs!',
   matchLaunchReady: 'Paleisti',
+  matchReadyDesc: 'Abu kapitonai turi patvirtinti pasirengimą, kad sukurtų kambarį.',
+  lobbyLaunching: 'Paleidžiama...',
   resetLobby: 'Atstatyti lobį',
   forceLaunchConfirm: 'Ar tikrai norite priverstinai paleisti žaidimą? Įsitikinkite, kad visi reikalavimai yra įvykdyti.',
   createLobbyConfirm: 'Bus sukurtas Dota 2 žaidimo kambarys ir pakviesti visi numatyti žaidėjai.',

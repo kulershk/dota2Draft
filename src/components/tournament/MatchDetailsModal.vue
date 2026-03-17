@@ -258,44 +258,117 @@ function winnerName(game: any) {
     <div class="px-7 py-5 flex flex-col gap-3 max-h-[65vh] overflow-y-auto">
       <!-- Match Ready Section -->
       <div v-if="isCaptainInMatch && bothTeamsAssigned && match.status !== 'completed'" class="flex flex-col gap-3">
-        <div v-for="g in allGames" :key="'ready-' + g.game_number" class="flex flex-col gap-2">
-          <template v-if="!g.winner_captain_id && g.game_number === nextGameNumber">
-            <div class="flex items-center justify-between p-3 rounded-lg border border-border bg-accent/20">
-              <div class="flex items-center gap-3">
-                <span class="text-xs font-semibold text-muted-foreground">{{ t('game') }} {{ g.game_number }}</span>
+        <div v-for="g in allGames" :key="'ready-' + g.game_number">
+          <template v-if="!g.dotabuff_id && g.game_number === nextGameNumber">
+            <div class="rounded-lg border border-border overflow-hidden">
+              <!-- Game header -->
+              <div class="flex items-center justify-between px-4 py-3 bg-accent/30 border-b border-border">
                 <div class="flex items-center gap-2">
-                  <span class="text-xs px-2 py-0.5 rounded-full font-medium"
+                  <Gamepad2 class="w-4 h-4 text-muted-foreground" />
+                  <span class="text-sm font-semibold text-foreground">{{ t('game') }} {{ g.game_number }}</span>
+                </div>
+                <span v-if="lobbyStatuses[g.game_number]?.status === 'creating'" class="text-xs text-muted-foreground animate-pulse">{{ t('lobbyCreating') }}</span>
+                <span v-else-if="lobbyStatuses[g.game_number]?.status === 'active'" class="text-xs font-medium text-green-500">{{ t('lobbyActive') }}</span>
+                <span v-else-if="lobbyStatuses[g.game_number]?.status === 'launching'" class="text-xs font-medium text-amber-500">{{ t('lobbyLaunching') }}</span>
+              </div>
+
+              <!-- Phase 1: Ready check to create lobby -->
+              <div v-if="!lobbyStatuses[g.game_number] || ['cancelled', 'error', 'completed'].includes(lobbyStatuses[g.game_number]?.status)" class="p-4 flex flex-col items-center gap-3">
+                <p class="text-xs text-muted-foreground text-center">{{ t('matchReadyDesc') }}</p>
+                <div class="flex items-center gap-3">
+                  <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium"
                     :class="(matchReadyState[g.game_number] || []).includes(match.team1_captain_id) ? 'bg-green-500/15 text-green-500' : 'bg-accent text-muted-foreground'">
+                    <Check v-if="(matchReadyState[g.game_number] || []).includes(match.team1_captain_id)" class="w-3 h-3" />
                     {{ match.team1_name || 'Team 1' }}
-                  </span>
-                  <span class="text-xs px-2 py-0.5 rounded-full font-medium"
+                  </div>
+                  <span class="text-muted-foreground text-xs">{{ t('vs') }}</span>
+                  <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium"
                     :class="(matchReadyState[g.game_number] || []).includes(match.team2_captain_id) ? 'bg-green-500/15 text-green-500' : 'bg-accent text-muted-foreground'">
+                    <Check v-if="(matchReadyState[g.game_number] || []).includes(match.team2_captain_id)" class="w-3 h-3" />
                     {{ match.team2_name || 'Team 2' }}
+                  </div>
+                </div>
+                <span v-if="noBotAvailable && bothCaptainsReady(g.game_number)" class="text-xs text-amber-500">{{ t('noBotAvailable') }}</span>
+                <button
+                  class="w-full max-w-xs px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
+                  :class="isReady(g.game_number)
+                    ? 'bg-green-500 text-white hover:bg-green-600'
+                    : 'bg-primary text-primary-foreground hover:bg-primary/90'"
+                  @click="toggleReady(g.game_number)"
+                >
+                  <span class="flex items-center justify-center gap-2">
+                    <Check v-if="isReady(g.game_number)" class="w-4 h-4" />
+                    {{ isReady(g.game_number) ? t('matchReadyLabel') : t('matchReadyUp') }}
+                  </span>
+                </button>
+              </div>
+
+              <!-- Phase 2: Lobby active — waiting for players + launch -->
+              <div v-else-if="lobbyStatuses[g.game_number]?.status === 'waiting'" class="flex flex-col">
+                <!-- Lobby password + player count -->
+                <div class="px-4 py-3 flex items-center justify-between border-b border-border/30">
+                  <div class="flex items-center gap-2 text-sm">
+                    <span class="text-muted-foreground">{{ t('lobbyPassword') }}:</span>
+                    <code class="font-mono font-bold bg-accent px-2 py-0.5 rounded text-foreground">{{ lobbyStatuses[g.game_number].password }}</code>
+                  </div>
+                  <span class="text-xs font-medium" :class="allPlayersJoined(g.game_number) ? 'text-green-500' : 'text-muted-foreground'">
+                    {{ (lobbyStatuses[g.game_number].players_joined || []).length }}/{{ (lobbyStatuses[g.game_number].players_expected || []).length }} {{ t('players') }}
                   </span>
                 </div>
-              </div>
-              <div class="flex items-center gap-2">
-                <!-- Phase 2: Lobby waiting — launch ready -->
-                <template v-if="lobbyStatuses[g.game_number]?.status === 'waiting'">
-                  <div class="flex items-center gap-2 text-xs">
-                    <Gamepad2 class="w-3.5 h-3.5 text-amber-500" />
-                    <code class="font-mono bg-accent px-1.5 py-0.5 rounded text-foreground">{{ lobbyStatuses[g.game_number].password }}</code>
-                    <span class="text-muted-foreground">
-                      {{ (lobbyStatuses[g.game_number].players_joined || []).length }}/{{ (lobbyStatuses[g.game_number].players_expected || []).length }}
-                    </span>
+
+                <!-- Player list -->
+                <div class="px-4 py-2.5 grid grid-cols-2 gap-x-4 gap-y-1 border-b border-border/30">
+                  <div v-for="p in getPlayerStatuses(g.game_number)" :key="p.steamId" class="flex items-center gap-1.5 text-xs py-0.5">
+                    <span class="w-2 h-2 rounded-full flex-shrink-0" :class="p.joined ? (p.correctTeam ? 'bg-green-500' : 'bg-amber-500') : 'bg-muted-foreground/30'"></span>
+                    <span :class="p.joined ? 'text-foreground' : 'text-muted-foreground'" class="truncate">{{ p.name }}</span>
+                    <span class="text-[10px] text-muted-foreground">({{ p.expectedTeam === 'radiant' ? 'R' : 'D' }})</span>
+                    <span v-if="p.joined && !p.correctTeam" class="text-amber-500 text-[10px]">wrong side</span>
+                  </div>
+                </div>
+
+                <!-- Team IDs -->
+                <div class="px-4 py-2.5 flex items-center gap-4 border-b border-border/30 text-xs">
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-muted-foreground">Radiant:</span>
+                    <template v-if="lobbyTeamIds[g.game_number]?.radiant">
+                      <span :class="match.team1_dota_id && lobbyTeamIds[g.game_number].radiant !== match.team1_dota_id ? 'text-red-500' : 'text-green-500'" class="font-medium">
+                        {{ lobbyTeamIds[g.game_number].radiantName || lobbyTeamIds[g.game_number].radiant }}
+                      </span>
+                      <Check v-if="!match.team1_dota_id || lobbyTeamIds[g.game_number].radiant === match.team1_dota_id" class="w-3 h-3 text-green-500" />
+                      <X v-else class="w-3 h-3 text-red-500" />
+                    </template>
+                    <span v-else class="text-red-500">{{ t('noTeamSet') }}</span>
                   </div>
                   <div class="flex items-center gap-1.5">
-                    <span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                    <span class="text-muted-foreground">Dire:</span>
+                    <template v-if="lobbyTeamIds[g.game_number]?.dire">
+                      <span :class="match.team2_dota_id && lobbyTeamIds[g.game_number].dire !== match.team2_dota_id ? 'text-red-500' : 'text-green-500'" class="font-medium">
+                        {{ lobbyTeamIds[g.game_number].direName || lobbyTeamIds[g.game_number].dire }}
+                      </span>
+                      <Check v-if="!match.team2_dota_id || lobbyTeamIds[g.game_number].dire === match.team2_dota_id" class="w-3 h-3 text-green-500" />
+                      <X v-else class="w-3 h-3 text-red-500" />
+                    </template>
+                    <span v-else class="text-red-500">{{ t('noTeamSet') }}</span>
+                  </div>
+                </div>
+
+                <!-- Launch ready + button -->
+                <div class="p-4 flex flex-col items-center gap-3">
+                  <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium"
                       :class="(launchReadyState[g.game_number] || []).includes(match.team1_captain_id) ? 'bg-green-500/15 text-green-500' : 'bg-accent text-muted-foreground'">
+                      <Check v-if="(launchReadyState[g.game_number] || []).includes(match.team1_captain_id)" class="w-3 h-3" />
                       {{ match.team1_name || 'T1' }}
-                    </span>
-                    <span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                    </div>
+                    <span class="text-muted-foreground text-xs">{{ t('vs') }}</span>
+                    <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium"
                       :class="(launchReadyState[g.game_number] || []).includes(match.team2_captain_id) ? 'bg-green-500/15 text-green-500' : 'bg-accent text-muted-foreground'">
+                      <Check v-if="(launchReadyState[g.game_number] || []).includes(match.team2_captain_id)" class="w-3 h-3" />
                       {{ match.team2_name || 'T2' }}
-                    </span>
+                    </div>
                   </div>
                   <button
-                    class="px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
+                    class="w-full max-w-xs px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
                     :disabled="!allPlayersJoined(g.game_number)"
                     :class="!allPlayersJoined(g.game_number)
                       ? 'bg-accent text-muted-foreground cursor-not-allowed'
@@ -304,71 +377,11 @@ function winnerName(game: any) {
                         : 'bg-primary text-primary-foreground hover:bg-primary/90'"
                     @click="toggleLaunchReady(g.game_number)"
                   >
-                    <span class="flex items-center gap-1.5">
-                      <Check v-if="isLaunchReady(g.game_number)" class="w-3.5 h-3.5" />
+                    <span class="flex items-center justify-center gap-2">
+                      <Check v-if="isLaunchReady(g.game_number)" class="w-4 h-4" />
                       {{ isLaunchReady(g.game_number) ? t('matchReadyLabel') : t('matchLaunchReady') }}
                     </span>
                   </button>
-                </template>
-                <!-- Creating / Active -->
-                <span v-else-if="lobbyStatuses[g.game_number]?.status === 'creating'" class="text-xs text-muted-foreground">
-                  {{ t('lobbyCreating') }}
-                </span>
-                <span v-else-if="lobbyStatuses[g.game_number]?.status === 'active'" class="text-xs text-green-500">
-                  {{ t('lobbyActive') }}
-                </span>
-                <!-- No bot -->
-                <span v-else-if="noBotAvailable && bothCaptainsReady(g.game_number)" class="text-xs text-amber-500">
-                  {{ t('noBotAvailable') }}
-                </span>
-                <!-- Phase 1: Ready to create lobby -->
-                <button
-                  v-if="!lobbyStatuses[g.game_number] || ['cancelled', 'error', 'completed'].includes(lobbyStatuses[g.game_number]?.status)"
-                  class="px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
-                  :class="isReady(g.game_number)
-                    ? 'bg-green-500 text-white hover:bg-green-600'
-                    : 'bg-primary text-primary-foreground hover:bg-primary/90'"
-                  @click="toggleReady(g.game_number)"
-                >
-                  <span class="flex items-center gap-1.5">
-                    <Check v-if="isReady(g.game_number)" class="w-3.5 h-3.5" />
-                    {{ isReady(g.game_number) ? t('matchReadyLabel') : t('matchReadyUp') }}
-                  </span>
-                </button>
-              </div>
-              <!-- Player join status + team IDs -->
-              <div v-if="lobbyStatuses[g.game_number]?.status === 'waiting' && (lobbyStatuses[g.game_number].players_expected || []).length > 0"
-                class="border-t border-border/30 px-3 py-2 flex flex-col gap-1.5">
-                <div class="flex flex-wrap gap-x-3 gap-y-1">
-                  <div v-for="p in getPlayerStatuses(g.game_number)" :key="p.steamId" class="flex items-center gap-1 text-[10px]">
-                    <span class="w-1.5 h-1.5 rounded-full" :class="p.joined ? (p.correctTeam ? 'bg-green-500' : 'bg-amber-500') : 'bg-muted-foreground/30'"></span>
-                    <span :class="p.joined ? 'text-foreground' : 'text-muted-foreground'">{{ p.name }}</span>
-                    <span v-if="p.joined && !p.correctTeam" class="text-amber-500">({{ p.actualTeam }})</span>
-                  </div>
-                </div>
-                <div class="flex gap-3 text-[10px]">
-                  <span class="flex items-center gap-1">
-                    <span class="text-muted-foreground">Radiant:</span>
-                    <template v-if="lobbyTeamIds[g.game_number]?.radiant">
-                      <span :class="match.team1_dota_id && lobbyTeamIds[g.game_number].radiant !== match.team1_dota_id ? 'text-red-500 font-semibold' : 'text-green-500'">
-                        {{ lobbyTeamIds[g.game_number].radiantName || lobbyTeamIds[g.game_number].radiant }}
-                      </span>
-                      <Check v-if="!match.team1_dota_id || lobbyTeamIds[g.game_number].radiant === match.team1_dota_id" class="w-2.5 h-2.5 text-green-500" />
-                      <X v-else class="w-2.5 h-2.5 text-red-500" />
-                    </template>
-                    <span v-else class="text-red-500">{{ t('noTeamSet') }}</span>
-                  </span>
-                  <span class="flex items-center gap-1">
-                    <span class="text-muted-foreground">Dire:</span>
-                    <template v-if="lobbyTeamIds[g.game_number]?.dire">
-                      <span :class="match.team2_dota_id && lobbyTeamIds[g.game_number].dire !== match.team2_dota_id ? 'text-red-500 font-semibold' : 'text-green-500'">
-                        {{ lobbyTeamIds[g.game_number].direName || lobbyTeamIds[g.game_number].dire }}
-                      </span>
-                      <Check v-if="!match.team2_dota_id || lobbyTeamIds[g.game_number].dire === match.team2_dota_id" class="w-2.5 h-2.5 text-green-500" />
-                      <X v-else class="w-2.5 h-2.5 text-red-500" />
-                    </template>
-                    <span v-else class="text-red-500">{{ t('noTeamSet') }}</span>
-                  </span>
                 </div>
               </div>
             </div>

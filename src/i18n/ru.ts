@@ -758,6 +758,8 @@ export default {
   matchReadyUp: 'Готов',
   matchReadyLabel: 'Готов!',
   matchLaunchReady: 'Запуск',
+  matchReadyDesc: 'Оба капитана должны подтвердить готовность для создания лобби.',
+  lobbyLaunching: 'Запускается...',
   resetLobby: 'Сбросить лобби',
   forceLaunchConfirm: 'Вы уверены, что хотите принудительно запустить игру? Убедитесь, что все требования выполнены.',
   createLobbyConfirm: 'Будет создано лобби Dota 2 для этой игры, и все ожидаемые игроки получат приглашение.',

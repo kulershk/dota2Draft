@@ -59,6 +59,7 @@ type Bot struct {
 	expectedDireTeamId    int
 	detectedRadiantTeamId int
 	detectedDireTeamId    int
+	launchSent            bool // prevent repeated LaunchLobby calls
 }
 
 func NewBot(id, username, password, refreshToken string, send SendFunc) *Bot {
@@ -445,28 +446,49 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 		}
 	}
 
-	// Detect match ID assigned (SERVERSETUP — coin toss phase)
-	if matchID != 0 && (oldLobby == nil || oldLobby.GetMatchId() == 0) {
-		b.log(fmt.Sprintf("Match ID assigned: %d (state: %s)", matchID, newLobby.GetState().String()))
-		b.send("game_started", protocol.GameStartedEvent{
-			LobbyID: b.activeLobbyID,
-			MatchID: fmt.Sprintf("%d", matchID),
-		})
-	}
-
 	lobbyState := newLobby.GetState()
 	oldState := gcccm.CSODOTALobby_UI
 	if oldLobby != nil {
 		oldState = oldLobby.GetState()
 	}
 
-	b.log(fmt.Sprintf("  State: %s → %s", oldState.String(), lobbyState.String()))
+	b.log(fmt.Sprintf("  State: %s → %s (matchID: %d)", oldState.String(), lobbyState.String(), matchID))
 
-	// Auto-launch after coin toss: lobby returns to UI with a match ID means coin toss is done
-	if lobbyState == gcccm.CSODOTALobby_UI && matchID != 0 && oldState != gcccm.CSODOTALobby_UI {
-		b.log("Coin toss completed — auto-launching game...")
-		if b.dotaClient != nil {
+	// Detect match ID assigned
+	if matchID != 0 && (oldLobby == nil || oldLobby.GetMatchId() == 0) {
+		b.log(fmt.Sprintf("Match ID assigned: %d", matchID))
+		b.send("game_started", protocol.GameStartedEvent{
+			LobbyID: b.activeLobbyID,
+			MatchID: fmt.Sprintf("%d", matchID),
+		})
+		// Auto-launch immediately since we have a match ID but lobby is still in UI
+		if lobbyState == gcccm.CSODOTALobby_UI && b.dotaClient != nil && !b.launchSent {
+			b.log("Auto-launching after match ID assigned...")
+			b.launchSent = true
 			b.dotaClient.LaunchLobby()
+		}
+	}
+
+	// Auto-launch after coin toss: both teams have made their selection priority choices
+	if matchID != 0 && lobbyState != gcccm.CSODOTALobby_RUN {
+		priorityChoice := newLobby.GetSeriesCurrentPriorityTeamChoice()
+		nonPriorityChoice := newLobby.GetSeriesCurrentNonPriorityTeamChoice()
+		oldPriorityChoice := gcccm.DOTASelectionPriorityChoice(0)
+		oldNonPriorityChoice := gcccm.DOTASelectionPriorityChoice(0)
+		if oldLobby != nil {
+			oldPriorityChoice = oldLobby.GetSeriesCurrentPriorityTeamChoice()
+			oldNonPriorityChoice = oldLobby.GetSeriesCurrentNonPriorityTeamChoice()
+		}
+		bothChosen := priorityChoice != 0 && nonPriorityChoice != 0
+		wasNotBothChosen := oldPriorityChoice == 0 || oldNonPriorityChoice == 0
+		if bothChosen && wasNotBothChosen {
+			b.log(fmt.Sprintf("Coin toss completed — priority: %s, non-priority: %s — auto-launching...",
+				priorityChoice.String(), nonPriorityChoice.String()))
+			b.launchSent = false // reset so we can launch again after coin toss
+			if b.dotaClient != nil {
+				b.launchSent = true
+				b.dotaClient.LaunchLobby()
+			}
 		}
 	}
 
@@ -754,6 +776,7 @@ func (b *Bot) LeaveLobby() {
 	b.lastLobby = nil
 	b.detectedRadiantTeamId = 0
 	b.detectedDireTeamId = 0
+	b.launchSent = false
 	if b.dotaClient != nil {
 		b.dotaClient.LeaveLobby()
 	}
@@ -763,6 +786,7 @@ func (b *Bot) AbandonAndLeaveLobby() {
 	b.lastLobby = nil
 	b.detectedRadiantTeamId = 0
 	b.detectedDireTeamId = 0
+	b.launchSent = false
 	if b.dotaClient != nil {
 		b.dotaClient.AbandonLobby()
 		b.dotaClient.LeaveLobby()
