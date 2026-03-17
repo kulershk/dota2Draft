@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Swords, Settings, Plus, RotateCcw, Trash2, ChevronRight, Pencil, EyeOff } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
+import { usePersistedRef } from '@/composables/usePersistedRef'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
@@ -24,8 +25,7 @@ const deleteStageId = ref<number | null>(null)
 const editingMatch = ref<any>(null)
 const viewingMatch = ref<any>(null)
 const activeStageId = ref<number | null>(null)
-const showHidden = ref(localStorage.getItem('tournament_showHidden') !== 'false')
-watch(showHidden, (v) => localStorage.setItem('tournament_showHidden', String(v)))
+const showHidden = usePersistedRef('showHiddenMatches', true)
 
 // Edit stage form
 const editStageName = ref('')
