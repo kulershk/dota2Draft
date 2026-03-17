@@ -559,6 +559,8 @@ export default {
   matchScore: 'Счёт матча',
   updateScore: 'Обновить счёт',
   hideMatch: 'Скрыть матч',
+  previewAsPlayer: 'Просмотр как игрок',
+  showHiddenMatches: 'Показать скрытые',
   hideMatchHint: '(скрыт от игроков, виден администраторам)',
   hiddenMatch: 'Этот матч скрыт от игроков',
   game: 'Игра',

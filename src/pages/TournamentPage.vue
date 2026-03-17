@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Swords, Settings, Plus, RotateCcw, Trash2, ChevronRight, Pencil } from 'lucide-vue-next'
+import { Swords, Settings, Plus, RotateCcw, Trash2, ChevronRight, Pencil, EyeOff } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
@@ -24,6 +24,7 @@ const deleteStageId = ref<number | null>(null)
 const editingMatch = ref<any>(null)
 const viewingMatch = ref<any>(null)
 const activeStageId = ref<number | null>(null)
+const showHidden = ref(true)
 
 // Edit stage form
 const editStageName = ref('')
@@ -497,6 +498,10 @@ function stageStatusClass(stage: any) {
       <div v-if="activeStage">
         <!-- Admin: edit/delete this stage -->
         <div v-if="isCompAdmin" class="flex justify-end gap-2 mb-2">
+          <button class="btn-ghost text-xs" :class="showHidden ? '' : 'text-primary'" @click="showHidden = !showHidden">
+            <EyeOff class="w-3 h-3" />
+            {{ showHidden ? t('previewAsPlayer') : t('showHiddenMatches') }}
+          </button>
           <button class="btn-ghost text-xs" @click="openEditStage(activeStage)">
             <Pencil class="w-3 h-3" />
             {{ t('editStage') }}
@@ -523,7 +528,7 @@ function stageStatusClass(stage: any) {
           v-else-if="activeStage.format === 'single_elimination'"
           :matches="stageMatches"
           :tournament-state="activeStage"
-          :is-admin="isCompAdmin"
+          :is-admin="isCompAdmin && showHidden"
           @edit-match="isCompAdmin ? (editingMatch = $event) : (viewingMatch = $event)"
         />
 
@@ -532,7 +537,7 @@ function stageStatusClass(stage: any) {
           v-else-if="activeStage.format === 'double_elimination'"
           :matches="stageMatches"
           :tournament-state="activeStage"
-          :is-admin="isCompAdmin"
+          :is-admin="isCompAdmin && showHidden"
           @edit-match="isCompAdmin ? (editingMatch = $event) : (viewingMatch = $event)"
         />
 
@@ -542,7 +547,7 @@ function stageStatusClass(stage: any) {
           :matches="stageMatches"
           :tournament-state="activeStage"
           :captains="store.captains.value"
-          :is-admin="isCompAdmin"
+          :is-admin="isCompAdmin && showHidden"
           @edit-match="isCompAdmin ? (editingMatch = $event) : (viewingMatch = $event)"
         />
       </div>

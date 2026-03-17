@@ -332,203 +332,206 @@ onUnmounted(() => {
     </div>
 
     <div class="px-7 py-5 flex flex-col gap-4 max-h-[60vh] overflow-y-auto">
-      <div v-for="(game, idx) in games" :key="idx" class="flex flex-col rounded-lg bg-accent/30">
-        <div class="flex items-center gap-3 p-3">
-          <span class="text-xs font-semibold text-muted-foreground w-16">{{ t('game') }} {{ game.game_number }}</span>
+      <div v-for="(game, idx) in games" :key="idx" class="rounded-lg border border-border overflow-hidden">
+        <!-- Game header -->
+        <div class="flex items-center justify-between px-4 py-3 bg-accent/30 border-b border-border">
+          <div class="flex items-center gap-2">
+            <Gamepad2 class="w-4 h-4 text-muted-foreground" />
+            <span class="text-sm font-semibold text-foreground">{{ t('game') }} {{ game.game_number }}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <!-- Lobby status badge -->
+            <template v-if="lobbyStatuses[game.game_number] && game.game_number === nextGameNumber">
+              <span v-if="lobbyStatuses[game.game_number].status === 'cointoss'" class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500">{{ t('lobbyCoinToss') }}</span>
+              <span v-else-if="lobbyStatuses[game.game_number].status === 'launching'" class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500">{{ t('lobbyLaunching') }}</span>
+              <span v-else-if="lobbyStatuses[game.game_number].status === 'active'" class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-green-500/10 text-green-500">{{ t('lobbyActive') }}</span>
+              <span v-else-if="lobbyStatuses[game.game_number].status === 'completed'" class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-green-500/10 text-green-500">{{ t('matchCompleted') }}</span>
+            </template>
+            <!-- Stats toggle -->
+            <button
+              v-if="game.has_stats || (gameStats[game.game_number]?.length)"
+              class="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              :title="t('viewStats')"
+              @click="toggleStats(game.game_number)"
+            >
+              <component :is="expandedGame === game.game_number ? ChevronUp : ChevronDown" class="w-4 h-4" />
+            </button>
+            <button
+              v-if="game.dotabuff_id && store.isAdmin"
+              class="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              :class="{ 'animate-spin': refetchingGame[game.game_number] }"
+              :disabled="refetchingGame[game.game_number]"
+              :title="t('refetchStats')"
+              @click="refetchStats(game.game_number)"
+            >
+              <RefreshCw class="w-4 h-4" />
+            </button>
+          </div>
+        </div>
 
-          <!-- Winner buttons -->
+        <!-- Winner + Match ID row -->
+        <div class="px-4 py-3 flex items-center gap-3 border-b border-border/30">
           <div class="flex gap-2 flex-1">
             <button
-              class="flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
+              class="flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors"
               :class="game.winner_captain_id === match.team1_captain_id
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-accent text-foreground hover:bg-accent/80'"
               @click="setGameWinner(idx, match.team1_captain_id)"
             >{{ match.team1_name || 'Team 1' }}</button>
             <button
-              class="flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
+              class="flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors"
               :class="game.winner_captain_id === match.team2_captain_id
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-accent text-foreground hover:bg-accent/80'"
               @click="setGameWinner(idx, match.team2_captain_id)"
             >{{ match.team2_name || 'Team 2' }}</button>
           </div>
-
-          <!-- Dotabuff ID -->
           <input
             v-model="game.dotabuff_id"
-            class="input-field !h-8 !text-xs w-36"
+            class="input-field !h-9 !text-xs w-36"
             :placeholder="t('dotabuffId')"
           />
-
-          <!-- Lobby actions -->
-          <template v-if="store.isAdmin && match.team1_captain_id && match.team2_captain_id && game.game_number === nextGameNumber">
-            <button
-              v-if="!lobbyStatuses[game.game_number] || lobbyStatuses[game.game_number]?.status === 'cancelled' || lobbyStatuses[game.game_number]?.status === 'error'"
-              class="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-              :class="{ 'animate-pulse': creatingLobby[game.game_number] }"
-              :disabled="creatingLobby[game.game_number]"
-              :title="t('createLobby')"
-              @click="confirmCreateGame = game.game_number"
-            >
-              <Gamepad2 class="w-4 h-4" />
-            </button>
-            <template v-else-if="lobbyStatuses[game.game_number]?.status === 'waiting'">
-              <button
-                class="p-1.5 rounded-md text-green-500 hover:bg-green-500/10 transition-colors"
-                :title="t('forceLaunch')"
-                @click="confirmForceGame = game.game_number"
-              >
-                <Play class="w-4 h-4" />
-              </button>
-              <button
-                class="p-1.5 rounded-md text-red-500 hover:bg-red-500/10 transition-colors"
-                :title="t('cancelLobby')"
-                @click="confirmCancelGame = game.game_number"
-              >
-                <X class="w-4 h-4" />
-              </button>
-            </template>
-            <template v-else-if="lobbyStatuses[game.game_number]">
-              <span
-                class="text-[10px] font-medium px-1.5 py-0.5 rounded"
-                :class="lobbyStatuses[game.game_number].status === 'completed' ? 'bg-green-500/10 text-green-500'
-                  : lobbyStatuses[game.game_number].status === 'active' ? 'bg-amber-500/10 text-amber-500'
-                  : lobbyStatuses[game.game_number].status === 'launching' ? 'bg-amber-500/10 text-amber-500'
-                  : 'bg-accent text-muted-foreground'"
-              >{{ lobbyStatuses[game.game_number].status }}</span>
-              <button
-                class="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                :title="t('resetLobby')"
-                @click="resetLobby(game.game_number)"
-              >
-                <RotateCcw class="w-3.5 h-3.5" />
-              </button>
-            </template>
-          </template>
-
-          <!-- Stats actions -->
-          <button
-            v-if="game.has_stats || (gameStats[game.game_number]?.length)"
-            class="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            :title="t('viewStats')"
-            @click="toggleStats(game.game_number)"
-          >
-            <component :is="expandedGame === game.game_number ? ChevronUp : ChevronDown" class="w-4 h-4" />
-          </button>
-          <button
-            v-if="game.dotabuff_id && store.isAdmin"
-            class="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            :class="{ 'animate-spin': refetchingGame[game.game_number] }"
-            :disabled="refetchingGame[game.game_number]"
-            :title="t('refetchStats')"
-            @click="refetchStats(game.game_number)"
-          >
-            <RefreshCw class="w-4 h-4" />
-          </button>
         </div>
 
-        <!-- Ready state -->
-        <div v-if="match.team1_captain_id && match.team2_captain_id && !game.winner_captain_id && game.game_number === nextGameNumber && (!lobbyStatuses[game.game_number] || ['cancelled', 'error'].includes(lobbyStatuses[game.game_number]?.status))"
-          class="border-t border-border/50 px-3 py-2 flex items-center gap-2 text-xs">
-          <span class="text-muted-foreground">{{ t('matchReadyUp') }}:</span>
-          <span class="flex items-center gap-1 px-1.5 py-0.5 rounded-full font-medium"
-            :class="isTeamReady(game.game_number, match.team1_captain_id) ? 'bg-green-500/15 text-green-500' : 'bg-accent text-muted-foreground'">
-            <Check v-if="isTeamReady(game.game_number, match.team1_captain_id)" class="w-3 h-3" />
-            {{ match.team1_name || 'Team 1' }}
-          </span>
-          <span class="flex items-center gap-1 px-1.5 py-0.5 rounded-full font-medium"
-            :class="isTeamReady(game.game_number, match.team2_captain_id) ? 'bg-green-500/15 text-green-500' : 'bg-accent text-muted-foreground'">
-            <Check v-if="isTeamReady(game.game_number, match.team2_captain_id)" class="w-3 h-3" />
-            {{ match.team2_name || 'Team 2' }}
-          </span>
-          <button
-            v-if="isCaptainInMatch"
-            class="ml-auto px-2.5 py-1 rounded-md text-xs font-medium transition-colors"
-            :class="isMyReady(game.game_number)
-              ? 'bg-green-500 text-white hover:bg-green-600'
-              : 'bg-primary text-primary-foreground hover:bg-primary/90'"
-            @click="toggleReady(game.game_number)"
-          >
-            <span class="flex items-center gap-1">
-              <Check v-if="isMyReady(game.game_number)" class="w-3 h-3" />
-              {{ isMyReady(game.game_number) ? t('matchReadyLabel') : t('matchReadyUp') }}
-            </span>
-          </button>
-        </div>
-
-        <!-- Lobby info + launch ready -->
-        <div v-if="lobbyStatuses[game.game_number] && lobbyStatuses[game.game_number].status === 'waiting'" class="border-t border-border/50 px-3 py-2 flex items-center gap-3 text-xs">
-          <span class="text-muted-foreground">{{ t('lobbyPassword') }}:</span>
-          <code class="text-foreground font-mono bg-accent px-2 py-0.5 rounded">{{ lobbyStatuses[game.game_number].password }}</code>
-          <span class="text-muted-foreground">
-            {{ (lobbyStatuses[game.game_number].players_joined || []).length }}/{{ (lobbyStatuses[game.game_number].players_expected || []).length }}
-          </span>
-          <span class="flex items-center gap-1 px-1.5 py-0.5 rounded-full font-medium text-[10px]"
-            :class="isLaunchTeamReady(game.game_number, match.team1_captain_id) ? 'bg-green-500/15 text-green-500' : 'bg-accent text-muted-foreground'">
-            <Check v-if="isLaunchTeamReady(game.game_number, match.team1_captain_id)" class="w-2.5 h-2.5" />
-            {{ match.team1_name || 'T1' }}
-          </span>
-          <span class="flex items-center gap-1 px-1.5 py-0.5 rounded-full font-medium text-[10px]"
-            :class="isLaunchTeamReady(game.game_number, match.team2_captain_id) ? 'bg-green-500/15 text-green-500' : 'bg-accent text-muted-foreground'">
-            <Check v-if="isLaunchTeamReady(game.game_number, match.team2_captain_id)" class="w-2.5 h-2.5" />
-            {{ match.team2_name || 'T2' }}
-          </span>
-          <button
-            v-if="isCaptainInMatch"
-            class="ml-auto px-2.5 py-1 rounded-md text-xs font-medium transition-colors"
-            :disabled="!allPlayersJoined(game.game_number)"
-            :class="!allPlayersJoined(game.game_number)
-              ? 'bg-accent text-muted-foreground cursor-not-allowed'
-              : isMyLaunchReady(game.game_number)
-                ? 'bg-green-500 text-white hover:bg-green-600'
-                : 'bg-primary text-primary-foreground hover:bg-primary/90'"
-            @click="toggleLaunchReady(game.game_number)"
-          >
-            <span class="flex items-center gap-1">
-              <Check v-if="isMyLaunchReady(game.game_number)" class="w-3 h-3" />
-              {{ isMyLaunchReady(game.game_number) ? t('matchReadyLabel') : t('matchLaunchReady') }}
-            </span>
-          </button>
-        </div>
-        <!-- Player join status + team IDs -->
-        <div v-if="lobbyStatuses[game.game_number] && lobbyStatuses[game.game_number].status === 'waiting' && (lobbyStatuses[game.game_number].players_expected || []).length > 0"
-          class="border-t border-border/50 px-3 py-2 flex flex-col gap-1.5">
-          <div class="flex flex-wrap gap-x-3 gap-y-1">
-            <div v-for="p in getPlayerStatuses(game.game_number)" :key="p.steamId" class="flex items-center gap-1 text-[10px]">
-              <span class="w-1.5 h-1.5 rounded-full" :class="p.joined ? (p.correctTeam ? 'bg-green-500' : 'bg-amber-500') : 'bg-muted-foreground/30'"></span>
-              <span :class="p.joined ? 'text-foreground' : 'text-muted-foreground'">{{ p.name }}</span>
-              <span v-if="p.joined && !p.correctTeam" class="text-amber-500">({{ p.actualTeam }})</span>
+        <!-- Admin lobby actions -->
+        <template v-if="store.isAdmin && match.team1_captain_id && match.team2_captain_id && game.game_number === nextGameNumber">
+          <div v-if="!lobbyStatuses[game.game_number] || ['cancelled', 'error'].includes(lobbyStatuses[game.game_number]?.status)"
+            class="px-4 py-3 flex items-center justify-between border-b border-border/30">
+            <div class="flex items-center gap-3">
+              <span class="text-xs text-muted-foreground">{{ t('matchReadyUp') }}:</span>
+              <span class="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+                :class="isTeamReady(game.game_number, match.team1_captain_id) ? 'bg-green-500/15 text-green-500' : 'bg-accent text-muted-foreground'">
+                <Check v-if="isTeamReady(game.game_number, match.team1_captain_id)" class="w-3 h-3" />
+                {{ match.team1_name || 'T1' }}
+              </span>
+              <span class="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+                :class="isTeamReady(game.game_number, match.team2_captain_id) ? 'bg-green-500/15 text-green-500' : 'bg-accent text-muted-foreground'">
+                <Check v-if="isTeamReady(game.game_number, match.team2_captain_id)" class="w-3 h-3" />
+                {{ match.team2_name || 'T2' }}
+              </span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <button
+                v-if="isCaptainInMatch"
+                class="px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
+                :class="isMyReady(game.game_number) ? 'bg-green-500 text-white hover:bg-green-600' : 'bg-primary text-primary-foreground hover:bg-primary/90'"
+                @click="toggleReady(game.game_number)"
+              >
+                <span class="flex items-center gap-1">
+                  <Check v-if="isMyReady(game.game_number)" class="w-3 h-3" />
+                  {{ isMyReady(game.game_number) ? t('matchReadyLabel') : t('matchReadyUp') }}
+                </span>
+              </button>
+              <button
+                class="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                :class="{ 'animate-pulse': creatingLobby[game.game_number] }"
+                :disabled="creatingLobby[game.game_number]"
+                :title="t('createLobby')"
+                @click="confirmCreateGame = game.game_number"
+              >
+                <Gamepad2 class="w-4 h-4" />
+              </button>
             </div>
           </div>
-          <div class="flex gap-3 text-[10px]">
-            <span class="flex items-center gap-1">
-              <span class="text-muted-foreground">Radiant:</span>
-              <template v-if="lobbyTeamIds[game.game_number]?.radiant">
-                <span :class="match.team1_dota_id && lobbyTeamIds[game.game_number].radiant !== match.team1_dota_id ? 'text-red-500 font-semibold' : 'text-green-500'">
-                  {{ lobbyTeamIds[game.game_number].radiantName || lobbyTeamIds[game.game_number].radiant }}
+
+          <!-- Lobby waiting: password + players + launch -->
+          <template v-else-if="lobbyStatuses[game.game_number]?.status === 'waiting'">
+            <div class="px-4 py-3 flex items-center justify-between border-b border-border/30">
+              <div class="flex items-center gap-2 text-sm">
+                <span class="text-muted-foreground">{{ t('lobbyPassword') }}:</span>
+                <code class="font-mono font-bold bg-accent px-2 py-0.5 rounded text-foreground">{{ lobbyStatuses[game.game_number].password }}</code>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-medium" :class="allPlayersJoined(game.game_number) ? 'text-green-500' : 'text-muted-foreground'">
+                  {{ (lobbyStatuses[game.game_number].players_joined || []).length }}/{{ (lobbyStatuses[game.game_number].players_expected || []).length }} {{ t('players') }}
                 </span>
-                <Check v-if="!match.team1_dota_id || lobbyTeamIds[game.game_number].radiant === match.team1_dota_id" class="w-2.5 h-2.5 text-green-500" />
-                <X v-else class="w-2.5 h-2.5 text-red-500" />
-              </template>
-              <span v-else class="text-red-500">{{ t('noTeamSet') }}</span>
-            </span>
-            <span class="flex items-center gap-1">
-              <span class="text-muted-foreground">Dire:</span>
-              <template v-if="lobbyTeamIds[game.game_number]?.dire">
-                <span :class="match.team2_dota_id && lobbyTeamIds[game.game_number].dire !== match.team2_dota_id ? 'text-red-500 font-semibold' : 'text-green-500'">
-                  {{ lobbyTeamIds[game.game_number].direName || lobbyTeamIds[game.game_number].dire }}
+                <button class="p-1.5 rounded-md text-green-500 hover:bg-green-500/10 transition-colors" :title="t('forceLaunch')" @click="confirmForceGame = game.game_number">
+                  <Play class="w-4 h-4" />
+                </button>
+                <button class="p-1.5 rounded-md text-red-500 hover:bg-red-500/10 transition-colors" :title="t('cancelLobby')" @click="confirmCancelGame = game.game_number">
+                  <X class="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <!-- Player list -->
+            <div class="px-4 py-2.5 grid grid-cols-2 gap-x-4 gap-y-1 border-b border-border/30">
+              <div v-for="p in getPlayerStatuses(game.game_number)" :key="p.steamId" class="flex items-center gap-1.5 text-xs py-0.5">
+                <span class="w-2 h-2 rounded-full flex-shrink-0" :class="p.joined ? (p.correctTeam ? 'bg-green-500' : 'bg-amber-500') : 'bg-muted-foreground/30'"></span>
+                <span :class="p.joined ? 'text-foreground' : 'text-muted-foreground'" class="truncate">{{ p.name }}</span>
+                <span class="text-[10px] text-muted-foreground">({{ p.expectedTeam === 'radiant' ? 'R' : 'D' }})</span>
+                <span v-if="p.joined && !p.correctTeam" class="text-amber-500 text-[10px]">wrong side</span>
+              </div>
+            </div>
+            <!-- Team IDs -->
+            <div class="px-4 py-2.5 flex items-center gap-4 border-b border-border/30 text-xs">
+              <div class="flex items-center gap-1.5">
+                <span class="text-muted-foreground">Radiant:</span>
+                <template v-if="lobbyTeamIds[game.game_number]?.radiant">
+                  <span :class="match.team1_dota_id && lobbyTeamIds[game.game_number].radiant !== match.team1_dota_id ? 'text-red-500' : 'text-green-500'" class="font-medium">
+                    {{ lobbyTeamIds[game.game_number].radiantName || lobbyTeamIds[game.game_number].radiant }}
+                  </span>
+                  <Check v-if="!match.team1_dota_id || lobbyTeamIds[game.game_number].radiant === match.team1_dota_id" class="w-3 h-3 text-green-500" />
+                  <X v-else class="w-3 h-3 text-red-500" />
+                </template>
+                <span v-else class="text-red-500">{{ t('noTeamSet') }}</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span class="text-muted-foreground">Dire:</span>
+                <template v-if="lobbyTeamIds[game.game_number]?.dire">
+                  <span :class="match.team2_dota_id && lobbyTeamIds[game.game_number].dire !== match.team2_dota_id ? 'text-red-500' : 'text-green-500'" class="font-medium">
+                    {{ lobbyTeamIds[game.game_number].direName || lobbyTeamIds[game.game_number].dire }}
+                  </span>
+                  <Check v-if="!match.team2_dota_id || lobbyTeamIds[game.game_number].dire === match.team2_dota_id" class="w-3 h-3 text-green-500" />
+                  <X v-else class="w-3 h-3 text-red-500" />
+                </template>
+                <span v-else class="text-red-500">{{ t('noTeamSet') }}</span>
+              </div>
+            </div>
+            <!-- Launch ready -->
+            <div class="px-4 py-3 flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+                  :class="isLaunchTeamReady(game.game_number, match.team1_captain_id) ? 'bg-green-500/15 text-green-500' : 'bg-accent text-muted-foreground'">
+                  <Check v-if="isLaunchTeamReady(game.game_number, match.team1_captain_id)" class="w-3 h-3" />
+                  {{ match.team1_name || 'T1' }}
                 </span>
-                <Check v-if="!match.team2_dota_id || lobbyTeamIds[game.game_number].dire === match.team2_dota_id" class="w-2.5 h-2.5 text-green-500" />
-                <X v-else class="w-2.5 h-2.5 text-red-500" />
-              </template>
-              <span v-else class="text-red-500">{{ t('noTeamSet') }}</span>
-            </span>
+                <span class="text-muted-foreground text-xs">{{ t('vs') }}</span>
+                <span class="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+                  :class="isLaunchTeamReady(game.game_number, match.team2_captain_id) ? 'bg-green-500/15 text-green-500' : 'bg-accent text-muted-foreground'">
+                  <Check v-if="isLaunchTeamReady(game.game_number, match.team2_captain_id)" class="w-3 h-3" />
+                  {{ match.team2_name || 'T2' }}
+                </span>
+              </div>
+              <button
+                v-if="isCaptainInMatch"
+                class="px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
+                :disabled="!allPlayersJoined(game.game_number)"
+                :class="!allPlayersJoined(game.game_number)
+                  ? 'bg-accent text-muted-foreground cursor-not-allowed'
+                  : isMyLaunchReady(game.game_number)
+                    ? 'bg-green-500 text-white hover:bg-green-600'
+                    : 'bg-primary text-primary-foreground hover:bg-primary/90'"
+                @click="toggleLaunchReady(game.game_number)"
+              >
+                <span class="flex items-center gap-1">
+                  <Check v-if="isMyLaunchReady(game.game_number)" class="w-3 h-3" />
+                  {{ isMyLaunchReady(game.game_number) ? t('matchReadyLabel') : t('matchLaunchReady') }}
+                </span>
+              </button>
+            </div>
+          </template>
+
+          <!-- Lobby completed/active with reset -->
+          <div v-else-if="lobbyStatuses[game.game_number]" class="px-4 py-3 flex items-center justify-end gap-2">
+            <button class="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" :title="t('resetLobby')" @click="resetLobby(game.game_number)">
+              <RotateCcw class="w-3.5 h-3.5" />
+            </button>
           </div>
-        </div>
+        </template>
 
         <!-- Lobby error -->
-        <div v-if="lobbyError[game.game_number]" class="border-t border-border/50 px-3 py-2 text-[10px] text-red-500">
+        <div v-if="lobbyError[game.game_number]" class="px-4 py-2 text-xs text-red-500 border-b border-border/30">
           {{ lobbyError[game.game_number] }}
         </div>
 

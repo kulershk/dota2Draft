@@ -559,6 +559,8 @@ export default {
   matchScore: 'Spēles rezultāts',
   updateScore: 'Atjaunināt rezultātu',
   hideMatch: 'Slēpt spēli',
+  previewAsPlayer: 'Priekšskatīt kā spēlētājam',
+  showHiddenMatches: 'Rādīt paslēptās',
   hideMatchHint: '(slēpts no spēlētājiem, redzams adminiem)',
   hiddenMatch: 'Šī spēle ir slēpta no spēlētājiem',
   game: 'Spēle',

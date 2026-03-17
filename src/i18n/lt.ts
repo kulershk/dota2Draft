@@ -559,6 +559,8 @@ export default {
   matchScore: 'Rungtynių rezultatas',
   updateScore: 'Atnaujinti rezultatą',
   hideMatch: 'Slėpti rungtynes',
+  previewAsPlayer: 'Peržiūrėti kaip žaidėjas',
+  showHiddenMatches: 'Rodyti paslėptas',
   hideMatchHint: '(paslėpta nuo žaidėjų, matoma adminams)',
   hiddenMatch: 'Šios rungtynės paslėptos nuo žaidėjų',
   game: 'Žaidimas',

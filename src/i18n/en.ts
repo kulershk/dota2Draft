@@ -560,6 +560,8 @@ export default {
   matchScore: 'Match Score',
   updateScore: 'Update Score',
   hideMatch: 'Hide match',
+  previewAsPlayer: 'Preview as Player',
+  showHiddenMatches: 'Show Hidden',
   hideMatchHint: '(hidden from players, visible to admins)',
   hiddenMatch: 'This match is hidden from players',
   game: 'Game',
