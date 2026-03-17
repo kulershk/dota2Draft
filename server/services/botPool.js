@@ -6,6 +6,7 @@ class BotPool {
     this.io = null
     this.goWs = null
     this.botLogs = new Map() // botId -> [{ time, message }]
+    this.lobbyTeamIds = new Map() // lobbyId -> { radiant, dire }
   }
 
   async init(io, wss) {
@@ -206,6 +207,31 @@ class BotPool {
       [lobby.match_id, lobby.game_number, dotaMatchId]
     )
 
+    // Save dota_team_id to captains on first game played
+    const teamIds = this.lobbyTeamIds.get(lobbyId)
+    if (teamIds) {
+      const match = await queryOne(
+        'SELECT team1_captain_id, team2_captain_id FROM matches WHERE id = $1', [lobby.match_id]
+      )
+      if (match) {
+        if (teamIds.radiant && match.team1_captain_id) {
+          const cap = await queryOne('SELECT dota_team_id FROM captains WHERE id = $1', [match.team1_captain_id])
+          if (cap && !cap.dota_team_id) {
+            await execute('UPDATE captains SET dota_team_id = $1 WHERE id = $2', [teamIds.radiant, match.team1_captain_id])
+            console.log(`[Lobby] Saved Radiant dota_team_id=${teamIds.radiant} for captain ${match.team1_captain_id}`)
+          }
+        }
+        if (teamIds.dire && match.team2_captain_id) {
+          const cap = await queryOne('SELECT dota_team_id FROM captains WHERE id = $1', [match.team2_captain_id])
+          if (cap && !cap.dota_team_id) {
+            await execute('UPDATE captains SET dota_team_id = $1 WHERE id = $2', [teamIds.dire, match.team2_captain_id])
+            console.log(`[Lobby] Saved Dire dota_team_id=${teamIds.dire} for captain ${match.team2_captain_id}`)
+          }
+        }
+      }
+      this.lobbyTeamIds.delete(lobbyId)
+    }
+
     // Free the bot
     if (lobby.bot_id) {
       await execute("UPDATE lobby_bots SET status = 'available', last_used_at = NOW() WHERE id = $1", [lobby.bot_id])
@@ -236,30 +262,14 @@ class BotPool {
     const radiantTeamId = data.radiantTeamId || 0
     const direTeamId = data.direTeamId || 0
 
+    const radiantTeamName = data.radiantTeamName || ''
+    const direTeamName = data.direTeamName || ''
+
+    // Store in memory for use when game starts
+    this.lobbyTeamIds.set(lobbyId, { radiant: radiantTeamId, dire: direTeamId })
+
     const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyId])
     if (!lobby) return
-
-    const match = await queryOne(`
-      SELECT m.team1_captain_id, m.team2_captain_id
-      FROM matches m WHERE m.id = $1
-    `, [lobby.match_id])
-    if (!match) return
-
-    // Save team IDs to captains if not already set (first game)
-    if (radiantTeamId && match.team1_captain_id) {
-      const cap = await queryOne('SELECT dota_team_id FROM captains WHERE id = $1', [match.team1_captain_id])
-      if (cap && !cap.dota_team_id) {
-        await execute('UPDATE captains SET dota_team_id = $1 WHERE id = $2', [radiantTeamId, match.team1_captain_id])
-        console.log(`[Lobby] Saved Radiant dota_team_id=${radiantTeamId} for captain ${match.team1_captain_id}`)
-      }
-    }
-    if (direTeamId && match.team2_captain_id) {
-      const cap = await queryOne('SELECT dota_team_id FROM captains WHERE id = $1', [match.team2_captain_id])
-      if (cap && !cap.dota_team_id) {
-        await execute('UPDATE captains SET dota_team_id = $1 WHERE id = $2', [direTeamId, match.team2_captain_id])
-        console.log(`[Lobby] Saved Dire dota_team_id=${direTeamId} for captain ${match.team2_captain_id}`)
-      }
-    }
 
     // Broadcast to frontend
     if (this.io) {
@@ -268,18 +278,39 @@ class BotPool {
         gameNumber: lobby.game_number,
         radiantTeamId,
         direTeamId,
+        radiantTeamName,
+        direTeamName,
       })
     }
   }
 
   async _onLobbyError(data) {
     const lobbyId = Number(data.lobbyId)
+    const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyId])
+    if (!lobby) return
+
+    // If lobby was launching and got a validation error, revert to waiting (don't kill the lobby)
+    if (lobby.status === 'launching') {
+      await execute(
+        "UPDATE match_lobbies SET status = 'waiting', updated_at = NOW() WHERE id = $1",
+        [lobbyId]
+      )
+      if (this.io) {
+        this.io.to(`comp:${lobby.competition_id}`).emit('lobby:statusUpdate', {
+          matchId: lobby.match_id,
+          gameNumber: lobby.game_number,
+          status: 'waiting',
+          errorMessage: data.error,
+        })
+      }
+      console.log(`[Lobby] Launch rejected: ${data.error} — reverted to waiting`)
+      return
+    }
+
     await execute(
       "UPDATE match_lobbies SET status = 'error', error_message = $1, updated_at = NOW() WHERE id = $2",
       [data.error, lobbyId]
     )
-    const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyId])
-    if (!lobby) return
 
     // Free the bot
     if (lobby.bot_id) {
@@ -482,7 +513,7 @@ class BotPool {
     return { ...lobby, players_expected: playersExpected }
   }
 
-  async forceLaunch(lobbyDbId) {
+  async forceLaunch(lobbyDbId, { skipValidation = false } = {}) {
     await execute("UPDATE match_lobbies SET status = 'launching', updated_at = NOW() WHERE id = $1", [lobbyDbId])
     const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyDbId])
     if (lobby && this.io) {
@@ -492,7 +523,7 @@ class BotPool {
         status: 'launching',
       })
     }
-    this._sendToGo('force_launch', { lobbyId: String(lobbyDbId) })
+    this._sendToGo('force_launch', { lobbyId: String(lobbyDbId), skipValidation })
   }
 
   async cancelLobby(lobbyDbId) {

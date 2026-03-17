@@ -178,7 +178,7 @@ export default function createLobbyRouter(io) {
       )
       if (!lobby) return res.status(404).json({ error: 'No active lobby found' })
 
-      await botPool.forceLaunch(lobby.id)
+      await botPool.forceLaunch(lobby.id, { skipValidation: true })
       res.json({ ok: true })
     } catch (e) {
       res.status(400).json({ error: e.message })

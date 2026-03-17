@@ -112,6 +112,10 @@ function getMultiKillCount(multiKills: Record<string, number>, key: string): num
 // Lobby management
 const lobbyStatuses = ref<Record<number, any>>({})
 const creatingLobby = ref<Record<number, boolean>>({})
+const confirmForceGame = ref<number | null>(null)
+const confirmCreateGame = ref<number | null>(null)
+const confirmCancelGame = ref<number | null>(null)
+const lobbyError = ref<Record<number, string>>({})
 
 async function createLobby(gameNumber: number) {
   const cId = compId.value
@@ -246,11 +250,16 @@ function getPlayerStatuses(gameNumber: number) {
 }
 
 // Detected Dota team IDs from lobby
-const lobbyTeamIds = ref<Record<number, { radiant: number; dire: number }>>({})
+const lobbyTeamIds = ref<Record<number, { radiant: number; dire: number; radiantName: string; direName: string }>>({})
 
 function onLobbyTeamIds(data: any) {
   if (Number(data.matchId) !== Number(props.match.id)) return
-  lobbyTeamIds.value = { ...lobbyTeamIds.value, [data.gameNumber]: { radiant: data.radiantTeamId || 0, dire: data.direTeamId || 0 } }
+  lobbyTeamIds.value = { ...lobbyTeamIds.value, [data.gameNumber]: {
+    radiant: data.radiantTeamId || 0,
+    dire: data.direTeamId || 0,
+    radiantName: data.radiantTeamName || '',
+    direName: data.direTeamName || '',
+  } }
 }
 
 function onLaunchReadyState(data: any) {
@@ -261,7 +270,6 @@ function onLaunchReadyState(data: any) {
 function onLobbyStatusUpdate(data: any) {
   if (Number(data.matchId) !== Number(props.match.id)) return
   if (!data.status) {
-    // Lobby was reset/deleted
     const copy = { ...lobbyStatuses.value }
     delete copy[data.gameNumber]
     lobbyStatuses.value = copy
@@ -270,6 +278,14 @@ function onLobbyStatusUpdate(data: any) {
   }
   if (data.status !== 'waiting') {
     launchReadyState.value = { ...launchReadyState.value, [data.gameNumber]: [] }
+  }
+  // Show/clear error messages
+  if (data.errorMessage) {
+    lobbyError.value = { ...lobbyError.value, [data.gameNumber]: data.errorMessage }
+  } else if (data.status && data.status !== 'waiting') {
+    const copy = { ...lobbyError.value }
+    delete copy[data.gameNumber]
+    lobbyError.value = copy
   }
 }
 
@@ -347,7 +363,7 @@ onUnmounted(() => {
               :class="{ 'animate-pulse': creatingLobby[game.game_number] }"
               :disabled="creatingLobby[game.game_number]"
               :title="t('createLobby')"
-              @click="createLobby(game.game_number)"
+              @click="confirmCreateGame = game.game_number"
             >
               <Gamepad2 class="w-4 h-4" />
             </button>
@@ -355,14 +371,14 @@ onUnmounted(() => {
               <button
                 class="p-1.5 rounded-md text-green-500 hover:bg-green-500/10 transition-colors"
                 :title="t('forceLaunch')"
-                @click="forceLaunchLobby(game.game_number)"
+                @click="confirmForceGame = game.game_number"
               >
                 <Play class="w-4 h-4" />
               </button>
               <button
                 class="p-1.5 rounded-md text-red-500 hover:bg-red-500/10 transition-colors"
                 :title="t('cancelLobby')"
-                @click="cancelLobby(game.game_number)"
+                @click="confirmCancelGame = game.game_number"
               >
                 <X class="w-4 h-4" />
               </button>
@@ -479,24 +495,35 @@ onUnmounted(() => {
               <span v-if="p.joined && !p.correctTeam" class="text-amber-500">({{ p.actualTeam }})</span>
             </div>
           </div>
-          <div v-if="lobbyTeamIds[game.game_number] && (lobbyTeamIds[game.game_number].radiant || lobbyTeamIds[game.game_number].dire)" class="flex gap-3 text-[10px]">
+          <div class="flex gap-3 text-[10px]">
             <span class="flex items-center gap-1">
               <span class="text-muted-foreground">Radiant:</span>
-              <span :class="match.team1_dota_id && lobbyTeamIds[game.game_number].radiant !== match.team1_dota_id ? 'text-red-500 font-semibold' : 'text-foreground'">
-                {{ lobbyTeamIds[game.game_number].radiant || t('noTeamSet') }}
-              </span>
-              <Check v-if="!match.team1_dota_id || lobbyTeamIds[game.game_number].radiant === match.team1_dota_id" class="w-2.5 h-2.5 text-green-500" />
-              <X v-else class="w-2.5 h-2.5 text-red-500" />
+              <template v-if="lobbyTeamIds[game.game_number]?.radiant">
+                <span :class="match.team1_dota_id && lobbyTeamIds[game.game_number].radiant !== match.team1_dota_id ? 'text-red-500 font-semibold' : 'text-green-500'">
+                  {{ lobbyTeamIds[game.game_number].radiantName || lobbyTeamIds[game.game_number].radiant }}
+                </span>
+                <Check v-if="!match.team1_dota_id || lobbyTeamIds[game.game_number].radiant === match.team1_dota_id" class="w-2.5 h-2.5 text-green-500" />
+                <X v-else class="w-2.5 h-2.5 text-red-500" />
+              </template>
+              <span v-else class="text-red-500">{{ t('noTeamSet') }}</span>
             </span>
             <span class="flex items-center gap-1">
               <span class="text-muted-foreground">Dire:</span>
-              <span :class="match.team2_dota_id && lobbyTeamIds[game.game_number].dire !== match.team2_dota_id ? 'text-red-500 font-semibold' : 'text-foreground'">
-                {{ lobbyTeamIds[game.game_number].dire || t('noTeamSet') }}
-              </span>
-              <Check v-if="!match.team2_dota_id || lobbyTeamIds[game.game_number].dire === match.team2_dota_id" class="w-2.5 h-2.5 text-green-500" />
-              <X v-else class="w-2.5 h-2.5 text-red-500" />
+              <template v-if="lobbyTeamIds[game.game_number]?.dire">
+                <span :class="match.team2_dota_id && lobbyTeamIds[game.game_number].dire !== match.team2_dota_id ? 'text-red-500 font-semibold' : 'text-green-500'">
+                  {{ lobbyTeamIds[game.game_number].direName || lobbyTeamIds[game.game_number].dire }}
+                </span>
+                <Check v-if="!match.team2_dota_id || lobbyTeamIds[game.game_number].dire === match.team2_dota_id" class="w-2.5 h-2.5 text-green-500" />
+                <X v-else class="w-2.5 h-2.5 text-red-500" />
+              </template>
+              <span v-else class="text-red-500">{{ t('noTeamSet') }}</span>
             </span>
           </div>
+        </div>
+
+        <!-- Lobby error -->
+        <div v-if="lobbyError[game.game_number]" class="border-t border-border/50 px-3 py-2 text-[10px] text-red-500">
+          {{ lobbyError[game.game_number] }}
         </div>
 
         <!-- Stats panel -->
@@ -593,6 +620,68 @@ onUnmounted(() => {
         {{ t('updateScore') }}
       </button>
       <button class="btn-secondary w-full justify-center" @click="emit('close')">{{ t('cancel') }}</button>
+    </div>
+  </ModalOverlay>
+
+  <!-- Force Launch Confirmation -->
+  <ModalOverlay :show="confirmForceGame !== null" @close="confirmForceGame = null">
+    <div class="px-7 py-6">
+      <h2 class="text-xl font-semibold text-foreground">{{ t('forceLaunch') }}</h2>
+      <p class="text-sm text-muted-foreground mt-2">{{ t('forceLaunchConfirm') }}</p>
+      <div v-if="confirmForceGame !== null" class="mt-3 flex flex-col gap-1.5 text-xs">
+        <div class="flex items-center gap-2">
+          <span class="text-muted-foreground">{{ t('players') }}:</span>
+          <span :class="allPlayersJoined(confirmForceGame) ? 'text-green-500' : 'text-amber-500'">
+            {{ (lobbyStatuses[confirmForceGame]?.players_joined || []).length }}/{{ (lobbyStatuses[confirmForceGame]?.players_expected || []).length }}
+          </span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-muted-foreground">Radiant:</span>
+          <span :class="lobbyTeamIds[confirmForceGame]?.radiant ? 'text-green-500' : 'text-red-500'">
+            {{ lobbyTeamIds[confirmForceGame]?.radiantName || lobbyTeamIds[confirmForceGame]?.radiant || t('noTeamSet') }}
+          </span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-muted-foreground">Dire:</span>
+          <span :class="lobbyTeamIds[confirmForceGame]?.dire ? 'text-green-500' : 'text-red-500'">
+            {{ lobbyTeamIds[confirmForceGame]?.direName || lobbyTeamIds[confirmForceGame]?.dire || t('noTeamSet') }}
+          </span>
+        </div>
+      </div>
+    </div>
+    <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
+      <button class="btn-destructive w-full justify-center" @click="forceLaunchLobby(confirmForceGame!); confirmForceGame = null">
+        {{ t('forceLaunch') }}
+      </button>
+      <button class="btn-secondary w-full justify-center" @click="confirmForceGame = null">{{ t('cancel') }}</button>
+    </div>
+  </ModalOverlay>
+
+  <!-- Create Lobby Confirmation -->
+  <ModalOverlay :show="confirmCreateGame !== null" @close="confirmCreateGame = null">
+    <div class="px-7 py-6">
+      <h2 class="text-xl font-semibold text-foreground">{{ t('createLobby') }}</h2>
+      <p class="text-sm text-muted-foreground mt-2">{{ t('createLobbyConfirm') }}</p>
+    </div>
+    <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
+      <button class="btn-primary w-full justify-center" @click="createLobby(confirmCreateGame!); confirmCreateGame = null">
+        {{ t('createLobby') }}
+      </button>
+      <button class="btn-secondary w-full justify-center" @click="confirmCreateGame = null">{{ t('cancel') }}</button>
+    </div>
+  </ModalOverlay>
+
+  <!-- Cancel Lobby Confirmation -->
+  <ModalOverlay :show="confirmCancelGame !== null" @close="confirmCancelGame = null">
+    <div class="px-7 py-6">
+      <h2 class="text-xl font-semibold text-foreground">{{ t('cancelLobby') }}</h2>
+      <p class="text-sm text-muted-foreground mt-2">{{ t('cancelLobbyConfirm') }}</p>
+    </div>
+    <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
+      <button class="btn-destructive w-full justify-center" @click="cancelLobby(confirmCancelGame!); confirmCancelGame = null">
+        {{ t('cancelLobby') }}
+      </button>
+      <button class="btn-secondary w-full justify-center" @click="confirmCancelGame = null">{{ t('cancel') }}</button>
     </div>
   </ModalOverlay>
 </template>

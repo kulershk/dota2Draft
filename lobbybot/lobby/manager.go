@@ -178,9 +178,11 @@ func (m *Manager) runLobby(ctx context.Context, lobby *Lobby) {
 	botLog("(Lobby state updates are tracked via GC events)")
 
 	// Wait for game start, cancel, or timeout (45 min max)
+	gameStarted := false
 	select {
 	case <-lobby.Bot.GameStartedCh():
 		botLog("Game started — leaving lobby and freeing bot")
+		gameStarted = true
 	case <-ctx.Done():
 		botLog("Lobby cancelled")
 	case <-time.After(45 * time.Minute):
@@ -188,7 +190,11 @@ func (m *Manager) runLobby(ctx context.Context, lobby *Lobby) {
 		m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobby.ID, Error: "Lobby timed out"})
 	}
 
-	lobby.Bot.LeaveLobby()
+	if gameStarted {
+		lobby.Bot.AbandonAndLeaveLobby()
+	} else {
+		lobby.Bot.LeaveLobby()
+	}
 	lobby.Bot.SetActiveLobbyID("")
 	lobby.Bot.SetExpectedTeams(nil)
 	lobby.Bot.SetBusy(false)
@@ -224,7 +230,7 @@ func (m *Manager) CancelLobby(lobbyID string) error {
 	return nil
 }
 
-func (m *Manager) ForceLaunch(lobbyID string) error {
+func (m *Manager) ForceLaunch(lobbyID string, skipValidation bool) error {
 	m.mu.RLock()
 	lobby, ok := m.lobbies[lobbyID]
 	m.mu.RUnlock()
@@ -235,28 +241,30 @@ func (m *Manager) ForceLaunch(lobbyID string) error {
 
 	log.Printf("[Lobby %s] Force launching", lobbyID)
 
-	// Validate team IDs — both sides must have a team selected
-	detRadiant, detDire := lobby.Bot.GetDetectedTeamIds()
-	if detRadiant == 0 {
-		errMsg := "Radiant has no team selected"
-		m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobbyID, Error: errMsg})
-		return fmt.Errorf(errMsg)
-	}
-	if detDire == 0 {
-		errMsg := "Dire has no team selected"
-		m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobbyID, Error: errMsg})
-		return fmt.Errorf(errMsg)
-	}
-	// Validate against expected team IDs (saved from first game)
-	if lobby.ExpectedRadiantTeamId != 0 && detRadiant != lobby.ExpectedRadiantTeamId {
-		errMsg := fmt.Sprintf("Wrong Radiant team: expected %d, got %d", lobby.ExpectedRadiantTeamId, detRadiant)
-		m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobbyID, Error: errMsg})
-		return fmt.Errorf(errMsg)
-	}
-	if lobby.ExpectedDireTeamId != 0 && detDire != lobby.ExpectedDireTeamId {
-		errMsg := fmt.Sprintf("Wrong Dire team: expected %d, got %d", lobby.ExpectedDireTeamId, detDire)
-		m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobbyID, Error: errMsg})
-		return fmt.Errorf(errMsg)
+	if !skipValidation {
+		// Validate team IDs — both sides must have a team selected
+		detRadiant, detDire := lobby.Bot.GetDetectedTeamIds()
+		if detRadiant == 0 {
+			errMsg := "Radiant has no team selected"
+			m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobbyID, Error: errMsg})
+			return fmt.Errorf(errMsg)
+		}
+		if detDire == 0 {
+			errMsg := "Dire has no team selected"
+			m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobbyID, Error: errMsg})
+			return fmt.Errorf(errMsg)
+		}
+		// Validate against expected team IDs (saved from first game)
+		if lobby.ExpectedRadiantTeamId != 0 && detRadiant != lobby.ExpectedRadiantTeamId {
+			errMsg := fmt.Sprintf("Wrong Radiant team: expected %d, got %d", lobby.ExpectedRadiantTeamId, detRadiant)
+			m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobbyID, Error: errMsg})
+			return fmt.Errorf(errMsg)
+		}
+		if lobby.ExpectedDireTeamId != 0 && detDire != lobby.ExpectedDireTeamId {
+			errMsg := fmt.Sprintf("Wrong Dire team: expected %d, got %d", lobby.ExpectedDireTeamId, detDire)
+			m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobbyID, Error: errMsg})
+			return fmt.Errorf(errMsg)
+		}
 	}
 
 	m.send("bot_log", protocol.BotLogEvent{

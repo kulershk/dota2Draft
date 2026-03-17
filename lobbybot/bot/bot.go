@@ -432,14 +432,16 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 		if radiantId != b.detectedRadiantTeamId || direId != b.detectedDireTeamId {
 			b.detectedRadiantTeamId = radiantId
 			b.detectedDireTeamId = direId
-			if radiantId != 0 || direId != 0 {
-				b.log(fmt.Sprintf("Team IDs detected — Radiant: %d, Dire: %d", radiantId, direId))
-				b.send("lobby_team_ids", protocol.LobbyTeamIdsEvent{
-					LobbyID:       b.activeLobbyID,
-					RadiantTeamId: radiantId,
-					DireTeamId:    direId,
-				})
-			}
+			radiantName := teamDetails[0].GetTeamName()
+			direName := teamDetails[1].GetTeamName()
+			b.log(fmt.Sprintf("Team IDs — Radiant: %d (%s), Dire: %d (%s)", radiantId, radiantName, direId, direName))
+			b.send("lobby_team_ids", protocol.LobbyTeamIdsEvent{
+				LobbyID:         b.activeLobbyID,
+				RadiantTeamId:   radiantId,
+				DireTeamId:      direId,
+				RadiantTeamName: radiantName,
+				DireTeamName:    direName,
+			})
 		}
 	}
 
@@ -729,14 +731,20 @@ func (b *Bot) LaunchLobby() {
 }
 
 func (b *Bot) LeaveLobby() {
-	b.mu.Lock()
-	if b.lobbyCacheCancel != nil {
-		b.lobbyCacheCancel()
-		b.lobbyCacheCancel = nil
-	}
-	b.mu.Unlock()
 	b.lastLobby = nil
+	b.detectedRadiantTeamId = 0
+	b.detectedDireTeamId = 0
 	if b.dotaClient != nil {
+		b.dotaClient.LeaveLobby()
+	}
+}
+
+func (b *Bot) AbandonAndLeaveLobby() {
+	b.lastLobby = nil
+	b.detectedRadiantTeamId = 0
+	b.detectedDireTeamId = 0
+	if b.dotaClient != nil {
+		b.dotaClient.AbandonLobby()
 		b.dotaClient.LeaveLobby()
 	}
 }

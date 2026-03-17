@@ -763,6 +763,9 @@ export default {
   matchReadyLabel: 'Ready!',
   matchLaunchReady: 'Launch',
   resetLobby: 'Reset Lobby',
+  forceLaunchConfirm: 'Are you sure you want to force launch this game? Check that all requirements are met before proceeding.',
+  createLobbyConfirm: 'This will create a Dota 2 lobby for this game and invite all expected players.',
+  cancelLobbyConfirm: 'This will cancel the current lobby. Players will be disconnected and a new lobby will need to be created.',
   noTeamSet: 'No team',
 
   showMatches: 'Show Matches',

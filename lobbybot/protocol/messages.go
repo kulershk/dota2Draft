@@ -69,7 +69,8 @@ type CancelLobbyCmd struct {
 }
 
 type ForceLaunchCmd struct {
-	LobbyID string `json:"lobbyId"`
+	LobbyID        string `json:"lobbyId"`
+	SkipValidation bool   `json:"skipValidation"`
 }
 
 type SyncCmd struct {
@@ -119,9 +120,11 @@ type GameStartedEvent struct {
 }
 
 type LobbyTeamIdsEvent struct {
-	LobbyID        string `json:"lobbyId"`
-	RadiantTeamId  int    `json:"radiantTeamId"`
-	DireTeamId     int    `json:"direTeamId"`
+	LobbyID          string `json:"lobbyId"`
+	RadiantTeamId    int    `json:"radiantTeamId"`
+	DireTeamId       int    `json:"direTeamId"`
+	RadiantTeamName  string `json:"radiantTeamName"`
+	DireTeamName     string `json:"direTeamName"`
 }
 
 type LobbyErrorEvent struct {

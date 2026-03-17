@@ -124,11 +124,16 @@ function toggleLaunchReady(gameNumber: number) {
   }
 }
 
-const lobbyTeamIds = ref<Record<number, { radiant: number; dire: number }>>({})
+const lobbyTeamIds = ref<Record<number, { radiant: number; dire: number; radiantName: string; direName: string }>>({})
 
 function onLobbyTeamIds(data: any) {
   if (Number(data.matchId) !== Number(props.match.id)) return
-  lobbyTeamIds.value = { ...lobbyTeamIds.value, [data.gameNumber]: { radiant: data.radiantTeamId || 0, dire: data.direTeamId || 0 } }
+  lobbyTeamIds.value = { ...lobbyTeamIds.value, [data.gameNumber]: {
+    radiant: data.radiantTeamId || 0,
+    dire: data.direTeamId || 0,
+    radiantName: data.radiantTeamName || '',
+    direName: data.direTeamName || '',
+  } }
 }
 
 function onLaunchReadyState(data: any) {
@@ -341,22 +346,28 @@ function winnerName(game: any) {
                     <span v-if="p.joined && !p.correctTeam" class="text-amber-500">({{ p.actualTeam }})</span>
                   </div>
                 </div>
-                <div v-if="lobbyTeamIds[g.game_number] && (lobbyTeamIds[g.game_number].radiant || lobbyTeamIds[g.game_number].dire)" class="flex gap-3 text-[10px]">
+                <div class="flex gap-3 text-[10px]">
                   <span class="flex items-center gap-1">
                     <span class="text-muted-foreground">Radiant:</span>
-                    <span :class="match.team1_dota_id && lobbyTeamIds[g.game_number].radiant !== match.team1_dota_id ? 'text-red-500 font-semibold' : 'text-foreground'">
-                      {{ lobbyTeamIds[g.game_number].radiant || t('noTeamSet') }}
-                    </span>
-                    <Check v-if="!match.team1_dota_id || lobbyTeamIds[g.game_number].radiant === match.team1_dota_id" class="w-2.5 h-2.5 text-green-500" />
-                    <X v-else class="w-2.5 h-2.5 text-red-500" />
+                    <template v-if="lobbyTeamIds[g.game_number]?.radiant">
+                      <span :class="match.team1_dota_id && lobbyTeamIds[g.game_number].radiant !== match.team1_dota_id ? 'text-red-500 font-semibold' : 'text-green-500'">
+                        {{ lobbyTeamIds[g.game_number].radiantName || lobbyTeamIds[g.game_number].radiant }}
+                      </span>
+                      <Check v-if="!match.team1_dota_id || lobbyTeamIds[g.game_number].radiant === match.team1_dota_id" class="w-2.5 h-2.5 text-green-500" />
+                      <X v-else class="w-2.5 h-2.5 text-red-500" />
+                    </template>
+                    <span v-else class="text-red-500">{{ t('noTeamSet') }}</span>
                   </span>
                   <span class="flex items-center gap-1">
                     <span class="text-muted-foreground">Dire:</span>
-                    <span :class="match.team2_dota_id && lobbyTeamIds[g.game_number].dire !== match.team2_dota_id ? 'text-red-500 font-semibold' : 'text-foreground'">
-                      {{ lobbyTeamIds[g.game_number].dire || t('noTeamSet') }}
-                    </span>
-                    <Check v-if="!match.team2_dota_id || lobbyTeamIds[g.game_number].dire === match.team2_dota_id" class="w-2.5 h-2.5 text-green-500" />
-                    <X v-else class="w-2.5 h-2.5 text-red-500" />
+                    <template v-if="lobbyTeamIds[g.game_number]?.dire">
+                      <span :class="match.team2_dota_id && lobbyTeamIds[g.game_number].dire !== match.team2_dota_id ? 'text-red-500 font-semibold' : 'text-green-500'">
+                        {{ lobbyTeamIds[g.game_number].direName || lobbyTeamIds[g.game_number].dire }}
+                      </span>
+                      <Check v-if="!match.team2_dota_id || lobbyTeamIds[g.game_number].dire === match.team2_dota_id" class="w-2.5 h-2.5 text-green-500" />
+                      <X v-else class="w-2.5 h-2.5 text-red-500" />
+                    </template>
+                    <span v-else class="text-red-500">{{ t('noTeamSet') }}</span>
                   </span>
                 </div>
               </div>

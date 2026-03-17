@@ -86,7 +86,7 @@ func main() {
 		case "force_launch":
 			var cmd protocol.ForceLaunchCmd
 			json.Unmarshal(data, &cmd)
-			lobbyMgr.ForceLaunch(cmd.LobbyID)
+			lobbyMgr.ForceLaunch(cmd.LobbyID, cmd.SkipValidation)
 
 		default:
 			log.Printf("Unknown message type: %s", msgType)
