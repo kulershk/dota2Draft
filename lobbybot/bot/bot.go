@@ -454,21 +454,24 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 		})
 	}
 
-	// Auto-launch again after coin toss (SERVERSETUP with match ID → need to start game)
 	lobbyState := newLobby.GetState()
 	oldState := gcccm.CSODOTALobby_UI
 	if oldLobby != nil {
 		oldState = oldLobby.GetState()
 	}
-	if lobbyState == gcccm.CSODOTALobby_SERVERSETUP && oldState != gcccm.CSODOTALobby_SERVERSETUP && matchID != 0 {
-		b.log("Lobby in SERVERSETUP with match ID — launching game after coin toss...")
+
+	b.log(fmt.Sprintf("  State: %s → %s", oldState.String(), lobbyState.String()))
+
+	// Auto-launch after coin toss: lobby returns to UI with a match ID means coin toss is done
+	if lobbyState == gcccm.CSODOTALobby_UI && matchID != 0 && oldState != gcccm.CSODOTALobby_UI {
+		b.log("Coin toss completed — auto-launching game...")
 		if b.dotaClient != nil {
 			b.dotaClient.LaunchLobby()
 		}
 	}
 
 	// Only signal bot to leave when game is actually running
-	if lobbyState == gcccm.CSODOTALobby_RUN && (oldLobby == nil || oldLobby.GetState() != gcccm.CSODOTALobby_RUN) {
+	if lobbyState == gcccm.CSODOTALobby_RUN && oldState != gcccm.CSODOTALobby_RUN {
 		b.log("Game is now running — leaving lobby")
 		select {
 		case b.gameStartedCh <- struct{}{}:

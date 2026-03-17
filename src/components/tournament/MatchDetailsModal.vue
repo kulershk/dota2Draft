@@ -54,7 +54,7 @@ const bothTeamsAssigned = computed(() => !!props.match.team1_captain_id && !!pro
 // Next game that needs to be played (no winner yet, no active lobby)
 const nextGameNumber = computed(() => {
   for (const g of allGames.value) {
-    if (!g.winner_captain_id) return g.game_number
+    if (!g.dotabuff_id) return g.game_number
   }
   return null
 })

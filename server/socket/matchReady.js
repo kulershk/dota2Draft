@@ -25,12 +25,11 @@ async function getMatchCaptain(socketId, compId, matchId) {
 }
 
 async function isNextGame(matchId, gameNumber) {
-  // Check that all previous games have a winner
+  // Check that all previous games have a match ID (game was played)
   const prevGames = await query(
-    'SELECT game_number FROM match_games WHERE match_id = $1 AND game_number < $2 AND winner_captain_id IS NOT NULL',
+    'SELECT game_number FROM match_games WHERE match_id = $1 AND game_number < $2 AND dotabuff_id IS NOT NULL',
     [matchId, gameNumber]
   )
-  // All games from 1 to gameNumber-1 must have winners
   for (let i = 1; i < gameNumber; i++) {
     if (!prevGames.some(g => g.game_number === i)) return false
   }

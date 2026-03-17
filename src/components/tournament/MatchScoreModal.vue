@@ -48,7 +48,7 @@ const score1 = computed(() => games.value.filter(g => g.winner_captain_id === pr
 const score2 = computed(() => games.value.filter(g => g.winner_captain_id === props.match.team2_captain_id).length)
 const nextGameNumber = computed(() => {
   for (const g of games.value) {
-    if (!g.winner_captain_id) return g.game_number
+    if (!g.dotabuff_id) return g.game_number
   }
   return null
 })
