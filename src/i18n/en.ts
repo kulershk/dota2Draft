@@ -578,6 +578,7 @@ export default {
   matchPending: 'Upcoming',
   matchLive: 'Live',
   matchCompleted: 'Completed',
+  matchWinner: '{team} wins!',
   matchDetails: 'Match Details',
   matchRoom: 'Match Room',
   matchNotFound: 'Match not found.',

@@ -577,6 +577,7 @@ export default {
   matchPending: 'Laukiama',
   matchLive: 'Tiesiogiai',
   matchCompleted: 'Baigta',
+  matchWinner: '{team} laimi!',
   matchDetails: 'Mačo detalės',
   matchRoom: 'Mačo kambarys',
   matchNotFound: 'Mačas nerastas.',

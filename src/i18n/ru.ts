@@ -577,6 +577,7 @@ export default {
   matchPending: 'Ожидание',
   matchLive: 'В эфире',
   matchCompleted: 'Завершён',
+  matchWinner: '{team} побеждает!',
   matchDetails: 'Детали матча',
   matchRoom: 'Комната матча',
   matchNotFound: 'Матч не найден.',

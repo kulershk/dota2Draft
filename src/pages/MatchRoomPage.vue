@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ChevronDown, ChevronUp, Check, Gamepad2, X, ArrowLeft } from 'lucide-vue-next'
+import { ChevronDown, ChevronUp, Check, Gamepad2, X, ArrowLeft, Trophy } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { getSocket } from '@/composables/useSocket'
@@ -191,6 +191,19 @@ async function fetchLobbyStatus(gameNumber: number) {
   } catch {}
 }
 
+// Track previous match status to detect transitions
+const prevMatchStatus = ref<string | null>(null)
+const matchJustCompleted = ref(false)
+
+function onTournamentUpdated() {
+  // Tournament data is re-fetched by the store globally.
+  // Re-fetch lobby statuses for all games since game states may have changed.
+  for (const g of allGames.value) {
+    fetchLobbyStatus(g.game_number)
+    store.getMatchReadyState(matchId.value, g.game_number)
+  }
+}
+
 const sock = getSocket()
 onMounted(() => {
   sock.emit('match:joinRoom', { matchId: matchId.value })
@@ -198,14 +211,22 @@ onMounted(() => {
   sock.on('match:launchReadyState', onLaunchReadyState)
   sock.on('lobby:statusUpdate', onLobbyStatusUpdate)
   sock.on('lobby:teamIds', onLobbyTeamIds)
+  sock.on('tournament:updated', onTournamentUpdated)
 })
 
 // Once match data is available, fetch ready states and lobby statuses
-watch(match, (m) => {
+watch(match, (m, oldM) => {
   if (!m) return
   // Auto-expand first game with stats
   const games = (m.games || []).filter((g: any) => g.has_stats)
   if (games.length > 0 && expandedGame.value === null) toggleStats(games[0].game_number)
+
+  // Detect status transition to completed
+  const oldStatus = oldM?.status || prevMatchStatus.value
+  if (m.status === 'completed' && oldStatus && oldStatus !== 'completed') {
+    matchJustCompleted.value = true
+  }
+  prevMatchStatus.value = m.status
 
   for (const g of allGames.value) {
     store.getMatchReadyState(m.id, g.game_number)
@@ -219,6 +240,7 @@ onUnmounted(() => {
   sock.off('match:launchReadyState', onLaunchReadyState)
   sock.off('lobby:statusUpdate', onLobbyStatusUpdate)
   sock.off('lobby:teamIds', onLobbyTeamIds)
+  sock.off('tournament:updated', onTournamentUpdated)
 })
 
 async function toggleStats(gameNumber: number) {
@@ -249,6 +271,13 @@ async function loadStats(gameNumber: number) {
 function getMultiKillCount(multiKills: Record<string, number>, key: string): number {
   return multiKills?.[key] || 0
 }
+
+const matchWinnerName = computed(() => {
+  if (!match.value || !match.value.winner_captain_id) return null
+  if (match.value.winner_captain_id === match.value.team1_captain_id) return match.value.team1_name
+  if (match.value.winner_captain_id === match.value.team2_captain_id) return match.value.team2_name
+  return null
+})
 
 function winnerName(game: any) {
   if (!match.value) return null
@@ -310,6 +339,13 @@ function goBack() {
           <span class="badge-info">{{ match.status === 'completed' ? t('matchCompleted') : match.status === 'live' ? t('matchLive') : t('matchPending') }}</span>
           <span class="text-xs text-text-tertiary">Best of {{ bestOf }}</span>
         </div>
+      </div>
+
+      <!-- Match Completed Banner -->
+      <div v-if="match.status === 'completed' && matchWinnerName" class="card px-6 py-5 mb-6 flex flex-col items-center gap-2 bg-green-500/5 border-green-500/20">
+        <Trophy class="w-8 h-8 text-green-500" />
+        <span class="text-lg font-bold text-foreground">{{ t('matchWinner', { team: matchWinnerName }) }}</span>
+        <span class="text-sm text-muted-foreground">{{ score1 }} : {{ score2 }}</span>
       </div>
 
       <!-- Match Ready Section (captain interactions) -->

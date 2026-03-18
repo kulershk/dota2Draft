@@ -5,11 +5,6 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="9608c49e-319f-438e-aac0-cbd0dc57dc13" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bot/bot.go" beforeDir="false" afterPath="$PROJECT_DIR$/bot/bot.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lobby/manager.go" beforeDir="false" afterPath="$PROJECT_DIR$/lobby/manager.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/main.go" beforeDir="false" afterPath="$PROJECT_DIR$/main.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/protocol/messages.go" beforeDir="false" afterPath="$PROJECT_DIR$/protocol/messages.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../server/services/botPool.js" beforeDir="false" afterPath="$PROJECT_DIR$/../server/services/botPool.js" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />

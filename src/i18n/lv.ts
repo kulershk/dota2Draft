@@ -577,6 +577,7 @@ export default {
   matchPending: 'Gaidīšana',
   matchLive: 'Tiešraide',
   matchCompleted: 'Pabeigts',
+  matchWinner: '{team} uzvar!',
   matchDetails: 'Mača detaļas',
   matchRoom: 'Mača istaba',
   matchNotFound: 'Mačs nav atrasts.',

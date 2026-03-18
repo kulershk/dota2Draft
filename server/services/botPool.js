@@ -201,7 +201,7 @@ class BotPool {
     )
     const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyId])
     if (lobby && this.io) {
-      this.io.to(`comp:${lobby.competition_id}`).emit('lobby:statusUpdate', {
+      this.io.to(`comp:${lobby.competition_id}`).to(`match:${lobby.match_id}`).emit('lobby:statusUpdate', {
         matchId: lobby.match_id,
         gameNumber: lobby.game_number,
         status: data.status,
@@ -214,7 +214,7 @@ class BotPool {
     const lobbyId = Number(data.lobbyId)
     const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyId])
     if (lobby && this.io) {
-      this.io.to(`comp:${lobby.competition_id}`).emit('lobby:statusUpdate', {
+      this.io.to(`comp:${lobby.competition_id}`).to(`match:${lobby.match_id}`).emit('lobby:statusUpdate', {
         matchId: lobby.match_id,
         gameNumber: lobby.game_number,
         status: lobby.status,
@@ -279,12 +279,12 @@ class BotPool {
 
     // Broadcast
     if (this.io) {
-      this.io.to(`comp:${lobby.competition_id}`).emit('lobby:statusUpdate', {
+      this.io.to(`comp:${lobby.competition_id}`).to(`match:${lobby.match_id}`).emit('lobby:statusUpdate', {
         matchId: lobby.match_id,
         gameNumber: lobby.game_number,
         status: 'completed',
       })
-      this.io.to(`comp:${lobby.competition_id}`).emit('lobby:matchIdCaptured', {
+      this.io.to(`comp:${lobby.competition_id}`).to(`match:${lobby.match_id}`).emit('lobby:matchIdCaptured', {
         matchId: lobby.match_id,
         gameNumber: lobby.game_number,
         dotaMatchId,
@@ -312,7 +312,7 @@ class BotPool {
 
     // Broadcast to frontend
     if (this.io) {
-      this.io.to(`comp:${lobby.competition_id}`).emit('lobby:teamIds', {
+      this.io.to(`comp:${lobby.competition_id}`).to(`match:${lobby.match_id}`).emit('lobby:teamIds', {
         matchId: lobby.match_id,
         gameNumber: lobby.game_number,
         radiantTeamId,
@@ -335,7 +335,7 @@ class BotPool {
         [lobbyId]
       )
       if (this.io) {
-        this.io.to(`comp:${lobby.competition_id}`).emit('lobby:statusUpdate', {
+        this.io.to(`comp:${lobby.competition_id}`).to(`match:${lobby.match_id}`).emit('lobby:statusUpdate', {
           matchId: lobby.match_id,
           gameNumber: lobby.game_number,
           status: 'waiting',
@@ -357,7 +357,7 @@ class BotPool {
     }
 
     if (this.io) {
-      this.io.to(`comp:${lobby.competition_id}`).emit('lobby:statusUpdate', {
+      this.io.to(`comp:${lobby.competition_id}`).to(`match:${lobby.match_id}`).emit('lobby:statusUpdate', {
         matchId: lobby.match_id,
         gameNumber: lobby.game_number,
         status: 'error',
@@ -666,7 +666,7 @@ class BotPool {
     await execute("UPDATE match_lobbies SET status = 'launching', updated_at = NOW() WHERE id = $1", [lobbyDbId])
     const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyDbId])
     if (lobby && this.io) {
-      this.io.to(`comp:${lobby.competition_id}`).emit('lobby:statusUpdate', {
+      this.io.to(`comp:${lobby.competition_id}`).to(`match:${lobby.match_id}`).emit('lobby:statusUpdate', {
         matchId: lobby.match_id,
         gameNumber: lobby.game_number,
         status: 'launching',
