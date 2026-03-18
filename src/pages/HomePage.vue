@@ -214,7 +214,7 @@ const isLoggedIn = computed(() => !!store.currentUser.value)
 import { useCarousel } from '@/composables/useCarousel'
 const carouselRef = ref<HTMLElement | null>(null)
 const matchCount = computed(() => upcomingMatches.value.length)
-const { isDragging: carouselDragging } = useCarousel(carouselRef, 0.5, matchCount)
+const { isDragging: carouselDragging } = useCarousel(carouselRef, 0.2, matchCount)
 
 const loopedMatches = computed(() => {
   const m = upcomingMatches.value

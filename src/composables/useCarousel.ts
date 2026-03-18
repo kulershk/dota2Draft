@@ -2,6 +2,7 @@ import { ref, watch, onUnmounted, nextTick, type Ref } from 'vue'
 
 export function useCarousel(containerRef: Ref<HTMLElement | null>, speed = 0.5, itemCount: Ref<number>) {
   const isDragging = ref(false)
+  const isHovering = ref(false)
   let animId = 0
   let startX = 0
   let scrollLeft = 0
@@ -28,12 +29,15 @@ export function useCarousel(containerRef: Ref<HTMLElement | null>, speed = 0.5, 
   function animate() {
     const el = containerRef.value
     if (!el) { animId = requestAnimationFrame(animate); return }
-    if (!isDragging.value) {
+    if (!isDragging.value && !isHovering.value) {
       el.scrollLeft += speed
       loopScroll(el)
     }
     animId = requestAnimationFrame(animate)
   }
+
+  function onMouseEnter() { isHovering.value = true }
+  function onMouseLeave() { isHovering.value = false }
 
   function onMouseDown(e: MouseEvent) {
     const el = containerRef.value
@@ -98,6 +102,8 @@ export function useCarousel(containerRef: Ref<HTMLElement | null>, speed = 0.5, 
     measureSet()
     el.style.cursor = 'grab'
     el.addEventListener('mousedown', onMouseDown)
+    el.addEventListener('mouseenter', onMouseEnter)
+    el.addEventListener('mouseleave', onMouseLeave)
     el.addEventListener('click', onClick, true)
     el.addEventListener('touchstart', onTouchStart, { passive: true })
     el.addEventListener('touchmove', onTouchMove, { passive: true })
@@ -112,6 +118,8 @@ export function useCarousel(containerRef: Ref<HTMLElement | null>, speed = 0.5, 
     const el = containerRef.value
     if (el) {
       el.removeEventListener('mousedown', onMouseDown)
+      el.removeEventListener('mouseenter', onMouseEnter)
+      el.removeEventListener('mouseleave', onMouseLeave)
       el.removeEventListener('click', onClick, true)
       el.removeEventListener('touchstart', onTouchStart)
       el.removeEventListener('touchmove', onTouchMove)
