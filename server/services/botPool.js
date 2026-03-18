@@ -1,5 +1,5 @@
 import { query, queryOne, execute } from '../db.js'
-import { fetchAndSaveGameStats } from '../helpers/opendota.js'
+import { fetchAndSaveGameStats, fetchOpenDotaMatch, saveMatchGameStats, requestOpenDotaParse } from '../helpers/opendota.js'
 
 class BotPool {
   constructor() {
@@ -42,6 +42,9 @@ class BotPool {
         })
       })
     }
+
+    // Start polling for unresolved game results
+    this._startResultsPolling()
   }
 
   _sendToGo(type_, data) {
@@ -340,22 +343,123 @@ class BotPool {
   }
 
   _scheduleStatsFetch(matchId, gameNumber, dotaMatchId) {
-    const delays = [5 * 60 * 1000, 10 * 60 * 1000, 15 * 60 * 1000]
-    for (const delay of delays) {
-      setTimeout(async () => {
+    // Request OpenDota to parse this match early
+    requestOpenDotaParse(dotaMatchId).catch(() => {})
+
+    // The actual fetching is handled by the polling job (_pollUnresolvedGames)
+    // which runs every 2 minutes and picks up any game with dotabuff_id but no winner
+    console.log(`[Stats] Match ${dotaMatchId} queued for auto-resolve (game ${gameNumber} of match ${matchId})`)
+  }
+
+  // Polling job: checks for games with dotabuff_id but no winner, fetches from OpenDota
+  _startResultsPolling() {
+    // Run every 10 minutes
+    this._pollTimer = setInterval(() => this._pollUnresolvedGames(), 10 * 60 * 1000)
+    // Also run once on startup after a short delay (catch games missed during downtime)
+    setTimeout(() => this._pollUnresolvedGames(), 15 * 1000)
+  }
+
+  async _pollUnresolvedGames() {
+    try {
+      const unresolvedGames = await query(`
+        SELECT mg.id, mg.match_id, mg.game_number, mg.dotabuff_id, mg.created_at
+        FROM match_games mg
+        JOIN matches m ON m.id = mg.match_id
+        WHERE mg.dotabuff_id IS NOT NULL
+          AND mg.dotabuff_id != ''
+          AND mg.winner_captain_id IS NULL
+        ORDER BY mg.created_at ASC
+        LIMIT 10
+      `)
+
+      if (unresolvedGames.length === 0) return
+
+      console.log(`[Stats] Polling ${unresolvedGames.length} unresolved game(s)...`)
+
+      for (const game of unresolvedGames) {
         try {
-          const mg = await queryOne(
-            'SELECT id FROM match_games WHERE match_id = $1 AND game_number = $2',
-            [matchId, gameNumber]
-          )
-          if (mg) {
-            await fetchAndSaveGameStats(mg.id, dotaMatchId)
-            console.log(`Stats fetched for match ${dotaMatchId} (delay: ${delay / 1000}s)`)
+          const matchData = await fetchOpenDotaMatch(game.dotabuff_id)
+          if (!matchData) {
+            // Request parse if match not found yet
+            await requestOpenDotaParse(game.dotabuff_id).catch(() => {})
+            continue
+          }
+
+          // Save stats
+          await saveMatchGameStats(game.id, matchData)
+
+          // Auto-fill winner if OpenDota has the result
+          if (matchData.radiant_win != null) {
+            await this._autoFillGameWinner(game.match_id, game.game_number, matchData.radiant_win)
+            console.log(`[Stats] Resolved game ${game.game_number} of match ${game.match_id} (dota: ${game.dotabuff_id})`)
+          } else {
+            // Match exists but not fully parsed yet, request parse
+            await requestOpenDotaParse(game.dotabuff_id).catch(() => {})
           }
         } catch (e) {
-          console.log(`Stats fetch attempt for ${dotaMatchId}: ${e.message}`)
+          console.log(`[Stats] Poll failed for ${game.dotabuff_id}: ${e.message}`)
         }
-      }, delay)
+      }
+    } catch (e) {
+      console.error('[Stats] Poll error:', e.message)
+    }
+  }
+
+  async _autoFillGameWinner(matchId, gameNumber, radiantWin) {
+    try {
+      const match = await queryOne('SELECT * FROM matches WHERE id = $1', [matchId])
+      if (!match) return
+
+      // Team 1 = Radiant, Team 2 = Dire
+      const winnerCaptainId = radiantWin ? match.team1_captain_id : match.team2_captain_id
+      if (!winnerCaptainId) return
+
+      // Set game winner
+      await execute(
+        'UPDATE match_games SET winner_captain_id = $1 WHERE match_id = $2 AND game_number = $3 AND winner_captain_id IS NULL',
+        [winnerCaptainId, matchId, gameNumber]
+      )
+      console.log(`[Auto] Game ${gameNumber} of match ${matchId} won by captain ${winnerCaptainId} (${radiantWin ? 'radiant' : 'dire'})`)
+
+      // Recalculate match score from all games
+      const games = await query(
+        'SELECT winner_captain_id FROM match_games WHERE match_id = $1 AND winner_captain_id IS NOT NULL',
+        [matchId]
+      )
+      const score1 = games.filter(g => g.winner_captain_id === match.team1_captain_id).length
+      const score2 = games.filter(g => g.winner_captain_id === match.team2_captain_id).length
+      const bestOf = match.best_of || 3
+      const winsNeeded = Math.ceil(bestOf / 2)
+
+      let matchWinner = null
+      let newStatus = 'live'
+      if (score1 >= winsNeeded) {
+        matchWinner = match.team1_captain_id
+        newStatus = 'completed'
+      } else if (score2 >= winsNeeded) {
+        matchWinner = match.team2_captain_id
+        newStatus = 'completed'
+      }
+
+      await execute(
+        'UPDATE matches SET score1 = $1, score2 = $2, winner_captain_id = $3, status = $4 WHERE id = $5',
+        [score1, score2, matchWinner, newStatus, matchId]
+      )
+
+      // Advance winner in bracket if match is completed
+      if (matchWinner && (match.next_match_id || match.loser_next_match_id)) {
+        const { advanceWinner } = await import('../helpers/tournament.js')
+        await advanceWinner(matchId, matchWinner)
+      }
+
+      // Notify clients
+      if (this.io && match.competition_id) {
+        this.io.to(`comp:${match.competition_id}`).emit('tournament:updated')
+      }
+
+      console.log(`[Auto] Match ${matchId} score: ${score1}-${score2}${matchWinner ? ' (completed)' : ''}`)
+    } catch (e) {
+      console.error(`[Auto] Failed to auto-fill winner for match ${matchId} game ${gameNumber}:`, e.message)
     }
   }
 
