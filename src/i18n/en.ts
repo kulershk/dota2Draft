@@ -774,6 +774,11 @@ export default {
   cancelLobbyConfirm: 'This will cancel the current lobby. Players will be disconnected and a new lobby will need to be created.',
   noTeamSet: 'No team',
 
+  scheduledTime: 'Scheduled',
+  upcomingMatches: 'Upcoming Matches',
+  startingSoon: 'Starting soon',
+  today: 'Today',
+  tomorrow: 'Tomorrow',
   showMatches: 'Show Matches',
   hideMatches: 'Hide Matches',
   bye: 'BYE',

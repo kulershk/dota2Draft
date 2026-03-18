@@ -27,6 +27,8 @@ interface TeamResult {
   mmr: number
   banner_url?: string | null
   players: TeamPlayer[]
+  game_wins?: number
+  game_losses?: number
 }
 
 const { t } = useI18n()
@@ -89,9 +91,19 @@ function totalSpent(team: TeamResult) {
               <p class="text-sm font-semibold text-foreground truncate">{{ team.team }}</p>
               <p class="text-xs text-muted-foreground truncate">{{ t('captainLabel', { name: team.name }) }}</p>
             </div>
-            <div class="text-right shrink-0 ml-3">
-              <p class="text-sm font-mono font-semibold text-foreground">{{ formatGold(team.budget) }}</p>
-              <p class="text-xs text-muted-foreground">{{ t('remaining') }}</p>
+            <div class="flex items-center gap-4 shrink-0 ml-3">
+              <div v-if="(team.game_wins || 0) + (team.game_losses || 0) > 0" class="text-center">
+                <p class="text-sm font-bold text-foreground">
+                  <span class="text-green-500">{{ team.game_wins || 0 }}</span>
+                  <span class="text-muted-foreground">:</span>
+                  <span class="text-red-500">{{ team.game_losses || 0 }}</span>
+                </p>
+                <p class="text-[10px] text-muted-foreground">W:L</p>
+              </div>
+              <div class="text-right">
+                <p class="text-sm font-mono font-semibold text-foreground">{{ formatGold(team.budget) }}</p>
+                <p class="text-xs text-muted-foreground">{{ t('remaining') }}</p>
+              </div>
             </div>
           </div>
         </div>

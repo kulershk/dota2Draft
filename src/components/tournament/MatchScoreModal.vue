@@ -24,6 +24,7 @@ const bestOf = computed(() => props.match.best_of || 3)
 const games = ref<{ game_number: number; winner_captain_id: number | null; dotabuff_id: string; has_stats?: boolean }[]>([])
 const isHidden = ref(false)
 const matchStatus = ref('pending')
+const scheduledAt = ref('')
 const expandedGame = ref<number | null>(null)
 const gameStats = ref<Record<number, any[]>>({})
 const loadingStats = ref<Record<number, boolean>>({})
@@ -32,6 +33,7 @@ const refetchingGame = ref<Record<number, boolean>>({})
 onMounted(() => {
   isHidden.value = !!props.match.hidden
   matchStatus.value = props.match.status || 'pending'
+  scheduledAt.value = props.match.scheduled_at ? String(props.match.scheduled_at).slice(0, 16) : ''
   const existing = props.match.games || []
   for (let i = 1; i <= bestOf.value; i++) {
     const g = existing.find((e: any) => e.game_number === i)
@@ -66,6 +68,7 @@ function save() {
     status: matchStatus.value,
     games: games.value,
     hidden: isHidden.value,
+    scheduled_at: scheduledAt.value || null,
   })
 }
 
@@ -618,6 +621,10 @@ onUnmounted(() => {
           <option value="live">{{ t('matchLive') }}</option>
           <option value="completed">{{ t('matchCompleted') }}</option>
         </select>
+      </div>
+      <div class="flex items-center gap-3">
+        <label class="text-sm text-foreground font-medium whitespace-nowrap">{{ t('scheduledTime') }}</label>
+        <input type="datetime-local" class="input-field flex-1" v-model="scheduledAt" />
       </div>
       <label class="flex items-center gap-2 cursor-pointer py-1">
         <input type="checkbox" class="w-4 h-4 accent-primary" v-model="isHidden" />

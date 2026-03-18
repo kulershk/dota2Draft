@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Calendar, Users, User, Gavel, Trophy, Clock, Settings, DollarSign, Upload, X, Tv } from 'lucide-vue-next'
+import { Calendar, Users, User, Gavel, Trophy, Clock, Settings, DollarSign, Upload, X, Tv, Swords } from 'lucide-vue-next'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
@@ -72,7 +72,37 @@ watch(compId, async (id) => {
   try {
     streams.value = await api.getCompStreamsLive(id)
   } catch { }
+  try {
+    await store.fetchTournament()
+  } catch { }
 }, { immediate: true })
+
+// Upcoming matches (scheduled, not completed)
+const upcomingMatches = computed(() => {
+  const tournament = store.tournamentData.value
+  if (!tournament?.matches) return []
+  return tournament.matches
+    .filter((m: any) => m.scheduled_at && m.status !== 'completed' && !m.hidden)
+    .sort((a: any, b: any) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())
+})
+
+function formatMatchDate(dateStr: string) {
+  // Treat as local time — remove trailing Z if present
+  const d = new Date(dateStr.replace('Z', ''))
+  const now = new Date()
+  const diffMs = d.getTime() - now.getTime()
+  const diffH = Math.floor(diffMs / 3600000)
+  const diffD = Math.floor(diffMs / 86400000)
+
+  const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+  const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+
+  if (diffMs < 0) return `${date} ${time}`
+  if (diffH < 1) return t('startingSoon')
+  if (diffD === 0) return `${t('today')} ${time}`
+  if (diffD === 1) return `${t('tomorrow')} ${time}`
+  return `${date} ${time}`
+}
 
 const myCaptain = computed(() => {
   if (!store.currentUser.value) return null
@@ -142,6 +172,30 @@ async function removeBanner(captain: any) {
           <span>{{ t('createdBy') }} <span class="font-medium text-foreground">{{ comp.created_by_name }}</span></span>
           <span class="mx-1">&middot;</span>
           <span>{{ formatDate(comp.created_at) }}</span>
+        </div>
+      </div>
+
+      <!-- Upcoming Matches -->
+      <div v-if="upcomingMatches.length > 0" class="card">
+        <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
+          <Swords class="w-5 h-5 text-foreground" />
+          <span class="text-sm font-semibold text-foreground">{{ t('upcomingMatches') }}</span>
+        </div>
+        <div class="divide-y divide-border">
+          <div v-for="match in upcomingMatches" :key="match.id" class="flex items-center gap-3 px-4 py-3">
+            <div class="flex-1 flex items-center justify-end gap-2 min-w-0">
+              <span class="text-sm font-medium text-foreground truncate">{{ match.team1_name || t('tbd') }}</span>
+              <img v-if="match.team1_banner || match.team1_avatar" :src="match.team1_banner || match.team1_avatar" class="w-6 h-6 object-cover shrink-0" :class="match.team1_banner ? 'rounded' : 'rounded-full'" />
+            </div>
+            <div class="flex flex-col items-center gap-0.5 shrink-0 px-2">
+              <span class="text-xs font-bold text-muted-foreground">{{ t('vs') }}</span>
+              <span class="text-[10px] text-primary font-medium">{{ formatMatchDate(match.scheduled_at) }}</span>
+            </div>
+            <div class="flex-1 flex items-center gap-2 min-w-0">
+              <img v-if="match.team2_banner || match.team2_avatar" :src="match.team2_banner || match.team2_avatar" class="w-6 h-6 object-cover shrink-0" :class="match.team2_banner ? 'rounded' : 'rounded-full'" />
+              <span class="text-sm font-medium text-foreground truncate">{{ match.team2_name || t('tbd') }}</span>
+            </div>
+          </div>
         </div>
       </div>
 
