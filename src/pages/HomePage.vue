@@ -213,11 +213,17 @@ const isLoggedIn = computed(() => !!store.currentUser.value)
 // Carousel for upcoming matches
 import { useCarousel } from '@/composables/useCarousel'
 const carouselRef = ref<HTMLElement | null>(null)
-const { isDragging: carouselDragging } = useCarousel(carouselRef, 0.5)
+const matchCount = computed(() => upcomingMatches.value.length)
+const { isDragging: carouselDragging } = useCarousel(carouselRef, 0.5, matchCount)
 
 const loopedMatches = computed(() => {
-  if (upcomingMatches.value.length === 0) return []
-  return [...upcomingMatches.value, ...upcomingMatches.value]
+  const m = upcomingMatches.value
+  if (m.length === 0) return []
+  // Repeat enough times to fill the viewport and allow seamless looping
+  const copies = Math.max(3, Math.ceil(10 / m.length))
+  const result = []
+  for (let i = 0; i < copies; i++) result.push(...m)
+  return result
 })
 </script>
 
