@@ -83,11 +83,13 @@ export default function createTournamentRouter(io) {
         LEFT JOIN players p1 ON p1.id = t1.player_id
         LEFT JOIN captains t2 ON t2.id = m.team2_captain_id
         LEFT JOIN players p2 ON p2.id = t2.player_id
-        WHERE m.scheduled_at IS NOT NULL
+        WHERE (m.scheduled_at IS NOT NULL OR m.status = 'live')
           AND m.status != 'completed'
           AND m.hidden = false
           AND c.status != 'finished'
-        ORDER BY m.scheduled_at ASC
+        ORDER BY
+          CASE WHEN m.status = 'live' THEN 0 ELSE 1 END,
+          m.scheduled_at ASC NULLS LAST
         LIMIT 20
       `)
       res.json(matches)

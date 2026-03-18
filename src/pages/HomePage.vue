@@ -209,6 +209,16 @@ function formatMatchDate(dateStr: string) {
 }
 
 const isLoggedIn = computed(() => !!store.currentUser.value)
+
+// Carousel for upcoming matches
+import { useCarousel } from '@/composables/useCarousel'
+const carouselRef = ref<HTMLElement | null>(null)
+const { isDragging: carouselDragging } = useCarousel(carouselRef, 0.5)
+
+const loopedMatches = computed(() => {
+  if (upcomingMatches.value.length === 0) return []
+  return [...upcomingMatches.value, ...upcomingMatches.value]
+})
 </script>
 
 <template>
@@ -255,16 +265,17 @@ const isLoggedIn = computed(() => !!store.currentUser.value)
         <span class="text-lg font-semibold text-foreground">{{ t('upcomingMatches') }}</span>
         <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-primary/20 text-primary">{{ upcomingMatches.length }}</span>
       </div>
-      <div class="flex gap-4 overflow-x-auto pb-2">
+      <div ref="carouselRef" class="flex gap-4 overflow-hidden select-none" @dragstart.prevent>
         <router-link
-          v-for="match in upcomingMatches"
-          :key="match.id"
+          v-for="(match, idx) in loopedMatches"
+          :key="match.id + '-' + idx"
           :to="`/c/${match.competition_id}/tournament?match=${match.id}`"
+          draggable="false"
           class="flex flex-col justify-between rounded-xl bg-card p-4 w-[280px] h-[160px] shrink-0 hover:bg-card/80 transition-colors"
         >
           <div class="flex items-center justify-between">
             <span class="text-[11px] text-text-tertiary truncate">{{ match.stage_name || match.competition_name || '' }}</span>
-            <span class="badge-accent shrink-0">{{ formatMatchDate(match.scheduled_at).includes('ago') || formatMatchDate(match.scheduled_at) === t('startingSoon') ? 'LIVE' : 'UPCOMING' }}</span>
+            <span :class="match.status === 'live' ? 'badge-success' : 'badge-accent'" class="shrink-0">{{ match.status === 'live' ? 'LIVE' : 'UPCOMING' }}</span>
           </div>
           <div class="flex items-center justify-between">
             <div class="flex flex-col items-center gap-1.5 w-20">

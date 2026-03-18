@@ -575,7 +575,7 @@ export default {
   draws: 'D',
   losses: 'L',
   points: 'Pts',
-  matchPending: 'Pending',
+  matchPending: 'Upcoming',
   matchLive: 'Live',
   matchCompleted: 'Completed',
   matchDetails: 'Match Details',
