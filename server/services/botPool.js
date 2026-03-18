@@ -599,6 +599,9 @@ class BotPool {
 
     await execute("UPDATE lobby_bots SET status = 'busy', last_used_at = NOW() WHERE id = $1", [availableBot.id])
 
+    // Auto-set match status to live when first lobby is created
+    await execute("UPDATE matches SET status = 'live' WHERE id = $1 AND status = 'pending'", [matchId])
+
     console.log('[Lobby] Settings from DB:', { cheats, allowSpectating, pauseSetting, selectionPriority, cmPick, penaltyRadiant, penaltyDire, seriesType })
 
     // Send to Go service
