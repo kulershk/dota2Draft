@@ -246,17 +246,27 @@ func (b *Bot) handleSteamEvents() {
 		case *steam.DisconnectedEvent:
 			b.mu.Lock()
 			waiting := b.pendingAuth
+			status := b.Status
 			b.mu.Unlock()
 			if waiting {
 				b.log("Disconnected (waiting for Steam Guard code)")
 				continue // don't exit the event loop, we'll reconnect after code
 			}
-			b.log("Disconnected from Steam")
-			b.mu.Lock()
-			wasOnline := b.Status != StatusOffline
-			b.mu.Unlock()
-			if wasOnline {
-				b.setStatus(StatusOffline)
+			// If we were online or connecting, auto-reconnect
+			if status != StatusOffline {
+				b.log("Disconnected from Steam — reconnecting in 3s...")
+				b.setStatus(StatusConnecting)
+				time.Sleep(3 * time.Second)
+				select {
+				case <-b.cancelCh:
+					b.setStatus(StatusOffline)
+					return
+				default:
+				}
+				if b.steamClient != nil {
+					b.steamClient.Connect()
+				}
+				continue
 			}
 			return
 
