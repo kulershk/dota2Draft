@@ -38,7 +38,7 @@ watch(compId, (newId) => {
   <div class="flex flex-col flex-1 overflow-hidden">
     <!-- Competition sub-nav -->
     <div class="border-b border-border bg-accent/30">
-      <div class="max-w-[1440px] mx-auto w-full flex items-center gap-1 px-4 py-1.5 overflow-x-auto">
+      <div class="max-w-[1200px] mx-auto w-full flex items-center gap-1 px-4 md:px-6 py-1.5 overflow-x-auto">
         <span v-if="store.currentCompetition.value" class="text-sm font-semibold text-foreground mr-3 whitespace-nowrap">
           {{ store.currentCompetition.value.name }}
         </span>

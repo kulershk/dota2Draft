@@ -272,7 +272,7 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
 </script>
 
 <template>
-  <div class="p-4 md:p-6 md:px-8 flex flex-col gap-4 md:gap-5 max-w-[1440px] mx-auto w-full">
+  <div class="p-4 md:p-6 md:px-8 flex flex-col gap-4 md:gap-5 max-w-[1200px] mx-auto w-full">
     <!-- Toast notifications (fixed top-right) -->
     <div class="fixed top-4 left-4 right-4 md:left-auto md:right-4 z-50 flex flex-col gap-2 md:w-[360px] pointer-events-none">
       <transition name="toast">

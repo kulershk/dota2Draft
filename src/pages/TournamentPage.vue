@@ -455,7 +455,7 @@ function stageStatusClass(stage: any) {
 </script>
 
 <template>
-  <div class="p-4 md:p-8 flex flex-col gap-4 md:gap-6 max-w-[1440px] mx-auto w-full">
+  <div class="p-4 md:p-8 flex flex-col gap-4 md:gap-6 max-w-[1200px] mx-auto w-full">
     <!-- Header -->
     <div class="flex items-center justify-between">
       <div>

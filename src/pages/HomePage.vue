@@ -209,7 +209,7 @@ const isLoggedIn = computed(() => !!store.currentUser.value)
 </script>
 
 <template>
-  <div class="p-4 md:p-8 md:px-10 max-w-[1440px] mx-auto w-full">
+  <div class="p-4 md:p-8 md:px-10 max-w-[1200px] mx-auto w-full">
     <!-- Hero -->
     <div class="text-center py-6 md:py-10">
       <h1 class="text-3xl md:text-4xl font-bold text-foreground">{{ siteTitle || t('heroTitle') }}</h1>
