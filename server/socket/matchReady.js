@@ -52,7 +52,8 @@ export function registerMatchReadyHandlers(socket, io) {
     setMatchCaptainReady(matchId, gameNumber, captain.id)
 
     const readyIds = getMatchReadyCaptainIds(matchId, gameNumber)
-    io.to(`comp:${compId}`).emit('match:readyState', { matchId, gameNumber, readyCaptainIds: readyIds })
+    const readyPayload = { matchId, gameNumber, readyCaptainIds: readyIds }
+    io.to(`comp:${compId}`).to(`match:${matchId}`).emit('match:readyState', readyPayload)
 
     // Check if both captains are ready
     const bothReady = match.team1_captain_id && match.team2_captain_id
@@ -71,9 +72,8 @@ export function registerMatchReadyHandlers(socket, io) {
         "SELECT id FROM lobby_bots WHERE status = 'available' ORDER BY last_used_at NULLS FIRST LIMIT 1"
       )
       if (!availableBot) {
-        io.to(`comp:${compId}`).emit('match:readyState', {
-          matchId, gameNumber, readyCaptainIds: readyIds, noBotAvailable: true,
-        })
+        const noBotPayload = { matchId, gameNumber, readyCaptainIds: readyIds, noBotAvailable: true }
+        io.to(`comp:${compId}`).to(`match:${matchId}`).emit('match:readyState', noBotPayload)
         return
       }
 
@@ -81,11 +81,13 @@ export function registerMatchReadyHandlers(socket, io) {
       try {
         await botPool.createLobby(compId, matchId, gameNumber, {})
         clearMatchReady(matchId, gameNumber)
-        io.to(`comp:${compId}`).emit('match:readyState', {
-          matchId, gameNumber, readyCaptainIds: [], lobbyCreated: true,
-        })
+        const createdPayload = { matchId, gameNumber, readyCaptainIds: [], lobbyCreated: true }
+        io.to(`comp:${compId}`).to(`match:${matchId}`).emit('match:readyState', createdPayload)
       } catch (e) {
         console.error('Auto-create lobby failed:', e.message)
+        io.to(`comp:${compId}`).to(`match:${matchId}`).emit('match:readyState', {
+          matchId, gameNumber, readyCaptainIds: readyIds, lobbyCreateError: e.message || 'Failed to create lobby',
+        })
       }
     }
   })
@@ -100,7 +102,7 @@ export function registerMatchReadyHandlers(socket, io) {
     setMatchCaptainUnready(matchId, gameNumber, result.captain.id)
 
     const readyIds = getMatchReadyCaptainIds(matchId, gameNumber)
-    io.to(`comp:${compId}`).emit('match:readyState', { matchId, gameNumber, readyCaptainIds: readyIds })
+    io.to(`comp:${compId}`).to(`match:${matchId}`).emit('match:readyState', { matchId, gameNumber, readyCaptainIds: readyIds })
   })
 
   // Phase 2: Ready up to launch game (lobby is in "waiting" state)
@@ -130,7 +132,7 @@ export function registerMatchReadyHandlers(socket, io) {
     setLaunchCaptainReady(matchId, gameNumber, captain.id)
 
     const readyIds = getLaunchReadyCaptainIds(matchId, gameNumber)
-    io.to(`comp:${compId}`).emit('match:launchReadyState', { matchId, gameNumber, readyCaptainIds: readyIds })
+    io.to(`comp:${compId}`).to(`match:${matchId}`).emit('match:launchReadyState', { matchId, gameNumber, readyCaptainIds: readyIds })
 
     // Check if both captains are launch-ready
     const bothReady = match.team1_captain_id && match.team2_captain_id
@@ -140,7 +142,7 @@ export function registerMatchReadyHandlers(socket, io) {
       try {
         await botPool.forceLaunch(lobby.id)
         clearLaunchReady(matchId, gameNumber)
-        io.to(`comp:${compId}`).emit('match:launchReadyState', {
+        io.to(`comp:${compId}`).to(`match:${matchId}`).emit('match:launchReadyState', {
           matchId, gameNumber, readyCaptainIds: [], launched: true,
         })
       } catch (e) {
@@ -159,7 +161,18 @@ export function registerMatchReadyHandlers(socket, io) {
     setLaunchCaptainUnready(matchId, gameNumber, result.captain.id)
 
     const readyIds = getLaunchReadyCaptainIds(matchId, gameNumber)
-    io.to(`comp:${compId}`).emit('match:launchReadyState', { matchId, gameNumber, readyCaptainIds: readyIds })
+    io.to(`comp:${compId}`).to(`match:${matchId}`).emit('match:launchReadyState', { matchId, gameNumber, readyCaptainIds: readyIds })
+  })
+
+  // Join/leave match room for focused updates
+  socket.on('match:joinRoom', ({ matchId }) => {
+    if (!matchId) return
+    socket.join(`match:${matchId}`)
+  })
+
+  socket.on('match:leaveRoom', ({ matchId }) => {
+    if (!matchId) return
+    socket.leave(`match:${matchId}`)
   })
 
   // Get current ready state for a match

@@ -78,6 +78,13 @@ func main() {
 				log.Printf("Create lobby error: %v", err)
 			}
 
+		case "rejoin_lobby":
+			var cmd protocol.RejoinLobbyCmd
+			json.Unmarshal(data, &cmd)
+			if err := lobbyMgr.RejoinLobby(cmd); err != nil {
+				log.Printf("Rejoin lobby error: %v", err)
+			}
+
 		case "cancel_lobby":
 			var cmd protocol.CancelLobbyCmd
 			json.Unmarshal(data, &cmd)

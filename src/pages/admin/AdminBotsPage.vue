@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Bot, Plus, Trash2, Plug, Unplug, ShieldQuestion, ChevronDown, ChevronUp, X, Circle } from 'lucide-vue-next'
+import { Bot, Plus, Trash2, Plug, Unplug, ShieldQuestion, ChevronDown, ChevronUp, X, Circle, ExternalLink } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { getSocket } from '@/composables/useSocket'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
@@ -222,6 +222,14 @@ onUnmounted(() => {
             <ShieldQuestion class="w-3.5 h-3.5" />
             {{ t('enterCode') }}
           </button>
+          <router-link
+            v-if="bot.status === 'busy' && bot.active_match_id && bot.active_competition_id"
+            :to="`/c/${bot.active_competition_id}/tournament?match=${bot.active_match_id}`"
+            class="btn-primary text-xs px-3 py-1.5"
+          >
+            <ExternalLink class="w-3.5 h-3.5" />
+            {{ t('matchDetails') || 'Match' }}
+          </router-link>
           <button
             v-if="bot.status === 'busy'"
             class="btn-secondary text-xs px-3 py-1.5 !text-red-500 hover:!bg-red-500/10"

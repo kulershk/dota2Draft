@@ -201,6 +201,97 @@ func (m *Manager) runLobby(ctx context.Context, lobby *Lobby) {
 	m.removeLobby(lobby.ID)
 }
 
+func (m *Manager) RejoinLobby(cmd protocol.RejoinLobbyCmd) error {
+	m.mu.Lock()
+	if _, exists := m.lobbies[cmd.LobbyID]; exists {
+		m.mu.Unlock()
+		log.Printf("[Lobby %s] Already tracked, skipping rejoin", cmd.LobbyID)
+		return nil
+	}
+
+	// Find the specific bot (it may be busy since it was assigned to this lobby)
+	b := m.botManager.GetBot(cmd.BotID)
+	if b == nil {
+		m.mu.Unlock()
+		log.Printf("[Lobby %s] Bot %s not found for rejoin", cmd.LobbyID, cmd.BotID)
+		return fmt.Errorf("bot %s not found", cmd.BotID)
+	}
+
+	inLobby := b.IsInLobby()
+	log.Printf("[Lobby %s] Bot %s rejoin — in Dota lobby: %v", cmd.LobbyID, cmd.BotID, inLobby)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	lobby := &Lobby{
+		ID:              cmd.LobbyID,
+		GameName:        cmd.GameName,
+		Password:        cmd.Password,
+		ExpectedPlayers: cmd.Players,
+		Bot:             b,
+		Status:          "waiting",
+		cancel:          cancel,
+	}
+	m.lobbies[cmd.LobbyID] = lobby
+	m.mu.Unlock()
+
+	b.SetBusy(true)
+	b.SetActiveLobbyID(cmd.LobbyID)
+	b.SetExpectedTeams(cmd.Players)
+
+	log.Printf("[Lobby %s] Rejoining — bot %s re-watching lobby (in Dota lobby: %v)", cmd.LobbyID, cmd.BotID, inLobby)
+	m.send("bot_log", protocol.BotLogEvent{
+		BotID:   cmd.BotID,
+		Message: fmt.Sprintf("Rejoining lobby '%s' after reconnect (in Dota lobby: %v)", cmd.GameName, inLobby),
+	})
+
+	if inLobby {
+		// Bot is still in the Dota lobby — just re-track it
+		m.send("lobby_status", protocol.LobbyStatusEvent{
+			LobbyID: cmd.LobbyID,
+			Status:  "waiting",
+		})
+	} else {
+		// Bot lost the lobby — report error
+		m.send("bot_log", protocol.BotLogEvent{
+			BotID:   cmd.BotID,
+			Message: fmt.Sprintf("Bot is NOT in Dota lobby anymore — lobby '%s' may need to be recreated", cmd.GameName),
+		})
+		m.send("lobby_error", protocol.LobbyErrorEvent{
+			LobbyID: cmd.LobbyID,
+			Error:   "Bot lost connection to lobby after reconnect",
+		})
+		b.SetActiveLobbyID("")
+		b.SetBusy(false)
+		m.removeLobby(cmd.LobbyID)
+		return nil
+	}
+
+	// Run the lobby watcher (waits for game start or cancel)
+	go func() {
+		select {
+		case <-b.GameStartedCh():
+			log.Printf("[Lobby %s] Game started after rejoin", cmd.LobbyID)
+			m.send("bot_log", protocol.BotLogEvent{
+				BotID:   cmd.BotID,
+				Message: "Game started — leaving lobby and freeing bot",
+			})
+			b.AbandonAndLeaveLobby()
+		case <-ctx.Done():
+			log.Printf("[Lobby %s] Lobby cancelled after rejoin", cmd.LobbyID)
+			b.LeaveLobby()
+		case <-time.After(45 * time.Minute):
+			log.Printf("[Lobby %s] Lobby timed out after rejoin", cmd.LobbyID)
+			m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: cmd.LobbyID, Error: "Lobby timed out"})
+			b.LeaveLobby()
+		}
+		b.SetActiveLobbyID("")
+		b.SetExpectedTeams(nil)
+		b.SetBusy(false)
+		m.removeLobby(cmd.LobbyID)
+	}()
+
+	return nil
+}
+
 func (m *Manager) CancelLobby(lobbyID string) error {
 	m.mu.RLock()
 	lobby, ok := m.lobbies[lobbyID]

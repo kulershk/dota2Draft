@@ -359,6 +359,45 @@ func (b *Bot) watchLobbyCacheEvents() {
 	b.mu.Unlock()
 
 	b.log("Lobby cache watcher started")
+
+	// Check if a lobby already exists in cache (e.g. bot was in a lobby before restart)
+	go func() {
+		time.Sleep(3 * time.Second) // give cache time to populate
+		container, err := b.dotaClient.GetCache().GetContainerForTypeID(uint32(cso.Lobby))
+		if err != nil {
+			return
+		}
+		existing := container.GetOne()
+		if existing == nil {
+			return
+		}
+		lobby, ok := existing.(*gcccm.CSODOTALobby)
+		if !ok {
+			return
+		}
+		b.log(fmt.Sprintf("CACHE: Found existing lobby on startup (id: %d, state: %s)", lobby.GetLobbyId(), lobby.GetState().String()))
+		b.mu.Lock()
+		b.lastLobby = lobby
+		assigned := b.activeLobbyID != ""
+		b.mu.Unlock()
+		if !assigned {
+			b.log("CACHE: Existing lobby with no assignment — waiting 5s for rejoin command...")
+			time.Sleep(5 * time.Second)
+			b.mu.Lock()
+			nowAssigned := b.activeLobbyID != ""
+			b.mu.Unlock()
+			if !nowAssigned {
+				b.log("CACHE: No rejoin received — leaving stale lobby")
+				b.LeaveLobby()
+				b.mu.Lock()
+				b.lastLobby = nil
+				b.mu.Unlock()
+			} else {
+				b.log("CACHE: Rejoin received — keeping lobby")
+			}
+		}
+	}()
+
 	for {
 		select {
 		case <-stopCh:
@@ -380,6 +419,28 @@ func (b *Bot) handleLobbyCacheEvent(event *socache.CacheEvent) {
 		lobby := event.Object.(*gcccm.CSODOTALobby)
 		b.log(fmt.Sprintf("CACHE: Lobby created (id: %d, state: %s)",
 			lobby.GetLobbyId(), lobby.GetState().String()))
+		// If bot has no active lobby assignment, wait briefly for rejoin_lobby command
+		// then leave if still unassigned
+		if b.activeLobbyID == "" {
+			b.log("CACHE: Found lobby with no active assignment — waiting 5s for rejoin command...")
+			b.lastLobby = lobby
+			go func() {
+				time.Sleep(5 * time.Second)
+				b.mu.Lock()
+				assigned := b.activeLobbyID != ""
+				b.mu.Unlock()
+				if !assigned {
+					b.log("CACHE: No rejoin received — leaving stale lobby")
+					b.LeaveLobby()
+					b.mu.Lock()
+					b.lastLobby = nil
+					b.mu.Unlock()
+				} else {
+					b.log("CACHE: Rejoin received — keeping lobby")
+				}
+			}()
+			return
+		}
 		b.processLobbyUpdate(nil, lobby)
 		b.lastLobby = lobby
 
@@ -423,17 +484,49 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 	for _, m := range newMembers {
 		pid := m.GetId()
 		newTeam := teamName(m.GetTeam())
-		if oldTeam, existed := oldMembers[pid]; !existed {
+		steamId := fmt.Sprintf("%d", pid)
+		if _, existed := oldMembers[pid]; !existed {
 			b.log(fmt.Sprintf("Player %d joined lobby → %s", pid, newTeam))
-		} else if oldTeam != m.GetTeam() {
-			b.log(fmt.Sprintf("Player %d changed team: %s → %s", pid, teamName(oldTeam), newTeam))
+			b.send("player_joined", protocol.PlayerJoinedEvent{
+				LobbyID: b.activeLobbyID,
+				SteamID: steamId,
+				Team:    newTeam,
+			})
+		} else if oldMembers[pid] != m.GetTeam() {
+			b.log(fmt.Sprintf("Player %d changed team: %s → %s", pid, teamName(oldMembers[pid]), newTeam))
+			b.send("player_joined", protocol.PlayerJoinedEvent{
+				LobbyID: b.activeLobbyID,
+				SteamID: steamId,
+				Team:    newTeam,
+			})
 		}
 	}
-	for pid, oldTeam := range oldMembers {
+	for pid := range oldMembers {
 		if _, stillHere := newMembersMap[pid]; !stillHere {
-			b.log(fmt.Sprintf("Player %d left lobby (was %s)", pid, teamName(oldTeam)))
+			b.log(fmt.Sprintf("Player %d left lobby", pid))
+			b.send("player_left", protocol.PlayerLeftEvent{
+				LobbyID: b.activeLobbyID,
+				SteamID: fmt.Sprintf("%d", pid),
+			})
 		}
 	}
+
+	// Send full player list update to Node so it stays in sync
+	var joinedPlayers []protocol.LobbyPlayer
+	for _, m := range newMembers {
+		team := teamName(m.GetTeam())
+		if team == "radiant" || team == "dire" {
+			joinedPlayers = append(joinedPlayers, protocol.LobbyPlayer{
+				SteamID: fmt.Sprintf("%d", m.GetId()),
+				Team:    team,
+			})
+		}
+	}
+	b.send("lobby_status", protocol.LobbyStatusEvent{
+		LobbyID:       b.activeLobbyID,
+		Status:        "waiting",
+		PlayersJoined: joinedPlayers,
+	})
 
 	// Detect team IDs from lobby team details
 	teamDetails := newLobby.GetTeamDetails()
@@ -614,6 +707,18 @@ func (b *Bot) IsAvailable() bool {
 	return b.Status == StatusAvailable
 }
 
+func (b *Bot) IsInLobby() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.lastLobby != nil
+}
+
+func (b *Bot) GetActiveLobbyID() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.activeLobbyID
+}
+
 func (b *Bot) SetBusy(busy bool) {
 	b.mu.Lock()
 	if busy {
@@ -666,7 +771,7 @@ func (b *Bot) CreatePracticeLobby(gameName, password string, opts LobbyOptions) 
 	}
 
 	gameMode := uint32(opts.GameMode)
-	visibility := gcccm.DOTALobbyVisibility_DOTALobbyVisibility_Friends
+	visibility := gcccm.DOTALobbyVisibility_DOTALobbyVisibility_Public
 	region := uint32(opts.ServerRegion)
 	allowCheats := opts.Cheats
 	fillBots := false

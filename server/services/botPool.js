@@ -154,6 +154,30 @@ class BotPool {
     if (this.io) {
       this.io.emit('bot:statusChanged', { botId, status: data.status, errorMessage: data.error || null })
     }
+
+    // When a bot comes back online, re-sync its active lobbies so Go can rejoin them
+    if (data.status === 'available') {
+      try {
+        const activeLobbies = await query(
+          "SELECT * FROM match_lobbies WHERE bot_id = $1 AND status IN ('creating', 'waiting', 'launching')",
+          [botId]
+        )
+        if (activeLobbies.length > 0) {
+          console.log(`[Bot ${botId}] Back online with ${activeLobbies.length} active lobby(s), re-syncing`)
+          for (const lobby of activeLobbies) {
+            this._sendToGo('rejoin_lobby', {
+              lobbyId: String(lobby.id),
+              botId: String(botId),
+              gameName: lobby.game_name,
+              password: lobby.password,
+              players: lobby.players_expected || [],
+            })
+          }
+        }
+      } catch (e) {
+        console.error(`[Bot ${botId}] Failed to re-sync lobbies:`, e.message)
+      }
+    }
   }
 
   _onBotLog(data) {
@@ -470,7 +494,13 @@ class BotPool {
   }
 
   async getBotStatuses() {
-    return await query('SELECT id, username, display_name, steam_id, status, error_message, auto_connect, last_used_at, created_at FROM lobby_bots ORDER BY id')
+    return await query(`
+      SELECT b.id, b.username, b.display_name, b.steam_id, b.status, b.error_message, b.auto_connect, b.last_used_at, b.created_at,
+        ml.match_id AS active_match_id, ml.competition_id AS active_competition_id
+      FROM lobby_bots b
+      LEFT JOIN match_lobbies ml ON ml.bot_id = b.id AND ml.status IN ('creating', 'waiting', 'launching', 'active')
+      ORDER BY b.id
+    `)
   }
 
   async addBot(username, password) {

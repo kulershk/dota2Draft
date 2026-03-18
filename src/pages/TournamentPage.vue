@@ -2,7 +2,7 @@
 import { Swords, Settings, Plus, RotateCcw, Trash2, ChevronRight, Pencil, EyeOff } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
 import { usePersistedRef } from '@/composables/usePersistedRef'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
@@ -11,10 +11,10 @@ import BracketView from '@/components/tournament/BracketView.vue'
 import DoubleEliminationView from '@/components/tournament/DoubleEliminationView.vue'
 import GroupStageView from '@/components/tournament/GroupStageView.vue'
 import MatchScoreModal from '@/components/tournament/MatchScoreModal.vue'
-import MatchDetailsModal from '@/components/tournament/MatchDetailsModal.vue'
 
 const { t } = useI18n()
 const route = useRoute()
+const router = useRouter()
 const api = useApi()
 const store = useDraftStore()
 
@@ -25,7 +25,6 @@ const showEditStage = ref(false)
 const showDeleteStage = ref(false)
 const deleteStageId = ref<number | null>(null)
 const editingMatch = ref<any>(null)
-const viewingMatch = ref<any>(null)
 const activeStageId = ref<number | null>(null)
 const showHidden = usePersistedRef('showHiddenMatches', true)
 
@@ -90,11 +89,7 @@ watch(() => store.currentCompetitionId.value, async (id) => {
       if (match.stage && stages.value.find((s: any) => s.id === match.stage)) {
         activeStageId.value = match.stage
       }
-      if (isCompAdmin.value) {
-        editingMatch.value = match
-      } else {
-        viewingMatch.value = match
-      }
+      onMatchClick(match)
     }
   }
 }, { immediate: true })
@@ -447,6 +442,17 @@ async function confirmRegenerate() {
   }
 }
 
+function onMatchClick(match: any) {
+  if (isCompAdmin.value) {
+    editingMatch.value = match
+  } else {
+    const compId = store.currentCompetitionId.value
+    if (compId) {
+      router.push({ name: 'comp-match', params: { compId, matchId: match.id } })
+    }
+  }
+}
+
 function stageStatusClass(stage: any) {
   if (stage.status === 'completed') return 'text-green-600 dark:text-green-400'
   if (stage.status === 'active') return 'text-primary'
@@ -539,7 +545,7 @@ function stageStatusClass(stage: any) {
           :matches="stageMatches"
           :tournament-state="activeStage"
           :is-admin="isCompAdmin && showHidden"
-          @edit-match="isCompAdmin ? (editingMatch = $event) : (viewingMatch = $event)"
+          @edit-match="onMatchClick"
         />
 
         <!-- Double elimination view -->
@@ -548,7 +554,7 @@ function stageStatusClass(stage: any) {
           :matches="stageMatches"
           :tournament-state="activeStage"
           :is-admin="isCompAdmin && showHidden"
-          @edit-match="isCompAdmin ? (editingMatch = $event) : (viewingMatch = $event)"
+          @edit-match="onMatchClick"
         />
 
         <!-- Group stage view -->
@@ -558,7 +564,7 @@ function stageStatusClass(stage: any) {
           :tournament-state="activeStage"
           :captains="store.captains.value"
           :is-admin="isCompAdmin && showHidden"
-          @edit-match="isCompAdmin ? (editingMatch = $event) : (viewingMatch = $event)"
+          @edit-match="onMatchClick"
         />
       </div>
     </template>
@@ -894,11 +900,5 @@ function stageStatusClass(stage: any) {
       @save="saveMatchScore(editingMatch.id, $event)"
     />
 
-    <!-- Match Details Modal (everyone) -->
-    <MatchDetailsModal
-      v-if="viewingMatch"
-      :match="viewingMatch"
-      @close="viewingMatch = null"
-    />
   </div>
 </template>

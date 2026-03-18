@@ -22,6 +22,7 @@ const router = createRouter({
         { path: 'tournament', name: 'comp-tournament', component: () => import('@/pages/TournamentPage.vue') },
         { path: 'fantasy', name: 'comp-fantasy', component: () => import('@/pages/FantasyPage.vue') },
         { path: 'rules', name: 'comp-rules', component: () => import('@/pages/CompetitionRulesPage.vue') },
+        { path: 'match/:matchId', name: 'comp-match', component: () => import('@/pages/MatchRoomPage.vue') },
       ],
     },
     {

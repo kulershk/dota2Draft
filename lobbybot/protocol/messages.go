@@ -64,6 +64,14 @@ type CreateLobbyCmd struct {
 	Players             []LobbyPlayer `json:"players"`
 }
 
+type RejoinLobbyCmd struct {
+	LobbyID  string        `json:"lobbyId"`
+	BotID    string        `json:"botId"`
+	GameName string        `json:"gameName"`
+	Password string        `json:"password"`
+	Players  []LobbyPlayer `json:"players"`
+}
+
 type CancelLobbyCmd struct {
 	LobbyID string `json:"lobbyId"`
 }

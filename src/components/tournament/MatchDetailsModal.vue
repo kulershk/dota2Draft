@@ -3,11 +3,13 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ChevronDown, ChevronUp, Check, Gamepad2, X } from 'lucide-vue-next'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
+import { useRouter } from 'vue-router'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { getSocket } from '@/composables/useSocket'
 
 const { t } = useI18n()
+const router = useRouter()
 const api = useApi()
 const store = useDraftStore()
 
@@ -42,7 +44,8 @@ const loadingStats = ref<Record<number, boolean>>({})
 // Match ready state
 const matchReadyState = ref<Record<number, number[]>>({}) // gameNumber -> readyCaptainIds
 const lobbyStatuses = ref<Record<number, any>>({})
-const noBotAvailable = ref(false)
+const noBotAvailable = ref<Record<number, boolean>>({})
+const lobbyCreateError = ref<Record<number, string | null>>({})
 
 const myCaptainId = computed(() => store.currentCaptain.value?.id || null)
 const isCaptainInMatch = computed(() => {
@@ -145,10 +148,19 @@ function onLaunchReadyState(data: any) {
 function onReadyState(data: any) {
   if (data.matchId !== props.match.id) return
   matchReadyState.value[data.gameNumber] = data.readyCaptainIds || []
-  if (data.noBotAvailable) noBotAvailable.value = true
-  else noBotAvailable.value = false
+  noBotAvailable.value = { ...noBotAvailable.value, [data.gameNumber]: !!data.noBotAvailable }
+  if (data.lobbyCreateError) {
+    lobbyCreateError.value = { ...lobbyCreateError.value, [data.gameNumber]: data.lobbyCreateError }
+  } else if (data.lobbyCreated || !data.noBotAvailable) {
+    lobbyCreateError.value = { ...lobbyCreateError.value, [data.gameNumber]: null }
+  }
   if (data.lobbyCreated) {
     fetchLobbyStatus(data.gameNumber)
+    // Auto-redirect to match room page
+    if (compId.value) {
+      emit('close')
+      router.push({ name: 'comp-match', params: { compId: compId.value, matchId: props.match.id } })
+    }
   }
 }
 
@@ -288,6 +300,12 @@ function winnerName(game: any) {
 
               <!-- Phase 1: Ready check to create lobby -->
               <div v-if="!lobbyStatuses[g.game_number] || ['cancelled', 'error', 'completed'].includes(lobbyStatuses[g.game_number]?.status)" class="p-4 flex flex-col items-center gap-3">
+                <!-- Previous lobby error -->
+                <div v-if="lobbyStatuses[g.game_number]?.status === 'error'" class="w-full rounded-md bg-red-500/10 border border-red-500/20 px-3 py-2 text-center">
+                  <p class="text-xs font-medium text-red-500">{{ t('lobbyError') }}</p>
+                  <p v-if="lobbyStatuses[g.game_number].error_message" class="text-[10px] text-red-400 mt-0.5">{{ lobbyStatuses[g.game_number].error_message }}</p>
+                  <p class="text-[10px] text-muted-foreground mt-0.5">{{ t('lobbyErrorRetry') }}</p>
+                </div>
                 <p class="text-xs text-muted-foreground text-center">{{ t('matchReadyDesc') }}</p>
                 <div class="flex items-center gap-3">
                   <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium"
@@ -302,7 +320,8 @@ function winnerName(game: any) {
                     {{ match.team2_name || 'Team 2' }}
                   </div>
                 </div>
-                <span v-if="noBotAvailable && bothCaptainsReady(g.game_number)" class="text-xs text-amber-500">{{ t('noBotAvailable') }}</span>
+                <span v-if="noBotAvailable[g.game_number] && bothCaptainsReady(g.game_number)" class="text-xs text-amber-500">{{ t('noBotAvailable') }}</span>
+                <span v-if="lobbyCreateError[g.game_number]" class="text-xs text-red-500">{{ lobbyCreateError[g.game_number] }}</span>
                 <button
                   class="w-full max-w-xs px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
                   :class="isReady(g.game_number)
@@ -319,15 +338,21 @@ function winnerName(game: any) {
 
               <!-- Phase 2: Lobby active — waiting for players + launch -->
               <div v-else-if="lobbyStatuses[g.game_number]?.status === 'waiting'" class="flex flex-col">
-                <!-- Lobby password + player count -->
-                <div class="px-4 py-3 flex items-center justify-between border-b border-border/30">
-                  <div class="flex items-center gap-2 text-sm">
-                    <span class="text-muted-foreground">{{ t('lobbyPassword') }}:</span>
-                    <code class="font-mono font-bold bg-accent px-2 py-0.5 rounded text-foreground">{{ lobbyStatuses[g.game_number].password }}</code>
+                <!-- Lobby name + password + player count -->
+                <div class="px-4 py-3 flex flex-col gap-1.5 border-b border-border/30">
+                  <div v-if="lobbyStatuses[g.game_number].game_name" class="flex items-center gap-2 text-xs">
+                    <span class="text-muted-foreground">{{ t('lobbyName') }}:</span>
+                    <span class="font-medium text-foreground">{{ lobbyStatuses[g.game_number].game_name }}</span>
                   </div>
-                  <span class="text-xs font-medium" :class="allPlayersJoined(g.game_number) ? 'text-green-500' : 'text-muted-foreground'">
-                    {{ (lobbyStatuses[g.game_number].players_joined || []).length }}/{{ (lobbyStatuses[g.game_number].players_expected || []).length }} {{ t('players') }}
-                  </span>
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2 text-sm">
+                      <span class="text-muted-foreground">{{ t('lobbyPassword') }}:</span>
+                      <code class="font-mono font-bold bg-accent px-2 py-0.5 rounded text-foreground">{{ lobbyStatuses[g.game_number].password }}</code>
+                    </div>
+                    <span class="text-xs font-medium" :class="allPlayersJoined(g.game_number) ? 'text-green-500' : 'text-muted-foreground'">
+                      {{ (lobbyStatuses[g.game_number].players_joined || []).length }}/{{ (lobbyStatuses[g.game_number].players_expected || []).length }} {{ t('players') }}
+                    </span>
+                  </div>
                 </div>
 
                 <!-- Player list -->

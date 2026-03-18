@@ -133,10 +133,40 @@
         }
       }
     },
+    "match:joinRoom": {
+      "publish": {
+        "summary": "Join a match-specific socket room",
+        "description": "Joins the match:${matchId} room for focused match updates. Used by the match room page.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "matchId": { "type": "integer" }
+            },
+            "required": ["matchId"]
+          }
+        }
+      }
+    },
+    "match:leaveRoom": {
+      "publish": {
+        "summary": "Leave a match-specific socket room",
+        "description": "Leaves the match:${matchId} room.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "matchId": { "type": "integer" }
+            },
+            "required": ["matchId"]
+          }
+        }
+      }
+    },
     "match:readyState": {
       "subscribe": {
         "summary": "Broadcast match ready state for a game",
-        "description": "Sent to competition room when captains ready/unready. May include lobbyCreated or noBotAvailable flags.",
+        "description": "Sent to competition room and match room when captains ready/unready. May include lobbyCreated or noBotAvailable flags.",
         "message": {
           "payload": {
             "type": "object",
