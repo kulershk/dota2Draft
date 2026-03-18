@@ -12,9 +12,11 @@ const siteTitle = ref('')
 const siteSubtitle = ref('')
 const discordUrl = ref('')
 const logoUrl = ref('')
+const heroBannerUrl = ref('')
 const saving = ref(false)
 const saved = ref(false)
 const uploadingLogo = ref(false)
+const uploadingBanner = ref(false)
 
 onMounted(async () => {
   const data = await api.getSiteSettings()
@@ -23,6 +25,7 @@ onMounted(async () => {
   siteSubtitle.value = data.site_subtitle || ''
   discordUrl.value = data.site_discord_url || ''
   logoUrl.value = data.site_logo_url || ''
+  heroBannerUrl.value = data.site_hero_banner_url || ''
 })
 
 async function saveSettings() {
@@ -57,6 +60,23 @@ async function handleLogoUpload(e: Event) {
 async function removeLogo() {
   await api.deleteSiteLogo()
   logoUrl.value = ''
+}
+
+async function handleBannerUpload(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  uploadingBanner.value = true
+  try {
+    const result = await api.uploadSiteHeroBanner(file)
+    heroBannerUrl.value = result.site_hero_banner_url
+  } finally {
+    uploadingBanner.value = false
+  }
+}
+
+async function removeBanner() {
+  await api.deleteSiteHeroBanner()
+  heroBannerUrl.value = ''
 }
 </script>
 
@@ -106,6 +126,32 @@ async function removeLogo() {
         <span class="text-sm font-semibold text-foreground">{{ t('homepageContent') }}</span>
       </div>
       <div class="px-5 py-4 flex flex-col gap-4">
+        <div>
+          <label class="block text-xs font-medium text-muted-foreground mb-1">Hero Banner</label>
+          <!-- Live preview -->
+          <div class="relative overflow-hidden rounded-lg border border-border mb-3">
+            <div v-if="heroBannerUrl" class="absolute inset-0">
+              <img :src="heroBannerUrl" class="w-full h-full object-cover" />
+              <div class="absolute inset-0 bg-gradient-to-b from-background/70 via-background/50 to-background" />
+            </div>
+            <div class="relative flex flex-col items-center text-center py-10 px-6">
+              <span class="text-lg font-bold text-foreground">{{ siteTitle || 'Site Title' }}</span>
+              <span class="text-xs text-muted-foreground mt-1">{{ siteSubtitle || 'Subtitle text' }}</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-3">
+            <label class="btn-secondary cursor-pointer text-xs">
+              <Upload class="w-3.5 h-3.5" />
+              {{ uploadingBanner ? t('loading') : 'Upload Banner' }}
+              <input type="file" accept="image/*" class="hidden" @change="handleBannerUpload" />
+            </label>
+            <button v-if="heroBannerUrl" class="btn-ghost text-xs text-destructive" @click="removeBanner">
+              <Trash2 class="w-3.5 h-3.5" />
+              Remove
+            </button>
+          </div>
+          <p class="text-[11px] text-muted-foreground mt-1.5">Recommended: 1200×400px. Displayed as the hero background on the home page.</p>
+        </div>
         <div>
           <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('siteHeroTitle') }}</label>
           <input type="text" v-model="siteTitle" class="input-field w-full" :placeholder="t('heroTitle')" />

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Users, Gavel, Trophy, Info, Swords, Star } from 'lucide-vue-next'
+import { Users, Gavel, Trophy, Info, Swords, Star, BookOpen } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { watch, onMounted, computed } from 'vue'
 import { useDraftStore } from '@/composables/useDraftStore'
@@ -18,6 +18,7 @@ const navItems = computed(() => [
   { label: t('navTeams'), icon: Trophy, name: 'comp-results' },
   { label: t('navTournament'), icon: Swords, name: 'comp-tournament' },
   ...(store.settings.fantasyEnabled ? [{ label: t('navFantasy'), icon: Star, name: 'comp-fantasy' }] : []),
+  ...(store.currentCompetition.value?.rules_content ? [{ label: t('rules') || 'Rules', icon: BookOpen, name: 'comp-rules' }] : []),
 ])
 
 async function enterCompetition(id: number) {
@@ -36,26 +37,28 @@ watch(compId, (newId) => {
 
 <template>
   <div class="flex flex-col flex-1 overflow-hidden">
-    <!-- Competition sub-nav -->
-    <div class="border-b border-border bg-accent/30">
-      <div class="max-w-[1200px] mx-auto w-full flex items-center gap-1 px-4 md:px-6 py-1.5 overflow-x-auto">
-        <span v-if="store.currentCompetition.value" class="text-sm font-semibold text-foreground mr-3 whitespace-nowrap">
-          {{ store.currentCompetition.value.name }}
-        </span>
+    <!-- Tab Bar -->
+    <div class="bg-muted">
+      <div class="max-w-[1200px] mx-auto w-full px-6 md:px-12 flex items-center overflow-x-auto">
         <router-link
           v-for="item in navItems"
           :key="item.name"
           :to="{ name: item.name, params: { compId: compId } }"
-          class="flex items-center gap-1.5 px-3 py-1.5 rounded text-sm transition-colors whitespace-nowrap"
+          class="flex items-center gap-1.5 px-6 py-3.5 text-sm transition-colors whitespace-nowrap border-b-2"
           :class="route.name === item.name
-            ? 'bg-primary text-primary-foreground font-medium'
-            : 'text-muted-foreground hover:bg-accent'"
+            ? 'text-primary font-semibold border-primary'
+            : 'text-text-tertiary border-transparent hover:text-foreground'"
         >
           <component :is="item.icon" class="w-3.5 h-3.5" />
           {{ item.label }}
         </router-link>
       </div>
     </div>
+
+    <!-- Divider -->
+    <div class="h-px bg-border" />
+
+    <!-- Page Content -->
     <div class="flex-1 overflow-y-auto">
       <router-view />
     </div>

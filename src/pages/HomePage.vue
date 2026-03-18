@@ -10,6 +10,7 @@ interface NewsPost {
   id: number
   title: string
   content: string
+  image_url: string | null
   created_by_name: string | null
   created_by_avatar: string | null
   created_at: string
@@ -123,9 +124,9 @@ const statusLabel = computed<Record<string, string>>(() => ({
 
 const statusClass: Record<string, string> = {
   draft: 'bg-accent text-muted-foreground',
-  registration: 'bg-primary/10 text-primary',
-  active: 'bg-color-success text-color-success-foreground',
-  finished: 'bg-color-success text-color-success-foreground',
+  registration: 'bg-primary/20 text-primary',
+  active: 'bg-color-success/20 text-color-success',
+  finished: 'bg-color-success/20 text-color-success',
 }
 
 function getCompStatus(comp: any) {
@@ -153,6 +154,7 @@ const streamers = ref<Streamer[]>([])
 const siteTitle = ref('')
 const siteSubtitle = ref('')
 const discordUrl = ref('')
+const heroBannerUrl = ref('')
 
 async function fetchSiteSettings() {
   try {
@@ -160,6 +162,7 @@ async function fetchSiteSettings() {
     siteTitle.value = data.site_title || ''
     siteSubtitle.value = data.site_subtitle || ''
     discordUrl.value = data.site_discord_url || ''
+    heroBannerUrl.value = data.site_hero_banner_url || ''
   } catch {}
 }
 
@@ -209,167 +212,114 @@ const isLoggedIn = computed(() => !!store.currentUser.value)
 </script>
 
 <template>
-  <div class="p-4 md:p-8 md:px-10 max-w-[1200px] mx-auto w-full">
-    <!-- Hero -->
-    <div class="text-center py-6 md:py-10">
-      <h1 class="text-3xl md:text-4xl font-bold text-foreground">{{ siteTitle || t('heroTitle') }}</h1>
-      <p class="text-muted-foreground mt-2 text-sm md:text-base">{{ siteSubtitle || t('heroSubtitle') }}</p>
+  <div>
+    <!-- Hero Banner -->
+    <div class="relative overflow-hidden">
+      <!-- Background image -->
+      <div v-if="heroBannerUrl" class="absolute inset-0">
+        <img :src="heroBannerUrl" class="w-full h-full object-cover" />
+        <div class="absolute inset-0 bg-gradient-to-b from-background/70 via-background/50 to-background" />
+      </div>
+      <!-- Content -->
+      <div class="relative max-w-[1200px] mx-auto w-full px-6 md:px-10 py-36 md:py-52 flex flex-col items-center text-center gap-6">
+        <div>
+          <h1 class="text-3xl md:text-4xl font-bold text-foreground">{{ siteTitle || t('heroTitle') }}</h1>
+          <p class="text-muted-foreground mt-2 text-sm md:text-base">{{ siteSubtitle || t('heroSubtitle') }}</p>
+        </div>
+        <!-- Stats row -->
+        <div class="flex items-center gap-0">
+          <div class="flex flex-col items-center gap-1 px-6 md:px-10 py-3">
+            <span class="text-2xl md:text-[28px] font-bold font-mono text-foreground">{{ store.competitions.value.length }}</span>
+            <span class="text-[11px] font-semibold font-mono uppercase tracking-[2px] text-text-tertiary">{{ t('competitions') }}</span>
+          </div>
+          <div class="w-px h-10 bg-border" />
+          <div class="flex flex-col items-center gap-1 px-6 md:px-10 py-3">
+            <span class="text-2xl md:text-[28px] font-bold font-mono text-foreground">{{ upcomingMatches.length }}</span>
+            <span class="text-[11px] font-semibold font-mono uppercase tracking-[2px] text-text-tertiary">{{ t('matches') || 'MATCHES' }}</span>
+          </div>
+          <div class="w-px h-10 bg-border" />
+          <div class="flex flex-col items-center gap-1 px-6 md:px-10 py-3">
+            <span class="text-2xl md:text-[28px] font-bold font-mono text-primary">{{ streamers.length }}</span>
+            <span class="text-[11px] font-semibold font-mono uppercase tracking-[2px] text-text-tertiary">{{ t('liveStreams') || 'LIVE' }}</span>
+          </div>
+        </div>
+      </div>
     </div>
 
+    <div class="max-w-[1200px] mx-auto w-full px-6 md:px-10 py-8">
     <div class="flex flex-col lg:flex-row gap-6">
       <!-- Main Content -->
       <div class="flex-1 min-w-0 flex flex-col gap-6">
         <!-- Competitions -->
-        <div class="card">
-          <div class="flex items-center justify-between px-4 py-3 border-b border-border">
+        <div class="rounded-lg bg-card overflow-hidden">
+          <!-- Header -->
+          <div class="flex items-center justify-between px-5 py-4">
             <div class="flex items-center gap-2">
-              <Swords class="w-5 h-5 text-foreground" />
-              <span class="text-sm font-semibold text-foreground">{{ t('competitions') }}</span>
-              <span class="text-xs text-muted-foreground">({{ activeCompetitions.length }})</span>
+              <Trophy class="w-[18px] h-[18px] text-primary" />
+              <span class="text-base font-semibold text-foreground">{{ t('competitions') }}</span>
             </div>
-            <router-link to="/competitions" class="flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80 transition-colors">
-              {{ t('viewAll') }}
-              <ArrowRight class="w-3.5 h-3.5" />
+            <router-link to="/competitions" class="text-sm font-medium text-primary hover:text-primary/80 transition-colors">
+              {{ t('viewAll') }} →
             </router-link>
           </div>
-          <div v-if="activeCompetitions.length === 0" class="px-4 py-10 text-center text-sm text-muted-foreground">
+          <!-- Entries -->
+          <div v-if="activeCompetitions.length === 0" class="px-5 pb-5 text-sm text-muted-foreground">
             {{ t('noActiveCompetitions') }}
           </div>
-          <div v-else class="divide-y divide-border">
+          <div v-else class="px-5 pb-5 flex flex-col gap-3">
             <router-link
               v-for="comp in activeCompetitions"
               :key="comp.id"
               :to="`/c/${comp.id}/info`"
-              class="flex items-center justify-between px-4 py-4 md:px-6 md:py-5 hover:bg-accent/30 transition-colors"
+              class="flex flex-col gap-2 hover:opacity-80 transition-opacity"
             >
-              <div class="flex items-center gap-4">
-                <div class="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <Trophy class="w-5 h-5 text-primary" />
-                </div>
-                <div>
-                  <h3 class="text-base font-semibold text-foreground">{{ comp.name }}</h3>
-                  <div v-if="comp.description" class="text-xs text-muted-foreground mt-0.5 prose prose-sm dark:prose-invert max-w-none [&>*]:m-0 line-clamp-2" v-html="comp.description"></div>
-                  <div class="flex items-center gap-3 mt-1 flex-wrap">
-                    <span v-if="comp.registration_start || comp.registration_end" class="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Users class="w-3 h-3" />
-                      Reg: {{ comp.registration_start ? formatDate(comp.registration_start) : '—' }} – {{ comp.registration_end ? formatDate(comp.registration_end) : '—' }}
-                    </span>
-                    <span v-if="comp.starts_at" class="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Calendar class="w-3 h-3" />
-                      Draft: {{ formatDate(comp.starts_at) }}
-                    </span>
-                    <span v-if="comp.created_by_name" class="flex items-center gap-1 text-xs text-muted-foreground">
-                      <User class="w-3 h-3" />
-                      {{ comp.created_by_name }}
-                    </span>
-                  </div>
-                </div>
+              <div class="flex items-center gap-2.5">
+                <span class="text-[15px] font-semibold text-foreground">{{ comp.name }}</span>
+                <span class="inline-flex items-center rounded px-2 py-0.5 text-[10px] font-semibold font-mono"
+                  :class="statusClass[getCompStatus(comp)] || statusClass.draft">
+                  {{ statusLabel[getCompStatus(comp)] || t('statusSetup') }}
+                </span>
               </div>
-              <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                :class="statusClass[getCompStatus(comp)] || statusClass.draft">
-                {{ statusLabel[getCompStatus(comp)] || t('statusSetup') }}
+              <span v-if="comp.created_by_name" class="text-xs text-text-tertiary">{{ comp.created_by_name }}</span>
+              <span class="text-[11px] text-text-muted">
+                {{ comp.registration_start ? formatDate(comp.registration_start) : '' }}{{ comp.registration_end ? ' - ' + formatDate(comp.registration_end) : '' }}
               </span>
             </router-link>
           </div>
         </div>
 
-        <!-- News -->
-        <div class="card">
-          <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
-            <Newspaper class="w-5 h-5 text-foreground" />
-            <span class="text-sm font-semibold text-foreground">{{ t('newsTitle') }}</span>
+        <!-- News & Announcements -->
+        <div class="rounded-lg bg-card overflow-hidden">
+          <!-- Header -->
+          <div class="flex items-center gap-2 px-5 py-4">
+            <Newspaper class="w-[18px] h-[18px] text-primary" />
+            <span class="text-base font-semibold text-foreground">{{ t('newsTitle') }}</span>
           </div>
-          <div v-if="news.length === 0" class="px-4 py-10 text-center text-sm text-muted-foreground">
+          <!-- Entries -->
+          <div v-if="news.length === 0" class="px-5 pb-5 text-sm text-muted-foreground">
             {{ t('noNewsYet') }}
           </div>
-          <div v-else class="divide-y divide-border">
-            <div v-for="post in news" :key="post.id" class="px-4 py-4 md:px-6 md:py-5">
-              <!-- Post header -->
-              <div class="flex items-start justify-between gap-3">
-                <h3 class="text-base font-semibold text-foreground">{{ post.title }}</h3>
-                <div class="flex items-center gap-3 shrink-0 mt-0.5">
-                  <span v-if="post.created_by_name" class="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
-                    <User class="w-3 h-3" />
-                    {{ post.created_by_name }}
-                  </span>
-                  <span class="flex items-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap">
-                    <Calendar class="w-3.5 h-3.5" />
-                    {{ formatDate(post.created_at) }}
-                  </span>
+          <div v-else class="px-5 pb-5 flex flex-col gap-0">
+            <router-link
+              v-for="(post, idx) in news"
+              :key="post.id"
+              :to="{ name: 'news-post', params: { id: post.id } }"
+              class="flex items-center gap-3 py-3 hover:opacity-80 transition-opacity"
+              :class="idx < news.length - 1 ? 'border-b border-foreground/10' : ''"
+            >
+              <!-- Thumbnail -->
+              <div class="w-20 h-[60px] rounded-md bg-surface overflow-hidden shrink-0">
+                <img v-if="post.image_url" :src="post.image_url" class="w-full h-full object-cover" />
+              </div>
+              <!-- Info -->
+              <div class="flex-1 flex flex-col gap-1 min-w-0">
+                <span class="text-sm font-semibold text-foreground truncate">{{ post.title }}</span>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs text-text-muted">{{ formatDate(post.created_at) }}</span>
+                  <span class="text-xs text-text-muted">{{ commentCounts[post.id] || 0 }} {{ (commentCounts[post.id] || 0) === 1 ? t('comment') : t('comments') }}</span>
                 </div>
               </div>
-              <!-- Post content -->
-              <div class="prose prose-sm dark:prose-invert max-w-none mt-2 text-muted-foreground" v-html="post.content"></div>
-
-              <!-- Comments toggle -->
-              <button
-                class="flex items-center gap-1.5 mt-3 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                @click="toggleComments(post.id)"
-              >
-                <MessageSquare class="w-3.5 h-3.5" />
-                {{ commentCounts[post.id] || 0 }} {{ (commentCounts[post.id] || 0) === 1 ? t('comment') : t('comments') }}
-                <ChevronUp v-if="expandedComments[post.id]" class="w-3 h-3" />
-                <ChevronDown v-else class="w-3 h-3" />
-              </button>
-
-              <!-- Comments section -->
-              <div v-if="expandedComments[post.id]" class="mt-3 border-t border-border pt-3">
-                <!-- Comment list -->
-                <div v-if="commentsMap[post.id]?.length" class="flex flex-col gap-3 mb-3">
-                  <div v-for="comment in commentsMap[post.id]" :key="comment.id" class="flex gap-2.5">
-                    <router-link :to="{ name: 'player-profile', params: { id: comment.player_id } }">
-                      <img v-if="comment.player_avatar" :src="comment.player_avatar" class="w-7 h-7 rounded-full shrink-0 mt-0.5" />
-                      <div v-else class="w-7 h-7 rounded-full bg-secondary flex items-center justify-center text-[10px] font-semibold text-secondary-foreground shrink-0 mt-0.5">
-                        {{ comment.player_name.charAt(0) }}
-                      </div>
-                    </router-link>
-                    <div class="flex-1 min-w-0">
-                      <div class="flex items-center gap-2">
-                        <router-link :to="{ name: 'player-profile', params: { id: comment.player_id } }" class="text-xs font-semibold text-foreground hover:text-primary transition-colors">{{ comment.player_name }}</router-link>
-                        <span class="text-[10px] text-muted-foreground">{{ formatCommentDate(comment.created_at) }}</span>
-                        <button
-                          v-if="canDeleteComment(comment)"
-                          class="ml-auto p-0.5 rounded hover:bg-accent text-muted-foreground hover:text-destructive transition-colors"
-                          title="Delete comment"
-                          @click="deleteComment(post.id, comment.id)"
-                        >
-                          <Trash2 class="w-3 h-3" />
-                        </button>
-                      </div>
-                      <p class="text-sm text-foreground/80 mt-0.5 whitespace-pre-wrap break-words">{{ comment.content }}</p>
-                    </div>
-                  </div>
-                </div>
-                <div v-else class="text-xs text-muted-foreground mb-3">{{ t('noCommentsYet') }}</div>
-
-                <!-- Add comment -->
-                <div v-if="isLoggedIn" class="flex gap-2 items-start">
-                  <img v-if="store.currentUser.value?.avatar_url" :src="store.currentUser.value.avatar_url" class="w-7 h-7 rounded-full shrink-0 mt-0.5" />
-                  <div v-else class="w-7 h-7 rounded-full bg-secondary flex items-center justify-center text-[10px] font-semibold text-secondary-foreground shrink-0 mt-0.5">
-                    {{ store.currentUser.value?.name?.charAt(0) || '?' }}
-                  </div>
-                  <div class="flex-1 flex gap-2">
-                    <input
-                      type="text"
-                      class="input-field flex-1 text-sm py-1.5"
-                      :placeholder="t('writeComment')"
-                      :value="newComment[post.id] || ''"
-                      @input="newComment[post.id] = ($event.target as HTMLInputElement).value"
-                      @keydown.enter="submitComment(post.id)"
-                      :disabled="submittingComment[post.id]"
-                    />
-                    <button
-                      class="btn-primary py-1.5 px-3"
-                      :disabled="!(newComment[post.id] || '').trim() || submittingComment[post.id]"
-                      @click="submitComment(post.id)"
-                    >
-                      <Send class="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-                <p v-else class="text-xs text-muted-foreground italic">{{ t('loginToComment') }}</p>
-              </div>
-            </div>
+            </router-link>
           </div>
         </div>
       </div>
@@ -378,100 +328,85 @@ const isLoggedIn = computed(() => !!store.currentUser.value)
       <div class="lg:w-[320px] shrink-0">
         <div class="flex flex-col gap-4 lg:sticky lg:top-4">
           <!-- Discord -->
-          <a
-            v-if="discordUrl"
-            :href="discordUrl"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="card flex items-center gap-3 px-4 py-3 hover:border-[#5865F2]/50 transition-colors group"
-          >
-            <div class="w-10 h-10 rounded-xl bg-[#5865F2] flex items-center justify-center shrink-0">
-              <svg class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
+          <div v-if="discordUrl" class="rounded-lg bg-card p-5 flex flex-col gap-3">
+            <div class="flex items-center gap-2.5">
+              <svg class="w-5 h-5 text-[#5865F2] shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
+              <span class="text-base font-semibold text-foreground">{{ t('joinDiscord') }}</span>
             </div>
-            <div class="flex-1 min-w-0">
-              <p class="text-sm font-semibold text-foreground group-hover:text-[#5865F2] transition-colors">{{ t('joinDiscord') }}</p>
-              <p class="text-xs text-muted-foreground">{{ t('discordDesc') }}</p>
-            </div>
-            <svg class="w-4 h-4 text-muted-foreground group-hover:text-[#5865F2] transition-colors shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17l9.2-9.2M17 17V7H7"/></svg>
-          </a>
+            <p class="text-sm text-muted-foreground leading-relaxed">{{ t('discordDesc') }}</p>
+            <a
+              :href="discordUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="flex items-center justify-center gap-2 w-full rounded-md bg-[#5865F2] hover:bg-[#4752C4] px-4 py-2.5 text-sm font-semibold text-white transition-colors"
+            >
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              Join Discord Server
+            </a>
+          </div>
 
           <!-- Upcoming Matches -->
-          <div v-if="upcomingMatches.length > 0" class="card">
-            <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
-              <Clock class="w-4 h-4 text-foreground" />
+          <div v-if="upcomingMatches.length > 0" class="rounded-lg bg-card p-4 flex flex-col gap-3">
+            <div class="flex items-center gap-2">
+              <Swords class="w-4 h-4 text-primary" />
               <span class="text-sm font-semibold text-foreground">{{ t('upcomingMatches') }}</span>
             </div>
-            <div class="divide-y divide-border">
-              <router-link
-                v-for="match in upcomingMatches"
-                :key="match.id"
-                :to="`/c/${match.competition_id}/tournament?match=${match.id}`"
-                class="flex items-center gap-2 px-3 py-2.5 hover:bg-accent/30 transition-colors"
-              >
-                <div class="flex-1 flex items-center justify-end gap-1.5 min-w-0">
-                  <span class="text-xs font-medium text-foreground truncate">{{ match.team1_name || t('tbd') }}</span>
-                  <img v-if="match.team1_banner || match.team1_avatar" :src="match.team1_banner || match.team1_avatar" class="w-12 h-12 object-cover shrink-0" :class="match.team1_banner ? 'rounded' : 'rounded-full'" />
+            <router-link
+              v-for="match in upcomingMatches"
+              :key="match.id"
+              :to="`/c/${match.competition_id}/tournament?match=${match.id}`"
+              class="flex flex-col gap-2 px-5 py-3 border-b border-surface last:border-0 hover:bg-surface/50 transition-colors"
+            >
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-medium text-foreground">{{ match.team1_name || t('tbd') }}</span>
+                  <span class="text-[11px] font-mono text-text-tertiary">vs</span>
+                  <span class="text-sm font-medium text-foreground">{{ match.team2_name || t('tbd') }}</span>
                 </div>
-                <div class="flex flex-col items-center shrink-0 px-1">
-                  <span class="text-[10px] font-bold text-muted-foreground">{{ t('vs') }}</span>
-                  <span class="text-[9px] text-primary font-medium whitespace-nowrap">{{ formatMatchDate(match.scheduled_at) }}</span>
-                </div>
-                <div class="flex-1 flex items-center gap-1.5 min-w-0">
-                  <img v-if="match.team2_banner || match.team2_avatar" :src="match.team2_banner || match.team2_avatar" class="w-12 h-12 object-cover shrink-0" :class="match.team2_banner ? 'rounded' : 'rounded-full'" />
-                  <span class="text-xs font-medium text-foreground truncate">{{ match.team2_name || t('tbd') }}</span>
-                </div>
-              </router-link>
-            </div>
+                <span class="badge-accent">{{ formatMatchDate(match.scheduled_at) }}</span>
+              </div>
+              <span v-if="match.competition_name || match.stage_name" class="text-[11px] text-text-tertiary">{{ match.competition_name }}{{ match.stage_name ? ' · ' + match.stage_name : '' }}</span>
+            </router-link>
           </div>
 
           <!-- Live Streams -->
-          <div v-if="streamers.length > 0" class="card">
-            <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
-              <Radio class="w-4 h-4 text-red-500 animate-pulse" />
-              <span class="text-sm font-semibold text-foreground">{{ t('liveStreams') }}</span>
-              <span class="text-xs text-muted-foreground">({{ streamers.length }})</span>
+          <div v-if="streamers.length > 0" class="rounded-lg bg-card overflow-hidden">
+            <!-- Header -->
+            <div class="flex items-center justify-between px-5 py-4 border-b border-surface">
+              <div class="flex items-center gap-2.5">
+                <svg class="w-[18px] h-[18px] text-destructive" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                <span class="text-sm font-semibold text-foreground">Live Dota 2 Streams</span>
+              </div>
+              <span class="inline-flex items-center rounded px-2 py-0.5 text-[9px] font-bold font-mono bg-destructive/20 text-destructive">{{ streamers.length }} LIVE</span>
             </div>
-            <div class="flex flex-col gap-3 p-3">
-              <a
-                v-for="streamer in streamers"
-                :key="streamer.id"
-                :href="`https://twitch.tv/${streamer.twitch_username}`"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="flex flex-col rounded-lg overflow-hidden border border-border hover:border-[#9146FF]/40 transition-colors"
-              >
-                <!-- Thumbnail -->
-                <div class="relative aspect-video bg-accent">
-                  <img v-if="streamer.stream.thumbnail_url" :src="streamer.stream.thumbnail_url" class="w-full h-full object-cover" />
-                  <div class="absolute top-1.5 left-1.5 flex items-center gap-1 bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
-                    <span class="w-1.5 h-1.5 bg-white rounded-full"></span>
-                    LIVE
-                  </div>
-                  <div class="absolute bottom-1.5 left-1.5 flex items-center gap-1 bg-black/70 text-white text-[10px] px-1.5 py-0.5 rounded">
-                    <Eye class="w-3 h-3" />
-                    {{ streamer.stream.viewer_count.toLocaleString() }}
-                  </div>
+            <!-- Stream rows -->
+            <a
+              v-for="(streamer, idx) in streamers"
+              :key="streamer.id"
+              :href="`https://twitch.tv/${streamer.twitch_username}`"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="flex items-center gap-3 px-5 py-3 hover:bg-surface/50 transition-colors"
+              :class="idx < streamers.length - 1 ? 'border-b border-surface' : ''"
+            >
+              <!-- Thumbnail -->
+              <div class="w-[100px] h-14 rounded-md overflow-hidden bg-surface shrink-0">
+                <img v-if="streamer.stream.thumbnail_url" :src="streamer.stream.thumbnail_url" class="w-full h-full object-cover" />
+              </div>
+              <!-- Info -->
+              <div class="flex-1 flex flex-col gap-1 min-w-0">
+                <span class="text-sm font-medium text-foreground truncate">{{ streamer.twitch_username }}</span>
+                <span class="text-[11px] text-muted-foreground truncate">{{ streamer.stream.title }}</span>
+                <div class="flex items-center gap-1.5">
+                  <span class="w-1.5 h-1.5 rounded-full bg-destructive shrink-0"></span>
+                  <span class="text-[10px] font-mono text-text-tertiary">{{ streamer.stream.viewer_count.toLocaleString() }} viewers</span>
                 </div>
-                <!-- Info -->
-                <div class="flex items-start gap-2 px-3 py-2.5">
-                  <img v-if="streamer.avatar_url" :src="streamer.avatar_url" class="w-7 h-7 rounded-full shrink-0" />
-                  <div v-else class="w-7 h-7 rounded-full bg-secondary flex items-center justify-center text-[10px] font-semibold text-secondary-foreground shrink-0">
-                    {{ streamer.name.charAt(0) }}
-                  </div>
-                  <div class="flex-1 min-w-0">
-                    <p class="text-xs font-medium text-foreground truncate">{{ streamer.stream.title }}</p>
-                    <div class="flex items-center gap-1 mt-0.5">
-                      <Twitch class="w-3 h-3 text-[#9146FF]" />
-                      <span class="text-[11px] text-[#9146FF]">{{ streamer.twitch_username }}</span>
-                      <span class="text-[11px] text-muted-foreground ml-auto">{{ streamer.name }}</span>
-                    </div>
-                  </div>
-                </div>
-              </a>
-            </div>
+              </div>
+            </a>
           </div>
         </div>
       </div>
+    </div>
     </div>
   </div>
 </template>

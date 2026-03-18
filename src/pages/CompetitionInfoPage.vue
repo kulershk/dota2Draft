@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Calendar, Users, User, Gavel, Trophy, Clock, Settings, DollarSign, Upload, X, Tv, Swords } from 'lucide-vue-next'
+import { Calendar, Users, User, Gavel, Trophy, Clock, Settings, DollarSign, Upload, X, Tv, Swords, Info, ChevronRight, Play } from 'lucide-vue-next'
+import { getRank } from '@/utils/ranks'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
@@ -23,13 +24,6 @@ const compStatusLabels = computed<Record<string, string>>(() => ({
   finished: t('statusFinished'),
 }))
 
-const compStatusClasses: Record<string, string> = {
-  draft: 'bg-accent text-muted-foreground',
-  registration: 'bg-primary/10 text-primary',
-  active: 'bg-color-success text-color-success-foreground',
-  finished: 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400',
-}
-
 function getCompStatus(c: any) {
   const auc = c?.auction_state?.status || 'idle'
   if (['nominating', 'bidding', 'paused'].includes(auc)) return 'active'
@@ -37,8 +31,7 @@ function getCompStatus(c: any) {
 }
 
 const displayStatus = computed(() => getCompStatus(comp.value))
-const auctionStatus = computed(() => compStatusLabels.value[displayStatus.value] || t('statusSetup'))
-const auctionStatusClass = computed(() => compStatusClasses[displayStatus.value] || compStatusClasses.draft)
+const statusLabel = computed(() => compStatusLabels.value[displayStatus.value] || t('statusSetup'))
 
 const registrationStatus = computed(() => {
   if (!comp.value) return { label: '—', open: false }
@@ -57,6 +50,12 @@ const registrationStatus = computed(() => {
 
 const participantCount = computed(() => store.players.value.length)
 const captainCount = computed(() => store.captains.value.length)
+const avgMmr = computed(() => {
+  const players = store.players.value.filter(p => p.mmr > 0)
+  if (!players.length) return 0
+  return Math.round(players.reduce((s, p) => s + p.mmr, 0) / players.length)
+})
+const avgRank = computed(() => getRank(avgMmr.value))
 
 function formatDate(dateStr: string | null) {
   if (!dateStr) return '—'
@@ -84,10 +83,10 @@ const upcomingMatches = computed(() => {
   return tournament.matches
     .filter((m: any) => m.scheduled_at && m.status !== 'completed' && !m.hidden)
     .sort((a: any, b: any) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())
+    .slice(0, 5)
 })
 
 function formatMatchDate(dateStr: string) {
-  // Treat as local time — remove trailing Z if present
   const d = new Date(dateStr.replace('Z', ''))
   const now = new Date()
   const diffMs = d.getTime() - now.getTime()
@@ -150,240 +149,273 @@ async function removeBanner(captain: any) {
 </script>
 
 <template>
-  <div class="p-4 md:p-8 md:px-10 flex flex-col gap-5 md:gap-6 max-w-[1200px] mx-auto w-full">
-    <div v-if="!comp" class="text-center py-12 text-muted-foreground">{{ t('loading') }}</div>
+  <div v-if="!comp" class="text-center py-12 text-muted-foreground">{{ t('loading') }}</div>
 
-    <template v-else>
-      <!-- Header -->
-      <div>
-        <div class="flex items-center gap-3 flex-wrap">
-          <h1 class="text-2xl md:text-3xl font-bold text-foreground">{{ comp.name }}</h1>
-          <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium" :class="auctionStatusClass">
-            {{ auctionStatus }}
+  <template v-else>
+    <!-- Hero Header -->
+    <div class="bg-gradient-to-b from-muted to-background">
+      <div class="max-w-[1200px] mx-auto w-full px-6 md:px-12 pt-8 md:pt-10 pb-6 md:pb-8 flex flex-col gap-6">
+        <!-- Title row -->
+        <div class="flex items-center gap-4 flex-wrap">
+          <h1 class="text-2xl md:text-[32px] font-bold text-foreground tracking-tight">{{ comp.name }}</h1>
+          <span class="inline-flex items-center gap-1.5 rounded px-3 py-1 text-xs font-semibold"
+            :class="displayStatus === 'active' ? 'bg-color-success/20 text-color-success' :
+                     displayStatus === 'finished' ? 'bg-color-success/20 text-color-success' :
+                     displayStatus === 'registration' ? 'bg-primary/20 text-primary' :
+                     'bg-accent text-muted-foreground'">
+            <span class="w-2 h-2 rounded-full"
+              :class="displayStatus === 'active' ? 'bg-color-success' :
+                       displayStatus === 'finished' ? 'bg-color-success' :
+                       displayStatus === 'registration' ? 'bg-primary' :
+                       'bg-muted-foreground'" />
+            {{ statusLabel }}
           </span>
-          <span v-if="displayStatus !== 'registration'" class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-            :class="registrationStatus.open ? 'bg-color-success text-color-success-foreground' : 'bg-accent text-muted-foreground'">
-            {{ t('registrationLabel') }} {{ registrationStatus.label }}
+          <span v-if="registrationStatus.open" class="inline-flex items-center rounded px-3 py-1 text-xs font-medium bg-color-success/20 text-color-success">
+            {{ registrationStatus.label }}
           </span>
         </div>
-        <div v-if="comp.created_by_name" class="flex items-center gap-1.5 mt-2 text-sm text-muted-foreground">
-          <img v-if="comp.created_by_avatar" :src="comp.created_by_avatar" class="w-5 h-5 rounded-full" />
-          <User v-else class="w-4 h-4" />
-          <span>{{ t('createdBy') }} <span class="font-medium text-foreground">{{ comp.created_by_name }}</span></span>
-          <span class="mx-1">&middot;</span>
-          <span>{{ formatDate(comp.created_at) }}</span>
+        <!-- Stats row -->
+        <div class="flex items-center">
+          <div class="flex-1 flex flex-col items-center gap-1 py-4">
+            <span class="text-2xl md:text-[28px] font-bold font-mono text-foreground">{{ participantCount }}</span>
+            <span class="text-[11px] font-semibold font-mono uppercase tracking-[2px] text-text-tertiary">{{ t('participants') }}</span>
+          </div>
+          <div class="w-px h-12 bg-border" />
+          <div class="flex-1 flex flex-col items-center gap-1 py-4">
+            <span class="text-2xl md:text-[28px] font-bold font-mono text-foreground">{{ captainCount }}</span>
+            <span class="text-[11px] font-semibold font-mono uppercase tracking-[2px] text-text-tertiary">{{ t('captains') }}</span>
+          </div>
+          <div class="w-px h-12 bg-border" />
+          <div class="flex-1 flex flex-col items-center gap-1 py-4">
+            <template v-if="comp.competition_type">
+              <span class="text-2xl">{{ comp.competition_type === 'LAN' ? '🖥️' : comp.competition_type === 'ONLINE' ? '🌐' : comp.competition_type === 'TEAMBUILDING' ? '🤝' : comp.competition_type === 'KRAKEN' ? '🐙' : '' }}</span>
+              <span class="text-[11px] font-semibold font-mono uppercase tracking-[2px] text-text-tertiary">{{ comp.competition_type }}</span>
+            </template>
+            <template v-else>
+              <span class="relative w-10 h-10" :title="avgRank.label">
+                <img :src="avgRank.icon" class="w-10 h-10" :alt="avgRank.label" />
+                <img v-if="avgRank.star" :src="avgRank.star" class="absolute inset-0 w-10 h-10" />
+              </span>
+              <span class="text-[11px] font-semibold font-mono uppercase tracking-[2px] text-text-tertiary">AVG RANK</span>
+            </template>
+          </div>
+          <div class="w-px h-12 bg-border" />
+          <div class="flex-1 flex flex-col items-center gap-1 py-4">
+            <span class="text-2xl md:text-[28px] font-bold font-mono text-primary">{{ avgMmr.toLocaleString() }}</span>
+            <span class="text-[11px] font-semibold font-mono uppercase tracking-[2px] text-text-tertiary">AVG MMR</span>
+          </div>
         </div>
       </div>
+    </div>
+    <div class="h-px bg-border" />
 
-      <!-- Upcoming Matches -->
-      <div v-if="upcomingMatches.length > 0" class="card">
-        <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
-          <Swords class="w-5 h-5 text-foreground" />
-          <span class="text-sm font-semibold text-foreground">{{ t('upcomingMatches') }}</span>
-        </div>
-        <div class="divide-y divide-border">
-          <router-link v-for="match in upcomingMatches" :key="match.id" :to="`/c/${compId}/tournament?match=${match.id}`" class="flex items-center gap-3 px-4 py-3 hover:bg-accent/30 transition-colors">
-            <div class="flex-1 flex items-center justify-end gap-2 min-w-0">
-              <span class="text-sm font-medium text-foreground truncate">{{ match.team1_name || t('tbd') }}</span>
-              <img v-if="match.team1_banner || match.team1_avatar" :src="match.team1_banner || match.team1_avatar" class="w-6 h-6 object-cover shrink-0" :class="match.team1_banner ? 'rounded' : 'rounded-full'" />
+    <!-- Main Content — two column layout -->
+    <div class="max-w-[1200px] mx-auto w-full px-6 md:px-12 py-8 flex flex-col lg:flex-row gap-8">
+
+      <!-- Left Column -->
+      <div class="flex-1 flex flex-col gap-8 min-w-0">
+
+        <!-- Upcoming Matches -->
+        <div v-if="upcomingMatches.length > 0" class="rounded-lg bg-card p-6 flex flex-col gap-4">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <Swords class="w-[18px] h-[18px] text-primary" />
+              <span class="text-lg font-semibold text-foreground">{{ t('upcomingMatches') }}</span>
             </div>
-            <div class="flex flex-col items-center gap-0.5 shrink-0 px-2">
-              <span class="text-xs font-bold text-muted-foreground">{{ t('vs') }}</span>
-              <span class="text-[10px] text-primary font-medium">{{ formatMatchDate(match.scheduled_at) }}</span>
-            </div>
+            <router-link :to="`/c/${compId}/tournament`" class="text-sm font-medium text-primary hover:text-primary/80 transition-colors">
+              {{ t('viewAll') || 'View All' }} →
+            </router-link>
+          </div>
+
+          <!-- Table header -->
+          <div class="flex items-center gap-3 rounded bg-surface px-3 py-2">
+            <span class="w-10 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">BO</span>
+            <span class="flex-1 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">{{ t('teams') || 'TEAMS' }}</span>
+            <span class="w-28 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-right">{{ t('schedule') || 'TIME' }}</span>
+            <span class="w-6"></span>
+          </div>
+
+          <!-- Match rows -->
+          <router-link
+            v-for="match in upcomingMatches"
+            :key="match.id"
+            :to="`/c/${compId}/tournament?match=${match.id}`"
+            class="flex items-center gap-3 px-3 py-2.5 border-b border-surface last:border-0 hover:bg-surface/50 transition-colors"
+          >
+            <!-- BO -->
+            <span class="w-10 text-sm font-mono text-foreground">{{ match.best_of || 1 }}</span>
+            <!-- Teams -->
             <div class="flex-1 flex items-center gap-2 min-w-0">
-              <img v-if="match.team2_banner || match.team2_avatar" :src="match.team2_banner || match.team2_avatar" class="w-6 h-6 object-cover shrink-0" :class="match.team2_banner ? 'rounded' : 'rounded-full'" />
+              <div class="w-6 h-6 rounded bg-surface overflow-hidden shrink-0">
+                <img v-if="match.team1_banner || match.team1_avatar" :src="match.team1_banner || match.team1_avatar" class="w-full h-full object-cover" />
+              </div>
+              <span class="text-sm font-medium text-foreground truncate">{{ match.team1_name || t('tbd') }}</span>
+              <span class="text-xs text-text-tertiary">vs</span>
+              <div class="w-6 h-6 rounded bg-surface overflow-hidden shrink-0">
+                <img v-if="match.team2_banner || match.team2_avatar" :src="match.team2_banner || match.team2_avatar" class="w-full h-full object-cover" />
+              </div>
               <span class="text-sm font-medium text-foreground truncate">{{ match.team2_name || t('tbd') }}</span>
             </div>
+            <!-- Time -->
+            <span class="w-28 text-xs font-medium text-primary text-right">{{ formatMatchDate(match.scheduled_at) }}</span>
+            <!-- Arrow -->
+            <ChevronRight class="w-4 h-4 text-text-tertiary shrink-0" />
           </router-link>
         </div>
+
+        <!-- About -->
+        <div v-if="comp.description" class="rounded-lg bg-card p-6 flex flex-col gap-5">
+          <div class="flex items-center gap-2">
+            <Info class="w-[18px] h-[18px] text-primary" />
+            <span class="text-lg font-semibold text-foreground">{{ t('about') }}</span>
+          </div>
+          <div class="flex flex-col gap-5">
+            <div>
+              <p class="text-[11px] font-semibold font-mono uppercase tracking-[2px] text-text-tertiary mb-1.5">{{ t('about').toUpperCase() }}</p>
+              <div class="prose prose-sm dark:prose-invert max-w-none text-muted-foreground leading-relaxed" v-html="comp.description"></div>
+            </div>
+          </div>
+        </div>
+
       </div>
 
-      <!-- Description -->
-      <div v-if="comp.description" class="card">
-        <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
-          <span class="text-sm font-semibold text-foreground">{{ t('about') }}</span>
-        </div>
-        <div class="p-4 md:p-6 prose prose-sm dark:prose-invert max-w-none text-foreground/80" v-html="comp.description"></div>
-      </div>
+      <!-- Right Column (sidebar) -->
+      <div class="w-full lg:w-[380px] flex flex-col gap-6 shrink-0">
 
-      <!-- Official Streams -->
-      <div v-if="streams.length > 0" class="card">
-        <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
-          <Tv class="w-5 h-5 text-foreground" />
-          <span class="text-sm font-semibold text-foreground">{{ t('officialStreams') }}</span>
-        </div>
-        <div class="p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-          <a v-for="stream in streams" :key="stream.id"
-            :href="'https://twitch.tv/' + stream.twitch_username" target="_blank" rel="noopener"
-            class="rounded-lg border border-border overflow-hidden hover:border-primary/40 transition-colors group">
-            <!-- Thumbnail preview (live) -->
-            <div v-if="stream.is_live && stream.stream?.thumbnail_url" class="relative">
-              <img :src="stream.stream.thumbnail_url" class="w-full aspect-video object-cover" />
-              <span class="absolute top-2 left-2 inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold bg-red-600 text-white">
-                {{ t('live') }}
-              </span>
-              <span v-if="stream.viewer_count != null" class="absolute bottom-2 left-2 inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-black/70 text-white">
-                {{ stream.viewer_count.toLocaleString() }} viewers
-              </span>
-            </div>
-            <!-- Offline placeholder -->
-            <div v-else class="w-full aspect-video bg-accent/50 flex items-center justify-center">
-              <Tv class="w-8 h-8 text-muted-foreground/40" />
-            </div>
-            <!-- Stream info -->
-            <div class="flex items-center gap-2.5 p-3">
-              <div class="relative shrink-0">
-                <img v-if="stream.profile_image_url" :src="stream.profile_image_url" class="w-9 h-9 rounded-full" />
-                <div v-else class="w-9 h-9 rounded-full bg-[#9146FF]/10 flex items-center justify-center">
-                  <Tv class="w-4 h-4 text-[#9146FF]" />
+        <!-- Official Streams -->
+        <div class="rounded-lg bg-card p-5 flex flex-col gap-4">
+          <div class="flex items-center gap-2">
+            <Tv class="w-4 h-4 text-primary" />
+            <span class="text-base font-semibold text-foreground">{{ t('officialStreams') }}</span>
+          </div>
+          <template v-if="streams.length > 0">
+            <a v-for="stream in streams" :key="stream.id"
+              :href="'https://twitch.tv/' + stream.twitch_username" target="_blank" rel="noopener"
+              class="rounded-md border border-border overflow-hidden hover:border-primary/40 transition-colors group">
+              <div v-if="stream.is_live && stream.stream?.thumbnail_url" class="relative">
+                <img :src="stream.stream.thumbnail_url" class="w-full aspect-video object-cover" />
+                <span class="absolute top-2 left-2 inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold bg-red-600 text-white">
+                  {{ t('live') }}
+                </span>
+              </div>
+              <div v-else class="w-full aspect-video bg-surface flex items-center justify-center">
+                <Tv class="w-8 h-8 text-text-muted" />
+              </div>
+              <div class="flex items-center gap-2.5 p-3">
+                <div class="relative shrink-0">
+                  <img v-if="stream.profile_image_url" :src="stream.profile_image_url" class="w-9 h-9 rounded-full" />
+                  <span v-if="stream.is_live" class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-red-500 border-2 border-card" />
                 </div>
-                <span v-if="stream.is_live" class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-red-500 border-2 border-card"></span>
-              </div>
-              <div class="min-w-0">
-                <p class="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">
-                  {{ stream.is_live && stream.stream?.title ? stream.stream.title : (stream.title || stream.twitch_username) }}
-                </p>
-                <p class="text-xs text-muted-foreground truncate">{{ stream.twitch_username }}</p>
-              </div>
-            </div>
-          </a>
-        </div>
-      </div>
-
-      <!-- Stats -->
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-        <div class="card p-4">
-          <div class="flex items-center gap-2 text-muted-foreground mb-1">
-            <Users class="w-4 h-4" />
-            <p class="text-xs font-semibold tracking-wider uppercase">{{ t('participants') }}</p>
-          </div>
-          <p class="text-2xl font-bold text-foreground">{{ participantCount }}</p>
-        </div>
-        <div class="card p-4">
-          <div class="flex items-center gap-2 text-muted-foreground mb-1">
-            <Trophy class="w-4 h-4" />
-            <p class="text-xs font-semibold tracking-wider uppercase">{{ t('captains') }}</p>
-          </div>
-          <p class="text-2xl font-bold text-foreground">{{ captainCount }}</p>
-        </div>
-        <div class="card p-4">
-          <div class="flex items-center gap-2 text-muted-foreground mb-1">
-            <DollarSign class="w-4 h-4" />
-            <p class="text-xs font-semibold tracking-wider uppercase">{{ t('budget') }}</p>
-          </div>
-          <p class="text-2xl font-bold text-foreground">{{ store.settings.startingBudget.toLocaleString() }}g</p>
-        </div>
-        <div class="card p-4">
-          <div class="flex items-center gap-2 text-muted-foreground mb-1">
-            <Settings class="w-4 h-4" />
-            <p class="text-xs font-semibold tracking-wider uppercase">{{ t('perTeam') }}</p>
-          </div>
-          <p class="text-2xl font-bold text-foreground">{{ store.settings.playersPerTeam + 1 }}</p>
-          <p class="text-xs text-muted-foreground">{{ t('captainPlusDrafted', { n: store.settings.playersPerTeam }) }}</p>
-        </div>
-      </div>
-
-      <!-- Dates -->
-      <div class="card">
-        <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
-          <Calendar class="w-5 h-5 text-foreground" />
-          <span class="text-sm font-semibold text-foreground">{{ t('schedule') }}</span>
-        </div>
-        <div class="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <p class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{{ t('registrationOpens') }}</p>
-            <p class="text-sm text-foreground mt-1">{{ formatDate(comp.registration_start) }}</p>
-          </div>
-          <div>
-            <p class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{{ t('registrationCloses') }}</p>
-            <p class="text-sm text-foreground mt-1">{{ formatDate(comp.registration_end) }}</p>
-          </div>
-          <div>
-            <p class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{{ t('draftStarts') }}</p>
-            <p class="text-sm text-foreground mt-1">{{ formatDate(comp.starts_at) }}</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Draft Settings -->
-      <div class="card">
-        <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
-          <Gavel class="w-5 h-5 text-foreground" />
-          <span class="text-sm font-semibold text-foreground">{{ t('draftSettings') }}</span>
-        </div>
-        <div class="p-4 grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-3">
-          <div>
-            <p class="text-xs text-muted-foreground">{{ t('bidTimer') }}</p>
-            <p class="text-sm font-medium text-foreground">{{ store.settings.bidTimer }}s</p>
-          </div>
-          <div>
-            <p class="text-xs text-muted-foreground">{{ t('minimumBid') }}</p>
-            <p class="text-sm font-medium text-foreground">{{ store.settings.minimumBid }}g</p>
-          </div>
-          <div>
-            <p class="text-xs text-muted-foreground">{{ t('bidIncrement') }}</p>
-            <p class="text-sm font-medium text-foreground">{{ store.settings.bidIncrement }}g</p>
-          </div>
-          <div>
-            <p class="text-xs text-muted-foreground">{{ t('maxBid') }}</p>
-            <p class="text-sm font-medium text-foreground">{{ store.settings.maxBid ? store.settings.maxBid + 'g' : t('noLimit') }}</p>
-          </div>
-          <div>
-            <p class="text-xs text-muted-foreground">{{ t('nominationOrder') }}</p>
-            <p class="text-sm font-medium text-foreground">{{ store.settings.nominationOrder === 'normal' ? t('roundRobin') : store.settings.nominationOrder === 'lowest_avg' ? t('lowestAvgMmr') : t('fewestPlayersFirst') }}</p>
-          </div>
-          <div>
-            <p class="text-xs text-muted-foreground">{{ t('requireAllOnline') }}</p>
-            <p class="text-sm font-medium text-foreground">{{ store.settings.requireAllOnline ? t('yes') : t('no') }}</p>
-          </div>
-          <div>
-            <p class="text-xs text-muted-foreground">{{ t('selfRegistration') }}</p>
-            <p class="text-sm font-medium text-foreground">{{ store.settings.allowSteamRegistration ? t('allowed') : t('disabled') }}</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Captains Preview -->
-      <div v-if="store.captains.value.length > 0" class="card">
-        <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
-          <Trophy class="w-5 h-5 text-foreground" />
-          <span class="text-sm font-semibold text-foreground">{{ t('captains') }} ({{ captainCount }})</span>
-        </div>
-        <div class="p-4 grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div v-for="captain in store.captains.value" :key="captain.id" class="rounded-lg bg-accent/30 border border-border overflow-hidden flex">
-            <!-- Logo / Banner (left side, 1:1) -->
-            <div class="relative shrink-0 w-24 aspect-square">
-              <img v-if="captain.banner_url" :src="captain.banner_url" class="w-full h-full object-cover" />
-              <div v-else class="w-full h-full bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
-                <Trophy class="w-6 h-6 text-primary/30" />
-              </div>
-              <!-- Upload/remove controls -->
-              <div v-if="canEditBanner(captain)" class="absolute top-1 right-1 flex flex-col gap-0.5">
-                <label class="p-0.5 rounded bg-background/80 backdrop-blur-sm cursor-pointer hover:bg-background transition-colors" :title="t('uploadBanner')">
-                  <Upload class="w-3 h-3 text-foreground" />
-                  <input type="file" accept="image/*" class="hidden" @change="openCropper(captain, $event)" :disabled="uploading" />
-                </label>
-                <button v-if="captain.banner_url" class="p-0.5 rounded bg-background/80 backdrop-blur-sm hover:bg-background transition-colors" :title="t('removeBanner')" @click="removeBanner(captain)">
-                  <X class="w-3 h-3 text-destructive" />
-                </button>
-              </div>
-            </div>
-            <!-- Team name + Captain info (right side) -->
-            <div class="flex flex-col justify-center gap-1.5 p-3 min-w-0">
-              <p class="text-sm font-semibold text-foreground truncate">{{ captain.team }}</p>
-              <div class="flex items-center gap-2">
-                <img v-if="captain.avatar_url" :src="captain.avatar_url" class="w-6 h-6 rounded-full shrink-0" />
-                <div v-else class="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary shrink-0">
-                  {{ captain.name.charAt(0) }}
+                <div class="min-w-0">
+                  <p class="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">
+                    {{ stream.is_live && stream.stream?.title ? stream.stream.title : (stream.title || stream.twitch_username) }}
+                  </p>
+                  <p class="text-xs text-muted-foreground truncate">{{ stream.twitch_username }}</p>
                 </div>
-                <p class="text-xs text-muted-foreground truncate">{{ captain.name }}</p>
               </div>
+            </a>
+          </template>
+          <div v-else class="rounded-md bg-surface flex flex-col items-center justify-center gap-2 py-12">
+            <Play class="w-10 h-10 text-text-tertiary" />
+            <span class="text-sm text-text-tertiary">{{ t('noActiveStreams') || 'No active streams' }}</span>
+          </div>
+        </div>
+
+        <!-- Schedule -->
+        <div class="rounded-lg bg-card p-5 flex flex-col gap-4">
+          <div class="flex items-center gap-2">
+            <Calendar class="w-4 h-4 text-primary" />
+            <span class="text-base font-semibold text-foreground">{{ t('schedule') }}</span>
+          </div>
+          <div class="flex flex-col">
+            <div class="flex flex-col gap-1 py-3 border-b border-surface">
+              <span class="text-[10px] font-semibold font-mono uppercase tracking-[1.5px] text-text-tertiary">{{ t('registrationOpens') || 'REGISTRATION OPEN' }}</span>
+              <span class="text-sm text-foreground">{{ formatDate(comp.registration_start) }}</span>
+            </div>
+            <div class="flex flex-col gap-1 py-3 border-b border-surface">
+              <span class="text-[10px] font-semibold font-mono uppercase tracking-[1.5px] text-text-tertiary">{{ t('registrationCloses') || 'REGISTRATION CLOSE' }}</span>
+              <span class="text-sm text-foreground">{{ formatDate(comp.registration_end) }}</span>
+            </div>
+            <div class="flex flex-col gap-1 py-3">
+              <span class="text-[10px] font-semibold font-mono uppercase tracking-[1.5px] text-text-tertiary">{{ t('draftStarts') || 'START / LIVE' }}</span>
+              <span class="text-sm text-foreground">{{ formatDate(comp.starts_at) }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Draft Settings -->
+        <div class="rounded-lg bg-card p-5 flex flex-col gap-4">
+          <div class="flex items-center gap-2">
+            <Settings class="w-4 h-4 text-primary" />
+            <span class="text-base font-semibold text-foreground">{{ t('draftSettings') }}</span>
+          </div>
+          <div class="flex flex-col">
+            <div class="flex items-center justify-between py-2.5 border-b border-surface">
+              <span class="text-xs text-text-tertiary">{{ t('bidTimer') }}</span>
+              <span class="text-sm font-medium font-mono text-foreground">{{ store.settings.bidTimer }}s</span>
+            </div>
+            <div class="flex items-center justify-between py-2.5 border-b border-surface">
+              <span class="text-xs text-text-tertiary">{{ t('minimumBid') }}</span>
+              <span class="text-sm font-medium font-mono text-foreground">{{ store.settings.minimumBid }}g</span>
+            </div>
+            <div class="flex items-center justify-between py-2.5 border-b border-surface">
+              <span class="text-xs text-text-tertiary">{{ t('bidIncrement') }}</span>
+              <span class="text-sm font-medium font-mono text-foreground">{{ store.settings.bidIncrement }}g</span>
+            </div>
+            <div class="flex items-center justify-between py-2.5 border-b border-surface">
+              <span class="text-xs text-text-tertiary">{{ t('maxBid') }}</span>
+              <span class="text-sm font-medium font-mono text-foreground">{{ store.settings.maxBid ? store.settings.maxBid + 'g' : t('noLimit') }}</span>
+            </div>
+            <div class="flex items-center justify-between py-2.5 border-b border-surface">
+              <span class="text-xs text-text-tertiary">{{ t('budget') }}</span>
+              <span class="text-sm font-medium font-mono text-foreground">{{ store.settings.startingBudget }}g</span>
+            </div>
+            <div class="flex items-center justify-between py-2.5 border-b border-surface">
+              <span class="text-xs text-text-tertiary">{{ t('perTeam') }}</span>
+              <span class="text-sm font-medium font-mono text-foreground">{{ store.settings.playersPerTeam }}</span>
+            </div>
+            <div class="flex items-center justify-between py-2.5">
+              <span class="text-xs text-text-tertiary">{{ t('nominationOrder') }}</span>
+              <span class="text-sm font-medium text-foreground">{{ store.settings.nominationOrder === 'normal' ? t('roundRobin') : store.settings.nominationOrder === 'lowest_avg' ? t('lowestAvgMmr') : t('fewestPlayersFirst') }}</span>
             </div>
           </div>
         </div>
       </div>
-    </template>
+    </div>
+
+    <!-- Captains Section (full width) -->
+    <div v-if="store.captains.value.length > 0" class="max-w-[1200px] mx-auto w-full px-6 md:px-12 pb-12">
+      <div class="h-px bg-border mb-5" />
+      <div class="flex items-center gap-2 mb-5">
+        <Users class="w-[18px] h-[18px] text-primary" />
+        <span class="text-xl font-semibold text-foreground">{{ t('captains') }}</span>
+        <span class="inline-flex items-center rounded px-2 py-0.5 text-xs font-semibold font-mono bg-primary/20 text-primary">
+          {{ store.captains.value.length }}
+        </span>
+      </div>
+      <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 gap-4">
+        <div v-for="captain in store.captains.value" :key="captain.id" class="flex flex-col items-center gap-2">
+          <div class="relative w-16 h-16 rounded-lg overflow-hidden bg-surface shrink-0">
+            <img v-if="captain.banner_url || captain.avatar_url" :src="captain.banner_url || captain.avatar_url" class="w-full h-full object-cover" />
+            <div v-else class="w-full h-full flex items-center justify-center">
+              <Trophy class="w-5 h-5 text-text-muted" />
+            </div>
+            <!-- Upload/remove controls -->
+            <div v-if="canEditBanner(captain)" class="absolute top-0.5 right-0.5 flex flex-col gap-0.5">
+              <label class="p-0.5 rounded bg-background/80 backdrop-blur-sm cursor-pointer hover:bg-background transition-colors" :title="t('uploadBanner')">
+                <Upload class="w-3 h-3 text-foreground" />
+                <input type="file" accept="image/*" class="hidden" @change="openCropper(captain, $event)" :disabled="uploading" />
+              </label>
+              <button v-if="captain.banner_url" class="p-0.5 rounded bg-background/80 backdrop-blur-sm hover:bg-background transition-colors" :title="t('removeBanner')" @click="removeBanner(captain)">
+                <X class="w-3 h-3 text-destructive" />
+              </button>
+            </div>
+          </div>
+          <span class="text-xs font-medium text-foreground text-center w-full truncate">{{ captain.team || captain.name }}</span>
+          <span class="text-[10px] font-mono text-text-tertiary text-center">{{ captain.name }}</span>
+        </div>
+      </div>
+    </div>
 
     <ImageCropper
       :show="showCropper"
@@ -393,5 +425,5 @@ async function removeBanner(captain: any) {
       @crop="handleCrop"
       @close="showCropper = false; cropFile = null"
     />
-  </div>
+  </template>
 </template>

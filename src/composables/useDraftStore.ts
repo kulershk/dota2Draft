@@ -16,6 +16,9 @@ export interface Competition {
   created_by_name: string | null
   created_by_avatar: string | null
   created_at: string
+  rules_title?: string
+  rules_content?: string
+  competition_type?: string
 }
 
 export interface Captain {

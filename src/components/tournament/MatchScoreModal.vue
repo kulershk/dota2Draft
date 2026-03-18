@@ -27,6 +27,7 @@ const isHidden = ref(false)
 const matchStatus = ref('pending')
 const scheduledAt = ref('')
 const expandedGame = ref<number | null>(null)
+const expandedGamePanel = ref<Set<number>>(new Set())
 const gameStats = ref<Record<number, any[]>>({})
 const loadingStats = ref<Record<number, boolean>>({})
 const refetchingGame = ref<Record<number, boolean>>({})
@@ -45,6 +46,9 @@ onMounted(() => {
       has_stats: g?.has_stats || false,
     })
   }
+  // Auto-expand the next unplayed game (or first game)
+  const next = games.value.find(g => !g.winner_captain_id)
+  expandedGamePanel.value.add(next?.game_number || 1)
 })
 
 const score1 = computed(() => games.value.filter(g => g.winner_captain_id === props.match.team1_captain_id).length)
@@ -324,88 +328,132 @@ onUnmounted(() => {
 
 <template>
   <ModalOverlay :show="true" wide @close="emit('close')">
-    <div class="border-b border-border px-7 py-6">
-      <h2 class="text-xl font-semibold text-foreground">{{ t('matchScore') }}</h2>
-      <div class="flex items-center gap-3 mt-2">
-        <span class="text-sm font-medium text-foreground">{{ match.team1_name || t('tbd') }}</span>
-        <span class="text-lg font-bold text-primary">{{ score1 }}</span>
-        <span class="text-muted-foreground">:</span>
-        <span class="text-lg font-bold text-primary">{{ score2 }}</span>
-        <span class="text-sm font-medium text-foreground">{{ match.team2_name || t('tbd') }}</span>
+    <!-- Header + Overview -->
+    <div class="px-6 pt-5 pb-3 flex flex-col gap-3">
+      <div class="flex items-center gap-2">
+        <Gamepad2 class="w-4 h-4 text-text-tertiary" />
+        <span class="text-base font-semibold text-foreground">{{ t('matchScore') }}</span>
       </div>
-      <div class="mt-3">
-        <DatePicker
-          mode="single"
-          :show-time="true"
-          :label="t('scheduledTime')"
-          :model-value="scheduledAt"
-          @update:model-value="scheduledAt = $event"
-        />
+      <!-- Overview card -->
+      <div class="rounded-md bg-surface border border-border px-4 py-3 flex flex-col gap-2">
+        <div class="flex items-center justify-center gap-4">
+          <div class="flex items-center gap-2">
+            <div class="w-7 h-7 rounded bg-card overflow-hidden shrink-0">
+              <img v-if="match.team1_banner || match.team1_avatar" :src="match.team1_banner || match.team1_avatar" class="w-full h-full object-cover" />
+            </div>
+            <span class="text-sm font-semibold text-foreground">{{ match.team1_name || t('tbd') }}</span>
+          </div>
+          <span class="text-2xl font-bold font-mono text-foreground">{{ score1 }} : {{ score2 }}</span>
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-semibold text-foreground">{{ match.team2_name || t('tbd') }}</span>
+            <div class="w-7 h-7 rounded bg-card overflow-hidden shrink-0">
+              <img v-if="match.team2_banner || match.team2_avatar" :src="match.team2_banner || match.team2_avatar" class="w-full h-full object-cover" />
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="badge-info">{{ matchStatus === 'completed' ? t('matchCompleted') : matchStatus === 'live' ? t('matchLive') : t('matchPending') }}</span>
+          <DatePicker mode="single" :show-time="true" :label="''" :model-value="scheduledAt" @update:model-value="scheduledAt = $event" />
+        </div>
       </div>
     </div>
 
-    <div class="px-7 py-5 flex flex-col gap-4 max-h-[60vh] overflow-y-auto">
-      <div v-for="(game, idx) in games" :key="idx" class="rounded-lg border border-border overflow-hidden">
-        <!-- Game header -->
-        <div class="flex items-center justify-between px-4 py-3 bg-accent/30 border-b border-border">
-          <div class="flex items-center gap-2">
-            <Gamepad2 class="w-4 h-4 text-muted-foreground" />
-            <span class="text-sm font-semibold text-foreground">{{ t('game') }} {{ game.game_number }}</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <!-- Lobby status badge -->
-            <template v-if="lobbyStatuses[game.game_number] && game.game_number === nextGameNumber">
-              <span v-if="lobbyStatuses[game.game_number].status === 'cointoss'" class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500">{{ t('lobbyCoinToss') }}</span>
-              <span v-else-if="lobbyStatuses[game.game_number].status === 'launching'" class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500">{{ t('lobbyLaunching') }}</span>
-              <span v-else-if="lobbyStatuses[game.game_number].status === 'active'" class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-green-500/10 text-green-500">{{ t('lobbyActive') }}</span>
-              <span v-else-if="lobbyStatuses[game.game_number].status === 'completed'" class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-green-500/10 text-green-500">{{ t('matchCompleted') }}</span>
-            </template>
-            <!-- Stats toggle -->
+    <!-- Games -->
+    <div class="px-6 pb-3 flex flex-col gap-1 max-h-[45vh] overflow-y-auto">
+      <div v-for="(game, idx) in games" :key="idx">
+        <!-- Game header (clickable toggle) -->
+        <button
+          class="flex items-center gap-2 w-full py-2 cursor-pointer"
+          @click="expandedGamePanel.has(game.game_number) ? expandedGamePanel.delete(game.game_number) : (expandedGamePanel.clear(), expandedGamePanel.add(game.game_number))"
+        >
+          <Gamepad2 class="w-4 h-4 text-primary" />
+          <span class="text-sm font-semibold text-foreground">{{ t('game') }} {{ game.game_number }}</span>
+          <span class="w-2 h-2 rounded-full"
+            :class="game.winner_captain_id ? 'bg-color-success' : 'bg-text-tertiary'" />
+          <!-- Lobby status badge -->
+          <template v-if="lobbyStatuses[game.game_number] && game.game_number === nextGameNumber">
+            <span v-if="lobbyStatuses[game.game_number].status === 'cointoss'" class="badge-warning">{{ t('lobbyCoinToss') }}</span>
+            <span v-else-if="lobbyStatuses[game.game_number].status === 'launching'" class="badge-warning">{{ t('lobbyLaunching') }}</span>
+            <span v-else-if="lobbyStatuses[game.game_number].status === 'active'" class="badge-success">{{ t('lobbyActive') }}</span>
+            <span v-else-if="lobbyStatuses[game.game_number].status === 'completed'" class="badge-success">{{ t('matchCompleted') }}</span>
+          </template>
+          <!-- Winner summary when collapsed -->
+          <span v-if="!expandedGamePanel.has(game.game_number) && game.winner_captain_id" class="text-xs text-muted-foreground ml-1">
+            {{ game.winner_captain_id === match.team1_captain_id ? match.team1_name : match.team2_name }}
+          </span>
+          <div class="ml-auto flex items-center gap-1">
+            <span v-if="game.dotabuff_id && !expandedGamePanel.has(game.game_number)" class="text-[10px] font-mono text-text-tertiary">{{ game.dotabuff_id }}</span>
             <button
-              v-if="game.has_stats || (gameStats[game.game_number]?.length)"
-              class="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-              :title="t('viewStats')"
-              @click="toggleStats(game.game_number)"
+              v-if="(game.has_stats || (gameStats[game.game_number]?.length)) && expandedGamePanel.has(game.game_number)"
+              class="p-1.5 rounded-md text-text-tertiary hover:text-foreground transition-colors"
+              @click.stop="toggleStats(game.game_number)"
             >
               <component :is="expandedGame === game.game_number ? ChevronUp : ChevronDown" class="w-4 h-4" />
             </button>
             <button
-              v-if="game.dotabuff_id && store.isAdmin"
-              class="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              v-if="game.dotabuff_id && store.isAdmin && expandedGamePanel.has(game.game_number)"
+              class="p-1.5 rounded-md text-text-tertiary hover:text-foreground transition-colors"
               :class="{ 'animate-spin': refetchingGame[game.game_number] }"
               :disabled="refetchingGame[game.game_number]"
-              :title="t('refetchStats')"
-              @click="refetchStats(game.game_number)"
+              @click.stop="refetchStats(game.game_number)"
             >
               <RefreshCw class="w-4 h-4" />
             </button>
+            <component :is="expandedGamePanel.has(game.game_number) ? ChevronUp : ChevronDown" class="w-4 h-4 text-text-tertiary" />
           </div>
+        </button>
+
+        <!-- Expanded game content -->
+        <div v-if="expandedGamePanel.has(game.game_number)" class="flex flex-col gap-2 pb-2">
+
+        <!-- Team score cards side by side -->
+        <div class="flex gap-2">
+          <button
+            class="flex-1 rounded-md border p-2.5 flex flex-col gap-2 transition-colors"
+            :class="game.winner_captain_id === match.team1_captain_id
+              ? 'bg-surface border-primary'
+              : 'bg-surface border-border hover:border-muted-foreground'"
+            @click="setGameWinner(idx, match.team1_captain_id)"
+          >
+            <div class="flex items-center gap-2">
+              <div class="w-5 h-5 rounded bg-card overflow-hidden shrink-0">
+                <img v-if="match.team1_banner || match.team1_avatar" :src="match.team1_banner || match.team1_avatar" class="w-full h-full object-cover" />
+              </div>
+              <span class="text-xs font-medium text-foreground">{{ match.team1_name || 'Team 1' }}</span>
+            </div>
+            <div class="flex items-center justify-center rounded bg-card h-8 w-full">
+              <span class="text-sm font-semibold font-mono" :class="game.winner_captain_id === match.team1_captain_id ? 'text-primary' : 'text-text-tertiary'">
+                {{ game.winner_captain_id === match.team1_captain_id ? 'W' : '—' }}
+              </span>
+            </div>
+          </button>
+          <button
+            class="flex-1 rounded-md border p-2.5 flex flex-col gap-2 transition-colors"
+            :class="game.winner_captain_id === match.team2_captain_id
+              ? 'bg-surface border-primary'
+              : 'bg-surface border-border hover:border-muted-foreground'"
+            @click="setGameWinner(idx, match.team2_captain_id)"
+          >
+            <div class="flex items-center gap-2">
+              <div class="w-5 h-5 rounded bg-card overflow-hidden shrink-0">
+                <img v-if="match.team2_banner || match.team2_avatar" :src="match.team2_banner || match.team2_avatar" class="w-full h-full object-cover" />
+              </div>
+              <span class="text-xs font-medium text-foreground">{{ match.team2_name || 'Team 2' }}</span>
+            </div>
+            <div class="flex items-center justify-center rounded bg-card h-8 w-full">
+              <span class="text-sm font-semibold font-mono" :class="game.winner_captain_id === match.team2_captain_id ? 'text-primary' : 'text-text-tertiary'">
+                {{ game.winner_captain_id === match.team2_captain_id ? 'W' : '—' }}
+              </span>
+            </div>
+          </button>
         </div>
 
-        <!-- Winner + Match ID row -->
-        <div class="px-4 py-3 flex items-center gap-3 border-b border-border/30">
-          <div class="flex gap-2 flex-1">
-            <button
-              class="flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors"
-              :class="game.winner_captain_id === match.team1_captain_id
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-accent text-foreground hover:bg-accent/80'"
-              @click="setGameWinner(idx, match.team1_captain_id)"
-            >{{ match.team1_name || 'Team 1' }}</button>
-            <button
-              class="flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors"
-              :class="game.winner_captain_id === match.team2_captain_id
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-accent text-foreground hover:bg-accent/80'"
-              @click="setGameWinner(idx, match.team2_captain_id)"
-            >{{ match.team2_name || 'Team 2' }}</button>
-          </div>
-          <input
-            v-model="game.dotabuff_id"
-            class="input-field !h-9 !text-xs w-36"
-            :placeholder="t('dotabuffId')"
-          />
-        </div>
+        <!-- Match ID input -->
+        <input
+          v-model="game.dotabuff_id"
+          class="input-field !text-xs"
+          :placeholder="t('dotabuffId') || 'Match ID'"
+        />
 
         <!-- Admin lobby actions -->
         <template v-if="store.isAdmin && match.team1_captain_id && match.team2_captain_id && game.game_number === nextGameNumber">
@@ -620,28 +668,38 @@ onUnmounted(() => {
             </table>
           </div>
         </div>
+        </div>
       </div>
     </div>
 
-    <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
-      <div class="flex items-center gap-3">
-        <label class="text-sm text-foreground font-medium">{{ t('statusCol') }}</label>
-        <select class="input-field flex-1" v-model="matchStatus">
+    <div class="mx-6 h-px bg-border" />
+
+    <div class="px-6 py-4 flex flex-col gap-3">
+      <!-- Status -->
+      <div class="flex flex-col gap-1.5">
+        <span class="text-[10px] font-semibold font-mono uppercase tracking-[1.5px] text-text-tertiary">STATUS</span>
+        <select class="input-field !h-9" v-model="matchStatus">
           <option value="pending">{{ t('matchPending') }}</option>
           <option value="live">{{ t('matchLive') }}</option>
           <option value="completed">{{ t('matchCompleted') }}</option>
         </select>
       </div>
-      <label class="flex items-center gap-2 cursor-pointer py-1">
-        <input type="checkbox" class="w-4 h-4 accent-primary" v-model="isHidden" />
-        <EyeOff class="w-4 h-4 text-muted-foreground" />
-        <span class="text-sm text-foreground">{{ t('hideMatch') }}</span>
-        <span class="text-xs text-muted-foreground">{{ t('hideMatchHint') }}</span>
+
+      <!-- Visibility -->
+      <label class="flex items-center gap-3 cursor-pointer rounded-md bg-surface border border-border px-3 py-2.5">
+        <input type="checkbox" class="w-4 h-4 accent-primary rounded shrink-0" v-model="isHidden" />
+        <div class="flex-1 flex flex-col gap-0.5">
+          <span class="text-sm font-medium text-foreground">{{ t('hideMatch') }}</span>
+          <span class="text-[11px] text-text-tertiary">{{ t('hideMatchHint') }}</span>
+        </div>
+        <EyeOff class="w-4 h-4 text-text-tertiary shrink-0" />
       </label>
-      <button class="btn-primary w-full justify-center" @click="save">
+
+      <!-- Actions -->
+      <button class="btn-primary w-full justify-center py-3 rounded-lg text-sm font-bold" @click="save">
+        <Check class="w-4 h-4" />
         {{ t('updateScore') }}
       </button>
-      <button class="btn-secondary w-full justify-center" @click="emit('close')">{{ t('cancel') }}</button>
     </div>
   </ModalOverlay>
 

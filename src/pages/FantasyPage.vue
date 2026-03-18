@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Star, Plus, Pencil, Trash2, Trophy, Lock, Play, Square } from 'lucide-vue-next'
+import { Star, Plus, Pencil, Trash2, Trophy, Lock, Play, Square, ChevronDown, ChevronUp } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
@@ -115,6 +115,12 @@ async function loadAll() {
   await store.fetchFantasy()
   await store.fetchTournament()
   await fetchLeaderboard()
+  // Auto-expand active/pending stages
+  for (const stage of stages.value) {
+    if (stage.status === 'active' || stage.status === 'pending') {
+      expandedStages.value.add(stage.id)
+    }
+  }
   loading.value = false
 }
 
@@ -148,7 +154,7 @@ function openCreateStage() {
   editingStageId.value = null
   stageName.value = ''
   stageMatchIds.value = []
-  stageStatus.value = 'pending'
+  stageStatus.value = 'upcoming'
   showStageModal.value = true
 }
 
@@ -314,6 +320,16 @@ async function toggleTopPicks(stageId: number) {
   }
 }
 
+const expandedStages = ref<Set<number>>(new Set())
+
+function toggleStageExpand(stageId: number) {
+  if (expandedStages.value.has(stageId)) {
+    expandedStages.value.delete(stageId)
+  } else {
+    expandedStages.value.add(stageId)
+  }
+}
+
 const roles = ['carry', 'mid', 'offlane', 'pos4', 'pos5'] as const
 
 const fantasyStats = [
@@ -335,31 +351,29 @@ function matchLabel(match: any) {
 </script>
 
 <template>
-  <div class="p-4 md:p-8 flex flex-col gap-4 md:gap-6 max-w-[1200px] mx-auto w-full">
+  <div class="p-4 md:p-8 flex flex-col gap-0 max-w-[1200px] mx-auto w-full">
     <!-- Header -->
-    <div class="flex items-center justify-between">
+    <div class="flex items-center justify-between py-6">
       <div class="flex items-center gap-3">
         <Star class="w-6 h-6 text-primary" />
-        <h1 class="text-2xl font-bold text-foreground">{{ t('fantasy') }}</h1>
+        <h1 class="text-2xl md:text-[28px] font-bold text-foreground tracking-tight">{{ t('fantasy') }}</h1>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-3">
         <button
           v-for="tab in (['picks', 'leaderboard', 'rules'] as const)" :key="tab"
-          class="px-4 py-2 text-sm font-medium rounded-lg transition-colors"
-          :class="activeTab === tab ? 'bg-primary text-primary-foreground' : 'bg-accent text-foreground hover:bg-accent/80'"
+          class="px-4 py-2.5 text-sm font-medium rounded-md transition-colors"
+          :class="activeTab === tab
+            ? 'bg-primary text-primary-foreground font-semibold'
+            : 'text-muted-foreground border border-border hover:text-foreground hover:border-muted-foreground'"
           @click="activeTab = tab"
         >
           {{ tab === 'picks' ? t('myPicks') : tab === 'leaderboard' ? t('leaderboard') : t('fantasyRules') }}
         </button>
+        <button v-if="isAdmin && activeTab === 'picks'" class="btn-primary text-sm" @click="openCreateStage">
+          <Plus class="w-4 h-4" />
+          {{ t('createFantasyStage') }}
+        </button>
       </div>
-    </div>
-
-    <!-- Admin: Create stage -->
-    <div v-if="isAdmin && activeTab === 'picks'" class="flex justify-end">
-      <button class="btn-primary text-sm" @click="openCreateStage">
-        <Plus class="w-4 h-4" />
-        {{ t('createFantasyStage') }}
-      </button>
     </div>
 
     <!-- Loading -->
@@ -371,142 +385,193 @@ function matchLabel(match: any) {
         {{ t('noFantasyStages') }}
       </div>
 
-      <div v-for="stage in stages" :key="stage.id" class="card">
-        <div class="flex items-center justify-between px-5 py-4 border-b border-border">
-          <div class="flex items-center gap-3">
-            <h3 class="text-lg font-semibold text-foreground">{{ stage.name }}</h3>
-            <span class="text-xs font-semibold uppercase px-2 py-0.5 rounded-full"
-              :class="stage.status === 'completed' ? 'bg-green-500/10 text-green-500'
-                : stage.status === 'active' ? 'bg-amber-500/10 text-amber-500'
-                : 'bg-accent text-muted-foreground'">
-              {{ stage.status === 'completed' ? t('matchCompleted') : stage.status === 'active' ? t('matchLive') : t('matchPending') }}
-            </span>
-            <span class="text-xs text-muted-foreground">{{ stage.participant_count || 0 }} {{ t('participants') }}</span>
-          </div>
-          <div v-if="isAdmin" class="flex items-center gap-2">
-            <button
-              v-if="stage.status === 'pending'"
-              class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 transition-colors"
-              @click="setStageStatus(stage.id, 'active')"
-            >
-              <Play class="w-3.5 h-3.5" />
-              {{ t('openStage') }}
-            </button>
-            <button
-              v-else-if="stage.status === 'active'"
-              class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-green-500/10 text-green-600 hover:bg-green-500/20 transition-colors"
-              @click="setStageStatus(stage.id, 'completed')"
-            >
-              <Square class="w-3.5 h-3.5" />
-              {{ t('closeStage') }}
-            </button>
-            <button
-              v-else
-              class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-accent text-muted-foreground hover:bg-accent/80 transition-colors"
-              @click="setStageStatus(stage.id, 'pending')"
-            >
-              {{ t('reopenStage') }}
-            </button>
-            <button class="p-1.5 rounded hover:bg-accent" @click="openEditStage(stage)">
-              <Pencil class="w-4 h-4 text-muted-foreground" />
-            </button>
-            <button class="p-1.5 rounded hover:bg-accent" @click="deleteStageId = stage.id; showDeleteConfirm = true">
-              <Trash2 class="w-4 h-4 text-muted-foreground" />
-            </button>
-          </div>
-        </div>
-
-        <!-- Picks grid -->
-        <div class="p-5">
-          <div v-if="!isLoggedIn" class="text-sm text-muted-foreground text-center py-4">
-            {{ t('loginToPickFantasy') }}
-          </div>
-          <div v-else class="grid grid-cols-5 gap-3">
-            <div v-for="role in roles" :key="role" class="flex flex-col items-center gap-2">
-              <span class="text-xs font-semibold text-muted-foreground uppercase">{{ t('fantasyRole_' + role) }}</span>
-              <div v-if="getStagePicks(stage.id)[role]" class="flex flex-col items-center gap-1">
-                <img
-                  v-if="getPlayerInfo(getStagePicks(stage.id)[role])?.avatar_url"
-                  :src="getPlayerInfo(getStagePicks(stage.id)[role])?.avatar_url || ''"
-                  class="w-10 h-10 rounded-full"
-                />
-                <span class="text-xs text-foreground font-medium text-center truncate max-w-[100px]">
-                  {{ getPlayerInfo(getStagePicks(stage.id)[role])?.name || '?' }}
+      <template v-for="stage in stages" :key="stage.id">
+        <!-- Stage section -->
+        <div class="border-t border-border">
+          <!-- Stage header (always visible) -->
+          <div class="flex items-center justify-between py-5 cursor-pointer" @click="toggleStageExpand(stage.id)">
+            <div class="flex items-center gap-3">
+              <h3 class="text-xl font-bold text-foreground">{{ stage.name }}</h3>
+              <span class="inline-flex items-center rounded px-2.5 py-0.5 text-[10px] font-bold font-mono"
+                :class="stage.status === 'active' ? 'bg-color-success/20 text-color-success'
+                  : stage.status === 'completed' ? 'bg-color-warning/20 text-color-warning'
+                  : stage.status === 'pending' ? 'bg-primary/20 text-primary'
+                  : 'bg-accent text-muted-foreground'">
+                {{ stage.status === 'completed' ? 'COMPLETED' : stage.status === 'active' ? 'LIVE' : stage.status === 'pending' ? 'OPEN' : 'UPCOMING' }}
+              </span>
+              <span class="text-sm text-text-tertiary">{{ stage.participant_count || 0 }} {{ t('participants') }}</span>
+            </div>
+            <div class="flex items-center gap-4">
+              <!-- Mini stats when collapsed -->
+              <template v-if="!expandedStages.has(stage.id) && stage.status !== 'pending' && stage.status !== 'upcoming'">
+                <span v-if="getMyStageTotal(stage.id) != null" class="text-sm font-semibold font-mono text-primary">
+                  {{ (getMyStageTotal(stage.id) ?? 0).toFixed(1) }} pts
                 </span>
-                <span
-                  v-if="repeatPenalty > 0 && isRepeatPick(stage.id, getStagePicks(stage.id)[role])"
-                  class="text-[9px] font-bold text-amber-500 px-1 py-0.5 rounded bg-amber-500/10"
-                  :title="t('repeatPenaltyLabel', { pct: Math.round(repeatPenalty * 100) })"
-                >-{{ Math.round(repeatPenalty * 100) }}%</span>
-                <span
-                  v-if="stage.status !== 'pending' && getMyRolePoints(stage.id, role) != null"
-                  class="text-xs font-bold"
-                  :class="(getMyRolePoints(stage.id, role) ?? 0) >= 0 ? 'text-primary' : 'text-red-500'"
-                >{{ (getMyRolePoints(stage.id, role) ?? 0).toFixed(1) }} {{ t('pts') }}</span>
+              </template>
+              <!-- Admin controls -->
+              <div v-if="isAdmin" class="flex items-center gap-2" @click.stop>
                 <button
-                  v-if="stage.status === 'pending'"
-                  class="text-[10px] text-primary hover:underline"
-                  @click="openPick(stage.id, role)"
-                >{{ t('changePick') }}</button>
+                  v-if="stage.status === 'upcoming'"
+                  class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-primary/20 text-primary hover:bg-primary/30 transition-colors"
+                  @click="setStageStatus(stage.id, 'pending')"
+                >
+                  {{ t('openStage') }}
+                </button>
                 <button
-                  v-if="stage.status === 'pending'"
-                  class="text-[10px] text-destructive hover:underline"
-                  @click="clearPick(stage.id, role)"
-                >{{ t('clear') }}</button>
-                <Lock v-else class="w-3 h-3 text-muted-foreground" />
+                  v-else-if="stage.status === 'pending'"
+                  class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-color-warning/20 text-color-warning hover:bg-color-warning/30 transition-colors"
+                  @click="setStageStatus(stage.id, 'active')"
+                >
+                  <Play class="w-3.5 h-3.5" />
+                  {{ t('matchLive') }}
+                </button>
+                <button
+                  v-else-if="stage.status === 'active'"
+                  class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-color-success/20 text-color-success hover:bg-color-success/30 transition-colors"
+                  @click="setStageStatus(stage.id, 'completed')"
+                >
+                  <Square class="w-3.5 h-3.5" />
+                  {{ t('closeStage') }}
+                </button>
+                <button
+                  v-else-if="stage.status === 'completed'"
+                  class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-accent text-muted-foreground hover:bg-accent/80 transition-colors"
+                  @click="setStageStatus(stage.id, 'upcoming')"
+                >
+                  {{ t('reopenStage') }}
+                </button>
+                <button class="text-text-tertiary hover:text-foreground transition-colors" @click="openEditStage(stage)">
+                  <Pencil class="w-4 h-4" />
+                </button>
+                <button class="text-text-tertiary hover:text-destructive transition-colors" @click="deleteStageId = stage.id; showDeleteConfirm = true">
+                  <Trash2 class="w-4 h-4" />
+                </button>
               </div>
-              <button
-                v-else-if="stage.status === 'pending'"
-                class="w-full py-3 rounded-lg border-2 border-dashed border-border hover:border-primary text-xs text-muted-foreground hover:text-primary transition-colors"
-                @click="openPick(stage.id, role)"
-              >
-                {{ t('pickPlayer') }}
+              <!-- Collapse link -->
+              <button v-if="!expandedStages.has(stage.id)" class="text-sm font-medium text-primary" @click.stop="toggleStageExpand(stage.id)">
+                {{ t('viewAll') || 'View My Picks' }}
               </button>
-              <div v-else class="text-xs text-muted-foreground py-3">-</div>
+              <component :is="expandedStages.has(stage.id) ? ChevronUp : ChevronDown" class="w-5 h-5 text-text-tertiary" />
             </div>
           </div>
-          <!-- Stage total -->
-          <div v-if="stage.status !== 'pending' && getMyStageTotal(stage.id) != null" class="mt-4 pt-3 border-t border-border flex items-center justify-between">
-            <span class="text-sm font-medium text-muted-foreground">{{ t('fantasyTotal') }}</span>
-            <span class="text-lg font-bold text-primary">{{ (getMyStageTotal(stage.id) ?? 0).toFixed(1) }} {{ t('pts') }}</span>
-          </div>
 
-          <!-- Top Picks toggle -->
-          <div v-if="stage.status !== 'pending'" class="mt-3 pt-3 border-t border-border">
-            <button
-              class="text-xs font-medium text-primary hover:underline"
-              @click="toggleTopPicks(stage.id)"
-            >{{ expandedStageTop === stage.id ? t('hideTopPicks') : t('showTopPicks') }}</button>
+          <!-- Expanded content -->
+          <div v-if="expandedStages.has(stage.id)" class="pb-6 flex flex-col gap-4">
+            <!-- Upcoming — no picks yet -->
+            <div v-if="stage.status === 'upcoming'" class="text-sm text-text-tertiary text-center py-6">
+              {{ t('fantasyUpcoming') || 'Picks will be available once this stage is opened.' }}
+            </div>
+            <!-- Picks row — card style -->
+            <div v-else-if="!isLoggedIn" class="text-sm text-muted-foreground text-center py-4">
+              {{ t('loginToPickFantasy') }}
+            </div>
+            <div v-else class="flex gap-3">
+              <!-- Role pick cards -->
+              <div v-for="role in roles" :key="role"
+                class="flex-1 flex flex-col items-center gap-2 rounded-lg bg-card p-3">
+                <span class="text-[10px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">{{ t('fantasyRole_' + role) }}</span>
 
-            <div v-if="expandedStageTop === stage.id" class="mt-4">
-              <div v-if="loadingTopPicks[stage.id]" class="text-xs text-muted-foreground text-center py-4">{{ t('loading') }}...</div>
-              <div v-else class="grid grid-cols-1 sm:grid-cols-5 gap-4">
-                <div v-for="role in roles" :key="role" class="flex flex-col gap-2">
-                  <span class="text-xs font-semibold text-muted-foreground uppercase text-center">{{ t('fantasyRole_' + role) }}</span>
-                  <div
-                    v-for="(player, idx) in (topPicksData[stage.id]?.[role] || []).slice(0, 5)"
-                    :key="idx"
-                    class="flex items-center gap-2 px-2 py-1.5 rounded-lg"
-                    :class="idx === 0 ? 'bg-primary/10' : 'bg-accent/30'"
+                <template v-if="getStagePicks(stage.id)[role]">
+                  <div class="w-12 h-12 rounded-full bg-surface overflow-hidden">
+                    <img
+                      v-if="getPlayerInfo(getStagePicks(stage.id)[role])?.avatar_url"
+                      :src="getPlayerInfo(getStagePicks(stage.id)[role])?.avatar_url || ''"
+                      class="w-full h-full object-cover"
+                    />
+                  </div>
+                  <span class="text-xs font-medium text-foreground text-center truncate w-full">
+                    {{ getPlayerInfo(getStagePicks(stage.id)[role])?.name || '?' }}
+                  </span>
+                  <span
+                    v-if="repeatPenalty > 0 && isRepeatPick(stage.id, getStagePicks(stage.id)[role])"
+                    class="text-[9px] font-bold text-amber-500 px-1.5 py-0.5 rounded bg-amber-500/10"
+                    :title="t('repeatPenaltyLabel', { pct: Math.round(repeatPenalty * 100) })"
+                  >-{{ Math.round(repeatPenalty * 100) }}%</span>
+                  <span
+                    v-if="stage.status !== 'pending' && getMyRolePoints(stage.id, role) != null"
+                    class="text-[11px] font-semibold font-mono"
+                    :class="(getMyRolePoints(stage.id, role) ?? 0) >= 0 ? 'text-primary' : 'text-red-500'"
+                  >{{ (getMyRolePoints(stage.id, role) ?? 0).toFixed(1) }} {{ t('pts') }}</span>
+                  <span v-else-if="stage.status === 'pending'" class="text-[11px] font-semibold font-mono text-muted-foreground">—</span>
+                  <div v-if="stage.status === 'pending'" class="flex gap-2">
+                    <button class="text-[10px] text-primary hover:underline" @click="openPick(stage.id, role)">{{ t('changePick') }}</button>
+                    <button class="text-[10px] text-destructive hover:underline" @click="clearPick(stage.id, role)">{{ t('clear') }}</button>
+                  </div>
+                  <Lock v-else class="w-3 h-3 text-text-tertiary" />
+                </template>
+
+                <template v-else-if="stage.status === 'pending'">
+                  <button
+                    class="w-12 h-12 rounded-full border-2 border-dashed border-border hover:border-primary flex items-center justify-center transition-colors"
+                    @click="openPick(stage.id, role)"
                   >
-                    <span class="text-[10px] font-bold text-muted-foreground w-4">{{ idx + 1 }}</span>
-                    <img v-if="player.avatar" :src="player.avatar" class="w-6 h-6 rounded-full" />
-                    <div class="flex-1 min-w-0">
-                      <div class="text-xs font-medium text-foreground truncate">{{ player.name }}</div>
+                    <Plus class="w-4 h-4 text-text-tertiary" />
+                  </button>
+                  <span class="text-[10px] text-text-muted">{{ t('pickPlayer') }}</span>
+                </template>
+                <template v-else>
+                  <div class="w-12 h-12 rounded-full bg-surface" />
+                  <span class="text-xs text-text-tertiary">—</span>
+                </template>
+              </div>
+
+              <!-- Total card -->
+              <div class="flex-1 flex flex-col items-center justify-center gap-2 rounded-lg bg-primary/10 border border-primary/25 p-3">
+                <span class="text-[10px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">TOTAL</span>
+                <span v-if="stage.status !== 'pending' && getMyStageTotal(stage.id) != null"
+                  class="text-[22px] font-bold font-mono text-primary">
+                  {{ (getMyStageTotal(stage.id) ?? 0).toFixed(1) }} pts
+                </span>
+                <span v-else class="text-[22px] font-bold font-mono text-text-tertiary">—</span>
+              </div>
+            </div>
+
+            <!-- Top Picks table -->
+            <div v-if="stage.status !== 'pending' && stage.status !== 'upcoming'" class="flex flex-col gap-2">
+              <button
+                class="text-xs font-medium text-primary hover:underline self-start"
+                @click="toggleTopPicks(stage.id)"
+              >{{ expandedStageTop === stage.id ? t('hideTopPicks') : t('showTopPicks') }}</button>
+
+              <div v-if="expandedStageTop === stage.id">
+                <div v-if="loadingTopPicks[stage.id]" class="text-xs text-muted-foreground text-center py-4">{{ t('loading') }}...</div>
+                <div v-else class="rounded-md border border-border overflow-hidden">
+                  <!-- Table header -->
+                  <div class="flex items-center bg-surface px-3 py-2">
+                    <span class="flex-1 text-[10px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">PICK TOP</span>
+                    <span class="w-20 text-[10px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-center">PTS LIVE</span>
+                    <span class="w-20 text-[10px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-center">BANS</span>
+                    <span class="w-20 text-[10px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-right">PICKS</span>
+                  </div>
+                  <!-- Rows per role -->
+                  <template v-for="role in roles" :key="role">
+                    <div
+                      v-for="(player, idx) in (topPicksData[stage.id]?.[role] || []).slice(0, 3)"
+                      :key="`${role}-${idx}`"
+                      class="flex items-center px-3 py-2 border-t border-border"
+                    >
+                      <div class="flex-1 flex items-center gap-2 min-w-0">
+                        <div class="w-6 h-6 rounded-full bg-card overflow-hidden shrink-0">
+                          <img v-if="player.avatar" :src="player.avatar" class="w-full h-full object-cover" />
+                        </div>
+                        <span class="text-xs text-foreground truncate">{{ player.name }}</span>
+                      </div>
+                      <span class="w-20 text-xs font-semibold font-mono text-center" :class="player.points >= 0 ? 'text-primary' : 'text-destructive'">
+                        {{ player.points.toFixed(1) }}
+                      </span>
+                      <div class="w-20 flex justify-center">
+                        <span v-if="player.bans" class="map-loss text-[9px]">{{ player.bans }}</span>
+                        <span v-else class="text-xs text-text-tertiary">—</span>
+                      </div>
+                      <span class="w-20 text-xs font-mono text-foreground text-right">{{ player.picks || 0 }}</span>
                     </div>
-                    <span class="text-xs font-bold" :class="player.points >= 0 ? 'text-primary' : 'text-red-500'">
-                      {{ player.points.toFixed(1) }}
-                    </span>
-                  </div>
-                  <div v-if="!(topPicksData[stage.id]?.[role] || []).length" class="text-[10px] text-muted-foreground text-center py-2">
-                    -
-                  </div>
+                  </template>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      </template>
     </template>
 
     <!-- Leaderboard Tab -->
@@ -660,6 +725,7 @@ function matchLabel(match: any) {
         <div v-if="editingStageId" class="flex flex-col gap-1.5">
           <label class="label-text">{{ t('statusCol') }}</label>
           <select class="input-field" v-model="stageStatus">
+            <option value="upcoming">{{ t('fantasyUpcomingLabel') || 'Upcoming' }}</option>
             <option value="pending">{{ t('matchPending') }}</option>
             <option value="active">{{ t('matchLive') }}</option>
             <option value="completed">{{ t('matchCompleted') }}</option>

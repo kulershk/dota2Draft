@@ -371,6 +371,7 @@ export default {
   // Admin: Competition Setup
   competitionSetup: 'Sacensības iestatīšana',
   tab_settings: 'Iestatījumi',
+  tab_rules: 'Rules',
   tab_lobby: 'Lobijs',
   tab_fantasy: 'Fantāzija',
   tab_captains: 'Kapteiņi un dalībnieki',

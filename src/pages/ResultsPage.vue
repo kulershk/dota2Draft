@@ -114,8 +114,8 @@ function totalSpent(team: TeamResult) {
           </div>
           <div v-else>
             <table class="w-full text-sm">
-              <tbody class="divide-y divide-border">
-                <tr v-for="player in team.players" :key="player.id">
+              <tbody>
+                <tr v-for="player in team.players" :key="player.id" class="border-b border-foreground/10 last:border-0">
                   <td class="py-2 pr-2">
                     <div class="flex items-center gap-2">
                       <img v-if="player.avatar_url" :src="player.avatar_url" class="w-6 h-6 rounded-full shrink-0" />

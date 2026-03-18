@@ -178,20 +178,24 @@ watch(searchQuery, () => { playersPage.value = 1 })
     </div>
 
     <!-- Stats Row -->
-    <div class="grid grid-cols-3 md:grid-cols-6 gap-3 md:gap-4">
-      <div class="card p-3 md:p-4 cursor-pointer transition-colors" :class="!activeRoleFilter ? 'ring-2 ring-primary' : 'hover:bg-accent/50'" @click="activeRoleFilter = null">
-        <p class="text-[10px] md:text-xs font-semibold tracking-wider text-muted-foreground uppercase">{{ t('total') }}</p>
-        <p class="text-xl md:text-3xl font-bold text-foreground mt-1">{{ store.players.value.length }}</p>
+    <div class="flex gap-4">
+      <div class="flex-1 stat-card-accented cursor-pointer transition-colors" :class="!activeRoleFilter ? 'ring-2 ring-primary' : 'hover:brightness-110'" @click="activeRoleFilter = null">
+        <span class="stat-card-label">{{ t('total') }}</span>
+        <span class="stat-card-value">{{ store.players.value.length }}</span>
       </div>
-      <div v-for="role in ['Carry', 'Mid', 'Offlane', 'Pos4', 'Pos5']" :key="role" class="card p-3 md:p-4 cursor-pointer transition-colors" :class="activeRoleFilter === role ? 'ring-2 ring-primary' : 'hover:bg-accent/50'" @click="toggleRoleFilter(role)">
-        <p class="text-[10px] md:text-xs font-semibold tracking-wider text-muted-foreground uppercase">{{ t(role.toLowerCase()) }}</p>
-        <p class="text-xl md:text-3xl font-bold text-foreground mt-1">{{ store.roleCounts.value[role as keyof typeof store.roleCounts.value] }}</p>
+      <div v-for="role in ['Carry', 'Mid', 'Offlane', 'Pos4', 'Pos5']" :key="role"
+        class="flex-1 stat-card cursor-pointer transition-colors"
+        :class="activeRoleFilter === role ? 'ring-2 ring-primary' : 'hover:brightness-110'"
+        @click="toggleRoleFilter(role)">
+        <span class="stat-card-label">{{ t(role.toLowerCase()) }}</span>
+        <span class="stat-card-value">{{ store.roleCounts.value[role as keyof typeof store.roleCounts.value] }}</span>
       </div>
     </div>
 
     <!-- Players Table -->
-    <div class="card">
-      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-3 border-b border-border">
+    <div>
+      <!-- Table toolbar -->
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
         <div class="flex items-center gap-2">
           <Users class="w-5 h-5 text-foreground" />
           <span class="text-sm font-semibold text-foreground">{{ t('players') }} ({{ store.players.value.length }})</span>
@@ -218,68 +222,66 @@ watch(searchQuery, () => { playersPage.value = 1 })
         </div>
       </div>
 
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="border-b border-border bg-accent/50">
-              <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[40px]">#</th>
-              <th class="text-left px-4 py-3 font-medium text-muted-foreground">{{ t('playerName') }}</th>
-              <th class="text-left px-4 py-3 font-medium text-muted-foreground">{{ t('role') }}</th>
-              <th class="text-left px-4 py-3 font-medium text-muted-foreground w-[100px]">{{ t('mmr') }}</th>
-              <th class="text-left px-4 py-3 font-medium text-muted-foreground">{{ t('info') }}</th>
-              <th v-if="store.isAdmin.value" class="text-left px-4 py-3 font-medium text-muted-foreground w-[100px]">{{ t('actions') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(player, i) in paginatedPlayers" :key="player.id" class="border-b border-border hover:bg-accent/30 transition-colors">
-              <td class="px-4 py-3 text-muted-foreground">{{ String(i + 1).padStart(2, '0') }}</td>
-              <td class="px-4 py-3">
-                <div class="flex items-center gap-2.5">
-                  <img v-if="player.avatar_url" :src="player.avatar_url" class="w-8 h-8 rounded-full object-cover" />
-                  <div v-else class="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-xs font-semibold text-secondary-foreground">
-                    {{ player.name.charAt(0) }}
-                  </div>
-                  <div class="flex flex-col">
-                    <router-link :to="{ name: 'player-profile', params: { id: player.id } }" class="font-medium text-foreground hover:text-primary transition-colors flex items-center gap-1.5">
-                      <Shield v-if="player.is_captain" class="w-3.5 h-3.5 text-amber-500 flex-shrink-0" :title="t('captainCol')" />
-                      {{ player.name }}
-                    </router-link>
-                    <div v-if="player.steam_id" class="flex items-center gap-2 mt-0.5">
-                      <a :href="`https://steamcommunity.com/profiles/${player.steam_id}`" target="_blank" rel="noopener" class="text-[10px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-0.5">
-                        Steam <ExternalLink class="w-2.5 h-2.5" />
-                      </a>
-                      <a v-if="player.steam_id && /^\d{10,}$/.test(player.steam_id)" :href="`https://www.dotabuff.com/players/${BigInt(player.steam_id) - BigInt('76561197960265728')}`" target="_blank" rel="noopener" class="text-[10px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-0.5">
-                        Dotabuff <ExternalLink class="w-2.5 h-2.5" />
-                      </a>
-                    </div>
-                  </div>
-                </div>
-              </td>
-              <td class="px-4 py-3">
-                <div class="flex gap-1">
-                  <RoleBadge v-for="role in sortedRoles(player.roles)" :key="role" :role="role" />
-                </div>
-              </td>
-              <td class="px-4 py-3">
-                <MmrDisplay :mmr="player.mmr" size="md" />
-              </td>
-              <td class="px-4 py-3 text-muted-foreground text-xs">{{ player.info }}</td>
-              <td v-if="store.isAdmin.value" class="px-4 py-3">
-                <div class="flex items-center gap-1">
-                  <button class="btn-ghost p-2" @click="openEditPlayer(player)"><Pencil class="w-4 h-4" /></button>
-                  <button class="btn-ghost p-2 text-destructive" @click="store.deletePlayer(player.id)"><Trash2 class="w-4 h-4" /></button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <!-- Table header -->
+      <div class="flex items-center rounded-t-md bg-surface px-4 py-3">
+        <span class="w-10 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">#</span>
+        <span class="flex-1 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">{{ t('playerName') }}</span>
+        <span class="w-[120px] text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">{{ t('role') }}</span>
+        <span class="w-20 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-right">{{ t('mmr') }}</span>
+        <span class="w-20 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-right">{{ t('info') }}</span>
+        <span v-if="store.isAdmin.value" class="w-20 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-right">{{ t('actions') }}</span>
       </div>
-      <div v-if="hasMorePlayers" class="px-4 py-3 border-t border-border text-center">
-        <button class="btn-ghost text-sm text-primary" @click="playersPage++">
+
+      <!-- Table rows -->
+      <div v-for="(player, i) in paginatedPlayers" :key="player.id"
+        class="flex items-center px-4 py-3 border-b border-border hover:bg-surface/50 transition-colors">
+        <!-- Rank -->
+        <span class="w-10 text-sm font-mono text-text-tertiary">{{ String(i + 1).padStart(2, '0') }}</span>
+        <!-- Player name -->
+        <div class="flex-1 flex items-center gap-2.5 min-w-0">
+          <img v-if="player.avatar_url" :src="player.avatar_url" class="w-8 h-8 rounded-full object-cover shrink-0" />
+          <div v-else class="w-8 h-8 rounded-full bg-surface flex items-center justify-center text-xs font-semibold text-muted-foreground shrink-0">
+            {{ player.name.charAt(0) }}
+          </div>
+          <div class="flex flex-col min-w-0">
+            <router-link :to="{ name: 'player-profile', params: { id: player.id } }" class="text-sm font-medium text-foreground hover:text-primary transition-colors flex items-center gap-1.5 truncate">
+              <Shield v-if="player.is_captain" class="w-3.5 h-3.5 text-amber-500 flex-shrink-0" :title="t('captainCol')" />
+              {{ player.name }}
+            </router-link>
+            <div v-if="player.steam_id" class="flex items-center gap-2 mt-0.5">
+              <a :href="`https://steamcommunity.com/profiles/${player.steam_id}`" target="_blank" rel="noopener" class="text-[10px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-0.5">
+                Steam <ExternalLink class="w-2.5 h-2.5" />
+              </a>
+              <a v-if="player.steam_id && /^\d{10,}$/.test(player.steam_id)" :href="`https://www.dotabuff.com/players/${BigInt(player.steam_id) - BigInt('76561197960265728')}`" target="_blank" rel="noopener" class="text-[10px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-0.5">
+                Dotabuff <ExternalLink class="w-2.5 h-2.5" />
+              </a>
+            </div>
+          </div>
+        </div>
+        <!-- Roles -->
+        <div class="w-[120px] flex flex-wrap gap-1">
+          <RoleBadge v-for="role in sortedRoles(player.roles)" :key="role" :role="role" />
+        </div>
+        <!-- MMR -->
+        <div class="w-20 text-right">
+          <MmrDisplay :mmr="player.mmr" size="md" />
+        </div>
+        <!-- Info -->
+        <span class="w-20 text-right text-xs font-mono text-muted-foreground truncate">{{ player.info }}</span>
+        <!-- Actions -->
+        <div v-if="store.isAdmin.value" class="w-20 flex items-center justify-end gap-2">
+          <button class="text-text-tertiary hover:text-foreground transition-colors" @click="openEditPlayer(player)"><Pencil class="w-4 h-4" /></button>
+          <button class="text-text-tertiary hover:text-destructive transition-colors" @click="store.deletePlayer(player.id)"><Trash2 class="w-4 h-4" /></button>
+        </div>
+      </div>
+
+      <!-- Show more -->
+      <div v-if="hasMorePlayers" class="flex justify-center py-4">
+        <button class="text-sm font-medium text-primary hover:text-primary/80 transition-colors" @click="playersPage++">
           {{ t('showMore', { remaining: filteredPlayers.length - paginatedPlayers.length }) }}
         </button>
       </div>
-      <div v-else-if="filteredPlayers.length > PLAYERS_PAGE_SIZE" class="px-4 py-2 border-t border-border text-center">
+      <div v-else-if="filteredPlayers.length > PLAYERS_PAGE_SIZE" class="flex justify-center py-3">
         <span class="text-xs text-muted-foreground">{{ t('showingAll', { count: filteredPlayers.length }) }}</span>
       </div>
     </div>

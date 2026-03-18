@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Newspaper, Plus, Pencil, Trash2, Calendar, User } from 'lucide-vue-next'
+import { Newspaper, Plus, Pencil, Trash2, Calendar, User, Upload, Image } from 'lucide-vue-next'
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
@@ -9,34 +9,48 @@ import RichTextEditor from '@/components/common/RichTextEditor.vue'
 
 const { t } = useI18n()
 const api = useApi()
+const uploadingImage = ref(false)
 
-interface NewsPost { id: number; title: string; content: string; created_by_name: string | null; created_by_avatar: string | null; created_at: string }
+interface NewsPost { id: number; title: string; content: string; image_url: string | null; created_by_name: string | null; created_by_avatar: string | null; created_at: string }
 const newsList = ref<NewsPost[]>([])
 const showAddNews = ref(false)
 const showEditNews = ref(false)
-const newNews = ref({ title: '', content: '' })
-const editNews = ref({ id: 0, title: '', content: '' })
+const newNews = ref({ title: '', content: '', image_url: '' })
+const editNews = ref({ id: 0, title: '', content: '', image_url: '' })
 
 async function fetchNews() { newsList.value = await api.getNews() }
 fetchNews()
 
 async function addNews() {
   if (!newNews.value.title || !newNews.value.content) return
-  await api.createNews(newNews.value)
-  newNews.value = { title: '', content: '' }
+  await api.createNews({ title: newNews.value.title, content: newNews.value.content, image_url: newNews.value.image_url })
+  newNews.value = { title: '', content: '', image_url: '' }
   showAddNews.value = false
   fetchNews()
 }
 
 function openEditNews(post: NewsPost) {
-  editNews.value = { id: post.id, title: post.title, content: post.content }
+  editNews.value = { id: post.id, title: post.title, content: post.content, image_url: (post as any).image_url || '' }
   showEditNews.value = true
 }
 
 async function saveNews() {
-  await api.updateNews(editNews.value.id, { title: editNews.value.title, content: editNews.value.content })
+  await api.updateNews(editNews.value.id, { title: editNews.value.title, content: editNews.value.content, image_url: editNews.value.image_url })
   showEditNews.value = false
   fetchNews()
+}
+
+async function handleImageUpload(e: Event, target: 'new' | 'edit') {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  uploadingImage.value = true
+  try {
+    const result = await api.uploadNewsImage(file)
+    if (target === 'new') newNews.value.image_url = result.url
+    else editNews.value.image_url = result.url
+  } finally {
+    uploadingImage.value = false
+  }
 }
 
 async function deleteNews(id: number) {
@@ -107,6 +121,22 @@ function formatDate(dateStr: string) {
       <div class="px-7 py-5 flex flex-col gap-5">
         <InputGroup :label="t('addNewsModal.titleLabel')" :model-value="newNews.title" :placeholder="t('addNewsModal.titlePlaceholder')" @update:model-value="newNews.title = $event" />
         <div class="flex flex-col gap-1.5">
+          <label class="label-text">Cover Image</label>
+          <div class="flex items-start gap-3">
+            <div v-if="newNews.image_url" class="relative">
+              <img :src="newNews.image_url" class="w-40 h-24 rounded-md object-cover border border-border" />
+              <button class="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-destructive text-white flex items-center justify-center" @click="newNews.image_url = ''">
+                <Trash2 class="w-3 h-3" />
+              </button>
+            </div>
+            <label class="btn-secondary cursor-pointer text-xs">
+              <Image class="w-3.5 h-3.5" />
+              {{ uploadingImage ? t('loading') : 'Upload Image' }}
+              <input type="file" accept="image/*" class="hidden" @change="handleImageUpload($event, 'new')" />
+            </label>
+          </div>
+        </div>
+        <div class="flex flex-col gap-1.5">
           <label class="label-text">{{ t('addNewsModal.content') }}</label>
           <RichTextEditor v-model="newNews.content" />
         </div>
@@ -127,6 +157,22 @@ function formatDate(dateStr: string) {
       </div>
       <div class="px-7 py-5 flex flex-col gap-5">
         <InputGroup :label="t('editNewsModal.titleLabel')" :model-value="editNews.title" placeholder="Title" @update:model-value="editNews.title = $event" />
+        <div class="flex flex-col gap-1.5">
+          <label class="label-text">Cover Image</label>
+          <div class="flex items-start gap-3">
+            <div v-if="editNews.image_url" class="relative">
+              <img :src="editNews.image_url" class="w-40 h-24 rounded-md object-cover border border-border" />
+              <button class="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-destructive text-white flex items-center justify-center" @click="editNews.image_url = ''">
+                <Trash2 class="w-3 h-3" />
+              </button>
+            </div>
+            <label class="btn-secondary cursor-pointer text-xs">
+              <Image class="w-3.5 h-3.5" />
+              {{ uploadingImage ? t('loading') : 'Upload Image' }}
+              <input type="file" accept="image/*" class="hidden" @change="handleImageUpload($event, 'edit')" />
+            </label>
+          </div>
+        </div>
         <div class="flex flex-col gap-1.5">
           <label class="label-text">{{ t('editNewsModal.content') }}</label>
           <RichTextEditor v-model="editNews.content" />

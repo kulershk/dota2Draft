@@ -8,6 +8,7 @@ const router = createRouter({
     { path: '/competitions', name: 'competitions', component: () => import('@/pages/CompetitionsPage.vue') },
     { path: '/how-it-works', name: 'how-it-works', component: () => import('@/pages/HowItWorksPage.vue') },
     { path: '/settings', name: 'settings', component: () => import('@/pages/SettingsPage.vue') },
+    { path: '/news/:id', name: 'news-post', component: () => import('@/pages/NewsPostPage.vue') },
     { path: '/player/:id', name: 'player-profile', component: () => import('@/pages/PlayerProfilePage.vue') },
     {
       path: '/c/:compId',
@@ -20,6 +21,7 @@ const router = createRouter({
         { path: 'results', name: 'comp-results', component: () => import('@/pages/ResultsPage.vue') },
         { path: 'tournament', name: 'comp-tournament', component: () => import('@/pages/TournamentPage.vue') },
         { path: 'fantasy', name: 'comp-fantasy', component: () => import('@/pages/FantasyPage.vue') },
+        { path: 'rules', name: 'comp-rules', component: () => import('@/pages/CompetitionRulesPage.vue') },
       ],
     },
     {

@@ -9,8 +9,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        primary: ['Roboto', 'sans-serif'],
-        mono: ['Roboto Mono', 'monospace'],
+        primary: ['Inter', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace'],
       },
       colors: {
         background: 'rgb(var(--background) / <alpha-value>)',
@@ -30,6 +30,7 @@ export default {
         ring: 'rgb(var(--ring) / <alpha-value>)',
         accent: 'rgb(var(--accent) / <alpha-value>)',
         'accent-foreground': 'rgb(var(--accent-foreground) / <alpha-value>)',
+        surface: 'rgb(var(--surface) / <alpha-value>)',
         sidebar: 'rgb(var(--sidebar) / <alpha-value>)',
         'sidebar-foreground': 'rgb(var(--sidebar-foreground) / <alpha-value>)',
         'sidebar-accent': 'rgb(var(--sidebar-accent) / <alpha-value>)',
@@ -46,6 +47,10 @@ export default {
         'color-error-foreground': 'rgb(var(--color-error-foreground) / <alpha-value>)',
         'color-info': 'rgb(var(--color-info) / <alpha-value>)',
         'color-info-foreground': 'rgb(var(--color-info-foreground) / <alpha-value>)',
+        'color-purple': 'rgb(var(--color-purple) / <alpha-value>)',
+        'color-purple-foreground': 'rgb(var(--color-purple-foreground) / <alpha-value>)',
+        'text-tertiary': 'rgb(var(--text-tertiary) / <alpha-value>)',
+        'text-muted': 'rgb(var(--text-muted) / <alpha-value>)',
       },
     },
   },

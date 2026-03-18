@@ -9,10 +9,9 @@ defineProps<{
 
 <template>
   <span
-    class="inline-flex items-center rounded-full font-medium"
     :class="[
-      roleColors[role] || 'bg-muted text-muted-foreground',
-      size === 'xs' ? 'px-1.5 py-0 text-[9px]' : 'px-2 py-0.5 text-[10px]'
+      roleColors[role] || 'badge-accent',
+      size === 'xs' ? '!px-1.5 !py-0 !text-[9px]' : ''
     ]"
   >{{ role }}</span>
 </template>

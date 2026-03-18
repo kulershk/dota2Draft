@@ -35,6 +35,9 @@ const PAGE_SIZE = 20
 
 const compName = ref('')
 const compDescription = ref('')
+const compRulesTitle = ref('')
+const compRulesContent = ref('')
+const compType = ref('')
 const compStatus = ref('draft')
 const compIsPublic = ref(false)
 const compStartsAt = ref('')
@@ -149,6 +152,9 @@ onMounted(async () => {
   const comp = await api.getCompetition(compId.value)
   compName.value = comp.name
   compDescription.value = comp.description || ''
+  compRulesTitle.value = comp.rules_title || ''
+  compRulesContent.value = comp.rules_content || ''
+  compType.value = comp.competition_type || ''
   compStatus.value = comp.status || 'draft'
   compIsPublic.value = !!comp.is_public
   compStartsAt.value = comp.starts_at ? new Date(comp.starts_at).toISOString().slice(0, 16) : ''
@@ -233,6 +239,9 @@ async function saveAll() {
     await api.updateCompetition(compId.value, {
       name: compName.value,
       description: compDescription.value,
+      rules_title: compRulesTitle.value,
+      rules_content: compRulesContent.value,
+      competition_type: compType.value,
       status: compStatus.value,
       is_public: compIsPublic.value,
       starts_at: compStartsAt.value || null,
@@ -336,7 +345,7 @@ async function deleteStream(id: number) {
 
     <!-- Tabs -->
     <div class="flex gap-1 border-b border-border overflow-x-auto">
-      <button v-for="tab in ['settings', 'lobby', 'fantasy', 'captains', 'other']" :key="tab"
+      <button v-for="tab in ['settings', 'rules', 'lobby', 'fantasy', 'captains', 'other']" :key="tab"
         class="px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px"
         :class="activeTab === tab ? 'text-primary border-primary' : 'text-muted-foreground border-transparent hover:text-foreground hover:border-border'"
         @click="activeTab = tab"
@@ -356,6 +365,20 @@ async function deleteStream(id: number) {
       </div>
       <div class="p-4 flex flex-col gap-4">
         <InputGroup :label="t('name')" :model-value="compName" placeholder="Competition name" @update:model-value="compName = $event" />
+        <div class="flex flex-col gap-1.5">
+          <label class="label-text">Competition Type</label>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="ct in ['', 'LAN', 'ONLINE', 'TEAMBUILDING', 'KRAKEN']"
+              :key="ct"
+              class="px-3 py-1.5 rounded-md text-xs font-semibold transition-colors"
+              :class="compType === ct
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-accent text-muted-foreground hover:text-foreground'"
+              @click="compType = ct"
+            >{{ ct || 'None' }}</button>
+          </div>
+        </div>
         <div class="flex flex-col gap-1.5">
           <label class="label-text">{{ t('statusCol') }}</label>
           <select class="input-field" v-model="compStatus">
@@ -459,6 +482,33 @@ async function deleteStream(id: number) {
       </button>
     </div>
 
+    </template>
+
+    <!-- Tab: Rules -->
+    <template v-if="activeTab === 'rules'">
+    <div class="card">
+      <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
+        <Info class="w-5 h-5 text-foreground" />
+        <span class="text-sm font-semibold text-foreground">Competition Rules</span>
+      </div>
+      <div class="p-4 flex flex-col gap-4">
+        <div class="flex flex-col gap-1.5">
+          <label class="label-text">Rules Title</label>
+          <input type="text" v-model="compRulesTitle" class="input-field" placeholder="e.g. Competition Rules" />
+          <p class="text-[11px] text-muted-foreground">Displayed as the section heading on the competition info page.</p>
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <label class="label-text">Rules Content</label>
+          <RichTextEditor v-model="compRulesContent" />
+          <p class="text-[11px] text-muted-foreground">Use the rich text editor to format rules with headings, lists, bold text, etc.</p>
+        </div>
+      </div>
+    </div>
+    <div class="flex justify-end">
+      <button class="btn-outline text-sm" :disabled="saving" @click="saveAll">
+        {{ saving ? t('saving') : t('saveSettings') }}
+      </button>
+    </div>
     </template>
 
     <!-- Tab: Lobby -->

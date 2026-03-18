@@ -136,6 +136,9 @@ export async function initDb() {
     ['registration_end', 'TIMESTAMP DEFAULT NULL'],
     ['created_by', 'INTEGER REFERENCES players(id) ON DELETE SET NULL'],
     ['is_public', 'BOOLEAN NOT NULL DEFAULT FALSE'],
+    ['rules_title', 'TEXT DEFAULT \'\''],
+    ['rules_content', 'TEXT DEFAULT \'\''],
+    ['competition_type', 'TEXT DEFAULT \'\''],
   ]) {
     const has = await queryOne(
       `SELECT 1 FROM information_schema.columns WHERE table_name = 'competitions' AND column_name = $1`, [col]
@@ -160,6 +163,12 @@ export async function initDb() {
       `SELECT 1 FROM information_schema.columns WHERE table_name = 'news' AND column_name = 'created_by'`
     )
     if (!has) await execute('ALTER TABLE news ADD COLUMN created_by INTEGER REFERENCES players(id) ON DELETE SET NULL')
+  }
+  {
+    const has = await queryOne(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'news' AND column_name = 'image_url'`
+    )
+    if (!has) await execute('ALTER TABLE news ADD COLUMN image_url TEXT')
   }
 
   // Check if captains already have competition_id (new schema)
@@ -339,7 +348,7 @@ export async function initDb() {
       id SERIAL PRIMARY KEY,
       competition_id INTEGER NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'pending',
+      status TEXT NOT NULL DEFAULT 'upcoming',
       stage_order INTEGER NOT NULL DEFAULT 0,
       created_at TIMESTAMP DEFAULT NOW()
     )

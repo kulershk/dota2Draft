@@ -371,6 +371,7 @@ export default {
   // Admin: Competition Setup
   competitionSetup: 'Настройка соревнования',
   tab_settings: 'Настройки',
+  tab_rules: 'Rules',
   tab_lobby: 'Лобби',
   tab_fantasy: 'Фэнтези',
   tab_captains: 'Капитаны и участники',

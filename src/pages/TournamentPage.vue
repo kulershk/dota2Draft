@@ -455,22 +455,19 @@ function stageStatusClass(stage: any) {
 </script>
 
 <template>
-  <div class="p-4 md:p-8 flex flex-col gap-4 md:gap-6 max-w-[1200px] mx-auto w-full">
+  <div class="p-4 md:p-8 flex flex-col gap-0 max-w-[1200px] mx-auto w-full">
     <!-- Header -->
-    <div class="flex items-center justify-between">
-      <div>
-        <h1 class="text-2xl font-semibold text-foreground flex items-center gap-2">
-          <Swords class="w-6 h-6" />
-          {{ t('tournament') }}
-        </h1>
+    <div class="flex items-center justify-between py-6">
+      <div class="flex items-center gap-3">
+        <Swords class="w-6 h-6 text-primary" />
+        <h1 class="text-2xl md:text-[28px] font-bold text-foreground tracking-tight">{{ t('tournament') }}</h1>
       </div>
-      <div v-if="isCompAdmin" class="flex items-center gap-2">
+      <div v-if="isCompAdmin" class="flex items-center gap-3">
         <button class="btn-primary text-sm" @click="openAddStage">
           <Plus class="w-4 h-4" />
           {{ t('addStage') }}
         </button>
-        <button v-if="hasStages" class="btn-ghost text-sm text-destructive" @click="showReset = true">
-          <RotateCcw class="w-4 h-4" />
+        <button v-if="hasStages" class="btn-secondary text-sm" @click="showReset = true">
           {{ t('resetTournament') }}
         </button>
       </div>
@@ -491,26 +488,19 @@ function stageStatusClass(stage: any) {
 
     <!-- Multi-stage view -->
     <template v-else>
-      <!-- Stage tabs -->
-      <div class="flex items-center gap-1 border-b border-border pb-0">
+      <!-- Stage filter chips -->
+      <div class="flex items-center gap-3 py-4">
+        <span class="text-sm text-muted-foreground">Group:</span>
         <button
           v-for="stage in stages"
           :key="stage.id"
-          class="relative px-4 py-2.5 text-sm font-medium transition-colors rounded-t-md"
+          class="transition-colors"
           :class="activeStageId === stage.id
-            ? 'text-foreground bg-card border border-border border-b-card -mb-[1px]'
-            : 'text-muted-foreground hover:text-foreground'"
+            ? 'chip-active'
+            : 'chip-default'"
           @click="activeStageId = stage.id"
         >
-          <div class="flex items-center gap-2">
-            <span class="w-1.5 h-1.5 rounded-full"
-              :class="stage.status === 'completed' ? 'bg-green-500' : stage.status === 'active' ? 'bg-primary' : 'bg-muted-foreground/40'"
-            ></span>
-            {{ stage.name }}
-            <span class="text-[10px] uppercase" :class="stageStatusClass(stage)">
-              {{ stage.status === 'completed' ? t('matchCompleted') : stage.status === 'active' ? t('matchLive') : t('matchPending') }}
-            </span>
-          </div>
+          {{ stage.name }}
         </button>
       </div>
 

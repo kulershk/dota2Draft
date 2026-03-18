@@ -231,7 +231,7 @@ export default function createFantasyRouter(io) {
         await execute('UPDATE fantasy_stages SET name = $1 WHERE id = $2', [name, stageId])
       }
 
-      if (status !== undefined && ['pending', 'active', 'completed'].includes(status)) {
+      if (status !== undefined && ['upcoming', 'pending', 'active', 'completed'].includes(status)) {
         await execute('UPDATE fantasy_stages SET status = $1 WHERE id = $2', [status, stageId])
       }
 

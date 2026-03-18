@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { ChevronDown, ChevronUp, EyeOff } from 'lucide-vue-next'
+import { Swords, ChevronDown, ChevronUp, EyeOff } from 'lucide-vue-next'
 import { computed, ref } from 'vue'
 
 const { t } = useI18n()
@@ -56,21 +56,17 @@ const standings = computed(() => {
       const s1 = m.score1 || 0
       const s2 = m.score2 || 0
       if (m.winner_captain_id === m.team1_captain_id) {
-        // Team 1 won
         if (statsById[m.team1_captain_id]) { statsById[m.team1_captain_id].w++; statsById[m.team1_captain_id].pts += 2; statsById[m.team1_captain_id].mw += s1; statsById[m.team1_captain_id].ml += s2 }
         if (statsById[m.team2_captain_id]) { statsById[m.team2_captain_id].l++; statsById[m.team2_captain_id].mw += s2; statsById[m.team2_captain_id].ml += s1 }
       } else if (m.winner_captain_id === m.team2_captain_id) {
-        // Team 2 won
         if (statsById[m.team2_captain_id]) { statsById[m.team2_captain_id].w++; statsById[m.team2_captain_id].pts += 2; statsById[m.team2_captain_id].mw += s2; statsById[m.team2_captain_id].ml += s1 }
         if (statsById[m.team1_captain_id]) { statsById[m.team1_captain_id].l++; statsById[m.team1_captain_id].mw += s1; statsById[m.team1_captain_id].ml += s2 }
       } else if (s1 === s2 && s1 > 0) {
-        // Draw (e.g. Bo2 ending 1-1)
         if (statsById[m.team1_captain_id]) { statsById[m.team1_captain_id].d++; statsById[m.team1_captain_id].pts += 1; statsById[m.team1_captain_id].mw += s1; statsById[m.team1_captain_id].ml += s2 }
         if (statsById[m.team2_captain_id]) { statsById[m.team2_captain_id].d++; statsById[m.team2_captain_id].pts += 1; statsById[m.team2_captain_id].mw += s2; statsById[m.team2_captain_id].ml += s1 }
       }
     }
 
-    // Sort: real teams by points, then game diff, TBD at bottom
     result[group.name] = entries.sort((a, b) => {
       if (a.isTbd !== b.isTbd) return a.isTbd ? 1 : -1
       if (b.pts !== a.pts) return b.pts - a.pts
@@ -78,6 +74,13 @@ const standings = computed(() => {
     })
   }
   return result
+})
+
+const recentMatches = computed(() => {
+  return props.matches
+    .filter(m => m.status === 'completed' && (props.isAdmin || !m.hidden))
+    .sort((a, b) => (b.updated_at || b.id) - (a.updated_at || a.id))
+    .slice(0, 10)
 })
 
 const matchesByGroup = computed(() => {
@@ -89,105 +92,143 @@ const matchesByGroup = computed(() => {
   }
   return result
 })
-
-function statusBadge(status: string) {
-  if (status === 'completed') return 'bg-green-500/15 text-green-600 dark:text-green-400'
-  if (status === 'live') return 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
-  return 'bg-accent text-muted-foreground'
-}
-
-function statusText(status: string) {
-  if (status === 'completed') return t('matchCompleted')
-  if (status === 'live') return t('matchLive')
-  return t('matchPending')
-}
 </script>
 
 <template>
-  <div class="flex flex-col gap-6">
-    <div v-for="group in groupsList" :key="group.name" class="flex flex-col gap-4">
-      <h2 class="text-lg font-semibold text-foreground">{{ group.name }}</h2>
-
-      <!-- Standings table -->
-      <div class="card overflow-hidden">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="border-b border-border bg-accent/50">
-              <th class="text-left px-4 py-2.5 font-medium text-muted-foreground">#</th>
-              <th class="text-left px-4 py-2.5 font-medium text-muted-foreground">{{ t('team') }}</th>
-              <th class="text-center px-4 py-2.5 font-medium text-muted-foreground">{{ t('wins') }}</th>
-              <th class="text-center px-4 py-2.5 font-medium text-muted-foreground">{{ t('losses') }}</th>
-              <th class="text-center px-4 py-2.5 font-medium text-muted-foreground">{{ t('points') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(team, idx) in standings[group.name]" :key="team.key" class="border-b border-border last:border-0">
-              <td class="px-4 py-2.5 text-muted-foreground">{{ idx + 1 }}</td>
-              <td class="px-4 py-2.5">
-                <div class="flex items-center gap-2">
-                  <img v-if="team.avatar" :src="team.avatar" class="w-5 h-5 object-cover" :class="team.hasBanner ? 'rounded' : 'rounded-full'" />
-                  <span class="font-medium" :class="team.isTbd ? 'text-muted-foreground italic' : 'text-foreground'">{{ team.team }}</span>
-                </div>
-              </td>
-              <td class="text-center px-4 py-2.5 text-green-600 dark:text-green-400 font-medium">{{ team.mw }}</td>
-              <td class="text-center px-4 py-2.5 text-red-500 font-medium">{{ team.ml }}</td>
-              <td class="text-center px-4 py-2.5 font-bold text-foreground">{{ team.pts }}</td>
-            </tr>
-          </tbody>
-        </table>
+  <div class="flex flex-col gap-8">
+    <!-- Group standings tables -->
+    <div v-for="group in groupsList" :key="group.name" class="flex flex-col gap-0">
+      <!-- Group title bar -->
+      <div class="flex items-center rounded-t-md bg-card px-4 py-3">
+        <span class="text-sm font-bold text-foreground uppercase tracking-wider">{{ group.name }}</span>
       </div>
 
-      <!-- Matches toggle -->
+      <!-- Table header -->
+      <div class="flex items-center bg-surface px-4 py-2.5">
+        <span class="w-10 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">#</span>
+        <span class="flex-1 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">{{ t('team') }}</span>
+        <span class="w-[50px] text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-center">W</span>
+        <span class="w-[50px] text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-center">L</span>
+        <span class="w-[60px] text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-right">PTS</span>
+      </div>
+
+      <!-- Team rows -->
+      <div
+        v-for="(team, idx) in standings[group.name]"
+        :key="team.key"
+        class="flex items-center px-4 py-2.5 border-b border-border"
+      >
+        <span class="w-10 text-sm font-mono"
+          :class="idx === 0 ? 'text-primary font-bold' : 'text-muted-foreground'">{{ idx + 1 }}</span>
+        <div class="flex-1 flex items-center gap-2.5 min-w-0">
+          <div class="w-7 h-7 rounded bg-surface overflow-hidden shrink-0">
+            <img v-if="team.avatar" :src="team.avatar" class="w-full h-full object-cover" />
+          </div>
+          <span class="text-sm font-medium truncate" :class="team.isTbd ? 'text-muted-foreground italic' : 'text-foreground'">{{ team.team }}</span>
+        </div>
+        <span class="w-[50px] text-sm font-mono font-semibold text-center text-color-success">{{ team.mw }}</span>
+        <span class="w-[50px] text-sm font-mono text-center text-destructive">{{ team.ml }}</span>
+        <span class="w-[60px] text-sm font-mono font-bold text-right text-foreground">{{ team.pts }}</span>
+      </div>
+    </div>
+
+    <!-- Recent Match Results -->
+    <div v-if="recentMatches.length > 0" class="flex flex-col gap-4">
+      <div class="flex items-center gap-2">
+        <Swords class="w-[18px] h-[18px] text-primary" />
+        <span class="text-lg font-semibold text-foreground">{{ t('recentMatchResults') || 'Recent Match Results' }}</span>
+      </div>
+
+      <div class="flex flex-col gap-3">
+        <div
+          v-for="match in recentMatches"
+          :key="match.id"
+          class="flex items-center justify-between rounded-md bg-card px-5 py-3.5 cursor-pointer hover:bg-card/80 transition-colors"
+          :class="match.hidden ? 'opacity-40' : ''"
+          @click="emit('edit-match', match)"
+        >
+          <!-- Team 1 -->
+          <div class="flex-1 flex items-center justify-end gap-2.5 min-w-0">
+            <span class="text-sm font-medium text-foreground truncate" :class="match.winner_captain_id === match.team1_captain_id ? 'font-bold' : ''">
+              {{ match.team1_name || t('tbd') }}
+            </span>
+            <div class="w-7 h-7 rounded bg-surface overflow-hidden shrink-0">
+              <img v-if="match.team1_banner || match.team1_avatar" :src="match.team1_banner || match.team1_avatar" class="w-full h-full object-cover" />
+            </div>
+          </div>
+
+          <!-- Score -->
+          <div class="flex items-center gap-2 px-6">
+            <span class="text-lg font-bold font-mono"
+              :class="match.winner_captain_id === match.team1_captain_id ? 'text-color-success' : 'text-destructive'">
+              {{ match.score1 != null ? match.score1 : '-' }}
+            </span>
+            <span class="text-text-tertiary font-mono">:</span>
+            <span class="text-lg font-bold font-mono"
+              :class="match.winner_captain_id === match.team2_captain_id ? 'text-color-success' : 'text-destructive'">
+              {{ match.score2 != null ? match.score2 : '-' }}
+            </span>
+            <!-- Status badge for non-normal results -->
+            <span v-if="match.status === 'cancelled'" class="badge-danger ml-1">Cancelled</span>
+          </div>
+
+          <!-- Team 2 -->
+          <div class="flex-1 flex items-center gap-2.5 min-w-0">
+            <div class="w-7 h-7 rounded bg-surface overflow-hidden shrink-0">
+              <img v-if="match.team2_banner || match.team2_avatar" :src="match.team2_banner || match.team2_avatar" class="w-full h-full object-cover" />
+            </div>
+            <span class="text-sm font-medium text-foreground truncate" :class="match.winner_captain_id === match.team2_captain_id ? 'font-bold' : ''">
+              {{ match.team2_name || t('tbd') }}
+            </span>
+          </div>
+
+          <EyeOff v-if="match.hidden && isAdmin" class="w-3.5 h-3.5 text-muted-foreground shrink-0 ml-2" :title="t('hiddenMatch')" />
+        </div>
+      </div>
+    </div>
+
+    <!-- All matches by group (expandable) -->
+    <div v-for="group in groupsList" :key="'matches-' + group.name" class="flex flex-col gap-3">
       <button
         class="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors self-start"
         @click="toggleMatches(group.name)"
       >
         <component :is="isGroupExpanded(group.name) ? ChevronUp : ChevronDown" class="w-4 h-4" />
-        {{ isGroupExpanded(group.name) ? t('hideMatches') : t('showMatches') }}
-        <span class="text-xs text-muted-foreground/60">({{ matchesByGroup[group.name]?.length || 0 }})</span>
+        {{ group.name }} {{ t('matches') || 'Matches' }}
+        <span class="text-xs text-text-tertiary">({{ matchesByGroup[group.name]?.length || 0 }})</span>
       </button>
 
-      <!-- Matches list -->
       <div v-if="isGroupExpanded(group.name)" class="flex flex-col gap-2">
         <div
           v-for="match in matchesByGroup[group.name]"
           :key="match.id"
-          class="card p-3 flex items-center gap-3 cursor-pointer hover:shadow-sm transition-shadow"
+          class="flex items-center justify-between rounded-md bg-card px-5 py-3.5 cursor-pointer hover:bg-card/80 transition-colors"
           :class="match.hidden ? 'opacity-40' : ''"
           @click="emit('edit-match', match)"
         >
-          <!-- Team 1 -->
-          <div class="flex-1 flex items-center justify-end gap-2">
-            <span class="text-sm font-medium text-foreground truncate" :class="match.winner_captain_id === match.team1_captain_id ? 'font-bold' : ''">
-              {{ match.team1_name || t('tbd') }}
-            </span>
-            <img v-if="match.team1_banner || match.team1_avatar" :src="match.team1_banner || match.team1_avatar" class="w-5 h-5 object-cover" :class="match.team1_banner ? 'rounded' : 'rounded-full'" />
+          <div class="flex-1 flex items-center justify-end gap-2.5 min-w-0">
+            <span class="text-sm font-medium text-foreground truncate">{{ match.team1_name || t('tbd') }}</span>
+            <div class="w-6 h-6 rounded bg-surface overflow-hidden shrink-0">
+              <img v-if="match.team1_banner || match.team1_avatar" :src="match.team1_banner || match.team1_avatar" class="w-full h-full object-cover" />
+            </div>
           </div>
-          <!-- Score -->
-          <div class="flex items-center gap-1.5 px-3">
-            <span class="text-sm font-bold" :class="match.winner_captain_id === match.team1_captain_id ? 'text-primary' : 'text-muted-foreground'">
+          <div class="flex items-center gap-2 px-4">
+            <span class="text-sm font-bold font-mono" :class="match.winner_captain_id === match.team1_captain_id ? 'text-color-success' : match.score1 != null ? 'text-destructive' : 'text-muted-foreground'">
               {{ match.score1 != null ? match.score1 : '-' }}
             </span>
-            <span class="text-xs text-muted-foreground">:</span>
-            <span class="text-sm font-bold" :class="match.winner_captain_id === match.team2_captain_id ? 'text-primary' : 'text-muted-foreground'">
+            <span class="text-xs text-text-tertiary">:</span>
+            <span class="text-sm font-bold font-mono" :class="match.winner_captain_id === match.team2_captain_id ? 'text-color-success' : match.score2 != null ? 'text-destructive' : 'text-muted-foreground'">
               {{ match.score2 != null ? match.score2 : '-' }}
             </span>
           </div>
-          <!-- Team 2 -->
-          <div class="flex-1 flex items-center gap-2">
-            <img v-if="match.team2_banner || match.team2_avatar" :src="match.team2_banner || match.team2_avatar" class="w-5 h-5 object-cover" :class="match.team2_banner ? 'rounded' : 'rounded-full'" />
-            <span class="text-sm font-medium text-foreground truncate" :class="match.winner_captain_id === match.team2_captain_id ? 'font-bold' : ''">
-              {{ match.team2_name || t('tbd') }}
-            </span>
+          <div class="flex-1 flex items-center gap-2.5 min-w-0">
+            <div class="w-6 h-6 rounded bg-surface overflow-hidden shrink-0">
+              <img v-if="match.team2_banner || match.team2_avatar" :src="match.team2_banner || match.team2_avatar" class="w-full h-full object-cover" />
+            </div>
+            <span class="text-sm font-medium text-foreground truncate">{{ match.team2_name || t('tbd') }}</span>
           </div>
-          <!-- Hidden indicator -->
-          <EyeOff v-if="match.hidden && isAdmin" class="w-3.5 h-3.5 text-muted-foreground shrink-0" :title="t('hiddenMatch')" />
-          <!-- Status -->
-          <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium shrink-0" :class="statusBadge(match.status)">
-            {{ statusText(match.status) }}
-          </span>
-          <!-- Dotabuff links -->
-          <div v-if="match.games?.length" class="flex gap-1 shrink-0">
+          <EyeOff v-if="match.hidden && isAdmin" class="w-3.5 h-3.5 text-muted-foreground shrink-0 ml-2" />
+          <div v-if="match.games?.length" class="flex gap-1 shrink-0 ml-2">
             <a
               v-for="game in match.games.filter((g: any) => g.dotabuff_id)"
               :key="game.id"

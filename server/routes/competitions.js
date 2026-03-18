@@ -87,13 +87,13 @@ router.put('/api/competitions/:id', async (req, res) => {
   const comp = await getCompetition(req.params.id)
   if (!comp) return res.status(404).json({ error: 'Competition not found' })
 
-  const { name, description, starts_at, registration_start, registration_end, settings, status, is_public } = req.body
+  const { name, description, starts_at, registration_start, registration_end, settings, status, is_public, rules_title, rules_content, competition_type } = req.body
 
   const newSettings = settings ? { ...comp.settings, ...settings } : comp.settings
   const newStatus = status || comp.status
   const newIsPublic = is_public !== undefined ? is_public : comp.is_public
   await execute(
-    `UPDATE competitions SET name = $1, description = $2, starts_at = $3, registration_start = $4, registration_end = $5, settings = $6, status = $8, is_public = $9 WHERE id = $7`,
+    `UPDATE competitions SET name = $1, description = $2, starts_at = $3, registration_start = $4, registration_end = $5, settings = $6, status = $8, is_public = $9, rules_title = $10, rules_content = $11, competition_type = $12 WHERE id = $7`,
     [
       name ?? comp.name,
       description ?? comp.description,
@@ -104,6 +104,9 @@ router.put('/api/competitions/:id', async (req, res) => {
       comp.id,
       newStatus,
       newIsPublic,
+      rules_title !== undefined ? rules_title : (comp.rules_title || ''),
+      rules_content !== undefined ? rules_content : (comp.rules_content || ''),
+      competition_type !== undefined ? competition_type : (comp.competition_type || ''),
     ]
   )
 

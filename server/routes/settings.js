@@ -19,6 +19,7 @@ router.get('/api/site-settings', async (req, res) => {
     site_discord_url: obj.site_discord_url || '',
     site_name: obj.site_name || '',
     site_logo_url: obj.site_logo_url || '',
+    site_hero_banner_url: obj.site_hero_banner_url || '',
   })
 })
 
@@ -47,6 +48,31 @@ router.post('/api/site-settings/logo', upload.single('logo'), async (req, res) =
     [logoUrl]
   )
   res.json({ site_logo_url: logoUrl })
+})
+
+// Hero banner upload
+router.post('/api/site-settings/hero-banner', upload.single('banner'), async (req, res) => {
+  const admin = await requirePermission(req, res, 'manage_site_settings')
+  if (!admin) return
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
+  const bannerUrl = `/uploads/${req.file.filename}`
+  await execute(
+    "INSERT INTO settings (key, value) VALUES ('site_hero_banner_url', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
+    [bannerUrl]
+  )
+  res.json({ site_hero_banner_url: bannerUrl })
+})
+
+router.delete('/api/site-settings/hero-banner', async (req, res) => {
+  const admin = await requirePermission(req, res, 'manage_site_settings')
+  if (!admin) return
+  const current = await queryOne("SELECT value FROM settings WHERE key = 'site_hero_banner_url'")
+  if (current?.value) {
+    const filePath = join(__dirname, '..', '..', current.value)
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
+  }
+  await execute("DELETE FROM settings WHERE key = 'site_hero_banner_url'")
+  res.json({ ok: true })
 })
 
 router.delete('/api/site-settings/logo', async (req, res) => {

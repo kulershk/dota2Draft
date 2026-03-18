@@ -192,6 +192,23 @@ export function useApi() {
     },
     deleteSiteLogo: () =>
       request('/api/site-settings/logo', { method: 'DELETE' }),
+    uploadSiteHeroBanner: async (file: File) => {
+      const form = new FormData()
+      form.append('banner', file)
+      const token = localStorage.getItem('draft_auth_token')
+      const res = await fetch('/api/site-settings/hero-banner', {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }))
+        throw new Error(err.error || 'Upload failed')
+      }
+      return res.json()
+    },
+    deleteSiteHeroBanner: () =>
+      request('/api/site-settings/hero-banner', { method: 'DELETE' }),
 
     // Twitch OAuth
     getTwitchLinkUrl: () => request('/api/auth/twitch/link'),
@@ -238,9 +255,25 @@ export function useApi() {
 
     // News
     getNews: () => request('/api/news'),
-    createNews: (data: { title: string; content: string }) =>
+    getNewsPost: (id: number) => request(`/api/news/${id}`),
+    uploadNewsImage: async (file: File) => {
+      const form = new FormData()
+      form.append('image', file)
+      const token = localStorage.getItem('draft_auth_token')
+      const res = await fetch('/api/news/upload-image', {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }))
+        throw new Error(err.error || 'Upload failed')
+      }
+      return res.json()
+    },
+    createNews: (data: { title: string; content: string; image_url?: string }) =>
       request('/api/news', { method: 'POST', body: JSON.stringify(data) }),
-    updateNews: (id: number, data: { title?: string; content?: string }) =>
+    updateNews: (id: number, data: { title?: string; content?: string; image_url?: string }) =>
       request(`/api/news/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     deleteNews: (id: number) =>
       request(`/api/news/${id}`, { method: 'DELETE' }),

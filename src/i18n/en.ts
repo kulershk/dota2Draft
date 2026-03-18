@@ -372,6 +372,7 @@ export default {
   // Admin: Competition Setup
   competitionSetup: 'Competition Setup',
   tab_settings: 'Settings',
+  tab_rules: 'Rules',
   tab_lobby: 'Lobby',
   tab_fantasy: 'Fantasy',
   tab_captains: 'Captains & Participants',
@@ -650,6 +651,7 @@ export default {
   hideTopPicks: 'Hide Top Picks',
   picked: 'picked',
   fantasyPickRole: 'Role',
+  rules: 'Rules',
   fantasyRules: 'Rules',
   fantasyRulesTitle: 'Fantasy Scoring Multipliers',
   fantasyRulesDesc: 'Points are calculated by multiplying each stat by the role multiplier. Different roles reward different stats.',

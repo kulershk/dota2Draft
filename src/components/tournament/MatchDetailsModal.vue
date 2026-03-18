@@ -238,26 +238,39 @@ function winnerName(game: any) {
 
 <template>
   <ModalOverlay :show="true" wide @close="emit('close')">
-    <div class="border-b border-border px-7 py-6">
-      <h2 class="text-xl font-semibold text-foreground">{{ t('matchDetails') }}</h2>
-      <div class="flex items-center gap-3 mt-2">
-        <span class="text-sm font-medium text-foreground">{{ match.team1_name || t('tbd') }}</span>
-        <span class="text-lg font-bold text-primary">{{ score1 }}</span>
-        <span class="text-muted-foreground">:</span>
-        <span class="text-lg font-bold text-primary">{{ score2 }}</span>
-        <span class="text-sm font-medium text-foreground">{{ match.team2_name || t('tbd') }}</span>
+    <!-- Header + Overview -->
+    <div class="px-6 pt-5 pb-3 flex flex-col gap-3">
+      <div class="flex items-center gap-2">
+        <Gamepad2 class="w-4 h-4 text-text-tertiary" />
+        <span class="text-base font-semibold text-foreground">{{ t('matchDetails') }}</span>
       </div>
-      <div v-if="match.status" class="mt-1">
-        <span class="text-xs font-semibold uppercase"
-          :class="match.status === 'completed' ? 'text-green-500' : match.status === 'live' ? 'text-amber-500' : 'text-muted-foreground'">
-          {{ match.status === 'completed' ? t('matchCompleted') : match.status === 'live' ? t('matchLive') : t('matchPending') }}
-        </span>
+      <!-- Overview card -->
+      <div class="rounded-md bg-surface border border-border px-4 py-3 flex flex-col gap-2">
+        <div class="flex items-center justify-center gap-4">
+          <div class="flex items-center gap-2">
+            <div class="w-7 h-7 rounded bg-card overflow-hidden shrink-0">
+              <img v-if="match.team1_banner || match.team1_avatar" :src="match.team1_banner || match.team1_avatar" class="w-full h-full object-cover" />
+            </div>
+            <span class="text-sm font-semibold text-foreground">{{ match.team1_name || t('tbd') }}</span>
+          </div>
+          <span class="text-2xl font-bold font-mono text-foreground">{{ score1 }} : {{ score2 }}</span>
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-semibold text-foreground">{{ match.team2_name || t('tbd') }}</span>
+            <div class="w-7 h-7 rounded bg-card overflow-hidden shrink-0">
+              <img v-if="match.team2_banner || match.team2_avatar" :src="match.team2_banner || match.team2_avatar" class="w-full h-full object-cover" />
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center justify-center gap-2">
+          <span class="badge-info">{{ match.status === 'completed' ? t('matchCompleted') : match.status === 'live' ? t('matchLive') : t('matchPending') }}</span>
+          <span class="text-xs text-text-tertiary">Best of {{ bestOf }}</span>
+        </div>
       </div>
     </div>
 
-    <div class="px-7 py-5 flex flex-col gap-3 max-h-[65vh] overflow-y-auto">
+    <div class="px-6 pb-3 flex flex-col gap-1 max-h-[55vh] overflow-y-auto">
       <!-- Match Ready Section -->
-      <div v-if="isCaptainInMatch && bothTeamsAssigned && match.status !== 'completed'" class="flex flex-col gap-3">
+      <div v-if="isCaptainInMatch && bothTeamsAssigned && match.status !== 'completed'" class="flex flex-col gap-3 mb-2">
         <div v-for="g in allGames" :key="'ready-' + g.game_number">
           <template v-if="!g.dotabuff_id && g.game_number === nextGameNumber">
             <div class="rounded-lg border border-border overflow-hidden">
@@ -398,25 +411,23 @@ function winnerName(game: any) {
         </div>
       </div>
 
-      <div v-if="games.length === 0 && !isCaptainInMatch" class="text-sm text-muted-foreground text-center py-6">
-        {{ t('noGamesYet') }}
-      </div>
-
-      <div v-for="game in games" :key="game.game_number" class="flex flex-col rounded-lg bg-accent/30">
-        <div
-          class="flex items-center gap-3 p-3 cursor-pointer hover:bg-accent/50 transition-colors"
-          @click="toggleStats(game.game_number)"
+      <!-- All games list -->
+      <div v-for="game in allGames" :key="game.game_number">
+        <button
+          class="flex items-center gap-2 w-full py-2 cursor-pointer"
+          @click="game.has_stats || game.winner_captain_id ? toggleStats(game.game_number) : null"
         >
-          <span class="text-xs font-semibold text-muted-foreground w-16">{{ t('game') }} {{ game.game_number }}</span>
-          <span v-if="winnerName(game)" class="text-sm font-medium text-foreground flex-1">
-            {{ winnerName(game) }}
-          </span>
-          <span v-else class="text-sm text-muted-foreground flex-1">-</span>
-          <span v-if="game.dotabuff_id" class="text-[10px] text-muted-foreground">
-            #{{ game.dotabuff_id }}
-          </span>
-          <component :is="expandedGame === game.game_number ? ChevronUp : ChevronDown" class="w-4 h-4 text-muted-foreground" />
-        </div>
+          <Gamepad2 class="w-4 h-4 text-primary" />
+          <span class="text-sm font-semibold text-foreground">{{ t('game') }} {{ game.game_number }}</span>
+          <span class="w-2 h-2 rounded-full"
+            :class="game.winner_captain_id ? 'bg-color-success' : 'bg-text-tertiary'" />
+          <span v-if="winnerName(game)" class="text-xs text-muted-foreground ml-1">{{ winnerName(game) }}</span>
+          <span v-else class="text-xs text-text-tertiary ml-1">—</span>
+          <div class="ml-auto flex items-center gap-1">
+            <span v-if="game.dotabuff_id" class="text-[10px] font-mono text-text-tertiary">#{{ game.dotabuff_id }}</span>
+            <component v-if="game.has_stats || game.winner_captain_id" :is="expandedGame === game.game_number ? ChevronUp : ChevronDown" class="w-4 h-4 text-text-tertiary" />
+          </div>
+        </button>
 
         <!-- Stats panel -->
         <div v-if="expandedGame === game.game_number" class="border-t border-border/50 p-3">

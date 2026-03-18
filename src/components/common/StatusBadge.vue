@@ -1,18 +1,20 @@
 <script setup lang="ts">
 defineProps<{
-  variant: 'success' | 'warning' | 'error' | 'info'
+  variant: 'success' | 'warning' | 'error' | 'info' | 'accent' | 'purple'
 }>()
 
 const classes: Record<string, string> = {
-  success: 'bg-color-success text-color-success-foreground',
-  warning: 'bg-color-warning text-color-warning-foreground',
-  error: 'bg-color-error text-color-error-foreground',
-  info: 'bg-color-info text-color-info-foreground',
+  success: 'badge-success',
+  warning: 'badge-warning',
+  error: 'badge-danger',
+  info: 'badge-info',
+  accent: 'badge-accent',
+  purple: 'badge-purple',
 }
 </script>
 
 <template>
-  <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium" :class="classes[variant]">
+  <span :class="classes[variant]">
     <slot />
   </span>
 </template>
