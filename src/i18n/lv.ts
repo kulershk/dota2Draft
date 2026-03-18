@@ -681,6 +681,7 @@ export default {
   botAwaitingGuard: 'Gaida Steam Guard',
   botError: 'Kļūda',
   botOffline: 'Bezsaistē',
+  autoConnect: 'Auto-pieslēgšanās',
   connectBot: 'Pieslēgt',
   disconnectBot: 'Atvienot',
   enterCode: 'Ievadīt kodu',

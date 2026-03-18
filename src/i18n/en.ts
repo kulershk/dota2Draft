@@ -684,6 +684,7 @@ export default {
   botAwaitingGuard: 'Awaiting Steam Guard',
   botError: 'Error',
   botOffline: 'Offline',
+  autoConnect: 'Auto-connect',
   connectBot: 'Connect',
   disconnectBot: 'Disconnect',
   enterCode: 'Enter Code',

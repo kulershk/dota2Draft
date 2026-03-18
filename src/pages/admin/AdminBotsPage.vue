@@ -60,6 +60,16 @@ async function submitGuard() {
   await fetchBots()
 }
 
+async function toggleAutoConnect(bot: any) {
+  const newVal = !bot.auto_connect
+  bot.auto_connect = newVal
+  try {
+    await api.setBotAutoConnect(bot.id, newVal)
+  } catch {
+    bot.auto_connect = !newVal
+  }
+}
+
 async function freeBot(botId: number) {
   try {
     await api.freeBusyBot(botId)
@@ -187,6 +197,10 @@ onUnmounted(() => {
           <div class="flex items-center gap-2 mt-0.5">
             <span class="text-xs font-medium" :class="statusColor(bot.status)">{{ statusLabel(bot.status) }}</span>
             <span v-if="bot.error_message" class="text-xs text-red-500">— {{ bot.error_message }}</span>
+            <label class="flex items-center gap-1 cursor-pointer ml-2" @click.stop>
+              <input type="checkbox" class="w-3.5 h-3.5 accent-primary" :checked="bot.auto_connect" @change="toggleAutoConnect(bot)" />
+              <span class="text-[10px] text-muted-foreground">{{ t('autoConnect') }}</span>
+            </label>
           </div>
         </div>
 

@@ -378,9 +378,17 @@ export async function initDb() {
       status TEXT NOT NULL DEFAULT 'offline',
       error_message TEXT DEFAULT NULL,
       last_used_at TIMESTAMP DEFAULT NULL,
+      auto_connect BOOLEAN NOT NULL DEFAULT false,
       created_at TIMESTAMP DEFAULT NOW()
     )
   `)
+  // Migration: add auto_connect column
+  const hasAutoConnect = await queryOne(
+    `SELECT 1 FROM information_schema.columns WHERE table_name = 'lobby_bots' AND column_name = 'auto_connect'`
+  )
+  if (!hasAutoConnect) {
+    await execute('ALTER TABLE lobby_bots ADD COLUMN auto_connect BOOLEAN NOT NULL DEFAULT false')
+  }
 
   await execute(`
     CREATE TABLE IF NOT EXISTS match_lobbies (

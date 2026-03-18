@@ -681,6 +681,7 @@ export default {
   botAwaitingGuard: 'Laukia Steam Guard',
   botError: 'Klaida',
   botOffline: 'Neprisijungęs',
+  autoConnect: 'Auto-prisijungimas',
   connectBot: 'Prisijungti',
   disconnectBot: 'Atjungti',
   enterCode: 'Įvesti kodą',

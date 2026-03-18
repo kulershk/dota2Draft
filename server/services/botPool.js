@@ -119,6 +119,18 @@ class BotPool {
         players: l.players_expected || [],
       })),
     })
+
+    // Auto-connect bots that have auto_connect enabled
+    for (const bot of bots) {
+      if (bot.auto_connect && (bot.status === 'offline' || bot.status === 'error')) {
+        console.log(`[Bot] Auto-connecting bot ${bot.id} (${bot.username})`)
+        try {
+          await this.connectBot(bot.id)
+        } catch (e) {
+          console.error(`[Bot] Auto-connect failed for ${bot.id}:`, e.message)
+        }
+      }
+    }
   }
 
   async _onBotStatus(data) {
@@ -354,7 +366,7 @@ class BotPool {
   }
 
   async getBotStatuses() {
-    return await query('SELECT id, username, display_name, steam_id, status, error_message, last_used_at, created_at FROM lobby_bots ORDER BY id')
+    return await query('SELECT id, username, display_name, steam_id, status, error_message, auto_connect, last_used_at, created_at FROM lobby_bots ORDER BY id')
   }
 
   async addBot(username, password) {

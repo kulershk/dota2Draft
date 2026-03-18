@@ -111,6 +111,18 @@ export default function createLobbyRouter(io) {
     }
   })
 
+  router.put('/api/admin/bots/:botId/auto-connect', async (req, res) => {
+    try {
+      const admin = await requirePermission(req, res, 'manage_bots')
+      if (!admin) return
+      const { autoConnect } = req.body
+      await execute('UPDATE lobby_bots SET auto_connect = $1 WHERE id = $2', [!!autoConnect, Number(req.params.botId)])
+      res.json({ ok: true })
+    } catch (e) {
+      res.status(400).json({ error: e.message })
+    }
+  })
+
   // ── Lobby Management (competition-scoped) ──
 
   router.post('/api/competitions/:compId/tournament/matches/:matchId/games/:gameNumber/lobby', async (req, res) => {
