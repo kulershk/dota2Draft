@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Newspaper, Calendar, Trophy, Users, Swords, User, MessageSquare, Send, Trash2, ChevronDown, ChevronUp, Twitch, Eye, Radio, ArrowRight } from 'lucide-vue-next'
+import { Newspaper, Calendar, Trophy, Users, Swords, User, MessageSquare, Send, Trash2, ChevronDown, ChevronUp, Twitch, Eye, Radio, ArrowRight, Clock } from 'lucide-vue-next'
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
@@ -87,6 +87,7 @@ onMounted(async () => {
   fetchNews()
   fetchStreamers()
   fetchSiteSettings()
+  fetchUpcomingMatches()
   getSocket().on('news:updated', fetchNews)
   getSocket().on('news:commented', ({ newsId }: { newsId: number }) => {
     fetchComments(newsId)
@@ -176,6 +177,33 @@ const activeCompetitions = computed(() =>
     return s !== 'finished'
   })
 )
+
+const upcomingMatches = ref<any[]>([])
+
+async function fetchUpcomingMatches() {
+  try {
+    upcomingMatches.value = await api.getUpcomingMatches()
+  } catch {
+    upcomingMatches.value = []
+  }
+}
+
+function formatMatchDate(dateStr: string) {
+  const d = new Date(dateStr.replace('Z', ''))
+  const now = new Date()
+  const diffMs = d.getTime() - now.getTime()
+  const diffH = Math.floor(diffMs / 3600000)
+  const diffD = Math.floor(diffMs / 86400000)
+
+  const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+  const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+
+  if (diffMs < 0) return `${date} ${time}`
+  if (diffH < 1) return t('startingSoon')
+  if (diffD === 0) return `${t('today')} ${time}`
+  if (diffD === 1) return `${t('tomorrow')} ${time}`
+  return `${date} ${time}`
+}
 
 const isLoggedIn = computed(() => !!store.currentUser.value)
 </script>
@@ -367,6 +395,35 @@ const isLoggedIn = computed(() => !!store.currentUser.value)
             <svg class="w-4 h-4 text-muted-foreground group-hover:text-[#5865F2] transition-colors shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17l9.2-9.2M17 17V7H7"/></svg>
           </a>
 
+          <!-- Upcoming Matches -->
+          <div v-if="upcomingMatches.length > 0" class="card">
+            <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
+              <Clock class="w-4 h-4 text-foreground" />
+              <span class="text-sm font-semibold text-foreground">{{ t('upcomingMatches') }}</span>
+            </div>
+            <div class="divide-y divide-border">
+              <router-link
+                v-for="match in upcomingMatches"
+                :key="match.id"
+                :to="`/c/${match.competition_id}/tournament?match=${match.id}`"
+                class="flex items-center gap-2 px-3 py-2.5 hover:bg-accent/30 transition-colors"
+              >
+                <div class="flex-1 flex items-center justify-end gap-1.5 min-w-0">
+                  <span class="text-xs font-medium text-foreground truncate">{{ match.team1_name || t('tbd') }}</span>
+                  <img v-if="match.team1_banner || match.team1_avatar" :src="match.team1_banner || match.team1_avatar" class="w-12 h-12 object-cover shrink-0" :class="match.team1_banner ? 'rounded' : 'rounded-full'" />
+                </div>
+                <div class="flex flex-col items-center shrink-0 px-1">
+                  <span class="text-[10px] font-bold text-muted-foreground">{{ t('vs') }}</span>
+                  <span class="text-[9px] text-primary font-medium whitespace-nowrap">{{ formatMatchDate(match.scheduled_at) }}</span>
+                </div>
+                <div class="flex-1 flex items-center gap-1.5 min-w-0">
+                  <img v-if="match.team2_banner || match.team2_avatar" :src="match.team2_banner || match.team2_avatar" class="w-12 h-12 object-cover shrink-0" :class="match.team2_banner ? 'rounded' : 'rounded-full'" />
+                  <span class="text-xs font-medium text-foreground truncate">{{ match.team2_name || t('tbd') }}</span>
+                </div>
+              </router-link>
+            </div>
+          </div>
+
           <!-- Live Streams -->
           <div v-if="streamers.length > 0" class="card">
             <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
@@ -374,14 +431,14 @@ const isLoggedIn = computed(() => !!store.currentUser.value)
               <span class="text-sm font-semibold text-foreground">{{ t('liveStreams') }}</span>
               <span class="text-xs text-muted-foreground">({{ streamers.length }})</span>
             </div>
-            <div class="flex flex-col divide-y divide-border">
+            <div class="flex flex-col gap-3 p-3">
               <a
                 v-for="streamer in streamers"
                 :key="streamer.id"
                 :href="`https://twitch.tv/${streamer.twitch_username}`"
                 target="_blank"
                 rel="noopener noreferrer"
-                class="flex flex-col hover:bg-accent/30 transition-colors"
+                class="flex flex-col rounded-lg overflow-hidden border border-border hover:border-[#9146FF]/40 transition-colors"
               >
                 <!-- Thumbnail -->
                 <div class="relative aspect-video bg-accent">

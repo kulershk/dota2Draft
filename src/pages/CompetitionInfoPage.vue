@@ -182,7 +182,7 @@ async function removeBanner(captain: any) {
           <span class="text-sm font-semibold text-foreground">{{ t('upcomingMatches') }}</span>
         </div>
         <div class="divide-y divide-border">
-          <div v-for="match in upcomingMatches" :key="match.id" class="flex items-center gap-3 px-4 py-3">
+          <router-link v-for="match in upcomingMatches" :key="match.id" :to="`/c/${compId}/tournament?match=${match.id}`" class="flex items-center gap-3 px-4 py-3 hover:bg-accent/30 transition-colors">
             <div class="flex-1 flex items-center justify-end gap-2 min-w-0">
               <span class="text-sm font-medium text-foreground truncate">{{ match.team1_name || t('tbd') }}</span>
               <img v-if="match.team1_banner || match.team1_avatar" :src="match.team1_banner || match.team1_avatar" class="w-6 h-6 object-cover shrink-0" :class="match.team1_banner ? 'rounded' : 'rounded-full'" />
@@ -195,7 +195,7 @@ async function removeBanner(captain: any) {
               <img v-if="match.team2_banner || match.team2_avatar" :src="match.team2_banner || match.team2_avatar" class="w-6 h-6 object-cover shrink-0" :class="match.team2_banner ? 'rounded' : 'rounded-full'" />
               <span class="text-sm font-medium text-foreground truncate">{{ match.team2_name || t('tbd') }}</span>
             </div>
-          </div>
+          </router-link>
         </div>
       </div>
 

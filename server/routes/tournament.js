@@ -69,6 +69,34 @@ export default function createTournamentRouter(io) {
     })
   })
 
+  // Global upcoming matches across all competitions
+  router.get('/api/upcoming-matches', async (req, res) => {
+    try {
+      const matches = await query(`
+        SELECT m.id, m.scheduled_at, m.status, m.best_of, m.score1, m.score2, m.competition_id,
+          c.name AS competition_name,
+          t1.team AS team1_name, COALESCE(p1.avatar_url, '') AS team1_avatar, t1.banner_url AS team1_banner,
+          t2.team AS team2_name, COALESCE(p2.avatar_url, '') AS team2_avatar, t2.banner_url AS team2_banner
+        FROM matches m
+        JOIN competitions c ON c.id = m.competition_id
+        LEFT JOIN captains t1 ON t1.id = m.team1_captain_id
+        LEFT JOIN players p1 ON p1.id = t1.player_id
+        LEFT JOIN captains t2 ON t2.id = m.team2_captain_id
+        LEFT JOIN players p2 ON p2.id = t2.player_id
+        WHERE m.scheduled_at IS NOT NULL
+          AND m.status != 'completed'
+          AND m.hidden = false
+          AND c.status != 'finished'
+        ORDER BY m.scheduled_at ASC
+        LIMIT 20
+      `)
+      res.json(matches)
+    } catch (err) {
+      console.error('Error fetching upcoming matches:', err)
+      res.status(500).json({ error: 'Failed to fetch upcoming matches' })
+    }
+  })
+
   router.post('/api/competitions/:compId/tournament/stages', async (req, res) => {
     const compId = Number(req.params.compId)
     const admin = await requireCompPermission(req, res, compId)

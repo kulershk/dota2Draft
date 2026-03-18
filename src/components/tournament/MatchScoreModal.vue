@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { EyeOff, RefreshCw, ChevronDown, ChevronUp, Gamepad2, Play, X, Check, RotateCcw } from 'lucide-vue-next'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
+import DatePicker from '@/components/common/DatePicker.vue'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { getSocket } from '@/composables/useSocket'
@@ -332,6 +333,15 @@ onUnmounted(() => {
         <span class="text-lg font-bold text-primary">{{ score2 }}</span>
         <span class="text-sm font-medium text-foreground">{{ match.team2_name || t('tbd') }}</span>
       </div>
+      <div class="mt-3">
+        <DatePicker
+          mode="single"
+          :show-time="true"
+          :label="t('scheduledTime')"
+          :model-value="scheduledAt"
+          @update:model-value="scheduledAt = $event"
+        />
+      </div>
     </div>
 
     <div class="px-7 py-5 flex flex-col gap-4 max-h-[60vh] overflow-y-auto">
@@ -621,10 +631,6 @@ onUnmounted(() => {
           <option value="live">{{ t('matchLive') }}</option>
           <option value="completed">{{ t('matchCompleted') }}</option>
         </select>
-      </div>
-      <div class="flex items-center gap-3">
-        <label class="text-sm text-foreground font-medium whitespace-nowrap">{{ t('scheduledTime') }}</label>
-        <input type="datetime-local" class="input-field flex-1" v-model="scheduledAt" />
       </div>
       <label class="flex items-center gap-2 cursor-pointer py-1">
         <input type="checkbox" class="w-4 h-4 accent-primary" v-model="isHidden" />

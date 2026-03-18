@@ -458,6 +458,17 @@
         "responses": { "200": { "description": "Array of captains with their drafted players" } }
       }
     },
+    "/api/upcoming-matches": {
+      "get": {
+        "tags": ["Tournament"],
+        "summary": "Get upcoming scheduled matches across all active competitions",
+        "responses": {
+          "200": {
+            "description": "Array of upcoming matches with team and competition info, ordered by scheduled_at ascending (max 20)"
+          }
+        }
+      }
+    },
     "/api/competitions/{compId}/tournament": {
       "get": {
         "tags": ["Tournament"],

@@ -89,6 +89,7 @@ export function useApi() {
 
     // Tournament
     getTournament: (compId: number) => request(`/api/competitions/${compId}/tournament`),
+    getUpcomingMatches: () => request('/api/upcoming-matches'),
     addTournamentStage: (compId: number, data: { name: string; format: string; groups?: any[]; bestOf?: number; seeds?: number[] }) =>
       request(`/api/competitions/${compId}/tournament/stages`, { method: 'POST', body: JSON.stringify(data) }),
     updateTournamentStage: (compId: number, stageId: number, data: { name?: string; status?: string }) =>

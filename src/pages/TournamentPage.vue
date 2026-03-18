@@ -2,6 +2,7 @@
 import { Swords, Settings, Plus, RotateCcw, Trash2, ChevronRight, Pencil, EyeOff } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
 import { usePersistedRef } from '@/composables/usePersistedRef'
+import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
@@ -13,6 +14,7 @@ import MatchScoreModal from '@/components/tournament/MatchScoreModal.vue'
 import MatchDetailsModal from '@/components/tournament/MatchDetailsModal.vue'
 
 const { t } = useI18n()
+const route = useRoute()
 const api = useApi()
 const store = useDraftStore()
 
@@ -78,6 +80,23 @@ watch(() => store.currentCompetitionId.value, async (id) => {
     activeStageId.value = stages.value[0].id
   }
   initSeeds()
+
+  // Auto-open match modal from ?match=ID query param
+  const matchId = Number(route.query.match)
+  if (matchId) {
+    const match = allMatches.value.find((m: any) => m.id === matchId)
+    if (match) {
+      // Switch to the stage containing this match
+      if (match.stage && stages.value.find((s: any) => s.id === match.stage)) {
+        activeStageId.value = match.stage
+      }
+      if (isCompAdmin.value) {
+        editingMatch.value = match
+      } else {
+        viewingMatch.value = match
+      }
+    }
+  }
 }, { immediate: true })
 
 watch(() => store.captains.value, () => initSeeds())
