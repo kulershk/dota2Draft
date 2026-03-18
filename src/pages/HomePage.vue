@@ -355,17 +355,15 @@ const isLoggedIn = computed(() => !!store.currentUser.value)
               v-for="match in upcomingMatches"
               :key="match.id"
               :to="`/c/${match.competition_id}/tournament?match=${match.id}`"
-              class="flex flex-col gap-2 px-5 py-3 border-b border-surface last:border-0 hover:bg-surface/50 transition-colors"
+              class="flex flex-col gap-2 px-5 py-3 border-b border-foreground/10 last:border-0 hover:bg-surface/50 transition-colors"
             >
-              <div class="flex items-center justify-between">
-                <div class="flex items-center gap-2">
-                  <span class="text-sm font-medium text-foreground">{{ match.team1_name || t('tbd') }}</span>
-                  <span class="text-[11px] font-mono text-text-tertiary">vs</span>
-                  <span class="text-sm font-medium text-foreground">{{ match.team2_name || t('tbd') }}</span>
-                </div>
-                <span class="badge-accent">{{ formatMatchDate(match.scheduled_at) }}</span>
+              <div class="flex items-center gap-2">
+                <span class="text-sm font-medium text-foreground">{{ match.team1_name || t('tbd') }}</span>
+                <span class="text-[11px] font-mono text-text-tertiary">vs</span>
+                <span class="text-sm font-medium text-foreground">{{ match.team2_name || t('tbd') }}</span>
               </div>
               <span v-if="match.competition_name || match.stage_name" class="text-[11px] text-text-tertiary">{{ match.competition_name }}{{ match.stage_name ? ' · ' + match.stage_name : '' }}</span>
+              <span class="text-[10px] font-medium text-primary">{{ formatMatchDate(match.scheduled_at) }}</span>
             </router-link>
           </div>
 
