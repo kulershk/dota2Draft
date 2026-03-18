@@ -246,7 +246,49 @@ const isLoggedIn = computed(() => !!store.currentUser.value)
       </div>
     </div>
 
-    <div class="max-w-[1200px] mx-auto w-full px-6 md:px-10 py-8">
+    <div class="max-w-[1200px] mx-auto w-full px-6 md:px-10 py-8 flex flex-col gap-8">
+
+    <!-- Upcoming Matches (full width, horizontal scroll) -->
+    <div v-if="upcomingMatches.length > 0" class="flex flex-col gap-4">
+      <div class="flex items-center gap-2.5">
+        <Calendar class="w-5 h-5 text-primary" />
+        <span class="text-lg font-semibold text-foreground">{{ t('upcomingMatches') }}</span>
+        <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-primary/20 text-primary">{{ upcomingMatches.length }}</span>
+      </div>
+      <div class="flex gap-4 overflow-x-auto pb-2">
+        <router-link
+          v-for="match in upcomingMatches"
+          :key="match.id"
+          :to="`/c/${match.competition_id}/tournament?match=${match.id}`"
+          class="flex flex-col justify-between rounded-xl bg-card p-4 w-[280px] h-[160px] shrink-0 hover:bg-card/80 transition-colors"
+        >
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] text-text-tertiary truncate">{{ match.stage_name || match.competition_name || '' }}</span>
+            <span class="badge-accent shrink-0">{{ formatMatchDate(match.scheduled_at).includes('ago') || formatMatchDate(match.scheduled_at) === t('startingSoon') ? 'LIVE' : 'UPCOMING' }}</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <div class="flex flex-col items-center gap-1.5 w-20">
+              <div class="w-9 h-9 rounded-full bg-surface overflow-hidden shrink-0">
+                <img v-if="match.team1_banner || match.team1_avatar" :src="match.team1_banner || match.team1_avatar" class="w-full h-full object-cover" />
+              </div>
+              <span class="text-xs font-semibold text-foreground text-center truncate w-full">{{ match.team1_name || t('tbd') }}</span>
+            </div>
+            <div class="flex flex-col items-center gap-0.5">
+              <span class="text-xl font-bold font-mono text-foreground">{{ match.score1 != null ? match.score1 : 0 }} : {{ match.score2 != null ? match.score2 : 0 }}</span>
+              <span class="text-[10px] text-text-tertiary">BO{{ match.best_of || 3 }}</span>
+            </div>
+            <div class="flex flex-col items-center gap-1.5 w-20">
+              <div class="w-9 h-9 rounded-full bg-surface overflow-hidden shrink-0">
+                <img v-if="match.team2_banner || match.team2_avatar" :src="match.team2_banner || match.team2_avatar" class="w-full h-full object-cover" />
+              </div>
+              <span class="text-xs font-semibold text-foreground text-center truncate w-full">{{ match.team2_name || t('tbd') }}</span>
+            </div>
+          </div>
+          <span class="text-[11px] text-text-muted text-center">{{ formatMatchDate(match.scheduled_at) }}</span>
+        </router-link>
+      </div>
+    </div>
+
     <div class="flex flex-col lg:flex-row gap-6">
       <!-- Main Content -->
       <div class="flex-1 min-w-0 flex flex-col gap-6">
@@ -343,28 +385,6 @@ const isLoggedIn = computed(() => !!store.currentUser.value)
               <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
               Join Discord Server
             </a>
-          </div>
-
-          <!-- Upcoming Matches -->
-          <div v-if="upcomingMatches.length > 0" class="rounded-lg bg-card p-4 flex flex-col gap-3">
-            <div class="flex items-center gap-2">
-              <Swords class="w-4 h-4 text-primary" />
-              <span class="text-sm font-semibold text-foreground">{{ t('upcomingMatches') }}</span>
-            </div>
-            <router-link
-              v-for="match in upcomingMatches"
-              :key="match.id"
-              :to="`/c/${match.competition_id}/tournament?match=${match.id}`"
-              class="flex flex-col gap-2 px-5 py-3 border-b border-foreground/10 last:border-0 hover:bg-surface/50 transition-colors"
-            >
-              <div class="flex items-center gap-2">
-                <span class="text-sm font-medium text-foreground">{{ match.team1_name || t('tbd') }}</span>
-                <span class="text-[11px] font-mono text-text-tertiary">vs</span>
-                <span class="text-sm font-medium text-foreground">{{ match.team2_name || t('tbd') }}</span>
-              </div>
-              <span v-if="match.competition_name || match.stage_name" class="text-[11px] text-text-tertiary">{{ match.competition_name }}{{ match.stage_name ? ' · ' + match.stage_name : '' }}</span>
-              <span class="text-[10px] font-medium text-primary">{{ formatMatchDate(match.scheduled_at) }}</span>
-            </router-link>
           </div>
 
           <!-- Live Streams -->
