@@ -57,7 +57,7 @@ const noBotAvailable = ref<Record<number, boolean>>({})
 const lobbyCreateError = ref<Record<number, string | null>>({})
 
 // Lobby countdown timer (5 min from lobby creation)
-const LOBBY_TIMEOUT_MS = 1 * 60 * 1000
+const LOBBY_TIMEOUT_MS = 5 * 60 * 1000
 const now = ref(Date.now())
 let tickInterval: ReturnType<typeof setInterval> | null = null
 
