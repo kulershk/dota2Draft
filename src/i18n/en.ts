@@ -559,6 +559,7 @@ export default {
   removeGroup: 'Remove',
   assignTeams: 'Assign teams to groups',
   matchScore: 'Match Score',
+  goToMatchRoom: 'Go to Match Room',
   updateScore: 'Update Score',
   hideMatch: 'Hide match',
   previewAsPlayer: 'Preview as Player',

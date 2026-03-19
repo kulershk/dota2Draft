@@ -545,12 +545,17 @@ function matchLabel(match: any) {
                   </div>
                   <!-- Rows per role -->
                   <template v-for="role in roles" :key="role">
+                    <!-- Role header -->
+                    <div class="flex items-center px-3 py-1.5 border-t border-border bg-accent/30">
+                      <span class="text-[10px] font-bold font-mono uppercase tracking-wider text-text-tertiary">{{ t('fantasyRole_' + role) }}</span>
+                    </div>
                     <div
                       v-for="(player, idx) in (topPicksData[stage.id]?.[role] || []).slice(0, 3)"
                       :key="`${role}-${idx}`"
-                      class="flex items-center px-3 py-2 border-t border-border"
+                      class="flex items-center px-3 py-2 border-t border-border/30"
                     >
                       <div class="flex-1 flex items-center gap-2 min-w-0">
+                        <span class="text-[10px] font-mono text-text-tertiary w-4 text-center shrink-0">{{ idx + 1 }}</span>
                         <div class="w-6 h-6 rounded-full bg-card overflow-hidden shrink-0">
                           <img v-if="player.avatar" :src="player.avatar" class="w-full h-full object-cover" />
                         </div>

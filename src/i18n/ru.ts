@@ -558,6 +558,7 @@ export default {
   removeGroup: 'Удалить',
   assignTeams: 'Распределите команды по группам',
   matchScore: 'Счёт матча',
+  goToMatchRoom: 'Перейти в комнату матча',
   updateScore: 'Обновить счёт',
   hideMatch: 'Скрыть матч',
   previewAsPlayer: 'Просмотр как игрок',

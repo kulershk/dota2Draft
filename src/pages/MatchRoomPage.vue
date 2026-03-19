@@ -251,6 +251,9 @@ watch(match, (m, oldM) => {
   const games = (m.games || []).filter((g: any) => g.has_stats)
   if (games.length > 0 && expandedGame.value === null) toggleStats(games[0].game_number)
 
+  // Fetch team rosters once
+  if (!oldM && m) fetchTeamRosters()
+
   // Detect status transition to completed
   const oldStatus = oldM?.status || prevMatchStatus.value
   if (m.status === 'completed' && oldStatus && oldStatus !== 'completed') {
@@ -301,6 +304,23 @@ async function loadStats(gameNumber: number) {
 
 function getMultiKillCount(multiKills: Record<string, number>, key: string): number {
   return multiKills?.[key] || 0
+}
+
+// Team rosters
+const teamRosters = ref<{ team1: any[]; team2: any[] }>({ team1: [], team2: [] })
+
+async function fetchTeamRosters() {
+  const cId = compId.value
+  if (!cId || !match.value) return
+  try {
+    const results = await api.getCompResults(cId)
+    const t1 = results.find((r: any) => r.id === match.value.team1_captain_id)
+    const t2 = results.find((r: any) => r.id === match.value.team2_captain_id)
+    teamRosters.value = {
+      team1: t1?.players || [],
+      team2: t2?.players || [],
+    }
+  } catch {}
 }
 
 const matchWinnerName = computed(() => {
@@ -369,6 +389,44 @@ function goBack() {
         <div class="flex items-center justify-center gap-2">
           <span class="badge-info">{{ match.status === 'completed' ? t('matchCompleted') : match.status === 'live' ? t('matchLive') : t('matchPending') }}</span>
           <span class="text-xs text-text-tertiary">Best of {{ bestOf }}</span>
+        </div>
+      </div>
+
+      <!-- Team Rosters -->
+      <div v-if="teamRosters.team1.length || teamRosters.team2.length" class="grid grid-cols-2 gap-4 mb-6">
+        <!-- Team 1 -->
+        <div class="card px-4 py-3 flex flex-col gap-2">
+          <div class="flex items-center gap-2 mb-1">
+            <div class="w-6 h-6 rounded bg-accent overflow-hidden shrink-0">
+              <img v-if="match.team1_banner || match.team1_avatar" :src="match.team1_banner || match.team1_avatar" class="w-full h-full object-cover" />
+            </div>
+            <span class="text-sm font-semibold text-foreground truncate">{{ match.team1_name || t('tbd') }}</span>
+          </div>
+          <div v-for="p in teamRosters.team1" :key="p.id" class="flex items-center gap-2 py-0.5">
+            <div class="w-5 h-5 rounded-full bg-accent overflow-hidden shrink-0">
+              <img v-if="p.avatar_url" :src="p.avatar_url" class="w-full h-full object-cover" />
+            </div>
+            <span class="text-sm text-foreground truncate">{{ p.name }}</span>
+            <span v-if="p.is_captain" class="text-[10px] font-medium text-primary bg-primary/10 px-1.5 py-0.5 rounded">C</span>
+            <span v-if="p.mmr" class="text-[10px] text-muted-foreground ml-auto">{{ p.mmr }}</span>
+          </div>
+        </div>
+        <!-- Team 2 -->
+        <div class="card px-4 py-3 flex flex-col gap-2">
+          <div class="flex items-center gap-2 mb-1">
+            <div class="w-6 h-6 rounded bg-accent overflow-hidden shrink-0">
+              <img v-if="match.team2_banner || match.team2_avatar" :src="match.team2_banner || match.team2_avatar" class="w-full h-full object-cover" />
+            </div>
+            <span class="text-sm font-semibold text-foreground truncate">{{ match.team2_name || t('tbd') }}</span>
+          </div>
+          <div v-for="p in teamRosters.team2" :key="p.id" class="flex items-center gap-2 py-0.5">
+            <div class="w-5 h-5 rounded-full bg-accent overflow-hidden shrink-0">
+              <img v-if="p.avatar_url" :src="p.avatar_url" class="w-full h-full object-cover" />
+            </div>
+            <span class="text-sm text-foreground truncate">{{ p.name }}</span>
+            <span v-if="p.is_captain" class="text-[10px] font-medium text-primary bg-primary/10 px-1.5 py-0.5 rounded">C</span>
+            <span v-if="p.mmr" class="text-[10px] text-muted-foreground ml-auto">{{ p.mmr }}</span>
+          </div>
         </div>
       </div>
 

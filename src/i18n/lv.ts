@@ -558,6 +558,7 @@ export default {
   removeGroup: 'Noņemt',
   assignTeams: 'Piešķiriet komandas grupām',
   matchScore: 'Spēles rezultāts',
+  goToMatchRoom: 'Iet uz spēles istabu',
   updateScore: 'Atjaunināt rezultātu',
   hideMatch: 'Slēpt spēli',
   previewAsPlayer: 'Priekšskatīt kā spēlētājam',

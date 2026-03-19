@@ -558,6 +558,7 @@ export default {
   removeGroup: 'Pašalinti',
   assignTeams: 'Priskirkite komandas grupėms',
   matchScore: 'Rungtynių rezultatas',
+  goToMatchRoom: 'Eiti į rungtynių kambarį',
   updateScore: 'Atnaujinti rezultatą',
   hideMatch: 'Slėpti rungtynes',
   previewAsPlayer: 'Peržiūrėti kaip žaidėjas',

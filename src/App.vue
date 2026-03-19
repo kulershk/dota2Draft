@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Gamepad2, Shield, LogOut, Sun, Moon, Menu, X, Home, LogIn, Lock, Globe, Settings, Swords, Info, Radio, ChevronDown, Check, LayoutDashboard, Bell, User } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
-import { onMounted, ref, computed } from 'vue'
+import { onMounted, ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { useApi } from '@/composables/useApi'
@@ -100,6 +100,12 @@ onMounted(async () => {
   }
 
   await store.restoreAuth()
+})
+
+const mainRef = ref<HTMLElement | null>(null)
+
+watch(() => route.path, () => {
+  if (mainRef.value) mainRef.value.scrollTop = 0
 })
 
 const mobileMenuOpen = ref(false)
@@ -335,7 +341,7 @@ async function handleClaimAdmin() {
     </header>
 
     <!-- Main Content -->
-    <main class="flex-1 overflow-hidden flex flex-col" :class="(route.path.startsWith('/admin') || route.path.startsWith('/c/')) ? '' : 'overflow-y-auto'">
+    <main ref="mainRef" class="flex-1 overflow-hidden flex flex-col" :class="(route.path.startsWith('/admin') || route.path.startsWith('/c/')) ? '' : 'overflow-y-auto'">
       <router-view />
       <!-- Footer (only on public pages) -->
       <footer v-if="!route.path.startsWith('/admin') && !route.path.startsWith('/c/')" class="mt-auto border-t border-border bg-sidebar">

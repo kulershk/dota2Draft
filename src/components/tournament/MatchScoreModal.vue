@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { EyeOff, RefreshCw, ChevronDown, ChevronUp, Gamepad2, Play, X, Check, RotateCcw } from 'lucide-vue-next'
+import { useRouter } from 'vue-router'
+import { EyeOff, RefreshCw, ChevronDown, ChevronUp, Gamepad2, Play, X, Check, RotateCcw, ExternalLink } from 'lucide-vue-next'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 import DatePicker from '@/components/common/DatePicker.vue'
 import { useApi } from '@/composables/useApi'
@@ -9,6 +10,7 @@ import { useDraftStore } from '@/composables/useDraftStore'
 import { getSocket } from '@/composables/useSocket'
 
 const { t } = useI18n()
+const router = useRouter()
 const api = useApi()
 const store = useDraftStore()
 
@@ -330,9 +332,18 @@ onUnmounted(() => {
   <ModalOverlay :show="true" wide @close="emit('close')">
     <!-- Header + Overview -->
     <div class="px-6 pt-5 pb-3 flex flex-col gap-3">
-      <div class="flex items-center gap-2">
-        <Gamepad2 class="w-4 h-4 text-text-tertiary" />
-        <span class="text-base font-semibold text-foreground">{{ t('matchScore') }}</span>
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <Gamepad2 class="w-4 h-4 text-text-tertiary" />
+          <span class="text-base font-semibold text-foreground">{{ t('matchScore') }}</span>
+        </div>
+        <button
+          class="flex items-center gap-1.5 text-xs text-primary hover:text-primary-hover transition-colors cursor-pointer"
+          @click="router.push({ name: 'comp-match', params: { compId: compId, matchId: match.id } }); emit('close')"
+        >
+          <ExternalLink class="w-3.5 h-3.5" />
+          {{ t('goToMatchRoom') }}
+        </button>
       </div>
       <!-- Overview card -->
       <div class="rounded-md bg-surface border border-border px-4 py-3 flex flex-col gap-2">
