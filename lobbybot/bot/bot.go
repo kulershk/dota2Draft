@@ -103,7 +103,7 @@ func (b *Bot) Connect() {
 	b.setStatus(StatusConnecting)
 
 	b.steamClient = steam.NewClient()
-	b.steamClient.ConnectionTimeout = 10 * time.Second
+	b.steamClient.ConnectionTimeout = 30 * time.Second
 	go b.handleSteamEvents()
 
 	b.log("Connecting to Steam network...")
@@ -252,7 +252,7 @@ func (b *Bot) handleSteamEvents() {
 				b.log("Disconnected (waiting for Steam Guard code)")
 				continue // don't exit the event loop, we'll reconnect after code
 			}
-			// If we were online or connecting, auto-reconnect
+			// If we were online or connecting, auto-reconnect with a fresh client
 			if status != StatusOffline {
 				b.log("Disconnected from Steam — reconnecting in 3s...")
 				b.setStatus(StatusConnecting)
@@ -263,29 +263,48 @@ func (b *Bot) handleSteamEvents() {
 					return
 				default:
 				}
-				if b.steamClient != nil {
-					b.steamClient.Connect()
-				}
-				continue
+				b.reconnect()
+				return // exit this event loop; reconnect starts a new one
 			}
 			return
 
 		case error:
-			b.log(fmt.Sprintf("Steam error: %v — retrying in 1s...", e))
-			time.Sleep(1 * time.Second)
+			b.log(fmt.Sprintf("Steam error: %v — reconnecting in 3s...", e))
+			b.setStatus(StatusConnecting)
+			time.Sleep(3 * time.Second)
 			select {
 			case <-b.cancelCh:
 				b.setStatus(StatusOffline)
 				return
 			default:
 			}
-			b.log("Reconnecting to Steam...")
-			if b.steamClient != nil {
-				b.steamClient.Connect()
-			}
-			continue
+			b.reconnect()
+			return // exit this event loop; reconnect starts a new one
 		}
 	}
+}
+
+func (b *Bot) reconnect() {
+	b.log("Creating fresh Steam client for reconnect...")
+	// Clean up old dota client if any
+	if b.dotaClient != nil {
+		b.dotaClient.SetPlaying(false)
+		b.dotaClient.Close()
+		b.dotaClient = nil
+	}
+	// Stop old lobby cache watcher
+	b.mu.Lock()
+	if b.lobbyCacheCancel != nil {
+		b.lobbyCacheCancel()
+		b.lobbyCacheCancel = nil
+	}
+	b.mu.Unlock()
+	// Create fresh client and start new event loop
+	b.steamClient = steam.NewClient()
+	b.steamClient.ConnectionTimeout = 30 * time.Second
+	go b.handleSteamEvents()
+	b.log("Reconnecting to Steam network...")
+	b.steamClient.Connect()
 }
 
 func (b *Bot) Disconnect() {
