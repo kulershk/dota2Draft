@@ -171,7 +171,7 @@ function onLobbyStatusUpdate(data: any) {
     delete copy[data.gameNumber]
     lobbyStatuses.value = copy
   } else {
-    lobbyStatuses.value = { ...lobbyStatuses.value, [data.gameNumber]: { ...(lobbyStatuses.value[data.gameNumber] || {}), status: data.status, ...(data.playersJoined ? { players_joined: data.playersJoined } : {}) } }
+    lobbyStatuses.value = { ...lobbyStatuses.value, [data.gameNumber]: { ...(lobbyStatuses.value[data.gameNumber] || {}), status: data.status, ...(data.playersJoined ? { players_joined: data.playersJoined } : {}), ...(data.errorMessage ? { error_message: data.errorMessage } : {}) } }
     if (data.status !== 'waiting') {
       launchReadyState.value = { ...launchReadyState.value, [data.gameNumber]: [] }
     }

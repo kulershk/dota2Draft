@@ -57,7 +57,7 @@ const noBotAvailable = ref<Record<number, boolean>>({})
 const lobbyCreateError = ref<Record<number, string | null>>({})
 
 // Lobby countdown timer (5 min from lobby creation)
-const LOBBY_TIMEOUT_MS = 5 * 60 * 1000
+const LOBBY_TIMEOUT_MS = 1 * 60 * 1000
 const now = ref(Date.now())
 let tickInterval: ReturnType<typeof setInterval> | null = null
 
@@ -196,7 +196,15 @@ function onLobbyStatusUpdate(data: any) {
     delete copy[data.gameNumber]
     lobbyStatuses.value = copy
   } else {
-    lobbyStatuses.value = { ...lobbyStatuses.value, [data.gameNumber]: { ...(lobbyStatuses.value[data.gameNumber] || {}), status: data.status, ...(data.playersJoined ? { players_joined: data.playersJoined } : {}) } }
+    lobbyStatuses.value = {
+      ...lobbyStatuses.value,
+      [data.gameNumber]: {
+        ...(lobbyStatuses.value[data.gameNumber] || {}),
+        status: data.status,
+        ...(data.playersJoined ? { players_joined: data.playersJoined } : {}),
+        ...(data.errorMessage ? { error_message: data.errorMessage } : {}),
+      },
+    }
     if (data.status !== 'waiting') {
       launchReadyState.value = { ...launchReadyState.value, [data.gameNumber]: [] }
     }
