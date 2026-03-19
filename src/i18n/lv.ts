@@ -708,6 +708,7 @@ export default {
   lobbyError: 'Kļūda',
   lobbyErrorRetry: 'Gatavojieties vēlreiz, lai mēģinātu atkārtoti.',
   lobbyName: 'Lobijs',
+  lobbyExpiresIn: 'Lobijs beidzas pēc',
   lobbyPassword: 'Parole',
   noBotAvailable: 'Nav pieejamu botu',
   noLogs: 'Vēl nav žurnālu.',

@@ -712,6 +712,7 @@ export default {
   lobbyError: 'Error',
   lobbyErrorRetry: 'Ready up again to retry.',
   lobbyName: 'Lobby',
+  lobbyExpiresIn: 'Lobby expires in',
   lobbyPassword: 'Password',
   noBotAvailable: 'No bot available',
   noLogs: 'No logs yet.',

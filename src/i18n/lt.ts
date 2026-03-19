@@ -708,6 +708,7 @@ export default {
   lobbyError: 'Klaida',
   lobbyErrorRetry: 'Pasiruoškite iš naujo, kad bandytumėte dar kartą.',
   lobbyName: 'Lobis',
+  lobbyExpiresIn: 'Lobis baigiasi po',
   lobbyPassword: 'Slaptažodis',
   noBotAvailable: 'Nėra galimų botų',
   noLogs: 'Dar nėra žurnalų.',

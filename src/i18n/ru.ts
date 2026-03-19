@@ -708,6 +708,7 @@ export default {
   lobbyError: 'Ошибка',
   lobbyErrorRetry: 'Нажмите «Готов» снова, чтобы повторить попытку.',
   lobbyName: 'Лобби',
+  lobbyExpiresIn: 'Лобби истекает через',
   lobbyPassword: 'Пароль',
   noBotAvailable: 'Нет доступных ботов',
   noLogs: 'Логов пока нет.',

@@ -56,6 +56,27 @@ const lobbyStatuses = ref<Record<number, any>>({})
 const noBotAvailable = ref<Record<number, boolean>>({})
 const lobbyCreateError = ref<Record<number, string | null>>({})
 
+// Lobby countdown timer (5 min from lobby creation)
+const LOBBY_TIMEOUT_MS = 5 * 60 * 1000
+const now = ref(Date.now())
+let tickInterval: ReturnType<typeof setInterval> | null = null
+
+function getLobbyTimeLeft(gameNumber: number): number | null {
+  const lobby = lobbyStatuses.value[gameNumber]
+  if (!lobby || !lobby.created_at) return null
+  if (!['waiting', 'creating'].includes(lobby.status)) return null
+  const created = new Date(lobby.created_at).getTime()
+  const remaining = (created + LOBBY_TIMEOUT_MS) - now.value
+  return Math.max(0, remaining)
+}
+
+function formatCountdown(ms: number): string {
+  const totalSec = Math.ceil(ms / 1000)
+  const min = Math.floor(totalSec / 60)
+  const sec = totalSec % 60
+  return `${min}:${sec.toString().padStart(2, '0')}`
+}
+
 const myCaptainId = computed(() => store.currentCaptain.value?.id || null)
 const isCaptainInMatch = computed(() => {
   if (!myCaptainId.value || !match.value) return false
@@ -212,6 +233,7 @@ onMounted(() => {
   sock.on('lobby:statusUpdate', onLobbyStatusUpdate)
   sock.on('lobby:teamIds', onLobbyTeamIds)
   sock.on('tournament:updated', onTournamentUpdated)
+  tickInterval = setInterval(() => { now.value = Date.now() }, 1000)
 })
 
 // Once match data is available, fetch ready states and lobby statuses
@@ -235,6 +257,7 @@ watch(match, (m, oldM) => {
 }, { immediate: true })
 
 onUnmounted(() => {
+  if (tickInterval) { clearInterval(tickInterval); tickInterval = null }
   sock.emit('match:leaveRoom', { matchId: matchId.value })
   sock.off('match:readyState', onReadyState)
   sock.off('match:launchReadyState', onLaunchReadyState)
@@ -405,6 +428,14 @@ function goBack() {
 
               <!-- Phase 2: Lobby active — waiting for players + launch -->
               <div v-else-if="lobbyStatuses[g.game_number]?.status === 'waiting'" class="flex flex-col">
+                <!-- Lobby countdown timer -->
+                <div v-if="getLobbyTimeLeft(g.game_number) != null" class="px-5 py-2.5 flex items-center justify-center gap-2 border-b border-border/30"
+                  :class="getLobbyTimeLeft(g.game_number)! < 60000 ? 'bg-red-500/10' : 'bg-amber-500/5'">
+                  <span class="text-xs text-muted-foreground">{{ t('lobbyExpiresIn') }}</span>
+                  <span class="text-sm font-bold font-mono" :class="getLobbyTimeLeft(g.game_number)! < 60000 ? 'text-red-500' : 'text-amber-500'">
+                    {{ formatCountdown(getLobbyTimeLeft(g.game_number)!) }}
+                  </span>
+                </div>
                 <!-- Lobby name + password + player count -->
                 <div class="px-5 py-3.5 flex flex-col gap-2 border-b border-border/30">
                   <div v-if="lobbyStatuses[g.game_number].game_name" class="flex items-center gap-2 text-sm">
@@ -544,8 +575,15 @@ function goBack() {
                 <span v-if="noBotAvailable[g.game_number] && bothCaptainsReady(g.game_number)" class="text-sm text-amber-500">{{ t('noBotAvailable') }}</span>
                 <span v-if="lobbyCreateError[g.game_number]" class="text-sm text-red-500">{{ lobbyCreateError[g.game_number] }}</span>
 
-                <!-- If lobby is waiting, show player statuses -->
+                <!-- If lobby is waiting, show timer + player statuses -->
                 <template v-if="lobbyStatuses[g.game_number]?.status === 'waiting'">
+                  <!-- Countdown timer -->
+                  <div v-if="getLobbyTimeLeft(g.game_number) != null" class="flex items-center justify-center gap-2 mt-1">
+                    <span class="text-xs text-muted-foreground">{{ t('lobbyExpiresIn') }}</span>
+                    <span class="text-sm font-bold font-mono" :class="getLobbyTimeLeft(g.game_number)! < 60000 ? 'text-red-500' : 'text-amber-500'">
+                      {{ formatCountdown(getLobbyTimeLeft(g.game_number)!) }}
+                    </span>
+                  </div>
                   <div class="w-full border-t border-border/30 pt-3 mt-1">
                     <div class="flex items-center justify-between mb-2">
                       <span class="text-sm text-muted-foreground">{{ t('lobbyPassword') }}:</span>
