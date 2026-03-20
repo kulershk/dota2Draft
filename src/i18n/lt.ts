@@ -540,6 +540,9 @@ export default {
 
   // Navigation
   navTournament: 'Turnyras',
+  navMatches: 'Rungtynės',
+  allMatches: 'Visos rungtynės',
+  allMatchesDesc: 'Visos šios varžybų rungtynės.',
 
   // Tournament
   tournament: 'Turnyras',

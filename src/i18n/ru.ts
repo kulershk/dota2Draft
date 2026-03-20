@@ -540,6 +540,9 @@ export default {
 
   // Navigation
   navTournament: 'Турнир',
+  navMatches: 'Матчи',
+  allMatches: 'Все матчи',
+  allMatchesDesc: 'Все матчи этого соревнования.',
 
   // Tournament
   tournament: 'Турнир',

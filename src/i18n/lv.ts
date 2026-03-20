@@ -540,6 +540,9 @@ export default {
 
   // Navigation
   navTournament: 'Turnīrs',
+  navMatches: 'Spēles',
+  allMatches: 'Visas spēles',
+  allMatchesDesc: 'Visas šīs sacensības spēles.',
 
   // Tournament
   tournament: 'Turnīrs',

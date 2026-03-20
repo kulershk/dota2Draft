@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Users, Gavel, Trophy, Info, Swords, Star, BookOpen } from 'lucide-vue-next'
+import { Users, Gavel, Trophy, Info, Swords, Star, BookOpen, ListChecks } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { watch, onMounted, computed } from 'vue'
 import { useDraftStore } from '@/composables/useDraftStore'
@@ -17,6 +17,7 @@ const navItems = computed(() => [
   ...(store.auction.status !== 'finished' ? [{ label: t('navLiveAuction'), icon: Gavel, name: 'comp-auction' }] : []),
   { label: t('navTeams'), icon: Trophy, name: 'comp-results' },
   { label: t('navTournament'), icon: Swords, name: 'comp-tournament' },
+  { label: t('navMatches'), icon: ListChecks, name: 'comp-matches' },
   ...(store.settings.fantasyEnabled ? [{ label: t('navFantasy'), icon: Star, name: 'comp-fantasy' }] : []),
   ...(store.currentCompetition.value?.rules_content ? [{ label: t('rules') || 'Rules', icon: BookOpen, name: 'comp-rules' }] : []),
 ])

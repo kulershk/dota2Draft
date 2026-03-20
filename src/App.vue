@@ -369,14 +369,16 @@ async function handleClaimAdmin() {
 
     <!-- Main Content -->
     <main ref="mainRef" class="flex-1 overflow-hidden flex flex-col relative" :class="(route.path.startsWith('/admin') || route.path.startsWith('/c/')) ? '' : 'overflow-y-auto'">
-      <!-- Global background image -->
-      <div v-if="heroBannerUrl" class="absolute inset-x-0 top-0 h-[40vh] overflow-hidden pointer-events-none z-0">
+      <!-- Background image (homepage only) -->
+      <div v-if="heroBannerUrl && route.path === '/'" class="absolute inset-x-0 top-0 h-[40vh] overflow-hidden pointer-events-none z-0">
         <img :src="heroBannerUrl" class="w-full h-full object-cover" />
         <div class="absolute inset-0 bg-gradient-to-b from-background/60 via-background/40 to-background" />
       </div>
+      <!-- Top gradient (all pages except homepage and admin) -->
+      <div v-else-if="!route.path.startsWith('/admin')" class="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-muted to-background pointer-events-none z-0" />
       <router-view class="relative z-[1]" />
       <!-- Footer (only on public pages) -->
-      <footer v-if="!route.path.startsWith('/admin') && !route.path.startsWith('/c/')" class="mt-auto border-t border-border bg-sidebar">
+      <footer v-if="!route.path.startsWith('/admin')" class="mt-auto border-t border-border bg-sidebar relative z-[1]">
         <div class="max-w-[1200px] mx-auto px-4 md:px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div class="flex items-center gap-2">
             <img v-if="customLogoUrl" :src="customLogoUrl" class="w-6 h-6 rounded object-contain" />
