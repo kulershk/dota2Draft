@@ -155,7 +155,6 @@ const streamers = ref<Streamer[]>([])
 const siteTitle = ref('')
 const siteSubtitle = ref('')
 const discordUrl = ref('')
-const heroBannerUrl = ref('')
 
 async function fetchSiteSettings() {
   try {
@@ -163,7 +162,6 @@ async function fetchSiteSettings() {
     siteTitle.value = data.site_title || ''
     siteSubtitle.value = data.site_subtitle || ''
     discordUrl.value = data.site_discord_url || ''
-    heroBannerUrl.value = data.site_hero_banner_url || ''
   } catch {}
 }
 
@@ -230,13 +228,7 @@ const loopedMatches = computed(() => {
 </script>
 
 <template>
-  <div class="relative">
-    <!-- Page background image covering top half -->
-    <div v-if="heroBannerUrl" class="absolute inset-x-0 top-0 h-[50vh] overflow-hidden pointer-events-none">
-      <img :src="heroBannerUrl" class="w-full h-full object-cover" />
-      <div class="absolute inset-0 bg-gradient-to-b from-background/60 via-background/40 to-background" />
-    </div>
-
+  <div>
     <!-- Hero Content -->
     <div class="relative">
       <div class="max-w-[1200px] mx-auto w-full px-6 md:px-10 pt-16 pb-16 md:pt-24 md:pb-24 flex flex-col items-center text-center gap-6">

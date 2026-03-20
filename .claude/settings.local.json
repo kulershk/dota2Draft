@@ -63,7 +63,12 @@
       "Bash(2)",
       "Bash(go build:*)",
       "Bash(find /c/Users/kuler/Desktop/Stuff/draft/lobbybot -type f -name \"*.go\" -exec wc -l {} +)",
-      "WebFetch(domain:unpkg.com)"
+      "WebFetch(domain:unpkg.com)",
+      "Bash(while read:*)",
+      "Bash(do if:*)",
+      "Bash(then echo:*)",
+      "Bash(fi)",
+      "Bash(done)"
     ]
   }
 }

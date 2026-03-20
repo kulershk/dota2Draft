@@ -206,6 +206,10 @@ const matchesByGroup = computed(() => {
           :class="match.hidden ? 'opacity-40' : ''"
           @click="emit('edit-match', match)"
         >
+          <span class="text-[9px] font-bold uppercase tracking-wider w-20 shrink-0"
+            :class="match.status === 'live' ? 'text-amber-500' : match.status === 'completed' ? 'text-color-success' : 'text-muted-foreground'">
+            {{ match.status === 'live' ? t('matchLive') : match.status === 'completed' ? t('matchCompleted') : t('matchUpcoming') }}
+          </span>
           <div class="flex-1 flex items-center justify-end gap-2.5 min-w-0">
             <span class="text-sm font-medium text-foreground truncate">{{ match.team1_name || t('tbd') }}</span>
             <div class="w-6 h-6 rounded bg-surface overflow-hidden shrink-0">

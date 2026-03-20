@@ -35,6 +35,7 @@ const showUserMenu = ref(false)
 const customSiteName = ref('')
 const customLogoUrl = ref('')
 const discordUrl = ref('')
+const heroBannerUrl = ref('')
 
 const languages = [
   { code: 'en', label: 'English' },
@@ -56,6 +57,7 @@ onMounted(async () => {
     customSiteName.value = data.site_name || ''
     customLogoUrl.value = data.site_logo_url || ''
     discordUrl.value = data.site_discord_url || ''
+    heroBannerUrl.value = data.site_hero_banner_url || ''
     if (data.site_name) document.title = data.site_name
     if (data.site_logo_url) {
       const favicon = document.getElementById('favicon') as HTMLLinkElement
@@ -366,8 +368,13 @@ async function handleClaimAdmin() {
     </header>
 
     <!-- Main Content -->
-    <main ref="mainRef" class="flex-1 overflow-hidden flex flex-col" :class="(route.path.startsWith('/admin') || route.path.startsWith('/c/')) ? '' : 'overflow-y-auto'">
-      <router-view />
+    <main ref="mainRef" class="flex-1 overflow-hidden flex flex-col relative" :class="(route.path.startsWith('/admin') || route.path.startsWith('/c/')) ? '' : 'overflow-y-auto'">
+      <!-- Global background image -->
+      <div v-if="heroBannerUrl" class="absolute inset-x-0 top-0 h-[40vh] overflow-hidden pointer-events-none z-0">
+        <img :src="heroBannerUrl" class="w-full h-full object-cover" />
+        <div class="absolute inset-0 bg-gradient-to-b from-background/60 via-background/40 to-background" />
+      </div>
+      <router-view class="relative z-[1]" />
       <!-- Footer (only on public pages) -->
       <footer v-if="!route.path.startsWith('/admin') && !route.path.startsWith('/c/')" class="mt-auto border-t border-border bg-sidebar">
         <div class="max-w-[1200px] mx-auto px-4 md:px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-3">
