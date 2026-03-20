@@ -94,20 +94,26 @@ export default function createTournamentRouter(io) {
         LIMIT 20
       `)
 
-      // Fetch rosters for each match's teams
+      // Fetch rosters for each match's teams (drafted players + captain themselves)
       const captainIds = [...new Set(matches.flatMap(m => [m.team1_captain_id, m.team2_captain_id].filter(Boolean)))]
       const rosterMap = {}
       if (captainIds.length > 0) {
         const rosterRows = await query(`
-          SELECT cp.drafted_by, COALESCE(p.display_name, p.name) AS name, p.avatar_url, cp.playing_role, cp.mmr
-          FROM competition_players cp
+          SELECT cap.id AS captain_id, COALESCE(p.display_name, p.name) AS name, p.avatar_url, cp.playing_role, cp.mmr,
+                 (cp.player_id = cap.player_id) AS is_captain
+          FROM captains cap
+          JOIN competition_players cp ON cp.competition_id = cap.competition_id
+            AND (cp.drafted_by = cap.id OR (cap.player_id IS NOT NULL AND cp.player_id = cap.player_id))
           JOIN players p ON p.id = cp.player_id
-          WHERE cp.drafted_by = ANY($1)
-          ORDER BY cp.playing_role ASC NULLS LAST, p.name
+          WHERE cap.id = ANY($1)
+          ORDER BY (cp.player_id = cap.player_id) DESC, cp.playing_role ASC NULLS LAST, p.name
         `, [captainIds])
         for (const r of rosterRows) {
-          if (!rosterMap[r.drafted_by]) rosterMap[r.drafted_by] = []
-          rosterMap[r.drafted_by].push({ name: r.name, avatar: r.avatar_url || '', playing_role: r.playing_role, mmr: r.mmr || 0 })
+          if (!rosterMap[r.captain_id]) rosterMap[r.captain_id] = []
+          // Avoid duplicates (captain could also be drafted_by themselves)
+          if (!rosterMap[r.captain_id].some(p => p.name === r.name)) {
+            rosterMap[r.captain_id].push({ name: r.name, avatar: r.avatar_url || '', playing_role: r.playing_role, mmr: r.mmr || 0 })
+          }
         }
       }
 
