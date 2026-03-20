@@ -7,6 +7,7 @@ import { useRoute } from 'vue-router'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { useApi } from '@/composables/useApi'
 import ImageCropper from '@/components/common/ImageCropper.vue'
+import ModalOverlay from '@/components/common/ModalOverlay.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -141,10 +142,19 @@ async function handleCrop(blob: Blob) {
   }
 }
 
-async function removeBanner(captain: any) {
+const showRemoveBanner = ref(false)
+const removeBannerCaptainId = ref<number>(0)
+
+function confirmRemoveBanner(captain: any) {
+  removeBannerCaptainId.value = captain.id
+  showRemoveBanner.value = true
+}
+
+async function removeBanner() {
   if (!store.currentCompetitionId.value) return
-  await api.deleteCaptainBanner(store.currentCompetitionId.value, captain.id)
+  await api.deleteCaptainBanner(store.currentCompetitionId.value, removeBannerCaptainId.value)
   await store.fetchCaptains()
+  showRemoveBanner.value = false
 }
 </script>
 
@@ -395,23 +405,23 @@ async function removeBanner(captain: any) {
       </div>
       <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 gap-4">
         <div v-for="captain in store.captains.value" :key="captain.id" class="flex flex-col items-center gap-2">
-          <div class="relative w-16 h-16 rounded-lg overflow-hidden bg-surface shrink-0">
+          <router-link :to="{ name: 'team-profile', params: { id: captain.id } }" class="relative w-16 h-16 rounded-lg overflow-hidden bg-surface shrink-0 hover:ring-2 hover:ring-primary transition-all">
             <img v-if="captain.banner_url || captain.avatar_url" :src="captain.banner_url || captain.avatar_url" class="w-full h-full object-cover" />
             <div v-else class="w-full h-full flex items-center justify-center">
               <Trophy class="w-5 h-5 text-text-muted" />
             </div>
-            <!-- Upload/remove controls -->
-            <div v-if="canEditBanner(captain)" class="absolute top-0.5 right-0.5 flex flex-col gap-0.5">
-              <label class="p-0.5 rounded bg-background/80 backdrop-blur-sm cursor-pointer hover:bg-background transition-colors" :title="t('uploadBanner')">
-                <Upload class="w-3 h-3 text-foreground" />
-                <input type="file" accept="image/*" class="hidden" @change="openCropper(captain, $event)" :disabled="uploading" />
-              </label>
-              <button v-if="captain.banner_url" class="p-0.5 rounded bg-background/80 backdrop-blur-sm hover:bg-background transition-colors" :title="t('removeBanner')" @click="removeBanner(captain)">
-                <X class="w-3 h-3 text-destructive" />
-              </button>
-            </div>
+          </router-link>
+          <!-- Upload/remove controls -->
+          <div v-if="canEditBanner(captain)" class="flex gap-1 -mt-1">
+            <label class="p-0.5 rounded bg-surface cursor-pointer hover:bg-accent transition-colors" :title="t('uploadBanner')">
+              <Upload class="w-3 h-3 text-foreground" />
+              <input type="file" accept="image/*" class="hidden" @change="openCropper(captain, $event)" :disabled="uploading" />
+            </label>
+            <button v-if="captain.banner_url" class="p-0.5 rounded bg-surface hover:bg-accent transition-colors" :title="t('removeBanner')" @click="confirmRemoveBanner(captain)">
+              <X class="w-3 h-3 text-destructive" />
+            </button>
           </div>
-          <span class="text-xs font-medium text-foreground text-center w-full truncate">{{ captain.team || captain.name }}</span>
+          <router-link :to="{ name: 'team-profile', params: { id: captain.id } }" class="text-xs font-medium text-foreground text-center w-full truncate hover:text-primary transition-colors">{{ captain.team || captain.name }}</router-link>
           <span class="text-[10px] font-mono text-text-tertiary text-center">{{ captain.name }}</span>
         </div>
       </div>
@@ -425,5 +435,17 @@ async function removeBanner(captain: any) {
       @crop="handleCrop"
       @close="showCropper = false; cropFile = null"
     />
+
+    <!-- Remove Banner Confirmation -->
+    <ModalOverlay :show="showRemoveBanner" @close="showRemoveBanner = false">
+      <div class="px-7 py-6 border-b border-border">
+        <h2 class="text-xl font-semibold text-foreground">{{ t('removeBanner') }}</h2>
+        <p class="text-sm text-muted-foreground mt-1">{{ t('removeBannerConfirm') }}</p>
+      </div>
+      <div class="px-7 py-5 flex flex-col gap-3">
+        <button class="btn-destructive w-full justify-center" @click="removeBanner">{{ t('remove') }}</button>
+        <button class="btn-secondary w-full justify-center" @click="showRemoveBanner = false">{{ t('cancel') }}</button>
+      </div>
+    </ModalOverlay>
   </template>
 </template>

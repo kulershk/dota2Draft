@@ -8,8 +8,10 @@ const router = createRouter({
     { path: '/competitions', name: 'competitions', component: () => import('@/pages/CompetitionsPage.vue') },
     { path: '/how-it-works', name: 'how-it-works', component: () => import('@/pages/HowItWorksPage.vue') },
     { path: '/settings', name: 'settings', component: () => import('@/pages/SettingsPage.vue') },
+    { path: '/news', name: 'news', component: () => import('@/pages/NewsPage.vue') },
     { path: '/news/:id', name: 'news-post', component: () => import('@/pages/NewsPostPage.vue') },
     { path: '/player/:id', name: 'player-profile', component: () => import('@/pages/PlayerProfilePage.vue') },
+    { path: '/team/:id', name: 'team-profile', component: () => import('@/pages/TeamProfilePage.vue') },
     {
       path: '/c/:compId',
       component: () => import('@/pages/CompetitionLayout.vue'),

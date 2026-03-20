@@ -50,6 +50,10 @@ export function useApi() {
       request(`/api/competitions/${compId}/players/${playerId}`, { method: 'DELETE' }),
     syncPlayerRoles: (compId: number) =>
       request(`/api/competitions/${compId}/players/sync-roles`, { method: 'POST' }),
+    assignPlayer: (compId: number, playerId: number, captainId: number) =>
+      request(`/api/competitions/${compId}/players/${playerId}/assign`, { method: 'POST', body: JSON.stringify({ captainId }) }),
+    unassignPlayer: (compId: number, playerId: number) =>
+      request(`/api/competitions/${compId}/players/${playerId}/unassign`, { method: 'POST' }),
 
     // Competition Captains
     getCompCaptains: (compId: number) => request(`/api/competitions/${compId}/captains`),
@@ -225,6 +229,7 @@ export function useApi() {
 
     // Users (global)
     getPlayerProfile: (id: number) => request(`/api/players/${id}/profile`),
+    getTeamProfile: (captainId: number) => request(`/api/teams/${captainId}/profile`),
     getUsers: () => request('/api/users'),
     updatePlayer: (id: number, data: Record<string, any>) =>
       request(`/api/players/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

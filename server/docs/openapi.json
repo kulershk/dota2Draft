@@ -384,6 +384,33 @@
         "responses": { "200": { "description": "Removed" } }
       }
     },
+    "/api/competitions/{compId}/players/{playerId}/assign": {
+      "post": {
+        "tags": ["Players"],
+        "summary": "Assign player to a captain's team",
+        "description": "Manually drafts a player to a captain's team. Requires manage_players permission.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "playerId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "captainId": { "type": "integer" } }, "required": ["captainId"] } } } },
+        "responses": { "200": { "description": "Player assigned to team" } }
+      }
+    },
+    "/api/competitions/{compId}/players/{playerId}/unassign": {
+      "post": {
+        "tags": ["Players"],
+        "summary": "Remove player from captain's team",
+        "description": "Removes a player from their drafted team (sets drafted=0, clears drafted_by). Requires manage_players permission.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "playerId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "Player removed from team" } }
+      }
+    },
     "/api/competitions/{compId}/users/{userId}/add-to-pool": {
       "post": {
         "tags": ["Players"],
@@ -710,6 +737,15 @@
         "summary": "Get public player profile",
         "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
         "responses": { "200": { "description": "Player profile with competition history and tournament results" } }
+      }
+    },
+    "/api/teams/{captainId}/profile": {
+      "get": {
+        "tags": ["Users"],
+        "summary": "Get public team profile",
+        "description": "Returns team info, roster, match history, and win/loss stats for a captain's team.",
+        "parameters": [{ "name": "captainId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Team profile with roster and matches" }, "404": { "description": "Team not found" } }
       }
     },
     "/api/players/{id}": {

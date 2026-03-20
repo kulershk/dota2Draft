@@ -230,16 +230,16 @@ const loopedMatches = computed(() => {
 </script>
 
 <template>
-  <div>
-    <!-- Hero Banner -->
-    <div class="relative overflow-hidden">
-      <!-- Background image -->
-      <div v-if="heroBannerUrl" class="absolute inset-0">
-        <img :src="heroBannerUrl" class="w-full h-full object-cover" />
-        <div class="absolute inset-0 bg-gradient-to-b from-background/70 via-background/50 to-background" />
-      </div>
-      <!-- Content -->
-      <div class="relative max-w-[1200px] mx-auto w-full px-6 md:px-10 py-36 md:py-52 flex flex-col items-center text-center gap-6">
+  <div class="relative">
+    <!-- Page background image covering top half -->
+    <div v-if="heroBannerUrl" class="absolute inset-x-0 top-0 h-[50vh] overflow-hidden pointer-events-none">
+      <img :src="heroBannerUrl" class="w-full h-full object-cover" />
+      <div class="absolute inset-0 bg-gradient-to-b from-background/60 via-background/40 to-background" />
+    </div>
+
+    <!-- Hero Content -->
+    <div class="relative">
+      <div class="max-w-[1200px] mx-auto w-full px-6 md:px-10 pt-16 pb-16 md:pt-24 md:pb-24 flex flex-col items-center text-center gap-6">
         <div>
           <h1 class="text-3xl md:text-4xl font-bold text-foreground">{{ siteTitle || t('heroTitle') }}</h1>
           <p class="text-muted-foreground mt-2 text-sm md:text-base">{{ siteSubtitle || t('heroSubtitle') }}</p>
@@ -264,16 +264,15 @@ const loopedMatches = computed(() => {
       </div>
     </div>
 
-    <div class="max-w-[1200px] mx-auto w-full px-6 md:px-10 py-8 flex flex-col gap-8">
-
-    <!-- Upcoming Matches (full width, horizontal scroll) -->
-    <div v-if="upcomingMatches.length > 0" class="flex flex-col gap-4">
+    <!-- Upcoming Matches (overlaps hero) -->
+    <div v-if="upcomingMatches.length > 0" class="relative z-10 max-w-[1200px] mx-auto w-full px-6 md:px-10">
+      <div class="flex flex-col gap-4">
       <div class="flex items-center gap-2.5">
         <Calendar class="w-5 h-5 text-primary" />
         <span class="text-lg font-semibold text-foreground">{{ t('upcomingMatches') }}</span>
         <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-primary/20 text-primary">{{ upcomingMatches.length }}</span>
       </div>
-      <div class="overflow-clip">
+      <div class="overflow-hidden">
       <div ref="carouselRef" class="flex gap-4 select-none w-max" @dragstart.prevent>
         <div
           v-for="(match, idx) in loopedMatches"
@@ -335,80 +334,71 @@ const loopedMatches = computed(() => {
       </div>
       </div>
     </div>
+    </div>
 
+    <div class="relative z-10 max-w-[1200px] mx-auto w-full px-6 md:px-10 pt-6 pb-8 flex flex-col gap-6">
     <div class="flex flex-col lg:flex-row gap-6">
       <!-- Main Content -->
       <div class="flex-1 min-w-0 flex flex-col gap-6">
-        <!-- Competitions -->
+        <!-- News & Announcements -->
         <div class="rounded-lg bg-card overflow-hidden">
           <!-- Header -->
           <div class="flex items-center justify-between px-5 py-4">
             <div class="flex items-center gap-2">
-              <Trophy class="w-[18px] h-[18px] text-primary" />
-              <span class="text-base font-semibold text-foreground">{{ t('competitions') }}</span>
+              <Newspaper class="w-[18px] h-[18px] text-primary" />
+              <span class="text-base font-semibold text-foreground">{{ t('newsTitle') }}</span>
             </div>
-            <router-link to="/competitions" class="text-sm font-medium text-primary hover:text-primary/80 transition-colors">
+            <router-link v-if="news.length > 5" to="/news" class="text-xs font-medium text-primary hover:text-primary/80 transition-colors">
               {{ t('viewAll') }} →
             </router-link>
-          </div>
-          <!-- Entries -->
-          <div v-if="activeCompetitions.length === 0" class="px-5 pb-5 text-sm text-muted-foreground">
-            {{ t('noActiveCompetitions') }}
-          </div>
-          <div v-else class="px-5 pb-5 flex flex-col gap-3">
-            <router-link
-              v-for="comp in activeCompetitions"
-              :key="comp.id"
-              :to="`/c/${comp.id}/info`"
-              class="flex flex-col gap-2 hover:opacity-80 transition-opacity"
-            >
-              <div class="flex items-center gap-2.5">
-                <span class="text-[15px] font-semibold text-foreground">{{ comp.name }}</span>
-                <span class="inline-flex items-center rounded px-2 py-0.5 text-[10px] font-semibold font-mono"
-                  :class="statusClass[getCompStatus(comp)] || statusClass.draft">
-                  {{ statusLabel[getCompStatus(comp)] || t('statusSetup') }}
-                </span>
-              </div>
-              <span v-if="comp.created_by_name" class="text-xs text-text-tertiary">{{ comp.created_by_name }}</span>
-              <span class="text-[11px] text-text-muted">
-                {{ comp.registration_start ? formatDate(comp.registration_start) : '' }}{{ comp.registration_end ? ' - ' + formatDate(comp.registration_end) : '' }}
-              </span>
-            </router-link>
-          </div>
-        </div>
-
-        <!-- News & Announcements -->
-        <div class="rounded-lg bg-card overflow-hidden">
-          <!-- Header -->
-          <div class="flex items-center gap-2 px-5 py-4">
-            <Newspaper class="w-[18px] h-[18px] text-primary" />
-            <span class="text-base font-semibold text-foreground">{{ t('newsTitle') }}</span>
           </div>
           <!-- Entries -->
           <div v-if="news.length === 0" class="px-5 pb-5 text-sm text-muted-foreground">
             {{ t('noNewsYet') }}
           </div>
-          <div v-else class="px-5 pb-5 flex flex-col gap-0">
+          <div v-else class="flex flex-col">
+            <!-- Featured first post -->
             <router-link
-              v-for="(post, idx) in news"
-              :key="post.id"
-              :to="{ name: 'news-post', params: { id: post.id } }"
-              class="flex items-center gap-3 py-3 hover:opacity-80 transition-opacity"
-              :class="idx < news.length - 1 ? 'border-b border-foreground/10' : ''"
+              :to="{ name: 'news-post', params: { id: news[0].id } }"
+              class="block hover:opacity-90 transition-opacity"
             >
-              <!-- Thumbnail -->
-              <div class="w-20 h-[60px] rounded-md bg-surface overflow-hidden shrink-0">
-                <img v-if="post.image_url" :src="post.image_url" class="w-full h-full object-cover" />
+              <div v-if="news[0].image_url" class="w-full h-[200px] bg-surface overflow-hidden">
+                <img :src="news[0].image_url" class="w-full h-full object-cover" />
               </div>
-              <!-- Info -->
-              <div class="flex-1 flex flex-col gap-1 min-w-0">
-                <span class="text-sm font-semibold text-foreground truncate">{{ post.title }}</span>
-                <div class="flex items-center gap-2">
-                  <span class="text-xs text-text-muted">{{ formatDate(post.created_at) }}</span>
-                  <span class="text-xs text-text-muted">{{ commentCounts[post.id] || 0 }} {{ (commentCounts[post.id] || 0) === 1 ? t('comment') : t('comments') }}</span>
+              <div class="px-5 py-4 border-b border-foreground/10">
+                <h3 class="text-lg font-bold text-foreground leading-tight mb-1.5">{{ news[0].title }}</h3>
+                <p class="text-sm text-muted-foreground line-clamp-2 mb-2">{{ news[0].content.replace(/<[^>]*>/g, '').slice(0, 150) }}</p>
+                <div class="flex items-center gap-3">
+                  <div v-if="news[0].created_by_avatar" class="flex items-center gap-1.5">
+                    <img :src="news[0].created_by_avatar" class="w-4 h-4 rounded-full" />
+                    <span class="text-xs text-text-muted">{{ news[0].created_by_name }}</span>
+                  </div>
+                  <span class="text-xs text-text-muted">{{ formatDate(news[0].created_at) }}</span>
+                  <span class="text-xs text-text-muted">{{ commentCounts[news[0].id] || 0 }} {{ (commentCounts[news[0].id] || 0) === 1 ? t('comment') : t('comments') }}</span>
                 </div>
               </div>
             </router-link>
+            <!-- Rest of posts -->
+            <div class="px-5 pb-5 flex flex-col gap-0">
+              <router-link
+                v-for="(post, idx) in news.slice(1, 5)"
+                :key="post.id"
+                :to="{ name: 'news-post', params: { id: post.id } }"
+                class="flex items-center gap-3 py-3 hover:opacity-80 transition-opacity"
+                :class="idx < news.length - 2 ? 'border-b border-foreground/10' : ''"
+              >
+                <div class="w-20 h-[60px] rounded-md bg-surface overflow-hidden shrink-0">
+                  <img v-if="post.image_url" :src="post.image_url" class="w-full h-full object-cover" />
+                </div>
+                <div class="flex-1 flex flex-col gap-1 min-w-0">
+                  <span class="text-sm font-semibold text-foreground truncate">{{ post.title }}</span>
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs text-text-muted">{{ formatDate(post.created_at) }}</span>
+                    <span class="text-xs text-text-muted">{{ commentCounts[post.id] || 0 }} {{ (commentCounts[post.id] || 0) === 1 ? t('comment') : t('comments') }}</span>
+                  </div>
+                </div>
+              </router-link>
+            </div>
           </div>
         </div>
       </div>
@@ -416,24 +406,40 @@ const loopedMatches = computed(() => {
       <!-- Sidebar -->
       <div class="lg:w-[320px] shrink-0">
         <div class="flex flex-col gap-4 lg:sticky lg:top-4">
-          <!-- Discord -->
-          <div v-if="discordUrl" class="rounded-lg bg-card p-5 flex flex-col gap-3">
-            <div class="flex items-center gap-2.5">
-              <svg class="w-5 h-5 text-[#5865F2] shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
-              <span class="text-base font-semibold text-foreground">{{ t('joinDiscord') }}</span>
+          <!-- Competitions -->
+          <div class="rounded-lg bg-card overflow-hidden">
+            <div class="flex items-center justify-between px-5 py-4 border-b border-surface">
+              <div class="flex items-center gap-2">
+                <Trophy class="w-[18px] h-[18px] text-primary" />
+                <span class="text-sm font-semibold text-foreground">{{ t('competitions') }}</span>
+              </div>
+              <router-link to="/competitions" class="text-xs font-medium text-primary hover:text-primary/80 transition-colors">
+                {{ t('viewAll') }} →
+              </router-link>
             </div>
-            <p class="text-sm text-muted-foreground leading-relaxed">{{ t('discordDesc') }}</p>
-            <a
-              :href="discordUrl"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="flex items-center justify-center gap-2 w-full rounded-md bg-[#5865F2] hover:bg-[#4752C4] px-4 py-2.5 text-sm font-semibold text-white transition-colors"
-            >
-              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-              Join Discord Server
-            </a>
+            <div v-if="activeCompetitions.length === 0" class="px-5 py-4 text-sm text-muted-foreground">
+              {{ t('noActiveCompetitions') }}
+            </div>
+            <div v-else class="divide-y divide-surface">
+              <router-link
+                v-for="comp in activeCompetitions"
+                :key="comp.id"
+                :to="`/c/${comp.id}/info`"
+                class="flex flex-col gap-1 px-5 py-3 hover:bg-surface/50 transition-colors"
+              >
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-semibold text-foreground truncate">{{ comp.name }}</span>
+                  <span class="inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold font-mono shrink-0"
+                    :class="statusClass[getCompStatus(comp)] || statusClass.draft">
+                    {{ statusLabel[getCompStatus(comp)] || t('statusSetup') }}
+                  </span>
+                </div>
+                <span class="text-[10px] text-text-muted">
+                  {{ comp.registration_start ? formatDate(comp.registration_start) : '' }}{{ comp.registration_end ? ' - ' + formatDate(comp.registration_end) : '' }}
+                </span>
+              </router-link>
+            </div>
           </div>
-
           <!-- Live Streams -->
           <div v-if="streamers.length > 0" class="rounded-lg bg-card overflow-hidden">
             <!-- Header -->

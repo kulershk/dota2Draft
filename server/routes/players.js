@@ -269,5 +269,48 @@ export default function createPlayersRouter(io) {
     res.json({ ok: true, updated })
   })
 
+  // Admin: assign player to a captain's team
+  router.post('/api/competitions/:compId/players/:playerId/assign', async (req, res) => {
+    const compId = Number(req.params.compId)
+    const admin = await requireCompPermission(req, res, compId, 'manage_players')
+    if (!admin) return
+    const playerId = Number(req.params.playerId)
+    const { captainId } = req.body
+    if (!captainId) return res.status(400).json({ error: 'captainId is required' })
+
+    const cp = await queryOne(
+      'SELECT * FROM competition_players WHERE competition_id = $1 AND player_id = $2',
+      [compId, playerId]
+    )
+    if (!cp) return res.status(404).json({ error: 'Player not in this competition' })
+
+    const captain = await queryOne('SELECT id FROM captains WHERE id = $1 AND competition_id = $2', [captainId, compId])
+    if (!captain) return res.status(404).json({ error: 'Captain not found' })
+
+    await execute(
+      'UPDATE competition_players SET drafted = 1, drafted_by = $1 WHERE competition_id = $2 AND player_id = $3',
+      [captainId, compId, playerId]
+    )
+
+    io.to(`comp:${compId}`).emit('players:updated', await getCompPlayers(compId))
+    res.json({ ok: true })
+  })
+
+  // Admin: remove player from a captain's team
+  router.post('/api/competitions/:compId/players/:playerId/unassign', async (req, res) => {
+    const compId = Number(req.params.compId)
+    const admin = await requireCompPermission(req, res, compId, 'manage_players')
+    if (!admin) return
+    const playerId = Number(req.params.playerId)
+
+    await execute(
+      'UPDATE competition_players SET drafted = 0, drafted_by = NULL, draft_price = NULL, draft_round = NULL WHERE competition_id = $1 AND player_id = $2',
+      [compId, playerId]
+    )
+
+    io.to(`comp:${compId}`).emit('players:updated', await getCompPlayers(compId))
+    res.json({ ok: true })
+  })
+
   return router
 }

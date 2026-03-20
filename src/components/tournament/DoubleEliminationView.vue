@@ -112,9 +112,10 @@ function statusClass(match: any) {
                   :class="isWinner(match, 1) ? 'bg-primary/10' : ''">
                   <div class="flex items-center gap-2 min-w-0">
                     <img v-if="match.team1_banner || match.team1_avatar" :src="match.team1_banner || match.team1_avatar" class="w-5 h-5 object-cover" :class="match.team1_banner ? 'rounded' : 'rounded-full'" />
-                    <span class="text-sm truncate" :class="isWinner(match, 1) ? 'font-bold text-foreground' : 'text-foreground'">
+                    <router-link v-if="match.team1_captain_id" :to="{ name: 'team-profile', params: { id: match.team1_captain_id } }" class="text-sm truncate hover:text-primary transition-colors" :class="isWinner(match, 1) ? 'font-bold text-foreground' : 'text-foreground'" @click.stop>
                       {{ teamName(match, 1) }}
-                    </span>
+                    </router-link>
+                    <span v-else class="text-sm truncate text-muted-foreground">{{ teamName(match, 1) }}</span>
                   </div>
                   <span class="text-sm font-bold ml-2" :class="isWinner(match, 1) ? 'text-primary' : 'text-muted-foreground'">
                     {{ score(match, 1) }}
@@ -124,9 +125,10 @@ function statusClass(match: any) {
                   :class="isWinner(match, 2) ? 'bg-primary/10' : ''">
                   <div class="flex items-center gap-2 min-w-0">
                     <img v-if="match.team2_banner || match.team2_avatar" :src="match.team2_banner || match.team2_avatar" class="w-5 h-5 object-cover" :class="match.team2_banner ? 'rounded' : 'rounded-full'" />
-                    <span class="text-sm truncate" :class="isWinner(match, 2) ? 'font-bold text-foreground' : 'text-foreground'">
+                    <router-link v-if="match.team2_captain_id" :to="{ name: 'team-profile', params: { id: match.team2_captain_id } }" class="text-sm truncate hover:text-primary transition-colors" :class="isWinner(match, 2) ? 'font-bold text-foreground' : 'text-foreground'" @click.stop>
                       {{ teamName(match, 2) }}
-                    </span>
+                    </router-link>
+                    <span v-else class="text-sm truncate text-muted-foreground">{{ teamName(match, 2) }}</span>
                   </div>
                   <span class="text-sm font-bold ml-2" :class="isWinner(match, 2) ? 'text-primary' : 'text-muted-foreground'">
                     {{ score(match, 2) }}
@@ -163,9 +165,10 @@ function statusClass(match: any) {
                   :class="isWinner(match, 1) ? 'bg-primary/10' : ''">
                   <div class="flex items-center gap-2 min-w-0">
                     <img v-if="match.team1_banner || match.team1_avatar" :src="match.team1_banner || match.team1_avatar" class="w-5 h-5 object-cover" :class="match.team1_banner ? 'rounded' : 'rounded-full'" />
-                    <span class="text-sm truncate" :class="isWinner(match, 1) ? 'font-bold text-foreground' : 'text-foreground'">
+                    <router-link v-if="match.team1_captain_id" :to="{ name: 'team-profile', params: { id: match.team1_captain_id } }" class="text-sm truncate hover:text-primary transition-colors" :class="isWinner(match, 1) ? 'font-bold text-foreground' : 'text-foreground'" @click.stop>
                       {{ teamName(match, 1) }}
-                    </span>
+                    </router-link>
+                    <span v-else class="text-sm truncate text-muted-foreground">{{ teamName(match, 1) }}</span>
                   </div>
                   <span class="text-sm font-bold ml-2" :class="isWinner(match, 1) ? 'text-primary' : 'text-muted-foreground'">
                     {{ score(match, 1) }}
@@ -175,9 +178,10 @@ function statusClass(match: any) {
                   :class="isWinner(match, 2) ? 'bg-primary/10' : ''">
                   <div class="flex items-center gap-2 min-w-0">
                     <img v-if="match.team2_banner || match.team2_avatar" :src="match.team2_banner || match.team2_avatar" class="w-5 h-5 object-cover" :class="match.team2_banner ? 'rounded' : 'rounded-full'" />
-                    <span class="text-sm truncate" :class="isWinner(match, 2) ? 'font-bold text-foreground' : 'text-foreground'">
+                    <router-link v-if="match.team2_captain_id" :to="{ name: 'team-profile', params: { id: match.team2_captain_id } }" class="text-sm truncate hover:text-primary transition-colors" :class="isWinner(match, 2) ? 'font-bold text-foreground' : 'text-foreground'" @click.stop>
                       {{ teamName(match, 2) }}
-                    </span>
+                    </router-link>
+                    <span v-else class="text-sm truncate text-muted-foreground">{{ teamName(match, 2) }}</span>
                   </div>
                   <span class="text-sm font-bold ml-2" :class="isWinner(match, 2) ? 'text-primary' : 'text-muted-foreground'">
                     {{ score(match, 2) }}

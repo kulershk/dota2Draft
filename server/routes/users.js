@@ -179,6 +179,90 @@ router.get('/api/players/:id/profile', async (req, res) => {
   })
 })
 
+// Public team profile
+router.get('/api/teams/:captainId/profile', async (req, res) => {
+  const captainId = Number(req.params.captainId)
+  const captain = await queryOne(`
+    SELECT c.id, c.team, c.name, c.budget, c.mmr, c.competition_id, c.banner_url,
+           COALESCE(p.display_name, c.name) AS display_name, p.avatar_url, p.steam_id,
+           comp.name AS competition_name
+    FROM captains c
+    LEFT JOIN players p ON p.id = c.player_id
+    JOIN competitions comp ON comp.id = c.competition_id
+    WHERE c.id = $1
+  `, [captainId])
+  if (!captain) return res.status(404).json({ error: 'Team not found' })
+
+  // Roster (drafted players + captain themselves)
+  const roster = await query(`
+    SELECT cp.player_id, COALESCE(p.display_name, p.name) AS name, p.avatar_url, p.steam_id,
+           cp.mmr, cp.roles, cp.playing_role, cp.draft_price, cp.draft_round,
+           (cp.player_id = cap.player_id) AS is_captain
+    FROM competition_players cp
+    JOIN players p ON p.id = cp.player_id
+    JOIN captains cap ON cap.id = $1
+    WHERE cp.drafted_by = $1 OR (cap.player_id IS NOT NULL AND cp.player_id = cap.player_id AND cp.competition_id = cap.competition_id)
+    ORDER BY (cp.player_id = cap.player_id) DESC, cp.playing_role ASC NULLS LAST, p.name
+  `, [captainId])
+
+  // Matches
+  const matches = await query(`
+    SELECT m.id, m.stage, m.round, m.match_order, m.group_name, m.score1, m.score2,
+           m.best_of, m.status, m.winner_captain_id, m.scheduled_at, m.bracket,
+           m.team1_captain_id, m.team2_captain_id,
+           t1.team AS team1_name, COALESCE(p1.avatar_url, '') AS team1_avatar, t1.banner_url AS team1_banner,
+           t2.team AS team2_name, COALESCE(p2.avatar_url, '') AS team2_avatar, t2.banner_url AS team2_banner
+    FROM matches m
+    LEFT JOIN captains t1 ON t1.id = m.team1_captain_id
+    LEFT JOIN players p1 ON p1.id = t1.player_id
+    LEFT JOIN captains t2 ON t2.id = m.team2_captain_id
+    LEFT JOIN players p2 ON p2.id = t2.player_id
+    WHERE m.competition_id = $1 AND (m.team1_captain_id = $2 OR m.team2_captain_id = $2)
+      AND m.hidden = false
+    ORDER BY m.stage, m.round, m.match_order
+  `, [captain.competition_id, captainId])
+
+  // Win/loss stats
+  let wins = 0, losses = 0
+  for (const m of matches) {
+    if (m.status === 'completed' && m.winner_captain_id) {
+      if (m.winner_captain_id === captainId) wins++
+      else losses++
+    }
+  }
+
+  res.json({
+    id: captain.id,
+    team: captain.team,
+    captain_name: captain.display_name,
+    avatar_url: captain.avatar_url || '',
+    banner_url: captain.banner_url || '',
+    steam_id: captain.steam_id || null,
+    budget: captain.budget,
+    mmr: captain.mmr,
+    competition_id: captain.competition_id,
+    competition_name: captain.competition_name,
+    roster: roster.map(r => ({
+      player_id: r.player_id,
+      name: r.name,
+      avatar_url: r.avatar_url || '',
+      steam_id: r.steam_id || null,
+      mmr: r.mmr,
+      roles: JSON.parse(r.roles || '[]'),
+      is_captain: !!r.is_captain,
+      playing_role: r.playing_role,
+      draft_price: r.draft_price,
+      draft_round: r.draft_round,
+    })),
+    matches: matches.map(m => ({
+      ...m,
+      is_team1: m.team1_captain_id === captainId,
+      won: m.winner_captain_id === captainId,
+    })),
+    stats: { wins, losses },
+  })
+})
+
 router.put('/api/players/:id', async (req, res) => {
   const admin = await requirePermission(req, res, 'manage_users')
   if (!admin) return

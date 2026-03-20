@@ -88,7 +88,7 @@ function totalSpent(team: TeamResult) {
           <!-- Team info -->
           <div class="flex items-center justify-between flex-1 px-4 py-3 min-w-0">
             <div class="min-w-0">
-              <p class="text-sm font-semibold text-foreground truncate">{{ team.team }}</p>
+              <router-link :to="{ name: 'team-profile', params: { id: team.id } }" class="text-sm font-semibold text-foreground truncate block hover:text-primary transition-colors">{{ team.team }}</router-link>
               <p class="text-xs text-muted-foreground truncate">{{ t('captainLabel', { name: team.name }) }}</p>
             </div>
             <div class="flex items-center gap-4 shrink-0 ml-3">
