@@ -41,7 +41,7 @@ export async function saveMatchGameStats(matchGameId, matchData) {
         obs_placed, sen_placed, observer_kills, sentry_kills,
         camps_stacked, stuns, teamfight_participation,
         towers_killed, roshans_killed, firstblood_claimed,
-        rune_pickups, courier_kills, win, is_radiant, duration_seconds
+        rune_pickups, courier_kills, win, is_radiant, duration_seconds, lane_role
       ) VALUES (
         $1, $2, $3, $4,
         $5, $6, $7, $8, $9, $10, $11,
@@ -50,7 +50,7 @@ export async function saveMatchGameStats(matchGameId, matchData) {
         $19, $20, $21, $22,
         $23, $24, $25,
         $26, $27, $28,
-        $29, $30, $31, $32, $33
+        $29, $30, $31, $32, $33, $34
       ) ON CONFLICT (match_game_id, account_id) DO UPDATE SET
         player_name = $3, hero_id = $4,
         kills = $5, deaths = $6, assists = $7, last_hits = $8, denies = $9, gpm = $10, xpm = $11,
@@ -59,7 +59,7 @@ export async function saveMatchGameStats(matchGameId, matchData) {
         obs_placed = $19, sen_placed = $20, observer_kills = $21, sentry_kills = $22,
         camps_stacked = $23, stuns = $24, teamfight_participation = $25,
         towers_killed = $26, roshans_killed = $27, firstblood_claimed = $28,
-        rune_pickups = $29, courier_kills = $30, win = $31, is_radiant = $32, duration_seconds = $33
+        rune_pickups = $29, courier_kills = $30, win = $31, is_radiant = $32, duration_seconds = $33, lane_role = $34
     `, [
       matchGameId, p.account_id || 0, p.personaname || '', p.hero_id || 0,
       p.kills || 0, p.deaths || 0, p.assists || 0, p.last_hits || 0, p.denies || 0,
@@ -70,7 +70,7 @@ export async function saveMatchGameStats(matchGameId, matchData) {
       p.camps_stacked || 0, p.stuns || 0, p.teamfight_participation || 0,
       p.towers_killed || 0, p.roshans_killed || 0, p.firstblood_claimed || 0,
       p.rune_pickups || 0, p.courier_kills || 0,
-      p.win || 0, !!p.isRadiant, duration
+      p.win || 0, !!p.isRadiant, duration, p.lane_role ?? null
     ])
   }
 

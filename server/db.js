@@ -338,9 +338,13 @@ export async function initDb() {
       win INTEGER DEFAULT 0,
       is_radiant BOOLEAN DEFAULT FALSE,
       duration_seconds INTEGER DEFAULT 0,
+      lane_role INTEGER DEFAULT NULL,
       UNIQUE(match_game_id, account_id)
     )
   `)
+
+  // Add lane_role column if missing (existing databases)
+  try { await execute('ALTER TABLE match_game_player_stats ADD COLUMN lane_role INTEGER DEFAULT NULL') } catch {}
 
   // Fantasy league tables
   await execute(`
@@ -454,9 +458,13 @@ export async function initDb() {
       drafted_by INTEGER DEFAULT NULL REFERENCES captains(id) ON DELETE SET NULL,
       draft_price INTEGER DEFAULT NULL,
       draft_round INTEGER DEFAULT NULL,
+      playing_role INTEGER DEFAULT NULL,
       UNIQUE(competition_id, player_id)
     )
   `)
+
+  // Add playing_role column if missing (existing databases)
+  try { await execute('ALTER TABLE competition_players ADD COLUMN playing_role INTEGER DEFAULT NULL') } catch {}
 }
 
 async function createFreshCompetitionTables() {
@@ -487,6 +495,7 @@ async function createFreshCompetitionTables() {
       drafted_by INTEGER DEFAULT NULL REFERENCES captains(id) ON DELETE SET NULL,
       draft_price INTEGER DEFAULT NULL,
       draft_round INTEGER DEFAULT NULL,
+      playing_role INTEGER DEFAULT NULL,
       UNIQUE(competition_id, player_id)
     );
 
@@ -582,6 +591,7 @@ async function migrateToCompetitions() {
       drafted_by INTEGER DEFAULT NULL REFERENCES captains(id) ON DELETE SET NULL,
       draft_price INTEGER DEFAULT NULL,
       draft_round INTEGER DEFAULT NULL,
+      playing_role INTEGER DEFAULT NULL,
       UNIQUE(competition_id, player_id)
     )
   `)

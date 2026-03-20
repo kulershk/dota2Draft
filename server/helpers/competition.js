@@ -29,6 +29,7 @@ export function parseCompSettings(comp) {
     blindBidTimer: Number(s.blindBidTimer) || Number(s.bidTimer) || 30,
     autoFinish: s.autoFinish !== false,
     fantasyEnabled: !!s.fantasyEnabled,
+    fantasyEnforceRoles: !!s.fantasyEnforceRoles,
     fantasyScoring: s.fantasyScoring || getDefaultFantasyScoring(),
     fantasyRepeatPenalty: s.fantasyRepeatPenalty != null ? Number(s.fantasyRepeatPenalty) : 0.15,
     lobbyGameMode: Number(s.lobbyGameMode) || 2,
@@ -101,6 +102,7 @@ export async function getCompPlayers(compId) {
     is_admin: !!p.is_admin,
     is_captain: captainPlayerIds.includes(p.player_id),
     in_pool: !!p.in_pool,
+    playing_role: p.playing_role ?? null,
   }))
 }
 

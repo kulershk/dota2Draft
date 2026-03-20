@@ -176,6 +176,9 @@ export default {
     subtitle: 'Atjauniniet šī spēlētāja datus.',
     saveChanges: 'Saglabāt izmaiņas',
   },
+  playingRole: 'Spēles loma',
+  playingRoleNone: 'Nav piešķirta',
+  syncRoles: 'Sinhronizēt lomas',
   roleNames: {
     carry: 'Carry (Pos 1)',
     mid: 'Mid (Pos 2)',
@@ -667,6 +670,8 @@ export default {
   fantasyRule6: '6. Izvēloties to pašu spēlētāju kā iepriekšējā posmā, tiek piemērots -{pct}% sods šī spēlētāja punktiem.',
   repeatPenalty: 'Atkārtotas izvēles sods',
   repeatPenaltyHint: 'Spēlētāji, kas izvēlēti atkārtoti no iepriekšējā posma, saņem -{pct}% punktu. Iestatiet 0, lai atspējotu.',
+  fantasyEnforceRoles: 'Piespiest lomu izvēli',
+  fantasyEnforceRolesHint: 'Spēlētājus var izvēlēties tikai fantasy lomām, kas atbilst viņu piešķirtajai spēles lomai (pos 1-5).',
   repeatPenaltyLabel: 'Atkārtots no iepriekšējā posma (-{pct}%)',
   loginToPickFantasy: 'Piesakieties, lai veiktu fantasy izvēles.',
   noPlayersFound: 'Nav atrasts neviens spēlētājs.',

@@ -4,6 +4,7 @@ import { getAuthPlayer } from '../middleware/auth.js'
 import { requireCompPermission } from '../middleware/permissions.js'
 import { getCompetition, getCompPlayers } from '../helpers/competition.js'
 import { parseSteamIds, fetchSteamProfile } from '../helpers/steam.js'
+import { steamIdToAccountId } from '../helpers/fantasy.js'
 
 export default function createPlayersRouter(io) {
   const router = Router()
@@ -72,14 +73,15 @@ export default function createPlayersRouter(io) {
     )
     if (!cp) return res.status(404).json({ error: 'Player not in this competition' })
 
-    const { name, roles, mmr, info, is_admin } = req.body
+    const { name, roles, mmr, info, is_admin, playing_role } = req.body
 
     await execute(
-      'UPDATE competition_players SET roles = $1, mmr = $2, info = $3 WHERE id = $4',
+      'UPDATE competition_players SET roles = $1, mmr = $2, info = $3, playing_role = $4 WHERE id = $5',
       [
         roles ? JSON.stringify(roles) : cp.roles,
         mmr ?? cp.mmr,
         info ?? cp.info,
+        playing_role !== undefined ? (playing_role || null) : cp.playing_role,
         cp.id,
       ]
     )
@@ -214,6 +216,57 @@ export default function createPlayersRouter(io) {
 
     io.to(`comp:${compId}`).emit('players:updated', await getCompPlayers(compId))
     res.json({ steamId, name: player.name, avatarUrl: player.avatar_url, status: 'added', id: player.id })
+  })
+
+  // Sync playing_role from most recent match lane_role
+  router.post('/api/competitions/:compId/players/sync-roles', async (req, res) => {
+    const compId = Number(req.params.compId)
+    const admin = await requireCompPermission(req, res, compId, 'manage_players')
+    if (!admin) return
+
+    // Get all competition players with steam IDs
+    const players = await query(`
+      SELECT cp.player_id, p.steam_id
+      FROM competition_players cp
+      JOIN players p ON p.id = cp.player_id
+      WHERE cp.competition_id = $1 AND cp.in_pool = true
+    `, [compId])
+
+    // Get all match game IDs for this competition
+    const gameRows = await query(`
+      SELECT mg.id FROM match_games mg
+      JOIN matches m ON m.id = mg.match_id
+      WHERE m.competition_id = $1
+    `, [compId])
+    const gameIds = gameRows.map(r => r.id)
+
+    let updated = 0
+    if (gameIds.length > 0) {
+      for (const p of players) {
+        const accountId = steamIdToAccountId(p.steam_id)
+        if (!accountId) continue
+
+        // Get most recent lane_role for this player
+        const stat = await queryOne(`
+          SELECT lane_role FROM match_game_player_stats
+          WHERE account_id = $1 AND match_game_id = ANY($2) AND lane_role IS NOT NULL
+          ORDER BY match_game_id DESC LIMIT 1
+        `, [accountId, gameIds])
+
+        if (stat?.lane_role) {
+          // lane_role: 1=Safe, 2=Mid, 3=Off, 4=Jungle → playing_role 1-4
+          const playingRole = stat.lane_role
+          await execute(
+            'UPDATE competition_players SET playing_role = $1 WHERE competition_id = $2 AND player_id = $3',
+            [playingRole, compId, p.player_id]
+          )
+          updated++
+        }
+      }
+    }
+
+    io.to(`comp:${compId}`).emit('players:updated', await getCompPlayers(compId))
+    res.json({ ok: true, updated })
   })
 
   return router

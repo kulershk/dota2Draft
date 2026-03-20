@@ -5,6 +5,8 @@ import { requireCompPermission } from '../middleware/permissions.js'
 import { getCompetition, parseCompSettings } from '../helpers/competition.js'
 import { getStagePoints, getStageTopPicks } from '../helpers/fantasy.js'
 
+const FANTASY_ROLE_TO_PLAYING_ROLE = { carry: 1, mid: 2, offlane: 3, pos4: 4, pos5: 5 }
+
 export default function createFantasyRouter(io) {
   const router = Router()
 
@@ -85,7 +87,7 @@ export default function createFantasyRouter(io) {
         stage.participant_count = participantCounts[stage.id] || 0
       }
 
-      res.json({ stages, myPicks, myRepeats, repeatPenalty: settings.fantasyRepeatPenalty })
+      res.json({ stages, myPicks, myRepeats, repeatPenalty: settings.fantasyRepeatPenalty, enforceRoles: settings.fantasyEnforceRoles })
     } catch (e) {
       console.error('Fantasy GET error:', e.message)
       res.status(500).json({ error: 'Internal error' })
@@ -320,11 +322,25 @@ export default function createFantasyRouter(io) {
       }
 
       const compPlayers = await query(
-        'SELECT player_id FROM competition_players WHERE competition_id = $1 AND player_id = ANY($2)',
+        'SELECT player_id, playing_role FROM competition_players WHERE competition_id = $1 AND player_id = ANY($2)',
         [compId, pickPlayerIds]
       )
       if (compPlayers.length !== 5) {
         return res.status(400).json({ error: 'Some players do not belong to this competition' })
+      }
+
+      // Enforce role restrictions if enabled
+      const comp = await getCompetition(compId)
+      const settings = parseCompSettings(comp)
+      if (settings.fantasyEnforceRoles) {
+        const playerRoleMap = Object.fromEntries(compPlayers.map(p => [p.player_id, p.playing_role]))
+        for (const role of roles) {
+          const requiredRole = FANTASY_ROLE_TO_PLAYING_ROLE[role]
+          const playerRole = playerRoleMap[picks[role]]
+          if (playerRole !== requiredRole) {
+            return res.status(400).json({ error: `Player ${playerRole ? 'is pos ' + playerRole : 'has no role assigned'}, cannot be picked as ${role}` })
+          }
+        }
       }
 
       for (const role of roles) {
@@ -368,10 +384,20 @@ export default function createFantasyRouter(io) {
 
       // Verify player belongs to this competition
       const compPlayer = await queryOne(
-        'SELECT player_id FROM competition_players WHERE competition_id = $1 AND player_id = $2',
+        'SELECT player_id, playing_role FROM competition_players WHERE competition_id = $1 AND player_id = $2',
         [compId, playerId]
       )
       if (!compPlayer) return res.status(400).json({ error: 'Player not in this competition' })
+
+      // Enforce role restrictions if enabled
+      const comp = await getCompetition(compId)
+      const settings = parseCompSettings(comp)
+      if (settings.fantasyEnforceRoles) {
+        const requiredRole = FANTASY_ROLE_TO_PLAYING_ROLE[role]
+        if (compPlayer.playing_role !== requiredRole) {
+          return res.status(400).json({ error: `Player ${compPlayer.playing_role ? 'is pos ' + compPlayer.playing_role : 'has no role assigned'}, cannot be picked as ${role}` })
+        }
+      }
 
       // Check player isn't already picked for another role in this stage
       const existing = await queryOne(

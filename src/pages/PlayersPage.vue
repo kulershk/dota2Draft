@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { Users, UserPlus, Search, Pencil, Trash2, ExternalLink, LogIn, Shield } from 'lucide-vue-next'
+import { Users, UserPlus, Search, Pencil, Trash2, ExternalLink, LogIn, Shield, RefreshCw } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDraftStore } from '@/composables/useDraftStore'
+import { useApi } from '@/composables/useApi'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 import InputGroup from '@/components/common/InputGroup.vue'
 import RoleBadge from '@/components/common/RoleBadge.vue'
@@ -11,7 +12,22 @@ import { sortedRoles } from '@/utils/roles'
 
 const { t } = useI18n()
 const store = useDraftStore()
+const api = useApi()
 const showEditPlayer = ref(false)
+const syncingRoles = ref(false)
+
+async function syncRoles() {
+  const compId = store.currentCompetitionId.value
+  if (!compId) return
+  syncingRoles.value = true
+  try {
+    await api.syncPlayerRoles(compId)
+  } catch (e: any) {
+    console.error('Sync roles error:', e.message)
+  } finally {
+    syncingRoles.value = false
+  }
+}
 const showRegister = ref(false)
 const searchQuery = ref('')
 const activeRoleFilter = ref<string | null>(null)
@@ -96,7 +112,7 @@ async function submitRegistration() {
   }
 }
 
-const editPlayer = ref({ id: 0, name: '', roles: [] as string[], mmr: '', info: '' })
+const editPlayer = ref({ id: 0, name: '', roles: [] as string[], mmr: '', info: '', playing_role: null as number | null })
 
 const allRoles = ['Carry (Pos 1)', 'Mid (Pos 2)', 'Offlane (Pos 3)', 'Soft Support (Pos 4)', 'Hard Support (Pos 5)']
 const roleMap: Record<string, string> = {
@@ -132,6 +148,7 @@ function openEditPlayer(player: any) {
     roles: displayRoles,
     mmr: String(player.mmr),
     info: player.info || '',
+    playing_role: player.playing_role ?? null,
   }
   showEditPlayer.value = true
 }
@@ -143,6 +160,7 @@ async function savePlayer() {
     roles: [...new Set(editPlayer.value.roles.map(r => roleMap[r] || r))],
     mmr: Number(editPlayer.value.mmr) || 0,
     info: editPlayer.value.info,
+    playing_role: editPlayer.value.playing_role,
   })
   showEditPlayer.value = false
 }
@@ -219,6 +237,10 @@ watch(searchQuery, () => { playersPage.value = 1 })
             </button>
             <span v-else-if="registrationStatus" class="text-xs text-muted-foreground italic flex-shrink-0">{{ registrationStatus }}</span>
           </template>
+          <button v-if="store.isAdmin.value" class="btn-secondary text-sm flex-shrink-0" :disabled="syncingRoles" @click="syncRoles">
+            <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': syncingRoles }" />
+            <span class="hidden sm:inline">{{ t('syncRoles') }}</span>
+          </button>
         </div>
       </div>
 
@@ -259,8 +281,11 @@ watch(searchQuery, () => { playersPage.value = 1 })
           </div>
         </div>
         <!-- Roles -->
-        <div class="w-[120px] flex flex-wrap gap-1">
+        <div class="w-[120px] flex flex-wrap gap-1 items-center">
           <RoleBadge v-for="role in sortedRoles(player.roles)" :key="role" :role="role" />
+          <span v-if="player.playing_role" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-primary/15 text-primary border border-primary/25" :title="t('playingRole')">
+            P{{ player.playing_role }}
+          </span>
         </div>
         <!-- MMR -->
         <div class="w-20 text-right">
@@ -365,6 +390,17 @@ watch(searchQuery, () => { playersPage.value = 1 })
           </div>
         </div>
         <InputGroup label="MMR" :model-value="editPlayer.mmr" placeholder="e.g. 11000" @update:model-value="editPlayer.mmr = $event" />
+        <div class="flex flex-col gap-1.5">
+          <label class="label-text">{{ t('playingRole') }}</label>
+          <select class="input-field" :value="editPlayer.playing_role ?? ''" @change="editPlayer.playing_role = ($event.target as HTMLSelectElement).value ? Number(($event.target as HTMLSelectElement).value) : null">
+            <option value="">{{ t('playingRoleNone') }}</option>
+            <option :value="1">Pos 1 — Carry</option>
+            <option :value="2">Pos 2 — Mid</option>
+            <option :value="3">Pos 3 — Offlane</option>
+            <option :value="4">Pos 4 — Soft Support</option>
+            <option :value="5">Pos 5 — Hard Support</option>
+          </select>
+        </div>
         <div class="flex flex-col gap-1.5">
           <label class="label-text">Player Info</label>
           <textarea :value="editPlayer.info" maxlength="200" placeholder="Brief description, achievements, playstyle notes..." rows="3" class="textarea-field" @input="editPlayer.info = ($event.target as HTMLTextAreaElement).value" />

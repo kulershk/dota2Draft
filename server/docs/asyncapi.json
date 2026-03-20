@@ -21,7 +21,13 @@
             "properties": {
               "token": { "type": "string", "description": "Bearer session token" }
             }
-          }
+          },
+          "examples": [
+            {
+              "name": "Authenticate",
+              "payload": { "token": "abc123def456" }
+            }
+          ]
         }
       }
     },
@@ -44,7 +50,13 @@
             "properties": {
               "serverTime": { "type": "integer", "description": "Unix timestamp in ms" }
             }
-          }
+          },
+          "examples": [
+            {
+              "name": "Server time",
+              "payload": { "serverTime": 1710849600000 }
+            }
+          ]
         }
       }
     },
@@ -58,7 +70,13 @@
               "competitionId": { "type": "integer" }
             },
             "required": ["competitionId"]
-          }
+          },
+          "examples": [
+            {
+              "name": "Join competition 1",
+              "payload": { "competitionId": 1 }
+            }
+          ]
         }
       }
     },
@@ -83,7 +101,13 @@
             "type": "array",
             "items": { "type": "integer" },
             "description": "Array of captain IDs that are ready"
-          }
+          },
+          "examples": [
+            {
+              "name": "Two captains ready",
+              "payload": [3, 7]
+            }
+          ]
         }
       }
     },
@@ -99,7 +123,13 @@
               "gameNumber": { "type": "integer" }
             },
             "required": ["matchId", "gameNumber"]
-          }
+          },
+          "examples": [
+            {
+              "name": "Ready for game 1 of match 5",
+              "payload": { "matchId": 5, "gameNumber": 1 }
+            }
+          ]
         }
       }
     },
@@ -114,7 +144,13 @@
               "gameNumber": { "type": "integer" }
             },
             "required": ["matchId", "gameNumber"]
-          }
+          },
+          "examples": [
+            {
+              "name": "Unready for game 1 of match 5",
+              "payload": { "matchId": 5, "gameNumber": 1 }
+            }
+          ]
         }
       }
     },
@@ -129,7 +165,13 @@
               "gameNumber": { "type": "integer" }
             },
             "required": ["matchId", "gameNumber"]
-          }
+          },
+          "examples": [
+            {
+              "name": "Get ready state for game 2 of match 5",
+              "payload": { "matchId": 5, "gameNumber": 2 }
+            }
+          ]
         }
       }
     },
@@ -144,7 +186,13 @@
               "matchId": { "type": "integer" }
             },
             "required": ["matchId"]
-          }
+          },
+          "examples": [
+            {
+              "name": "Join match room",
+              "payload": { "matchId": 5 }
+            }
+          ]
         }
       }
     },
@@ -159,7 +207,13 @@
               "matchId": { "type": "integer" }
             },
             "required": ["matchId"]
-          }
+          },
+          "examples": [
+            {
+              "name": "Leave match room",
+              "payload": { "matchId": 5 }
+            }
+          ]
         }
       }
     },
@@ -177,7 +231,21 @@
               "lobbyCreated": { "type": "boolean" },
               "noBotAvailable": { "type": "boolean" }
             }
-          }
+          },
+          "examples": [
+            {
+              "name": "Both captains ready, lobby created",
+              "payload": { "matchId": 5, "gameNumber": 1, "readyCaptainIds": [3, 7], "lobbyCreated": true, "noBotAvailable": false }
+            },
+            {
+              "name": "One captain ready",
+              "payload": { "matchId": 5, "gameNumber": 1, "readyCaptainIds": [3], "lobbyCreated": false, "noBotAvailable": false }
+            },
+            {
+              "name": "Both ready but no bot",
+              "payload": { "matchId": 5, "gameNumber": 1, "readyCaptainIds": [3, 7], "lobbyCreated": false, "noBotAvailable": true }
+            }
+          ]
         }
       }
     },
@@ -188,7 +256,13 @@
           "payload": {
             "type": "array",
             "items": { "type": "integer" }
-          }
+          },
+          "examples": [
+            {
+              "name": "Three captains online",
+              "payload": [3, 7, 12]
+            }
+          ]
         }
       }
     },
@@ -212,7 +286,16 @@
                 "banner_url": { "type": "string", "nullable": true }
               }
             }
-          }
+          },
+          "examples": [
+            {
+              "name": "Two captains with updated budgets",
+              "payload": [
+                { "id": 3, "name": "Puppey", "team": "Secret", "budget": 850, "status": "active", "mmr": 9500, "player_id": 10, "avatar_url": "https://cdn.example.com/puppey.jpg", "banner_url": "https://cdn.example.com/secret.png" },
+                { "id": 7, "name": "N0tail", "team": "OG", "budget": 720, "status": "active", "mmr": 9200, "player_id": 15, "avatar_url": "https://cdn.example.com/notail.jpg", "banner_url": null }
+              ]
+            }
+          ]
         }
       }
     },
@@ -234,7 +317,16 @@
                 "draft_price": { "type": "integer", "nullable": true }
               }
             }
-          }
+          },
+          "examples": [
+            {
+              "name": "Player pool after a draft pick",
+              "payload": [
+                { "id": 20, "name": "Miracle-", "roles": ["carry", "mid"], "mmr": 11000, "drafted": true, "drafted_by": 3, "draft_price": 250 },
+                { "id": 21, "name": "GH", "roles": ["pos4"], "mmr": 9800, "drafted": false, "drafted_by": null, "draft_price": null }
+              ]
+            }
+          ]
         }
       }
     },
@@ -245,7 +337,13 @@
           "payload": {
             "type": "object",
             "description": "Full CompSettings object"
-          }
+          },
+          "examples": [
+            {
+              "name": "Settings with bid timer and budget",
+              "payload": { "startingBudget": 1000, "bidTimer": 15, "nomTimer": 30, "maxTeamSize": 5, "requireAllOnline": true, "blindBidding": false }
+            }
+          ]
         }
       }
     },
@@ -274,7 +372,17 @@
               "startingBid": { "type": "integer", "description": "Optional custom starting bid" }
             },
             "required": ["playerId"]
-          }
+          },
+          "examples": [
+            {
+              "name": "Nominate player with default bid",
+              "payload": { "playerId": 20 }
+            },
+            {
+              "name": "Nominate player with custom starting bid",
+              "payload": { "playerId": 20, "startingBid": 100 }
+            }
+          ]
         }
       }
     },
@@ -289,7 +397,13 @@
               "amount": { "type": "integer", "description": "Bid amount in gold" }
             },
             "required": ["amount"]
-          }
+          },
+          "examples": [
+            {
+              "name": "Place a bid of 150 gold",
+              "payload": { "amount": 150 }
+            }
+          ]
         }
       }
     },
@@ -304,7 +418,13 @@
               "amount": { "type": "integer", "description": "Blind bid amount in gold" }
             },
             "required": ["amount"]
-          }
+          },
+          "examples": [
+            {
+              "name": "Submit blind bid of 200 gold",
+              "payload": { "amount": 200 }
+            }
+          ]
         }
       }
     },
@@ -317,7 +437,13 @@
             "properties": {
               "amount": { "type": "integer" }
             }
-          }
+          },
+          "examples": [
+            {
+              "name": "Blind bid confirmed",
+              "payload": { "amount": 200 }
+            }
+          ]
         }
       }
     },
@@ -331,7 +457,13 @@
               "captainId": { "type": "integer", "description": "Captain ID to set as nominator" }
             },
             "required": ["captainId"]
-          }
+          },
+          "examples": [
+            {
+              "name": "Set captain 7 as nominator",
+              "payload": { "captainId": 7 }
+            }
+          ]
         }
       }
     },
@@ -398,7 +530,101 @@
               "players": { "type": "array" },
               "settings": { "type": "object" }
             }
-          }
+          },
+          "examples": [
+            {
+              "name": "Nominating phase — waiting for captain to pick a player",
+              "payload": {
+                "status": "nominating",
+                "currentRound": 2,
+                "totalRounds": 5,
+                "nominator": { "id": 3, "name": "Puppey", "team": "Secret" },
+                "nominatedPlayer": null,
+                "currentBid": 0,
+                "currentBidder": null,
+                "bidTimerEnd": null,
+                "bidHistory": [],
+                "blindPhase": false,
+                "blindBidCount": 0,
+                "topBidderIds": [],
+                "revealedBids": null,
+                "captains": [],
+                "players": [],
+                "settings": {}
+              }
+            },
+            {
+              "name": "Active bidding on a player",
+              "payload": {
+                "status": "bidding",
+                "currentRound": 2,
+                "totalRounds": 5,
+                "nominator": { "id": 3, "name": "Puppey", "team": "Secret" },
+                "nominatedPlayer": { "id": 20, "name": "Miracle-", "mmr": 11000 },
+                "currentBid": 180,
+                "currentBidder": { "id": 7, "name": "N0tail", "team": "OG" },
+                "bidTimerEnd": 1710849615000,
+                "bidHistory": [
+                  { "id": 1, "captain_id": 3, "captain_name": "Puppey", "amount": 100 },
+                  { "id": 2, "captain_id": 7, "captain_name": "N0tail", "amount": 150 },
+                  { "id": 3, "captain_id": 3, "captain_name": "Puppey", "amount": 180 }
+                ],
+                "blindPhase": false,
+                "blindBidCount": 0,
+                "topBidderIds": [],
+                "revealedBids": null,
+                "captains": [],
+                "players": [],
+                "settings": {}
+              }
+            },
+            {
+              "name": "Blind bidding phase — bids are sealed",
+              "payload": {
+                "status": "bidding",
+                "currentRound": 1,
+                "totalRounds": 5,
+                "nominator": { "id": 3, "name": "Puppey", "team": "Secret" },
+                "nominatedPlayer": { "id": 20, "name": "Miracle-", "mmr": 11000 },
+                "currentBid": 0,
+                "currentBidder": null,
+                "bidTimerEnd": 1710849630000,
+                "bidHistory": [],
+                "blindPhase": true,
+                "blindBidCount": 3,
+                "topBidderIds": [],
+                "revealedBids": null,
+                "captains": [],
+                "players": [],
+                "settings": {}
+              }
+            },
+            {
+              "name": "Blind bids revealed — open phase begins for top bidders",
+              "payload": {
+                "status": "bidding",
+                "currentRound": 1,
+                "totalRounds": 5,
+                "nominator": { "id": 3, "name": "Puppey", "team": "Secret" },
+                "nominatedPlayer": { "id": 20, "name": "Miracle-", "mmr": 11000 },
+                "currentBid": 250,
+                "currentBidder": { "id": 7, "name": "N0tail", "team": "OG" },
+                "bidTimerEnd": 1710849645000,
+                "bidHistory": [],
+                "blindPhase": false,
+                "blindBidCount": 0,
+                "topBidderIds": [3, 7],
+                "revealedBids": [
+                  { "captainId": 7, "captainName": "N0tail", "amount": 250, "qualified": true },
+                  { "captainId": 3, "captainName": "Puppey", "amount": 240, "qualified": true },
+                  { "captainId": 12, "captainName": "Kuroky", "amount": 100, "qualified": false }
+                ],
+                "captains": [],
+                "players": [],
+                "settings": {}
+              }
+            }
+          ]
         }
       }
     },
@@ -411,7 +637,13 @@
             "properties": {
               "bidTimerEnd": { "type": "integer", "description": "Unix timestamp ms" }
             }
-          }
+          },
+          "examples": [
+            {
+              "name": "Timer reset after new bid",
+              "payload": { "bidTimerEnd": 1710849615000 }
+            }
+          ]
         }
       }
     },
@@ -426,7 +658,13 @@
               "captainName": { "type": "string" },
               "amount": { "type": "integer" }
             }
-          }
+          },
+          "examples": [
+            {
+              "name": "Player sold",
+              "payload": { "playerName": "Miracle-", "captainName": "Puppey", "amount": 250 }
+            }
+          ]
         }
       }
     },
@@ -439,7 +677,13 @@
             "properties": {
               "results": { "type": "string" }
             }
-          }
+          },
+          "examples": [
+            {
+              "name": "Draft finished",
+              "payload": { "results": "Draft completed successfully" }
+            }
+          ]
         }
       }
     },
@@ -452,7 +696,13 @@
             "properties": {
               "message": { "type": "string" }
             }
-          }
+          },
+          "examples": [
+            {
+              "name": "Last sale reverted",
+              "payload": { "message": "Reverted sale of Miracle- to Secret for 250g" }
+            }
+          ]
         }
       }
     },
@@ -466,7 +716,29 @@
               "type": { "type": "string", "enum": ["start", "nomination", "bid", "sold", "pause", "resume", "undo", "end", "info"] },
               "message": { "type": "string" }
             }
-          }
+          },
+          "examples": [
+            {
+              "name": "Draft started",
+              "payload": { "type": "start", "message": "Draft started" }
+            },
+            {
+              "name": "Player nominated",
+              "payload": { "type": "nomination", "message": "Puppey nominated Miracle- (starting bid: 100g)" }
+            },
+            {
+              "name": "Bid placed",
+              "payload": { "type": "bid", "message": "N0tail bid 150g on Miracle-" }
+            },
+            {
+              "name": "Player sold",
+              "payload": { "type": "sold", "message": "Miracle- sold to Secret for 250g" }
+            },
+            {
+              "name": "Auction paused",
+              "payload": { "type": "pause", "message": "Auction paused by admin" }
+            }
+          ]
         }
       }
     },
@@ -484,7 +756,17 @@
                 "time": { "type": "integer" }
               }
             }
-          }
+          },
+          "examples": [
+            {
+              "name": "Log history with 3 entries",
+              "payload": [
+                { "type": "start", "message": "Draft started", "time": 1710849000000 },
+                { "type": "nomination", "message": "Puppey nominated Miracle-", "time": 1710849010000 },
+                { "type": "sold", "message": "Miracle- sold to Secret for 250g", "time": 1710849060000 }
+              ]
+            }
+          ]
         }
       }
     },
@@ -497,7 +779,17 @@
             "properties": {
               "message": { "type": "string" }
             }
-          }
+          },
+          "examples": [
+            {
+              "name": "Insufficient budget",
+              "payload": { "message": "Not enough budget to bid 500g (remaining: 350g)" }
+            },
+            {
+              "name": "Not your turn",
+              "payload": { "message": "It is not your turn to nominate" }
+            }
+          ]
         }
       }
     },
@@ -522,7 +814,13 @@
             "properties": {
               "newsId": { "type": "integer" }
             }
-          }
+          },
+          "examples": [
+            {
+              "name": "New comment on news post 42",
+              "payload": { "newsId": 42 }
+            }
+          ]
         }
       }
     }

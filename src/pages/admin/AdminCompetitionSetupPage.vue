@@ -59,6 +59,7 @@ const localSettings = reactive({
   blindBidTimer: 30,
   autoFinish: true,
   fantasyEnabled: false,
+  fantasyEnforceRoles: false,
   fantasyScoring: getDefaultFantasyScoring(),
   fantasyRepeatPenalty: 0.15,
   lobbyGameMode: 2,
@@ -656,6 +657,11 @@ async function deleteStream(id: number) {
             <span class="text-xs text-muted-foreground flex-1">{{ t('repeatPenaltyHint', { pct: Math.round((localSettings.fantasyRepeatPenalty || 0) * 100) }) }}</span>
           </div>
         </div>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" class="w-4 h-4 accent-primary" v-model="localSettings.fantasyEnforceRoles" />
+          <span class="text-sm text-foreground">{{ t('fantasyEnforceRoles') }}</span>
+        </label>
+        <span class="text-xs text-muted-foreground -mt-2">{{ t('fantasyEnforceRolesHint') }}</span>
         <div class="flex items-center justify-between">
           <button class="text-xs text-primary hover:underline" @click="showFantasyScoring = !showFantasyScoring">
             {{ showFantasyScoring ? t('hideMultipliers') : t('showMultipliers') }}

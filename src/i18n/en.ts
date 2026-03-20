@@ -176,6 +176,9 @@ export default {
     subtitle: "Update this player's details.",
     saveChanges: 'Save Changes',
   },
+  playingRole: 'Playing Role',
+  playingRoleNone: 'Not assigned',
+  syncRoles: 'Sync Roles',
   roleNames: {
     carry: 'Carry (Pos 1)',
     mid: 'Mid (Pos 2)',
@@ -669,6 +672,8 @@ export default {
   fantasyRule6: '6. Picking the same player as the previous stage applies a -{pct}% penalty to that player\'s points.',
   repeatPenalty: 'Repeat Pick Penalty',
   repeatPenaltyHint: 'Players picked again from previous stage get -{pct}% points. Set to 0 to disable.',
+  fantasyEnforceRoles: 'Enforce Role Picking',
+  fantasyEnforceRolesHint: 'Players can only be picked for fantasy roles matching their assigned playing role (pos 1-5).',
   repeatPenaltyLabel: 'Repeat from last stage (-{pct}%)',
   loginToPickFantasy: 'Log in to make your fantasy picks.',
   noPlayersFound: 'No players found.',

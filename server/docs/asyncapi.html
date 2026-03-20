@@ -2,19 +2,184 @@
 <html>
 <head>
   <title>Dota 2 Draft — Socket.io Events</title>
-  <link rel="stylesheet" href="https://unpkg.com/@asyncapi/react-component@1/styles/default.min.css">
   <style>
-    body { margin: 0; padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #c9d1d9; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #c9d1d9; padding: 0; }
+    a { color: #58a6ff; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .layout { display: flex; min-height: 100vh; }
+    .sidebar { width: 280px; background: #161b22; border-right: 1px solid #30363d; padding: 20px 0; position: fixed; top: 0; left: 0; bottom: 0; overflow-y: auto; }
+    .sidebar h2 { font-size: 14px; color: #8b949e; text-transform: uppercase; letter-spacing: 1px; padding: 8px 20px; margin-top: 16px; }
+    .sidebar h2:first-child { margin-top: 0; }
+    .sidebar a { display: block; padding: 6px 20px; font-size: 13px; color: #c9d1d9; transition: background 0.15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sidebar a:hover { background: #21262d; text-decoration: none; }
+    .sidebar a.pub { border-left: 3px solid #3fb950; padding-left: 17px; }
+    .sidebar a.sub { border-left: 3px solid #58a6ff; padding-left: 17px; }
+    .sidebar .title { padding: 16px 20px 12px; font-size: 16px; font-weight: 700; color: #f0f6fc; border-bottom: 1px solid #30363d; margin-bottom: 8px; }
+
+    .content { margin-left: 280px; padding: 32px 48px; max-width: 960px; flex: 1; }
+    .content h1 { font-size: 28px; font-weight: 700; color: #f0f6fc; margin-bottom: 8px; }
+    .content .desc { color: #8b949e; font-size: 14px; margin-bottom: 32px; line-height: 1.5; }
+
+    .channel { margin-bottom: 32px; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; }
+    .channel-header { padding: 14px 20px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #30363d; background: #161b22; }
+    .channel-name { font-size: 16px; font-weight: 600; color: #f0f6fc; font-family: 'SFMono-Regular', Consolas, monospace; }
+    .badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .badge-pub { background: #238636; color: #fff; }
+    .badge-sub { background: #1f6feb; color: #fff; }
+    .channel-summary { font-size: 13px; color: #8b949e; margin-left: auto; }
+
+    .channel-body { padding: 16px 20px; }
+    .channel-desc { font-size: 13px; color: #8b949e; margin-bottom: 12px; line-height: 1.5; }
+
+    .section-label { font-size: 11px; font-weight: 600; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; margin-top: 16px; }
+    .section-label:first-child { margin-top: 0; }
+
+    .props-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .props-table th { text-align: left; padding: 8px 12px; background: #161b22; color: #8b949e; font-weight: 600; border-bottom: 1px solid #30363d; }
+    .props-table td { padding: 8px 12px; border-bottom: 1px solid #21262d; vertical-align: top; }
+    .props-table tr:last-child td { border-bottom: none; }
+    .prop-name { font-family: 'SFMono-Regular', Consolas, monospace; color: #79c0ff; font-size: 12px; }
+    .prop-type { font-family: 'SFMono-Regular', Consolas, monospace; color: #d2a8ff; font-size: 11px; }
+    .prop-desc { color: #8b949e; }
+    .prop-required { color: #f85149; font-size: 10px; font-weight: 600; }
+    .prop-enum { font-family: 'SFMono-Regular', Consolas, monospace; color: #ffa657; font-size: 11px; }
+
+    .example-block { margin-top: 12px; }
+    .example-name { font-size: 12px; font-weight: 600; color: #8b949e; margin-bottom: 4px; }
+    .example-code { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 12px 16px; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 12px; color: #c9d1d9; overflow-x: auto; white-space: pre; line-height: 1.5; margin-bottom: 8px; }
+
+    .null-payload { font-size: 13px; color: #484f58; font-style: italic; }
+
+    .divider { height: 1px; background: #21262d; margin: 12px 0; }
+
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .content { margin-left: 0; padding: 20px; }
+    }
   </style>
 </head>
 <body>
-  <div id="asyncapi"></div>
-  <script src="https://unpkg.com/@asyncapi/react-component@1/browser/standalone/index.js"></script>
+  <div class="layout">
+    <nav class="sidebar" id="sidebar"></nav>
+    <main class="content" id="content"></main>
+  </div>
   <script>
-    AsyncApiStandalone.render({
-      schema: { url: '/api/docs/asyncapi.json' },
-      config: { show: { sidebar: true } }
-    }, document.getElementById('asyncapi'));
+    fetch('/api/docs/asyncapi.json')
+      .then(r => r.json())
+      .then(spec => render(spec))
+      .catch(e => {
+        document.getElementById('content').innerHTML = '<h1>Error loading spec</h1><p>' + e.message + '</p>';
+      });
+
+    function render(spec) {
+      const sidebar = document.getElementById('sidebar');
+      const content = document.getElementById('content');
+      const channels = spec.channels || {};
+
+      // Header
+      content.innerHTML = '<h1>' + esc(spec.info.title) + '</h1>' +
+        '<p class="desc">' + esc(spec.info.description || '') + '</p>';
+
+      // Sidebar title
+      sidebar.innerHTML = '<div class="title">' + esc(spec.info.title) + '</div>';
+
+      // Group channels
+      const groups = {};
+      for (const [name] of Object.entries(channels)) {
+        const prefix = name.split(':')[0];
+        if (!groups[prefix]) groups[prefix] = [];
+        groups[prefix].push(name);
+      }
+
+      for (const [group, names] of Object.entries(groups)) {
+        sidebar.innerHTML += '<h2>' + esc(group) + '</h2>';
+        for (const name of names) {
+          const ch = channels[name];
+          const dir = ch.publish ? 'pub' : 'sub';
+          sidebar.innerHTML += '<a href="#' + esc(name) + '" class="' + dir + '">' + esc(name) + '</a>';
+        }
+      }
+
+      // Render channels
+      for (const [name, ch] of Object.entries(channels)) {
+        const ops = [];
+        if (ch.publish) ops.push({ dir: 'publish', label: 'Client → Server', badge: 'pub', op: ch.publish });
+        if (ch.subscribe) ops.push({ dir: 'subscribe', label: 'Server → Client', badge: 'sub', op: ch.subscribe });
+
+        for (const { dir, label, badge, op } of ops) {
+          let html = '<div class="channel" id="' + esc(name) + '">';
+          html += '<div class="channel-header">';
+          html += '<span class="badge badge-' + badge + '">' + label + '</span>';
+          html += '<span class="channel-name">' + esc(name) + '</span>';
+          html += '<span class="channel-summary">' + esc(op.summary || '') + '</span>';
+          html += '</div>';
+          html += '<div class="channel-body">';
+
+          if (op.description) {
+            html += '<p class="channel-desc">' + esc(op.description) + '</p>';
+          }
+
+          const msg = op.message;
+          if (msg) {
+            const payload = msg.payload;
+
+            if (!payload || payload.type === 'null') {
+              html += '<p class="null-payload">No payload</p>';
+            } else if (payload.type === 'object' && payload.properties) {
+              html += '<div class="section-label">Payload</div>';
+              html += renderPropsTable(payload);
+            } else if (payload.type === 'array') {
+              html += '<div class="section-label">Payload (array)</div>';
+              if (payload.items?.type === 'object' && payload.items.properties) {
+                html += renderPropsTable(payload.items);
+              } else if (payload.items) {
+                html += '<p style="font-size:13px;color:#8b949e;">Array of <code style="color:#d2a8ff;">' + esc(payload.items.type || 'any') + '</code></p>';
+              }
+              if (payload.description) {
+                html += '<p style="font-size:13px;color:#8b949e;margin-top:4px;">' + esc(payload.description) + '</p>';
+              }
+            }
+
+            // Examples
+            if (msg.examples && msg.examples.length > 0) {
+              html += '<div class="section-label">Examples</div>';
+              for (const ex of msg.examples) {
+                html += '<div class="example-block">';
+                if (ex.name) html += '<div class="example-name">' + esc(ex.name) + '</div>';
+                html += '<div class="example-code">' + esc(JSON.stringify(ex.payload, null, 2)) + '</div>';
+                html += '</div>';
+              }
+            }
+          }
+
+          html += '</div></div>';
+          content.innerHTML += html;
+        }
+      }
+    }
+
+    function renderPropsTable(schema) {
+      const required = schema.required || [];
+      let html = '<table class="props-table"><thead><tr><th>Property</th><th>Type</th><th>Description</th></tr></thead><tbody>';
+      for (const [prop, def] of Object.entries(schema.properties)) {
+        const d = def;
+        let type = d.type || 'any';
+        if (d.type === 'array' && d.items) type = d.items.type + '[]';
+        if (d.nullable) type += ' | null';
+        let desc = d.description || '';
+        if (d.enum) desc += (desc ? ' ' : '') + '<span class="prop-enum">' + d.enum.map(e => esc(String(e))).join(' | ') + '</span>';
+        const req = required.includes(prop) ? ' <span class="prop-required">required</span>' : '';
+        html += '<tr><td><span class="prop-name">' + esc(prop) + '</span>' + req + '</td>';
+        html += '<td><span class="prop-type">' + esc(type) + '</span></td>';
+        html += '<td class="prop-desc">' + desc + '</td></tr>';
+      }
+      html += '</tbody></table>';
+      return html;
+    }
+
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
   </script>
 </body>
 </html>

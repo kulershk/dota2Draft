@@ -51,9 +51,15 @@ app.use('/uploads', express.static(uploadsDir))
 
 // API Docs
 const openApiSpec = JSON.parse(readFileSync(join(__dirname, 'docs', 'openapi.json'), 'utf-8'))
-const asyncApiSpec = JSON.parse(readFileSync(join(__dirname, 'docs', 'asyncapi.json'), 'utf-8'))
 app.get('/api/docs/openapi.json', (req, res) => res.json(openApiSpec))
-app.get('/api/docs/asyncapi.json', (req, res) => res.json(asyncApiSpec))
+app.get('/api/docs/asyncapi.json', (req, res) => {
+  try {
+    const spec = JSON.parse(readFileSync(join(__dirname, 'docs', 'asyncapi.json'), 'utf-8'))
+    res.json(spec)
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to load AsyncAPI spec' })
+  }
+})
 app.get('/api/docs/socket', (req, res) => res.sendFile(join(__dirname, 'docs', 'asyncapi.html')))
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openApiSpec, { customSiteTitle: 'Dota 2 Draft — REST API Docs' }))
 

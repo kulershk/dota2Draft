@@ -48,6 +48,8 @@ export function useApi() {
       request(`/api/competitions/${compId}/players/${playerId}`, { method: 'PUT', body: JSON.stringify(data) }),
     deleteCompPlayer: (compId: number, playerId: number) =>
       request(`/api/competitions/${compId}/players/${playerId}`, { method: 'DELETE' }),
+    syncPlayerRoles: (compId: number) =>
+      request(`/api/competitions/${compId}/players/sync-roles`, { method: 'POST' }),
 
     // Competition Captains
     getCompCaptains: (compId: number) => request(`/api/competitions/${compId}/captains`),

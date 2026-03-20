@@ -340,6 +340,16 @@
         "responses": { "200": { "description": "Player list", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Player" } } } } } }
       }
     },
+    "/api/competitions/{compId}/players/sync-roles": {
+      "post": {
+        "tags": ["Players"],
+        "summary": "Sync playing roles from match stats",
+        "description": "Sets each player's playing_role based on their most recent lane_role from OpenDota match stats. Safe lane players with low GPM are assigned pos 5 (support), others pos 1 (carry). Requires manage_players permission.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Roles synced", "content": { "application/json": { "schema": { "type": "object", "properties": { "ok": { "type": "boolean" }, "updated": { "type": "integer" } } } } } } }
+      }
+    },
     "/api/competitions/{compId}/players/register": {
       "post": {
         "tags": ["Players"],
@@ -616,7 +626,7 @@
         "tags": ["Fantasy"],
         "summary": "Save fantasy picks for a stage",
         "security": [{ "bearerAuth": [] }],
-        "description": "Save user's player picks for each role. Stage must be in 'pending' status. All 5 roles required, no duplicate players.",
+        "description": "Save user's player picks for each role. Stage must be in 'pending' status. All 5 roles required, no duplicate players. If fantasyEnforceRoles is enabled, players can only be picked for roles matching their playing_role.",
         "parameters": [
           { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
           { "name": "stageId", "in": "path", "required": true, "schema": { "type": "integer" } }

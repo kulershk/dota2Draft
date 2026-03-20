@@ -176,6 +176,9 @@ export default {
     subtitle: 'Обновите данные этого игрока.',
     saveChanges: 'Сохранить изменения',
   },
+  playingRole: 'Игровая роль',
+  playingRoleNone: 'Не назначена',
+  syncRoles: 'Синхронизировать роли',
   roleNames: {
     carry: 'Carry (Pos 1)',
     mid: 'Mid (Pos 2)',
@@ -667,6 +670,8 @@ export default {
   fantasyRule6: '6. Выбор того же игрока, что и на предыдущем этапе, применяет штраф -{pct}% к очкам этого игрока.',
   repeatPenalty: 'Штраф за повторный выбор',
   repeatPenaltyHint: 'Игроки, выбранные повторно с предыдущего этапа, получают -{pct}% очков. Установите 0, чтобы отключить.',
+  fantasyEnforceRoles: 'Принудительный выбор ролей',
+  fantasyEnforceRolesHint: 'Игроков можно выбирать только на fantasy роли, соответствующие их назначенной игровой роли (pos 1-5).',
   repeatPenaltyLabel: 'Повтор с прошлого этапа (-{pct}%)',
   loginToPickFantasy: 'Войдите, чтобы сделать свои fantasy выборы.',
   noPlayersFound: 'Игроки не найдены.',

@@ -215,13 +215,19 @@ function openPick(stageId: number, role: string) {
   showPickModal.value = true
 }
 
+const FANTASY_ROLE_TO_POS: Record<string, number> = { carry: 1, mid: 2, offlane: 3, pos4: 4, pos5: 5 }
+
 const filteredTeamGroups = computed(() => {
   const q = pickSearch.value.toLowerCase()
+  const enforce = store.fantasyData.value.enforceRoles
+  const requiredPos = enforce ? FANTASY_ROLE_TO_POS[pickRole.value] : null
   const result: { captain: any; players: any[] }[] = []
   for (const group of teamGroupedPlayers.value) {
     const filtered = group.players.filter((p: any) => {
       const name = (p.name || '').toLowerCase()
-      return name.includes(q)
+      if (!name.includes(q)) return false
+      if (requiredPos && p.playing_role !== requiredPos) return false
+      return true
     })
     if (filtered.length > 0) {
       result.push({ captain: group.captain, players: filtered })

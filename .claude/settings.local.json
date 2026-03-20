@@ -62,7 +62,8 @@
       "Read(//c/Users/kuler/Desktop/Stuff/draft/lobbybot/**)",
       "Bash(2)",
       "Bash(go build:*)",
-      "Bash(find /c/Users/kuler/Desktop/Stuff/draft/lobbybot -type f -name \"*.go\" -exec wc -l {} +)"
+      "Bash(find /c/Users/kuler/Desktop/Stuff/draft/lobbybot -type f -name \"*.go\" -exec wc -l {} +)",
+      "WebFetch(domain:unpkg.com)"
     ]
   }
 }

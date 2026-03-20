@@ -176,6 +176,9 @@ export default {
     subtitle: 'Atnaujinkite šio žaidėjo duomenis.',
     saveChanges: 'Išsaugoti pakeitimus',
   },
+  playingRole: 'Žaidimo rolė',
+  playingRoleNone: 'Nepriskirta',
+  syncRoles: 'Sinchronizuoti roles',
   roleNames: {
     carry: 'Carry (Pos 1)',
     mid: 'Mid (Pos 2)',
@@ -667,6 +670,8 @@ export default {
   fantasyRule6: '6. Pasirinkus tą patį žaidėją kaip ankstesniame etape, taikomas -{pct}% baudos taškas.',
   repeatPenalty: 'Pakartotinio pasirinkimo bauda',
   repeatPenaltyHint: 'Žaidėjai, pasirinkti pakartotinai iš ankstesnio etapo, gauna -{pct}% taškų. Nustatykite 0, kad išjungtumėte.',
+  fantasyEnforceRoles: 'Priverstinis rolių pasirinkimas',
+  fantasyEnforceRolesHint: 'Žaidėjus galima pasirinkti tik fantasy rolėms, atitinkančioms jų priskirtą žaidimo rolę (pos 1-5).',
   repeatPenaltyLabel: 'Pakartotinis iš ankstesnio etapo (-{pct}%)',
   loginToPickFantasy: 'Prisijunkite, kad galėtumėte daryti fantasy pasirinkimus.',
   noPlayersFound: 'Nerasta jokių žaidėjų.',
