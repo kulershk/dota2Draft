@@ -3,7 +3,7 @@ import { query, queryOne, execute } from '../db.js'
 import { createSession } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/permissions.js'
 import { fetchSteamProfile, fetchSteamProfiles, parseSteamIds } from '../helpers/steam.js'
-import { socketPlayers } from '../socket/state.js'
+import { socketPlayers, getOnlinePlayerIds, getPlayerActivities } from '../socket/state.js'
 
 const router = Router()
 
@@ -23,6 +23,8 @@ router.get('/api/users', async (req, res) => {
     if (!groupsByPlayer[m.player_id]) groupsByPlayer[m.player_id] = []
     groupsByPlayer[m.player_id].push({ id: m.group_id, name: m.group_name })
   }
+  const onlineIds = new Set(getOnlinePlayerIds())
+  const activities = getPlayerActivities()
   res.json(rows.map(p => ({
     id: p.id,
     name: p.display_name || p.name,
@@ -40,6 +42,8 @@ router.get('/api/users', async (req, res) => {
     last_online: p.last_online || null,
     steam_synced_at: p.steam_synced_at || null,
     permission_groups: groupsByPlayer[p.id] || [],
+    online: onlineIds.has(p.id),
+    activity: activities[p.id] || null,
   })))
 })
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Users, Search, ExternalLink, Ban, CheckCircle, LogIn, UserPlus, Pencil, ArrowUp, ArrowDown, Upload, RefreshCw } from 'lucide-vue-next'
 import RoleBadge from '@/components/common/RoleBadge.vue'
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
@@ -38,6 +38,34 @@ interface User {
   created_at: string
   last_online: string | null
   permission_groups: PermGroupRef[]
+  online: boolean
+  activity: { page: string; path: string; timestamp: number } | null
+}
+
+const pageLabels: Record<string, string> = {
+  'home': 'Home',
+  'competitions': 'Competitions',
+  'news': 'All News',
+  'news-post': 'Reading News',
+  'how-it-works': 'How It Works',
+  'settings': 'Settings',
+  'player-profile': 'Player Profile',
+  'team-profile': 'Team Profile',
+  'comp-info': 'Competition Info',
+  'comp-players': 'Players',
+  'comp-auction': 'Live Auction',
+  'comp-results': 'Teams',
+  'comp-tournament': 'Tournament',
+  'comp-matches': 'Matches',
+  'comp-fantasy': 'Fantasy',
+  'comp-rules': 'Rules',
+  'comp-match': 'Match Room',
+}
+
+function getActivityLabel(user: User): string {
+  if (!user.online) return ''
+  if (!user.activity) return 'Online'
+  return pageLabels[user.activity.page] || user.activity.path || 'Online'
 }
 
 const users = ref<User[]>([])
@@ -74,6 +102,18 @@ async function fetchUsers() {
 }
 fetchUsers()
 fetchSyncStatus()
+
+// Auto-refresh user activity every 30 seconds
+let activityInterval: ReturnType<typeof setInterval> | null = null
+onMounted(() => {
+  activityInterval = setInterval(async () => {
+    try {
+      const usrs = await api.getUsers()
+      users.value = usrs
+    } catch {}
+  }, 30000)
+})
+onUnmounted(() => { if (activityInterval) clearInterval(activityInterval) })
 
 async function openEditUser(user: User) {
   editUser.value = user
@@ -457,7 +497,13 @@ function formatRelativeTime(dateStr: string | null) {
                   >{{ pg.name }}</span>
                 </div>
               </td>
-              <td class="px-4 py-3 text-muted-foreground text-xs">{{ formatRelativeTime(user.last_online) }}</td>
+              <td class="px-4 py-3">
+                <div v-if="user.online" class="flex items-center gap-1.5">
+                  <span class="w-2 h-2 rounded-full bg-green-500 shrink-0 animate-pulse"></span>
+                  <span class="text-xs text-green-500 font-medium">{{ getActivityLabel(user) }}</span>
+                </div>
+                <span v-else class="text-xs text-muted-foreground">{{ formatRelativeTime(user.last_online) }}</span>
+              </td>
               <td class="px-4 py-3 text-muted-foreground text-xs">{{ formatDate(user.created_at) }}</td>
               <td class="px-4 py-3">
                 <div class="flex items-center gap-1">

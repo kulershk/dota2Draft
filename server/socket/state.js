@@ -4,6 +4,7 @@ import { hasPermission } from '../middleware/permissions.js'
 // Per-competition state maps
 export const socketPlayers = new Map()       // socketId -> playerId
 export const socketCompetitions = new Map()  // socketId -> compId
+export const playerActivity = new Map()      // playerId -> { page, path, timestamp }
 export const compOnlineCaptains = new Map()  // compId -> Map<socketId, captainId>
 export const compReadyCaptains = new Map()   // compId -> Set<captainId>
 export const compBidTimers = new Map()       // compId -> timeout
@@ -86,6 +87,14 @@ export function setLaunchCaptainUnready(matchId, gameNumber, captainId) {
 export function clearLaunchReady(matchId, gameNumber) {
   const key = getMatchReadyKey(matchId, gameNumber)
   matchLaunchReadyCaptains.delete(key)
+}
+
+export function getOnlinePlayerIds() {
+  return [...new Set(socketPlayers.values())]
+}
+
+export function getPlayerActivities() {
+  return Object.fromEntries(playerActivity)
 }
 
 export function clearCompBidTimer(compId) {

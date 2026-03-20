@@ -8,6 +8,7 @@ import { useApi } from '@/composables/useApi'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 import InputGroup from '@/components/common/InputGroup.vue'
 import { setLocale } from '@/i18n'
+import { getSocket } from '@/composables/useSocket'
 
 const { t, locale } = useI18n()
 const route = useRoute()
@@ -110,7 +111,12 @@ const mainRef = ref<HTMLElement | null>(null)
 
 watch(() => route.path, () => {
   if (mainRef.value) mainRef.value.scrollTop = 0
-})
+  // Track activity for admin panel
+  try {
+    const pageName = String(route.name || route.path)
+    getSocket().emit('activity', { page: pageName, path: route.path })
+  } catch {}
+}, { immediate: true })
 
 const mobileMenuOpen = ref(false)
 

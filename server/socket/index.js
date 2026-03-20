@@ -3,7 +3,7 @@ import { getSessionPlayerId } from '../middleware/auth.js'
 import { getFullAuctionState, getAuctionLog, getCaptains } from '../helpers/competition.js'
 import {
   socketPlayers, socketCompetitions, compOnlineCaptains, compReadyCaptains,
-  getOnlineCaptainIds, getReadyCaptainIds,
+  getOnlineCaptainIds, getReadyCaptainIds, playerActivity,
 } from './state.js'
 import { registerAuctionHandlers } from './auction.js'
 import { registerMatchReadyHandlers } from './matchReady.js'
@@ -38,7 +38,21 @@ export function initSocket(io) {
       if (pid) execute('UPDATE players SET last_online = NOW() WHERE id = $1', [pid]).catch(() => {})
     }, 60 * 1000) // every 1 minute
 
-    socket.on('disconnect', () => { clearInterval(heartbeat) })
+    // Track user activity (page navigation)
+    socket.on('activity', ({ page, path }) => {
+      const pid = socketPlayers.get(socket.id)
+      if (pid) playerActivity.set(pid, { page: page || '', path: path || '', timestamp: Date.now() })
+    })
+
+    socket.on('disconnect', () => {
+      clearInterval(heartbeat)
+      const pid = socketPlayers.get(socket.id)
+      // Only clear activity if no other sockets for this player
+      if (pid) {
+        const hasOther = [...socketPlayers.entries()].some(([sid, p]) => p === pid && sid !== socket.id)
+        if (!hasOther) playerActivity.delete(pid)
+      }
+    })
 
     // Time sync
     socket.on('time:sync', () => {
