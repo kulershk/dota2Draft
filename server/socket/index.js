@@ -1,4 +1,4 @@
-import { queryOne } from '../db.js'
+import { queryOne, execute } from '../db.js'
 import { getSessionPlayerId } from '../middleware/auth.js'
 import { getFullAuctionState, getAuctionLog, getCaptains } from '../helpers/competition.js'
 import {
@@ -18,6 +18,7 @@ export function initSocket(io) {
       const playerId = getSessionPlayerId(handshakeToken)
       if (playerId) {
         socketPlayers.set(socket.id, playerId)
+        execute('UPDATE players SET last_online = NOW() WHERE id = $1', [playerId]).catch(() => {})
       }
     }
 
@@ -26,9 +27,18 @@ export function initSocket(io) {
       const playerId = getSessionPlayerId(token)
       if (playerId) {
         socketPlayers.set(socket.id, playerId)
+        execute('UPDATE players SET last_online = NOW() WHERE id = $1', [playerId]).catch(() => {})
         socket.emit('auth:success')
       }
     })
+
+    // Periodic heartbeat to keep last_online fresh
+    const heartbeat = setInterval(() => {
+      const pid = socketPlayers.get(socket.id)
+      if (pid) execute('UPDATE players SET last_online = NOW() WHERE id = $1', [pid]).catch(() => {})
+    }, 60 * 1000) // every 1 minute
+
+    socket.on('disconnect', () => { clearInterval(heartbeat) })
 
     // Time sync
     socket.on('time:sync', () => {
