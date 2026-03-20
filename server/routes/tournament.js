@@ -74,6 +74,7 @@ export default function createTournamentRouter(io) {
     try {
       const matches = await query(`
         SELECT m.id, m.scheduled_at, m.status, m.best_of, m.score1, m.score2, m.competition_id,
+          m.team1_captain_id, m.team2_captain_id,
           c.name AS competition_name,
           t1.team AS team1_name, COALESCE(p1.avatar_url, '') AS team1_avatar, t1.banner_url AS team1_banner,
           t2.team AS team2_name, COALESCE(p2.avatar_url, '') AS team2_avatar, t2.banner_url AS team2_banner
@@ -92,7 +93,29 @@ export default function createTournamentRouter(io) {
           m.scheduled_at ASC NULLS LAST
         LIMIT 20
       `)
-      res.json(matches)
+
+      // Fetch rosters for each match's teams
+      const captainIds = [...new Set(matches.flatMap(m => [m.team1_captain_id, m.team2_captain_id].filter(Boolean)))]
+      const rosterMap = {}
+      if (captainIds.length > 0) {
+        const rosterRows = await query(`
+          SELECT cp.drafted_by, COALESCE(p.display_name, p.name) AS name, p.avatar_url, cp.playing_role, cp.mmr
+          FROM competition_players cp
+          JOIN players p ON p.id = cp.player_id
+          WHERE cp.drafted_by = ANY($1)
+          ORDER BY cp.playing_role ASC NULLS LAST, p.name
+        `, [captainIds])
+        for (const r of rosterRows) {
+          if (!rosterMap[r.drafted_by]) rosterMap[r.drafted_by] = []
+          rosterMap[r.drafted_by].push({ name: r.name, avatar: r.avatar_url || '', playing_role: r.playing_role, mmr: r.mmr || 0 })
+        }
+      }
+
+      res.json(matches.map(m => ({
+        ...m,
+        team1_players: rosterMap[m.team1_captain_id] || [],
+        team2_players: rosterMap[m.team2_captain_id] || [],
+      })))
     } catch (err) {
       console.error('Error fetching upcoming matches:', err)
       res.status(500).json({ error: 'Failed to fetch upcoming matches' })

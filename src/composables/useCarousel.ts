@@ -5,33 +5,47 @@ export function useCarousel(containerRef: Ref<HTMLElement | null>, speed = 0.5, 
   const isHovering = ref(false)
   let animId = 0
   let startX = 0
-  let scrollLeft = 0
+  let dragStartOffset = 0
   let dragDelta = 0
   let bound = false
   let singleSetWidth = 0
+  let offset = 0
 
   function measureSet() {
     const el = containerRef.value
-    if (!el || itemCount.value === 0) return
-    // Each item is 280px + 16px gap
-    singleSetWidth = itemCount.value * (280 + 16)
+    if (!el || itemCount.value === 0) { singleSetWidth = 0; return }
+    const children = el.children
+    if (children.length > 0 && itemCount.value > 0) {
+      let width = 0
+      for (let i = 0; i < itemCount.value && i < children.length; i++) {
+        const child = children[i] as HTMLElement
+        width += child.offsetWidth
+      }
+      const gap = parseFloat(getComputedStyle(el).gap || '0')
+      width += gap * itemCount.value
+      singleSetWidth = width
+    }
   }
 
-  function loopScroll(el: HTMLElement) {
+  function applyTransform() {
+    const el = containerRef.value
+    if (!el) return
+    el.style.transform = `translateX(${-offset}px)`
+  }
+
+  function wrapOffset() {
     if (singleSetWidth <= 0) return
-    if (el.scrollLeft >= singleSetWidth) {
-      el.scrollLeft -= singleSetWidth
-    } else if (el.scrollLeft <= 0) {
-      el.scrollLeft += singleSetWidth
-    }
+    while (offset >= singleSetWidth) offset -= singleSetWidth
+    while (offset < 0) offset += singleSetWidth
   }
 
   function animate() {
     const el = containerRef.value
     if (!el) { animId = requestAnimationFrame(animate); return }
-    if (!isDragging.value && !isHovering.value) {
-      el.scrollLeft += speed
-      loopScroll(el)
+    if (!isDragging.value && !isHovering.value && singleSetWidth > 0) {
+      offset += speed
+      wrapOffset()
+      applyTransform()
     }
     animId = requestAnimationFrame(animate)
   }
@@ -46,18 +60,17 @@ export function useCarousel(containerRef: Ref<HTMLElement | null>, speed = 0.5, 
     isDragging.value = true
     dragDelta = 0
     startX = e.pageX
-    scrollLeft = el.scrollLeft
+    dragStartOffset = offset
     el.style.cursor = 'grabbing'
   }
 
   function onMouseMove(e: MouseEvent) {
     if (!isDragging.value) return
-    const el = containerRef.value
-    if (!el) return
     const dx = e.pageX - startX
     dragDelta = Math.abs(dx)
-    el.scrollLeft = scrollLeft - dx
-    loopScroll(el)
+    offset = dragStartOffset - dx
+    wrapOffset()
+    applyTransform()
   }
 
   function onMouseUp() {
@@ -75,22 +88,19 @@ export function useCarousel(containerRef: Ref<HTMLElement | null>, speed = 0.5, 
   }
 
   function onTouchStart(e: TouchEvent) {
-    const el = containerRef.value
-    if (!el) return
     isDragging.value = true
     dragDelta = 0
     startX = e.touches[0].pageX
-    scrollLeft = el.scrollLeft
+    dragStartOffset = offset
   }
 
   function onTouchMove(e: TouchEvent) {
     if (!isDragging.value) return
-    const el = containerRef.value
-    if (!el) return
     const dx = e.touches[0].pageX - startX
     dragDelta = Math.abs(dx)
-    el.scrollLeft = scrollLeft - dx
-    loopScroll(el)
+    offset = dragStartOffset - dx
+    wrapOffset()
+    applyTransform()
   }
 
   function onTouchEnd() { isDragging.value = false }
@@ -135,9 +145,11 @@ export function useCarousel(containerRef: Ref<HTMLElement | null>, speed = 0.5, 
     else unbind()
   }, { immediate: true })
 
-  // Re-measure when item count changes
   watch(itemCount, () => {
-    measureSet()
+    nextTick(() => {
+      measureSet()
+      if (!bound && containerRef.value) bind()
+    })
   })
 
   onUnmounted(unbind)
