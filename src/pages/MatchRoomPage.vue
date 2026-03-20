@@ -617,7 +617,7 @@ function goBack() {
       </div>
 
       <!-- Spectator view: show lobby status for non-captains -->
-      <div v-else-if="bothTeamsAssigned && match.status !== 'completed'" class="flex flex-col gap-4 mb-6">
+      <div v-else-if="(store.isAdmin.value || isCaptainInMatch) && bothTeamsAssigned && match.status !== 'completed'" class="flex flex-col gap-4 mb-6">
         <div v-for="g in allGames" :key="'spec-' + g.game_number">
           <template v-if="!g.dotabuff_id && g.game_number === nextGameNumber">
             <div class="card overflow-hidden">
