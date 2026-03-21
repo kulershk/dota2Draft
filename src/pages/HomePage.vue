@@ -98,8 +98,7 @@ onMounted(async () => {
 })
 
 function formatDate(dateStr: string) {
-  const d = new Date(dateStr)
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return formatDateUtil(dateStr)
 }
 
 function formatCommentDate(dateStr: string) {
@@ -190,23 +189,7 @@ async function fetchUpcomingMatches() {
   }
 }
 
-function formatMatchDate(dateStr: string) {
-  if (!dateStr) return '—'
-  const d = new Date(dateStr.replace('Z', ''))
-  const now = new Date()
-  const diffMs = d.getTime() - now.getTime()
-  const diffH = Math.floor(diffMs / 3600000)
-  const diffD = Math.floor(diffMs / 86400000)
-
-  const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-  const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-
-  if (diffMs < 0) return `${date} ${time}`
-  if (diffH < 1) return t('startingSoon')
-  if (diffD === 0) return `${t('today')} ${time}`
-  if (diffD === 1) return `${t('tomorrow')} ${time}`
-  return `${date} ${time}`
-}
+import { formatMatchDate, formatDate as formatDateUtil } from '@/utils/format'
 
 const isLoggedIn = computed(() => !!store.currentUser.value)
 

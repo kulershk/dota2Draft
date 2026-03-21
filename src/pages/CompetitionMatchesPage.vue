@@ -3,6 +3,7 @@ import { Swords, Search, Calendar } from 'lucide-vue-next'
 import { ref, computed, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDraftStore } from '@/composables/useDraftStore'
+import { formatMatchDate } from '@/utils/format'
 
 const { t } = useI18n()
 const store = useDraftStore()
@@ -47,7 +48,18 @@ const filteredMatches = computed(() => {
 
 function formatDate(dateStr: string) {
   if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  const d = new Date(dateStr.replace('Z', ''))
+  const now = new Date()
+  const diffMs = d.getTime() - now.getTime()
+  const diffH = Math.floor(diffMs / 3600000)
+  const diffD = Math.floor(diffMs / 86400000)
+  const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+  const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  if (diffMs < 0) return `${date} ${time}`
+  if (diffH < 1) return 'Starting soon'
+  if (diffD === 0) return `Today ${time}`
+  if (diffD === 1) return `Tomorrow ${time}`
+  return `${date} ${time}`
 }
 
 watch([searchQuery, statusFilter], () => {})
