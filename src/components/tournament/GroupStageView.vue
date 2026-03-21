@@ -120,11 +120,15 @@ const matchesByGroup = computed(() => {
       >
         <span class="w-10 text-sm font-mono"
           :class="idx === 0 ? 'text-primary font-bold' : 'text-muted-foreground'">{{ idx + 1 }}</span>
-        <div class="flex-1 flex items-center gap-2.5 min-w-0">
+        <router-link v-if="team.id" :to="{ name: 'team-profile', params: { id: team.id } }" class="flex-1 flex items-center gap-2.5 min-w-0 hover:opacity-80 transition-opacity">
           <div class="w-7 h-7 rounded bg-surface overflow-hidden shrink-0">
             <img v-if="team.avatar" :src="team.avatar" class="w-full h-full object-cover" />
           </div>
-          <span class="text-sm font-medium truncate" :class="team.isTbd ? 'text-muted-foreground italic' : 'text-foreground'">{{ team.team }}</span>
+          <span class="text-sm font-medium truncate text-foreground hover:text-primary transition-colors">{{ team.team }}</span>
+        </router-link>
+        <div v-else class="flex-1 flex items-center gap-2.5 min-w-0">
+          <div class="w-7 h-7 rounded bg-surface overflow-hidden shrink-0"></div>
+          <span class="text-sm font-medium truncate text-muted-foreground italic">{{ team.team }}</span>
         </div>
         <span class="w-[50px] text-sm font-mono font-semibold text-center text-color-success">{{ team.mw }}</span>
         <span class="w-[50px] text-sm font-mono text-center text-destructive">{{ team.ml }}</span>
@@ -149,9 +153,10 @@ const matchesByGroup = computed(() => {
         >
           <!-- Team 1 -->
           <div class="flex-1 flex items-center justify-end gap-2.5 min-w-0">
-            <span class="text-sm font-medium text-foreground truncate" :class="match.winner_captain_id === match.team1_captain_id ? 'font-bold' : ''">
+            <router-link v-if="match.team1_captain_id" :to="{ name: 'team-profile', params: { id: match.team1_captain_id } }" class="text-sm font-medium text-foreground truncate hover:text-primary transition-colors" :class="match.winner_captain_id === match.team1_captain_id ? 'font-bold' : ''" @click.stop>
               {{ match.team1_name || t('tbd') }}
-            </span>
+            </router-link>
+            <span v-else class="text-sm font-medium text-muted-foreground truncate">{{ t('tbd') }}</span>
             <div class="w-7 h-7 rounded bg-surface overflow-hidden shrink-0">
               <img v-if="match.team1_banner || match.team1_avatar" :src="match.team1_banner || match.team1_avatar" class="w-full h-full object-cover" />
             </div>
@@ -177,9 +182,10 @@ const matchesByGroup = computed(() => {
             <div class="w-7 h-7 rounded bg-surface overflow-hidden shrink-0">
               <img v-if="match.team2_banner || match.team2_avatar" :src="match.team2_banner || match.team2_avatar" class="w-full h-full object-cover" />
             </div>
-            <span class="text-sm font-medium text-foreground truncate" :class="match.winner_captain_id === match.team2_captain_id ? 'font-bold' : ''">
+            <router-link v-if="match.team2_captain_id" :to="{ name: 'team-profile', params: { id: match.team2_captain_id } }" class="text-sm font-medium text-foreground truncate hover:text-primary transition-colors" :class="match.winner_captain_id === match.team2_captain_id ? 'font-bold' : ''" @click.stop>
               {{ match.team2_name || t('tbd') }}
-            </span>
+            </router-link>
+            <span v-else class="text-sm font-medium text-muted-foreground truncate">{{ t('tbd') }}</span>
           </div>
 
           <EyeOff v-if="match.hidden && isAdmin" class="w-3.5 h-3.5 text-muted-foreground shrink-0 ml-2" :title="t('hiddenMatch')" />
@@ -211,7 +217,8 @@ const matchesByGroup = computed(() => {
             {{ match.status === 'live' ? t('matchLive') : match.status === 'completed' ? t('matchCompleted') : t('matchUpcoming') }}
           </span>
           <div class="flex-1 flex items-center justify-end gap-2.5 min-w-0">
-            <span class="text-sm font-medium text-foreground truncate">{{ match.team1_name || t('tbd') }}</span>
+            <router-link v-if="match.team1_captain_id" :to="{ name: 'team-profile', params: { id: match.team1_captain_id } }" class="text-sm font-medium text-foreground truncate hover:text-primary transition-colors" @click.stop>{{ match.team1_name || t('tbd') }}</router-link>
+            <span v-else class="text-sm font-medium text-muted-foreground truncate">{{ t('tbd') }}</span>
             <div class="w-6 h-6 rounded bg-surface overflow-hidden shrink-0">
               <img v-if="match.team1_banner || match.team1_avatar" :src="match.team1_banner || match.team1_avatar" class="w-full h-full object-cover" />
             </div>
@@ -229,7 +236,8 @@ const matchesByGroup = computed(() => {
             <div class="w-6 h-6 rounded bg-surface overflow-hidden shrink-0">
               <img v-if="match.team2_banner || match.team2_avatar" :src="match.team2_banner || match.team2_avatar" class="w-full h-full object-cover" />
             </div>
-            <span class="text-sm font-medium text-foreground truncate">{{ match.team2_name || t('tbd') }}</span>
+            <router-link v-if="match.team2_captain_id" :to="{ name: 'team-profile', params: { id: match.team2_captain_id } }" class="text-sm font-medium text-foreground truncate hover:text-primary transition-colors" @click.stop>{{ match.team2_name || t('tbd') }}</router-link>
+            <span v-else class="text-sm font-medium text-muted-foreground truncate">{{ t('tbd') }}</span>
           </div>
           <EyeOff v-if="match.hidden && isAdmin" class="w-3.5 h-3.5 text-muted-foreground shrink-0 ml-2" />
           <div v-if="match.games?.length" class="flex gap-1 shrink-0 ml-2">
