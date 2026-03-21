@@ -4,6 +4,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { formatMatchDate } from '@/utils/format'
+import { MATCH_STATUS } from '@/utils/constants'
 
 const { t } = useI18n()
 const store = useDraftStore()
@@ -24,8 +25,8 @@ const allMatches = computed(() => {
     .filter((m: any) => !m.hidden && (m.team1_captain_id || m.team2_captain_id))
     .sort((a: any, b: any) => {
       // Live first, then by scheduled_at desc, then by id desc
-      if (a.status === 'live' && b.status !== 'live') return -1
-      if (b.status === 'live' && a.status !== 'live') return 1
+      if (a.status === MATCH_STATUS.LIVE && b.status !== MATCH_STATUS.LIVE) return -1
+      if (b.status === MATCH_STATUS.LIVE && a.status !== MATCH_STATUS.LIVE) return 1
       if (a.scheduled_at && b.scheduled_at) return new Date(b.scheduled_at).getTime() - new Date(a.scheduled_at).getTime()
       return b.id - a.id
     })
@@ -65,9 +66,9 @@ watch([searchQuery, statusFilter], () => {})
       </div>
       <select v-model="statusFilter" class="input-field w-full sm:w-auto">
         <option value="all">{{ t('allStatuses') }}</option>
-        <option value="live">{{ t('matchLive') }}</option>
-        <option value="completed">{{ t('matchCompleted') }}</option>
-        <option value="pending">{{ t('matchUpcoming') }}</option>
+        <option :value="MATCH_STATUS.LIVE">{{ t('matchLive') }}</option>
+        <option :value="MATCH_STATUS.COMPLETED">{{ t('matchCompleted') }}</option>
+        <option :value="MATCH_STATUS.PENDING">{{ t('matchUpcoming') }}</option>
       </select>
     </div>
 
@@ -85,8 +86,8 @@ watch([searchQuery, statusFilter], () => {})
         >
           <!-- Status -->
           <span class="text-[9px] font-bold uppercase tracking-wider w-[70px] shrink-0"
-            :class="match.status === 'live' ? 'text-amber-500' : match.status === 'completed' ? 'text-color-success' : 'text-muted-foreground'">
-            {{ match.status === 'live' ? t('matchLive') : match.status === 'completed' ? t('matchCompleted') : t('matchUpcoming') }}
+            :class="match.status === MATCH_STATUS.LIVE ? 'text-amber-500' : match.status === MATCH_STATUS.COMPLETED ? 'text-color-success' : 'text-muted-foreground'">
+            {{ match.status === MATCH_STATUS.LIVE ? t('matchLive') : match.status === MATCH_STATUS.COMPLETED ? t('matchCompleted') : t('matchUpcoming') }}
           </span>
 
           <!-- Team 1 -->

@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { watch, onMounted, computed } from 'vue'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { useI18n } from 'vue-i18n'
+import { AUCTION_STATUS } from '@/utils/constants'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -14,7 +15,7 @@ const compId = computed(() => Number(route.params.compId))
 const navItems = computed(() => [
   { label: t('navInfo'), icon: Info, name: 'comp-info' },
   { label: t('navParticipants'), icon: Users, name: 'comp-players' },
-  ...(store.auction.status !== 'finished' ? [{ label: t('navLiveAuction'), icon: Gavel, name: 'comp-auction' }] : []),
+  ...(store.auction.status !== AUCTION_STATUS.FINISHED ? [{ label: t('navLiveAuction'), icon: Gavel, name: 'comp-auction' }] : []),
   { label: t('navTeams'), icon: Trophy, name: 'comp-results' },
   { label: t('navTournament'), icon: Swords, name: 'comp-tournament' },
   { label: t('navMatches'), icon: ListChecks, name: 'comp-matches' },

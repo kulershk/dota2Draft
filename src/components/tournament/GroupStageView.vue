@@ -2,6 +2,7 @@
 import { useI18n } from 'vue-i18n'
 import { Swords, ChevronDown, ChevronUp, EyeOff } from 'lucide-vue-next'
 import { computed, ref } from 'vue'
+import { MATCH_STATUS } from '@/utils/constants'
 
 const { t } = useI18n()
 
@@ -52,7 +53,7 @@ const standings = computed(() => {
 
     const groupMatches = props.matches.filter(m => m.group_name === group.name)
     for (const m of groupMatches) {
-      if (m.status !== 'completed') continue
+      if (m.status !== MATCH_STATUS.COMPLETED) continue
       const s1 = m.score1 || 0
       const s2 = m.score2 || 0
       if (m.winner_captain_id === m.team1_captain_id) {
@@ -78,7 +79,7 @@ const standings = computed(() => {
 
 const recentMatches = computed(() => {
   return props.matches
-    .filter(m => m.status === 'completed' && (props.isAdmin || !m.hidden))
+    .filter(m => m.status === MATCH_STATUS.COMPLETED && (props.isAdmin || !m.hidden))
     .sort((a, b) => (b.updated_at || b.id) - (a.updated_at || a.id))
     .slice(0, 10)
 })
@@ -213,8 +214,8 @@ const matchesByGroup = computed(() => {
           @click="emit('edit-match', match)"
         >
           <span class="text-[9px] font-bold uppercase tracking-wider w-20 shrink-0"
-            :class="match.status === 'live' ? 'text-amber-500' : match.status === 'completed' ? 'text-color-success' : 'text-muted-foreground'">
-            {{ match.status === 'live' ? t('matchLive') : match.status === 'completed' ? t('matchCompleted') : t('matchUpcoming') }}
+            :class="match.status === MATCH_STATUS.LIVE ? 'text-amber-500' : match.status === MATCH_STATUS.COMPLETED ? 'text-color-success' : 'text-muted-foreground'">
+            {{ match.status === MATCH_STATUS.LIVE ? t('matchLive') : match.status === MATCH_STATUS.COMPLETED ? t('matchCompleted') : t('matchUpcoming') }}
           </span>
           <div class="flex-1 flex items-center justify-end gap-2.5 min-w-0">
             <router-link v-if="match.team1_captain_id" :to="{ name: 'team-profile', params: { id: match.team1_captain_id } }" class="text-sm font-medium text-foreground truncate hover:text-primary transition-colors" @click.stop>{{ match.team1_name || t('tbd') }}</router-link>
