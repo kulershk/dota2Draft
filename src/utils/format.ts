@@ -3,14 +3,16 @@ export function formatMatchDate(dateStr: string): string {
   const d = new Date(dateStr.replace('Z', ''))
   const now = new Date()
   const diffMs = d.getTime() - now.getTime()
-  const diffH = Math.floor(diffMs / 3600000)
-  const diffD = Math.floor(diffMs / 86400000)
   const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
   const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   if (diffMs < 0) return `${date} ${time}`
-  if (diffH < 1) return 'Starting soon'
-  if (diffD === 0) return `Today ${time}`
-  if (diffD === 1) return `Tomorrow ${time}`
+  if (diffMs < 3600000) return 'Starting soon'
+  // Compare calendar dates, not hour diff
+  const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const matchDate = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  const dayDiff = Math.round((matchDate.getTime() - todayDate.getTime()) / 86400000)
+  if (dayDiff === 0) return `Today ${time}`
+  if (dayDiff === 1) return `Tomorrow ${time}`
   return `${date} ${time}`
 }
 

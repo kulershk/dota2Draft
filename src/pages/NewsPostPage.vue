@@ -123,13 +123,13 @@ watch(postId, () => {
       <article class="flex flex-col gap-4">
         <h1 class="text-2xl md:text-3xl font-bold text-foreground tracking-tight">{{ post.title }}</h1>
         <div class="flex items-center gap-4">
-          <div v-if="post.created_by_name" class="flex items-center gap-2">
+          <router-link v-if="post.created_by" :to="{ name: 'player-profile', params: { id: post.created_by } }" class="flex items-center gap-2 hover:opacity-80 transition-opacity">
             <img v-if="post.created_by_avatar" :src="post.created_by_avatar" class="w-8 h-8 rounded-full" />
             <div v-else class="w-8 h-8 rounded-full bg-surface flex items-center justify-center text-xs font-semibold text-muted-foreground">
-              {{ post.created_by_name.charAt(0) }}
+              {{ (post.created_by_name || '?').charAt(0) }}
             </div>
-            <span class="text-sm font-medium text-foreground">{{ post.created_by_name }}</span>
-          </div>
+            <span class="text-sm font-medium text-foreground hover:text-primary transition-colors">{{ post.created_by_name }}</span>
+          </router-link>
           <span class="text-sm text-text-tertiary">{{ formatDate(post.created_at) }}</span>
         </div>
         <div v-if="post.image_url" class="rounded-lg overflow-hidden">

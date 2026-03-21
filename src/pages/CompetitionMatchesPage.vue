@@ -67,7 +67,7 @@ watch([searchQuery, statusFilter], () => {})
         <option value="all">{{ t('allStatuses') }}</option>
         <option value="live">{{ t('matchLive') }}</option>
         <option value="completed">{{ t('matchCompleted') }}</option>
-        <option value="upcoming">{{ t('matchUpcoming') }}</option>
+        <option value="pending">{{ t('matchUpcoming') }}</option>
       </select>
     </div>
 

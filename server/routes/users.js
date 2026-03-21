@@ -102,6 +102,9 @@ router.get('/api/players/:id/profile', async (req, res) => {
 
     // Find finals matches where this captain participated
     for (const stage of ts.stages) {
+      // Skip group stages — only compute placements from elimination brackets
+      if (stage.format === 'group_stage') continue
+
       const stageMatches = matches.filter(m => m.stage === stage.id)
       if (stageMatches.length === 0) continue
 
