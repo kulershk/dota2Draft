@@ -46,21 +46,6 @@ const filteredMatches = computed(() => {
   return list
 })
 
-function formatDate(dateStr: string) {
-  if (!dateStr) return '—'
-  const d = new Date(dateStr.replace('Z', ''))
-  const now = new Date()
-  const diffMs = d.getTime() - now.getTime()
-  const diffH = Math.floor(diffMs / 3600000)
-  const diffD = Math.floor(diffMs / 86400000)
-  const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-  const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-  if (diffMs < 0) return `${date} ${time}`
-  if (diffH < 1) return 'Starting soon'
-  if (diffD === 0) return `Today ${time}`
-  if (diffD === 1) return `Tomorrow ${time}`
-  return `${date} ${time}`
-}
 
 watch([searchQuery, statusFilter], () => {})
 </script>
@@ -137,7 +122,7 @@ watch([searchQuery, statusFilter], () => {})
             <span v-if="match.group_name" class="text-[10px] text-muted-foreground ml-2">{{ match.group_name }}</span>
             <div v-if="match.scheduled_at" class="flex items-center gap-1 justify-end mt-0.5">
               <Calendar class="w-3 h-3 text-muted-foreground" />
-              <span class="text-[10px] text-muted-foreground">{{ formatDate(match.scheduled_at) }}</span>
+              <span class="text-[10px] text-muted-foreground">{{ formatMatchDate(match.scheduled_at) }}</span>
             </div>
           </div>
         </router-link>

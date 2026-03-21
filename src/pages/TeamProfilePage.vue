@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Users, Trophy, Swords, ExternalLink, Calendar, Shield } from 'lucide-vue-next'
+import { formatMatchDate } from '@/utils/format'
 import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -32,10 +33,6 @@ watch(captainId, async (id) => {
   }
 }, { immediate: true })
 
-function formatDate(dateStr: string) {
-  if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-}
 
 const posLabel: Record<number, string> = { 1: 'Carry', 2: 'Mid', 3: 'Offlane', 4: 'Pos 4', 5: 'Pos 5' }
 </script>
@@ -163,7 +160,7 @@ const posLabel: Record<number, string> = { 1: 'Carry', 2: 'Mid', 3: 'Offlane', 4
               <span v-else-if="match.status === 'completed'" class="text-[10px] font-semibold" :class="match.won ? 'text-green-500' : 'text-red-500'">
                 {{ match.won ? t('win') : t('loss') }}
               </span>
-              <span v-else class="text-[10px] text-muted-foreground">{{ formatDate(match.scheduled_at) }}</span>
+              <span v-else class="text-[10px] text-muted-foreground">{{ formatMatchDate(match.scheduled_at) }}</span>
               <div v-if="match.bracket" class="text-[9px] text-muted-foreground mt-0.5">{{ match.bracket }}</div>
             </div>
           </router-link>
