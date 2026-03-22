@@ -543,6 +543,7 @@ export default {
   navMatches: 'Rungtynės',
   allMatches: 'Visos rungtynės',
   allMatchesDesc: 'Visos šios varžybų rungtynės.',
+  allMatchesGlobalDesc: 'Visos rungtynės iš visų varžybų.',
 
   // Tournament
   tournament: 'Turnyras',

@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { query, queryOne, execute } from '../db.js'
 import { requireCompPermission } from '../middleware/permissions.js'
+import { getSessionPlayerId, getTokenFromReq } from '../middleware/auth.js'
 import { getCompetition, getCaptains } from '../helpers/competition.js'
 import { advanceWinner, generateEliminationBracket, generateGroupMatches, generateDoubleEliminationBracket } from '../helpers/tournament.js'
 import { fetchAndSaveGameStats } from '../helpers/opendota.js'
@@ -67,6 +68,98 @@ export default function createTournamentRouter(io) {
       tournament_state: comp.tournament_state || {},
       matches: matches.map(m => ({ ...m, games: gamesByMatch[m.id] || [] })),
     })
+  })
+
+  // All matches across all competitions (with filters)
+  router.get('/api/matches', async (req, res) => {
+    try {
+      const { status } = req.query
+      let where = 'm.hidden = false'
+      const params = []
+      if (status && status !== 'all') {
+        params.push(status)
+        where += ` AND m.status = $${params.length}`
+      }
+      const matches = await query(`
+        SELECT m.id, m.scheduled_at, m.status, m.best_of, m.score1, m.score2,
+          m.competition_id, m.team1_captain_id, m.team2_captain_id,
+          m.winner_captain_id, m.group_name, m.stage,
+          c.name AS competition_name,
+          t1.team AS team1_name, COALESCE(p1.avatar_url, '') AS team1_avatar, t1.banner_url AS team1_banner,
+          t2.team AS team2_name, COALESCE(p2.avatar_url, '') AS team2_avatar, t2.banner_url AS team2_banner
+        FROM matches m
+        JOIN competitions c ON c.id = m.competition_id
+        LEFT JOIN captains t1 ON t1.id = m.team1_captain_id
+        LEFT JOIN players p1 ON p1.id = t1.player_id
+        LEFT JOIN captains t2 ON t2.id = m.team2_captain_id
+        LEFT JOIN players p2 ON p2.id = t2.player_id
+        WHERE ${where}
+          AND (m.team1_captain_id IS NOT NULL OR m.team2_captain_id IS NOT NULL)
+        ORDER BY
+          CASE WHEN m.status = 'live' THEN 0 ELSE 1 END,
+          m.scheduled_at DESC NULLS LAST,
+          m.id DESC
+        LIMIT 200
+      `, params)
+      // Mark matches the current user is in
+      const playerId = getSessionPlayerId(getTokenFromReq(req))
+      if (playerId) {
+        const captainIds = [...new Set(matches.flatMap(m => [m.team1_captain_id, m.team2_captain_id].filter(Boolean)))]
+        const myTeamCaptainIds = new Set()
+        if (captainIds.length > 0) {
+          // Check if user is a captain of any team in these matches
+          const capRows = await query('SELECT id FROM captains WHERE id = ANY($1) AND player_id = $2', [captainIds, playerId])
+          for (const r of capRows) myTeamCaptainIds.add(r.id)
+          // Check if user is drafted onto a team (drafted_by set)
+          const draftRows = await query('SELECT DISTINCT drafted_by FROM competition_players WHERE player_id = $1 AND drafted_by = ANY($2) AND drafted_by IS NOT NULL', [playerId, captainIds])
+          for (const r of draftRows) myTeamCaptainIds.add(r.drafted_by)
+          // Check if user is on a team as the captain's own player entry (drafted_by may be NULL for captains)
+          const selfCapRows = await query(
+            `SELECT c.id FROM captains c
+             JOIN competition_players cp ON cp.competition_id = c.competition_id AND cp.player_id = c.player_id
+             WHERE c.id = ANY($1) AND c.player_id = $2`,
+            [captainIds, playerId]
+          )
+          for (const r of selfCapRows) myTeamCaptainIds.add(r.id)
+        }
+        for (const m of matches) {
+          m.my_match = myTeamCaptainIds.has(m.team1_captain_id) || myTeamCaptainIds.has(m.team2_captain_id)
+        }
+      }
+      res.json(matches)
+    } catch (err) {
+      console.error('Error fetching all matches:', err)
+      res.status(500).json({ error: 'Failed to fetch matches' })
+    }
+  })
+
+  // Count of upcoming matches the current user is in
+  router.get('/api/matches/my-upcoming-count', async (req, res) => {
+    try {
+      const playerId = getSessionPlayerId(getTokenFromReq(req))
+      if (!playerId) return res.json({ count: 0 })
+      const row = await queryOne(`
+        SELECT COUNT(DISTINCT m.id)::int AS count
+        FROM matches m
+        JOIN captains t1 ON t1.id = m.team1_captain_id
+        JOIN captains t2 ON t2.id = m.team2_captain_id
+        WHERE m.status IN ('pending', 'live')
+          AND m.hidden = false
+          AND (
+            t1.player_id = $1 OR t2.player_id = $1
+            OR EXISTS (
+              SELECT 1 FROM competition_players cp
+              WHERE cp.competition_id = m.competition_id
+                AND cp.player_id = $1
+                AND (cp.drafted_by = t1.id OR cp.drafted_by = t2.id)
+            )
+          )
+      `, [playerId])
+      res.json({ count: row?.count || 0 })
+    } catch (err) {
+      console.error('Error fetching my upcoming match count:', err)
+      res.json({ count: 0 })
+    }
   })
 
   // Global upcoming matches across all competitions

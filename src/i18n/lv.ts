@@ -543,6 +543,7 @@ export default {
   navMatches: 'Spēles',
   allMatches: 'Visas spēles',
   allMatchesDesc: 'Visas šīs sacensības spēles.',
+  allMatchesGlobalDesc: 'Visas spēles no visām sacensībām.',
 
   // Tournament
   tournament: 'Turnīrs',

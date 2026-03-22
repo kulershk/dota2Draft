@@ -12,6 +12,8 @@ const props = defineProps<{
   imageFile: File | null
   aspectRatio?: number
   outputSize?: number
+  outputWidth?: number
+  outputHeight?: number
 }>()
 
 const emit = defineEmits<{
@@ -60,10 +62,11 @@ function destroyCropper() {
 async function doCrop() {
   if (!cropper) return
   cropping.value = true
-  const size = props.outputSize ?? 256
+  const w = props.outputWidth ?? props.outputSize ?? 256
+  const h = props.outputHeight ?? props.outputSize ?? 256
   const canvas = cropper.getCroppedCanvas({
-    width: size,
-    height: size,
+    width: w,
+    height: h,
     imageSmoothingEnabled: true,
     imageSmoothingQuality: 'high',
   })

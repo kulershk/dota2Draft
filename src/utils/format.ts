@@ -1,4 +1,4 @@
-export function formatMatchDate(dateStr: string): string {
+export function formatMatchDate(dateStr: string, t?: (key: string) => string): string {
   if (!dateStr) return '—'
   const d = new Date(dateStr.replace('Z', ''))
   const now = new Date()
@@ -6,13 +6,12 @@ export function formatMatchDate(dateStr: string): string {
   const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
   const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   if (diffMs < 0) return `${date} ${time}`
-  if (diffMs < 3600000) return 'Starting soon'
-  // Compare calendar dates, not hour diff
+  if (diffMs < 3600000) return t ? t('startingSoon') : 'Starting soon'
   const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const matchDate = new Date(d.getFullYear(), d.getMonth(), d.getDate())
   const dayDiff = Math.round((matchDate.getTime() - todayDate.getTime()) / 86400000)
-  if (dayDiff === 0) return `Today ${time}`
-  if (dayDiff === 1) return `Tomorrow ${time}`
+  if (dayDiff === 0) return `${t ? t('today') : 'Today'} ${time}`
+  if (dayDiff === 1) return `${t ? t('tomorrow') : 'Tomorrow'} ${time}`
   return `${date} ${time}`
 }
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Gamepad2, Shield, LogOut, Sun, Moon, Menu, X, Home, LogIn, Lock, Globe, Settings, Swords, Info, Radio, ChevronDown, Check, LayoutDashboard, Bell, User, Newspaper } from 'lucide-vue-next'
+import { Gamepad2, Shield, LogOut, Sun, Moon, Menu, X, Home, LogIn, Lock, Globe, Settings, Swords, Info, Radio, ChevronDown, Check, LayoutDashboard, Bell, User, Newspaper, Calendar } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { onMounted, ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -122,6 +122,21 @@ const mobileMenuOpen = ref(false)
 
 const isLoggedIn = computed(() => !!store.currentUser.value)
 
+const myMatchCount = ref(0)
+
+async function fetchMyMatchCount() {
+  if (!store.currentUser.value) { myMatchCount.value = 0; return }
+  try {
+    const data = await useApi().getMyUpcomingMatchCount()
+    myMatchCount.value = data.count || 0
+  } catch { myMatchCount.value = 0 }
+}
+
+watch(() => store.currentUser.value, (user) => {
+  if (user) fetchMyMatchCount()
+  else myMatchCount.value = 0
+}, { immediate: true })
+
 const userRoleLabel = computed(() => {
   if (!store.currentUser.value) return t('spectator')
   const parts: string[] = []
@@ -178,6 +193,17 @@ async function handleClaimAdmin() {
             >
               <Swords class="w-[15px] h-[15px]" />
               {{ t('competitions') }}
+            </router-link>
+            <router-link
+              to="/matches"
+              class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] tracking-wide transition-colors"
+              :class="route.path === '/matches'
+                ? 'bg-primary/15 text-primary font-semibold border border-primary/30'
+                : 'text-muted-foreground hover:text-foreground'"
+            >
+              <Calendar class="w-[15px] h-[15px]" />
+              {{ t('navMatches') }}
+              <span v-if="myMatchCount > 0" class="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full px-1 text-[10px] font-bold bg-primary text-primary-foreground">{{ myMatchCount }}</span>
             </router-link>
             <router-link
               to="/news"
@@ -345,6 +371,11 @@ async function handleClaimAdmin() {
         <router-link to="/competitions" class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-muted-foreground hover:bg-accent hover:text-foreground" @click="mobileMenuOpen = false">
           <Swords class="w-[18px] h-[18px]" />
           {{ t('competitions') }}
+        </router-link>
+        <router-link to="/matches" class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-muted-foreground hover:bg-accent hover:text-foreground" @click="mobileMenuOpen = false">
+          <Calendar class="w-[18px] h-[18px]" />
+          {{ t('navMatches') }}
+          <span v-if="myMatchCount > 0" class="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full px-1 text-[10px] font-bold bg-primary text-primary-foreground">{{ myMatchCount }}</span>
         </router-link>
         <router-link to="/news" class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-muted-foreground hover:bg-accent hover:text-foreground" @click="mobileMenuOpen = false">
           <Newspaper class="w-[18px] h-[18px]" />

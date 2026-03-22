@@ -544,6 +544,7 @@ export default {
   navMatches: 'Matches',
   allMatches: 'All Matches',
   allMatchesDesc: 'All matches in this competition.',
+  allMatchesGlobalDesc: 'All matches across all competitions.',
 
   // Tournament
   tournament: 'Tournament',

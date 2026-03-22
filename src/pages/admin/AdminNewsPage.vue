@@ -6,6 +6,7 @@ import { useApi } from '@/composables/useApi'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 import InputGroup from '@/components/common/InputGroup.vue'
 import RichTextEditor from '@/components/common/RichTextEditor.vue'
+import ImageCropper from '@/components/common/ImageCropper.vue'
 
 const { t } = useI18n()
 const api = useApi()
@@ -40,16 +41,32 @@ async function saveNews() {
   fetchNews()
 }
 
-async function handleImageUpload(e: Event, target: 'new' | 'edit') {
-  const file = (e.target as HTMLInputElement).files?.[0]
+// Cropper state
+const showCropper = ref(false)
+const cropperFile = ref<File | null>(null)
+const cropTarget = ref<'new' | 'edit'>('new')
+
+function handleImageSelect(e: Event, target: 'new' | 'edit') {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
   if (!file) return
+  input.value = ''
+  cropperFile.value = file
+  cropTarget.value = target
+  showCropper.value = true
+}
+
+async function handleCroppedImage(blob: Blob) {
+  showCropper.value = false
+  const file = new File([blob], 'news-cover.png', { type: 'image/png' })
   uploadingImage.value = true
   try {
     const result = await api.uploadNewsImage(file)
-    if (target === 'new') newNews.value.image_url = result.url
+    if (cropTarget.value === 'new') newNews.value.image_url = result.url
     else editNews.value.image_url = result.url
   } finally {
     uploadingImage.value = false
+    cropperFile.value = null
   }
 }
 
@@ -132,7 +149,7 @@ function formatDate(dateStr: string) {
             <label class="btn-secondary cursor-pointer text-xs">
               <Image class="w-3.5 h-3.5" />
               {{ uploadingImage ? t('loading') : 'Upload Image' }}
-              <input type="file" accept="image/*" class="hidden" @change="handleImageUpload($event, 'new')" />
+              <input type="file" accept="image/*" class="hidden" @change="handleImageSelect($event, 'new')" />
             </label>
           </div>
         </div>
@@ -169,7 +186,7 @@ function formatDate(dateStr: string) {
             <label class="btn-secondary cursor-pointer text-xs">
               <Image class="w-3.5 h-3.5" />
               {{ uploadingImage ? t('loading') : 'Upload Image' }}
-              <input type="file" accept="image/*" class="hidden" @change="handleImageUpload($event, 'edit')" />
+              <input type="file" accept="image/*" class="hidden" @change="handleImageSelect($event, 'edit')" />
             </label>
           </div>
         </div>
@@ -186,5 +203,16 @@ function formatDate(dateStr: string) {
         <button class="btn-secondary w-full justify-center" @click="showEditNews = false">{{ t('cancel') }}</button>
       </div>
     </ModalOverlay>
+
+    <!-- Image Cropper (1120:400 aspect ratio) -->
+    <ImageCropper
+      :show="showCropper"
+      :image-file="cropperFile"
+      :aspect-ratio="1120 / 400"
+      :output-width="1120"
+      :output-height="400"
+      @crop="handleCroppedImage"
+      @close="showCropper = false"
+    />
   </div>
 </template>

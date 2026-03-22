@@ -1,39 +1,34 @@
 <script setup lang="ts">
 import { Swords, Search, Calendar } from 'lucide-vue-next'
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useDraftStore } from '@/composables/useDraftStore'
+import { useApi } from '@/composables/useApi'
 import { formatMatchDate } from '@/utils/format'
 import { MATCH_STATUS } from '@/utils/constants'
 
 const { t } = useI18n()
-const store = useDraftStore()
+const api = useApi()
 
-onMounted(() => {
-  if (store.currentCompetitionId.value) store.fetchTournament()
-})
-
-watch(() => store.currentCompetitionId.value, (id) => {
-  if (id && store.tournamentData.value.matches.length === 0) store.fetchTournament()
-})
-
+const matches = ref<any[]>([])
 const searchQuery = ref('')
 const statusFilter = ref('all')
+const loading = ref(true)
 
-const allMatches = computed(() => {
-  return (store.tournamentData.value.matches || [])
-    .filter((m: any) => !m.hidden && (m.team1_captain_id || m.team2_captain_id))
-    .sort((a: any, b: any) => {
-      // Live first, then by scheduled_at desc, then by id desc
-      if (a.status === MATCH_STATUS.LIVE && b.status !== MATCH_STATUS.LIVE) return -1
-      if (b.status === MATCH_STATUS.LIVE && a.status !== MATCH_STATUS.LIVE) return 1
-      if (a.scheduled_at && b.scheduled_at) return new Date(b.scheduled_at).getTime() - new Date(a.scheduled_at).getTime()
-      return b.id - a.id
-    })
-})
+async function fetchMatches() {
+  loading.value = true
+  try {
+    matches.value = await api.getAllMatches()
+  } catch {
+    matches.value = []
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(fetchMatches)
 
 const filteredMatches = computed(() => {
-  let list = allMatches.value
+  let list = matches.value
   if (statusFilter.value !== 'all') {
     list = list.filter((m: any) => m.status === statusFilter.value)
   }
@@ -41,21 +36,19 @@ const filteredMatches = computed(() => {
     const q = searchQuery.value.toLowerCase()
     list = list.filter((m: any) =>
       (m.team1_name || '').toLowerCase().includes(q) ||
-      (m.team2_name || '').toLowerCase().includes(q)
+      (m.team2_name || '').toLowerCase().includes(q) ||
+      (m.competition_name || '').toLowerCase().includes(q)
     )
   }
   return list
 })
-
-
-watch([searchQuery, statusFilter], () => {})
 </script>
 
 <template>
   <div class="p-4 md:p-8 md:px-10 max-w-[1200px] mx-auto w-full flex flex-col gap-5">
     <div>
-      <h1 class="text-2xl md:text-3xl font-bold text-foreground">{{ t('allMatches') }}</h1>
-      <p class="text-sm text-muted-foreground mt-1">{{ t('allMatchesDesc') }}</p>
+      <h1 class="text-2xl md:text-3xl font-bold text-foreground">{{ t('navMatches') }}</h1>
+      <p class="text-sm text-muted-foreground mt-1">{{ t('allMatchesGlobalDesc') }}</p>
     </div>
 
     <!-- Filters -->
@@ -74,15 +67,19 @@ watch([searchQuery, statusFilter], () => {})
 
     <!-- List -->
     <div class="card">
-      <div v-if="filteredMatches.length === 0" class="px-4 py-10 text-center text-sm text-muted-foreground">
+      <div v-if="loading" class="px-4 py-10 text-center text-sm text-muted-foreground">
+        {{ t('loading') }}
+      </div>
+      <div v-else-if="filteredMatches.length === 0" class="px-4 py-10 text-center text-sm text-muted-foreground">
         {{ t('noResults') }}
       </div>
-      <div v-else class="divide-y divide-border">
+      <div v-else>
         <router-link
           v-for="match in filteredMatches"
           :key="match.id"
-          :to="{ name: 'comp-match', params: { matchId: match.id } }"
-          class="flex items-center px-4 py-4 md:px-6 md:py-4 hover:bg-accent/30 transition-colors gap-3"
+          :to="`/c/${match.competition_id}/tournament?match=${match.id}`"
+          class="relative flex items-center px-4 py-4 md:px-6 md:py-4 hover:bg-accent/30 transition-colors gap-3 border-b border-border"
+            :class="match.my_match ? `bg-primary/5 match-bar match-bar--${match.status}` : ''"
         >
           <!-- Status -->
           <span class="text-[9px] font-bold uppercase tracking-wider w-[70px] shrink-0"
@@ -118,12 +115,14 @@ watch([searchQuery, statusFilter], () => {})
           </div>
 
           <!-- Meta -->
-          <div class="shrink-0 text-right w-28 hidden sm:block">
-            <span class="text-[10px] text-muted-foreground">BO{{ match.best_of }}</span>
-            <span v-if="match.group_name" class="text-[10px] text-muted-foreground ml-2">{{ match.group_name }}</span>
-            <div v-if="match.scheduled_at" class="flex items-center gap-1 justify-end mt-0.5">
-              <Calendar class="w-3 h-3 text-muted-foreground" />
-              <span class="text-[10px] text-muted-foreground">{{ formatMatchDate(match.scheduled_at, t) }}</span>
+          <div class="shrink-0 text-right w-32 hidden sm:block">
+            <span class="text-[10px] text-primary font-medium truncate block">{{ match.competition_name }}</span>
+            <div class="flex items-center gap-1 justify-end mt-0.5">
+              <span class="text-[10px] text-muted-foreground">BO{{ match.best_of }}</span>
+              <template v-if="match.scheduled_at">
+                <span class="text-[10px] text-muted-foreground mx-0.5">&middot;</span>
+                <span class="text-[10px] text-muted-foreground">{{ formatMatchDate(match.scheduled_at, t) }}</span>
+              </template>
             </div>
           </div>
         </router-link>
@@ -131,3 +130,17 @@ watch([searchQuery, statusFilter], () => {})
     </div>
   </div>
 </template>
+
+<style scoped>
+.match-bar::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+}
+.match-bar--live::after { background: #ef4444; }
+.match-bar--completed::after { background: #22c55e; }
+.match-bar--pending::after { background: #6b7280; }
+</style>

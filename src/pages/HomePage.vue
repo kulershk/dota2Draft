@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { Newspaper, Calendar, Trophy, Users, Swords, User, MessageSquare, Send, Trash2, ChevronDown, ChevronUp, Twitch, Eye, Radio, ArrowRight, Clock } from 'lucide-vue-next'
-import RankBadge from '@/components/common/RankBadge.vue'
+import { Newspaper, Trophy, Users, Swords, User, MessageSquare, Send, Trash2, ChevronDown, ChevronUp, Twitch, Eye, Radio, ArrowRight, Clock } from 'lucide-vue-next'
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
@@ -193,20 +192,15 @@ import { formatMatchDate, formatDate as formatDateUtil } from '@/utils/format'
 
 const isLoggedIn = computed(() => !!store.currentUser.value)
 
-// Carousel for upcoming matches
-import { useCarousel } from '@/composables/useCarousel'
-const carouselRef = ref<HTMLElement | null>(null)
-const matchCount = computed(() => upcomingMatches.value.length)
-const { isDragging: carouselDragging } = useCarousel(carouselRef, 0.2, matchCount)
-
-const loopedMatches = computed(() => {
-  const m = upcomingMatches.value
-  if (m.length === 0) return []
-  // Repeat enough times to fill the viewport and allow seamless looping
-  const copies = Math.max(3, Math.ceil(10 / m.length))
-  const result = []
-  for (let i = 0; i < copies; i++) result.push(...m)
-  return result
+// Flat list: live first, then by scheduled_at
+const sortedMatches = computed(() => {
+  return [...upcomingMatches.value].sort((a: any, b: any) => {
+    if (a.status === 'live' && b.status !== 'live') return -1
+    if (a.status !== 'live' && b.status === 'live') return 1
+    const tA = a.scheduled_at ? new Date(a.scheduled_at).getTime() : Infinity
+    const tB = b.scheduled_at ? new Date(b.scheduled_at).getTime() : Infinity
+    return tA - tB
+  })
 })
 </script>
 
@@ -239,78 +233,6 @@ const loopedMatches = computed(() => {
       </div>
     </div>
 
-    <!-- Upcoming Matches (overlaps hero) -->
-    <div v-if="upcomingMatches.length > 0" class="relative z-10 max-w-[1200px] mx-auto w-full px-6 md:px-10">
-      <div class="flex flex-col gap-4">
-      <div class="flex items-center gap-2.5">
-        <Calendar class="w-5 h-5 text-primary" />
-        <span class="text-lg font-semibold text-foreground">{{ t('upcomingMatches') }}</span>
-        <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-primary/20 text-primary">{{ upcomingMatches.length }}</span>
-      </div>
-      <div class="overflow-hidden">
-      <div ref="carouselRef" class="flex gap-4 select-none w-max" @dragstart.prevent>
-        <div
-          v-for="(match, idx) in loopedMatches"
-          :key="match.id + '-' + idx"
-          class="relative group shrink-0 w-[280px]"
-        >
-          <router-link
-            :to="`/c/${match.competition_id}/tournament?match=${match.id}`"
-            draggable="false"
-            class="flex flex-col justify-between rounded-xl bg-card p-4 w-[280px] h-[160px] hover:bg-card/80 transition-colors"
-          >
-            <div class="flex items-center justify-between">
-              <span class="text-[11px] text-text-tertiary truncate">{{ match.stage_name || match.competition_name || '' }}</span>
-              <span :class="match.status === 'live' ? 'badge-success' : 'badge-accent'" class="shrink-0">{{ match.status === 'live' ? 'LIVE' : 'UPCOMING' }}</span>
-            </div>
-            <div class="flex items-center justify-between">
-              <div class="flex flex-col items-center gap-1.5 w-20">
-                <div class="w-9 h-9 rounded-full bg-surface overflow-hidden shrink-0">
-                  <img v-if="match.team1_banner || match.team1_avatar" :src="match.team1_banner || match.team1_avatar" class="w-full h-full object-cover" />
-                </div>
-                <span class="text-xs font-semibold text-foreground text-center truncate w-full">{{ match.team1_name || t('tbd') }}</span>
-              </div>
-              <div class="flex flex-col items-center gap-0.5">
-                <span class="text-xl font-bold font-mono text-foreground">{{ match.score1 != null ? match.score1 : 0 }} : {{ match.score2 != null ? match.score2 : 0 }}</span>
-                <span class="text-[10px] text-text-tertiary">BO{{ match.best_of || 3 }}</span>
-              </div>
-              <div class="flex flex-col items-center gap-1.5 w-20">
-                <div class="w-9 h-9 rounded-full bg-surface overflow-hidden shrink-0">
-                  <img v-if="match.team2_banner || match.team2_avatar" :src="match.team2_banner || match.team2_avatar" class="w-full h-full object-cover" />
-                </div>
-                <span class="text-xs font-semibold text-foreground text-center truncate w-full">{{ match.team2_name || t('tbd') }}</span>
-              </div>
-            </div>
-            <span class="text-[11px] text-text-muted text-center">{{ formatMatchDate(match.scheduled_at) }}</span>
-          </router-link>
-          <!-- Roster overlay on hover -->
-          <div v-if="match.team1_players?.length || match.team2_players?.length" class="absolute inset-0 rounded-xl bg-card/95 backdrop-blur-sm hidden group-hover:flex items-center p-3 gap-3 z-10 pointer-events-none">
-            <div class="flex-1 flex flex-col gap-0.5 min-w-0">
-              <span class="text-[9px] font-semibold text-primary uppercase tracking-wider mb-0.5 truncate">{{ match.team1_name || t('tbd') }}</span>
-              <div v-for="p in match.team1_players" :key="p.name" class="flex items-center gap-1">
-                <span v-if="p.playing_role" class="text-[8px] font-bold text-muted-foreground w-3.5 shrink-0">P{{ p.playing_role }}</span>
-                <span v-else class="w-3.5 shrink-0"></span>
-                <RankBadge v-if="p.mmr" :mmr="p.mmr" size="sm" class="shrink-0 !w-3.5 !h-3.5" />
-                <span class="text-[10px] text-foreground truncate">{{ p.name }}</span>
-              </div>
-            </div>
-            <div class="w-px self-stretch bg-border/50"></div>
-            <div class="flex-1 flex flex-col gap-0.5 min-w-0">
-              <span class="text-[9px] font-semibold text-primary uppercase tracking-wider mb-0.5 truncate">{{ match.team2_name || t('tbd') }}</span>
-              <div v-for="p in match.team2_players" :key="p.name" class="flex items-center gap-1">
-                <span v-if="p.playing_role" class="text-[8px] font-bold text-muted-foreground w-3.5 shrink-0">P{{ p.playing_role }}</span>
-                <span v-else class="w-3.5 shrink-0"></span>
-                <RankBadge v-if="p.mmr" :mmr="p.mmr" size="sm" class="shrink-0 !w-3.5 !h-3.5" />
-                <span class="text-[10px] text-foreground truncate">{{ p.name }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      </div>
-    </div>
-    </div>
-
     <div class="relative z-10 max-w-[1200px] mx-auto w-full px-6 md:px-10 pt-6 pb-8 flex flex-col gap-6">
     <div class="flex flex-col lg:flex-row gap-6">
       <!-- Main Content -->
@@ -337,7 +259,7 @@ const loopedMatches = computed(() => {
               :to="{ name: 'news-post', params: { id: news[0].id } }"
               class="block hover:opacity-90 transition-opacity"
             >
-              <div v-if="news[0].image_url" class="w-full h-[200px] bg-surface overflow-hidden">
+              <div v-if="news[0].image_url" class="w-full bg-surface overflow-hidden" style="aspect-ratio: 1120 / 400;">
                 <img :src="news[0].image_url" class="w-full h-full object-cover" />
               </div>
               <div class="px-5 py-4 border-b border-foreground/10">
@@ -413,6 +335,56 @@ const loopedMatches = computed(() => {
                   {{ comp.registration_start ? formatDate(comp.registration_start) : '' }}{{ comp.registration_end ? ' - ' + formatDate(comp.registration_end) : '' }}
                 </span>
               </router-link>
+            </div>
+          </div>
+          <!-- Matches (separate block, grouped by competition) -->
+          <div v-if="upcomingMatches.length > 0" class="rounded-lg bg-card overflow-hidden">
+            <div class="flex items-center justify-between px-5 py-4 border-b border-surface">
+              <div class="flex items-center gap-2">
+                <Swords class="w-[18px] h-[18px] text-primary" />
+                <span class="text-sm font-semibold text-foreground">{{ t('upcomingMatches') }}</span>
+              </div>
+              <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-primary/15 text-primary">{{ upcomingMatches.length }}</span>
+            </div>
+            <div class="divide-y divide-surface">
+                <router-link
+                  v-for="match in sortedMatches"
+                  :key="match.id"
+                  :to="`/c/${match.competition_id}/tournament?match=${match.id}`"
+                  class="flex items-center gap-2 px-4 py-2 hover:bg-surface/50 transition-colors"
+                >
+                  <!-- Live indicator -->
+                  <div class="w-3 shrink-0 flex justify-center">
+                    <span v-if="match.status === 'live'" class="w-1.5 h-1.5 rounded-full bg-destructive animate-pulse"></span>
+                  </div>
+                  <!-- Teams stacked -->
+                  <div class="flex flex-col gap-1 flex-1 min-w-0">
+                    <div class="flex items-center gap-1.5">
+                      <div class="w-4 h-4 rounded-full bg-surface overflow-hidden shrink-0">
+                        <img v-if="match.team1_banner || match.team1_avatar" :src="match.team1_banner || match.team1_avatar" class="w-full h-full object-cover" />
+                      </div>
+                      <span class="text-[11px] text-foreground truncate" :class="match.score1 > match.score2 ? 'font-bold' : 'font-medium'">{{ match.team1_name || t('tbd') }}</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                      <div class="w-4 h-4 rounded-full bg-surface overflow-hidden shrink-0">
+                        <img v-if="match.team2_banner || match.team2_avatar" :src="match.team2_banner || match.team2_avatar" class="w-full h-full object-cover" />
+                      </div>
+                      <span class="text-[11px] text-foreground truncate" :class="match.score2 > match.score1 ? 'font-bold' : 'font-medium'">{{ match.team2_name || t('tbd') }}</span>
+                    </div>
+                  </div>
+                  <!-- Score + Time (right side) -->
+                  <div class="shrink-0 flex flex-col items-end gap-1">
+                    <template v-if="match.status === 'live' || (match.score1 > 0 || match.score2 > 0)">
+                      <span class="text-[11px] font-bold font-mono" :class="{ 'text-foreground': match.score1 >= match.score2, 'text-muted-foreground': match.score1 < match.score2 }">{{ match.score1 ?? 0 }}</span>
+                      <span class="text-[11px] font-bold font-mono" :class="{ 'text-foreground': match.score2 >= match.score1, 'text-muted-foreground': match.score2 < match.score1 }">{{ match.score2 ?? 0 }}</span>
+                    </template>
+                    <template v-else>
+                      <span v-if="match.scheduled_at" class="text-[10px] text-muted-foreground font-mono whitespace-nowrap">{{ formatMatchDate(match.scheduled_at, t) }}</span>
+                      <span v-else class="text-[10px] text-muted-foreground font-mono">{{ t('tbd') }}</span>
+                      <span class="text-[10px] text-muted-foreground font-mono">BO{{ match.best_of || 3 }}</span>
+                    </template>
+                  </div>
+                </router-link>
             </div>
           </div>
           <!-- Live Streams -->

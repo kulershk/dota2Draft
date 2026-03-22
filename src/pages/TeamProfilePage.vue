@@ -160,7 +160,7 @@ const posLabel: Record<number, string> = { 1: 'Carry', 2: 'Mid', 3: 'Offlane', 4
               <span v-else-if="match.status === 'completed'" class="text-[10px] font-semibold" :class="match.won ? 'text-green-500' : 'text-red-500'">
                 {{ match.won ? t('win') : t('loss') }}
               </span>
-              <span v-else class="text-[10px] text-muted-foreground">{{ formatMatchDate(match.scheduled_at) }}</span>
+              <span v-else class="text-[10px] text-muted-foreground">{{ formatMatchDate(match.scheduled_at, t) }}</span>
               <div v-if="match.bracket" class="text-[9px] text-muted-foreground mt-0.5">{{ match.bracket }}</div>
             </div>
           </router-link>

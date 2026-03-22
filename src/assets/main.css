@@ -22,6 +22,14 @@
   background: rgb(var(--muted-foreground) / 0.8);
 }
 
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 :root {
   --background: 245 245 245;
   --foreground: 51 51 51;

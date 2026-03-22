@@ -133,7 +133,7 @@ watch(postId, () => {
           <span class="text-sm text-text-tertiary">{{ formatDate(post.created_at) }}</span>
         </div>
         <div v-if="post.image_url" class="rounded-lg overflow-hidden">
-          <img :src="post.image_url" class="w-full max-h-[400px] object-cover" />
+          <img :src="post.image_url" class="w-full object-cover" style="aspect-ratio: 1120 / 400;" />
         </div>
         <div class="h-px bg-border" />
         <div class="prose prose-sm dark:prose-invert max-w-none text-muted-foreground leading-relaxed" v-html="post.content"></div>

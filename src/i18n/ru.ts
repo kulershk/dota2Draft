@@ -543,6 +543,7 @@ export default {
   navMatches: 'Матчи',
   allMatches: 'Все матчи',
   allMatchesDesc: 'Все матчи этого соревнования.',
+  allMatchesGlobalDesc: 'Все матчи из всех соревнований.',
 
   // Tournament
   tournament: 'Турнир',

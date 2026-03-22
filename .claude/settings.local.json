@@ -68,7 +68,8 @@
       "Bash(do if:*)",
       "Bash(then echo:*)",
       "Bash(fi)",
-      "Bash(done)"
+      "Bash(done)",
+      "WebFetch(domain:www.hltv.org)"
     ]
   }
 }
