@@ -879,4 +879,7 @@ export default {
   recentMatchResults: 'Naujausi rungtynių rezultatai',
   fantasyUpcoming: 'Pasirinkimai bus prieinami, kai etapas bus atidarytas.',
   fantasyUpcomingLabel: 'Būsimas',
+  fantasyAllowedTeams: 'Leidžiamos komandos',
+  fantasyAllowedTeamsHint: 'Pasirinkite, kurių komandų žaidėjus galima rinktis. Panaikinus komandą, esami pasirinkimai užrakinami.',
+  fantasyPickLocked: 'Užrakinta',
 }

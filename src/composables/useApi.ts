@@ -116,7 +116,7 @@ export function useApi() {
     // Fantasy
     getFantasy: (compId: number) => request(`/api/competitions/${compId}/fantasy`),
     getFantasyLeaderboard: (compId: number) => request(`/api/competitions/${compId}/fantasy/leaderboard`),
-    createFantasyStage: (compId: number, data: { name: string; matchIds: number[] }) =>
+    createFantasyStage: (compId: number, data: { name: string; matchIds: number[]; allowedCaptainIds?: number[] | null }) =>
       request(`/api/competitions/${compId}/fantasy/stages`, { method: 'POST', body: JSON.stringify(data) }),
     updateFantasyStage: (compId: number, stageId: number, data: Record<string, any>) =>
       request(`/api/competitions/${compId}/fantasy/stages/${stageId}`, { method: 'PUT', body: JSON.stringify(data) }),

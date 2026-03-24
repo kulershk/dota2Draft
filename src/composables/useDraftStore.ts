@@ -256,7 +256,7 @@ const roleCounts = computed(() => {
 })
 
 const tournamentData = ref<{ tournament_state: any; matches: any[] }>({ tournament_state: {}, matches: [] })
-const fantasyData = ref<{ stages: any[]; myPicks: Record<number, Record<string, number>>; myRepeats: Record<number, number[]>; repeatPenalty: number; enforceRoles: boolean }>({ stages: [], myPicks: {}, myRepeats: {}, repeatPenalty: 0, enforceRoles: false })
+const fantasyData = ref<{ stages: any[]; myPicks: Record<number, Record<string, number>>; myRepeats: Record<number, number[]>; lockedPicks: Record<number, Record<string, boolean>>; repeatPenalty: number; enforceRoles: boolean }>({ stages: [], myPicks: {}, myRepeats: {}, lockedPicks: {}, repeatPenalty: 0, enforceRoles: false })
 
 const onlineCaptainIds = ref<number[]>([])
 const readyCaptainIds = ref<number[]>([])
@@ -537,7 +537,7 @@ export function useDraftStore() {
     try {
       fantasyData.value = await api.getFantasy(compId)
     } catch {
-      fantasyData.value = { stages: [], myPicks: {}, myRepeats: {}, repeatPenalty: 0, enforceRoles: false }
+      fantasyData.value = { stages: [], myPicks: {}, myRepeats: {}, lockedPicks: {}, repeatPenalty: 0, enforceRoles: false }
     }
   }
 

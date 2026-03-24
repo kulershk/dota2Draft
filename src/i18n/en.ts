@@ -884,4 +884,7 @@ export default {
   recentMatchResults: 'Recent Match Results',
   fantasyUpcoming: 'Picks will be available once this stage is opened.',
   fantasyUpcomingLabel: 'Upcoming',
+  fantasyAllowedTeams: 'Allowed Teams',
+  fantasyAllowedTeamsHint: 'Select which teams\' players can be picked. Unchecking a team locks existing picks from that team.',
+  fantasyPickLocked: 'Locked',
 }

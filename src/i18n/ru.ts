@@ -879,4 +879,7 @@ export default {
   recentMatchResults: 'Последние результаты матчей',
   fantasyUpcoming: 'Выбор будет доступен после открытия этапа.',
   fantasyUpcomingLabel: 'Предстоящий',
+  fantasyAllowedTeams: 'Разрешённые команды',
+  fantasyAllowedTeamsHint: 'Выберите, из каких команд можно выбирать игроков. Снятие команды блокирует существующие выборы из неё.',
+  fantasyPickLocked: 'Заблокировано',
 }

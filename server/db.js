@@ -354,9 +354,13 @@ export async function initDb() {
       name TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'upcoming',
       stage_order INTEGER NOT NULL DEFAULT 0,
+      allowed_captain_ids JSONB DEFAULT NULL,
       created_at TIMESTAMP DEFAULT NOW()
     )
   `)
+
+  // Add allowed_captain_ids column if missing (existing databases)
+  try { await execute('ALTER TABLE fantasy_stages ADD COLUMN allowed_captain_ids JSONB DEFAULT NULL') } catch {}
 
   await execute(`
     CREATE TABLE IF NOT EXISTS fantasy_stage_matches (

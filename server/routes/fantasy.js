@@ -70,6 +70,40 @@ export default function createFantasyRouter(io) {
 
       const settings = parseCompSettings(comp)
 
+      // Compute locked picks (picks from teams no longer in the allowed list)
+      let lockedPicks = {} // { stageId: { role: true } }
+      if (player) {
+        // Get all captains and build player→captain mapping
+        const captainRows = await query(
+          'SELECT id, player_id FROM captains WHERE competition_id = $1',
+          [compId]
+        )
+        const playerIdToCaptainId = {}
+        for (const cap of captainRows) {
+          if (cap.player_id) playerIdToCaptainId[cap.player_id] = cap.id
+        }
+
+        for (const stage of stages) {
+          const allowed = stage.allowed_captain_ids
+          if (!allowed || !Array.isArray(allowed) || allowed.length === 0) continue
+          const stagePicks = myPicks[stage.id]
+          if (!stagePicks) continue
+
+          for (const [role, pickPlayerId] of Object.entries(stagePicks)) {
+            // Find which captain this picked player belongs to
+            const cp = await queryOne(
+              'SELECT drafted_by FROM competition_players WHERE competition_id = $1 AND player_id = $2',
+              [compId, pickPlayerId]
+            )
+            const effectiveCaptainId = cp?.drafted_by || playerIdToCaptainId[pickPlayerId] || null
+            if (effectiveCaptainId && !allowed.includes(effectiveCaptainId)) {
+              if (!lockedPicks[stage.id]) lockedPicks[stage.id] = {}
+              lockedPicks[stage.id][role] = true
+            }
+          }
+        }
+      }
+
       // Count participants per stage
       let participantCounts = {}
       if (stageIds.length > 0) {
@@ -87,7 +121,7 @@ export default function createFantasyRouter(io) {
         stage.participant_count = participantCounts[stage.id] || 0
       }
 
-      res.json({ stages, myPicks, myRepeats, repeatPenalty: settings.fantasyRepeatPenalty, enforceRoles: settings.fantasyEnforceRoles })
+      res.json({ stages, myPicks, myRepeats, lockedPicks, repeatPenalty: settings.fantasyRepeatPenalty, enforceRoles: settings.fantasyEnforceRoles })
     } catch (e) {
       console.error('Fantasy GET error:', e.message)
       res.status(500).json({ error: 'Internal error' })
@@ -159,7 +193,7 @@ export default function createFantasyRouter(io) {
       const admin = await requireCompPermission(req, res, compId)
       if (!admin) return
 
-      const { name, matchIds = [] } = req.body
+      const { name, matchIds = [], allowedCaptainIds = null } = req.body
       if (!name) return res.status(400).json({ error: 'Name is required' })
 
       // Validate matches belong to this competition and aren't already assigned
@@ -192,8 +226,8 @@ export default function createFantasyRouter(io) {
       const order = (last?.max_order ?? -1) + 1
 
       const stage = await queryOne(
-        'INSERT INTO fantasy_stages (competition_id, name, stage_order) VALUES ($1, $2, $3) RETURNING *',
-        [compId, name, order]
+        'INSERT INTO fantasy_stages (competition_id, name, stage_order, allowed_captain_ids) VALUES ($1, $2, $3, $4) RETURNING *',
+        [compId, name, order, allowedCaptainIds ? JSON.stringify(allowedCaptainIds) : null]
       )
 
       // Assign matches
@@ -227,7 +261,7 @@ export default function createFantasyRouter(io) {
       )
       if (!stage) return res.status(404).json({ error: 'Stage not found' })
 
-      const { name, status, matchIds } = req.body
+      const { name, status, matchIds, allowedCaptainIds } = req.body
 
       if (name !== undefined) {
         await execute('UPDATE fantasy_stages SET name = $1 WHERE id = $2', [name, stageId])
@@ -235,6 +269,13 @@ export default function createFantasyRouter(io) {
 
       if (status !== undefined && ['upcoming', 'pending', 'active', 'completed'].includes(status)) {
         await execute('UPDATE fantasy_stages SET status = $1 WHERE id = $2', [status, stageId])
+      }
+
+      if (allowedCaptainIds !== undefined) {
+        await execute(
+          'UPDATE fantasy_stages SET allowed_captain_ids = $1 WHERE id = $2',
+          [allowedCaptainIds ? JSON.stringify(allowedCaptainIds) : null, stageId]
+        )
       }
 
       if (matchIds !== undefined) {
@@ -322,11 +363,30 @@ export default function createFantasyRouter(io) {
       }
 
       const compPlayers = await query(
-        'SELECT player_id, playing_role FROM competition_players WHERE competition_id = $1 AND player_id = ANY($2)',
+        'SELECT player_id, playing_role, drafted_by FROM competition_players WHERE competition_id = $1 AND player_id = ANY($2)',
         [compId, pickPlayerIds]
       )
       if (compPlayers.length !== 5) {
         return res.status(400).json({ error: 'Some players do not belong to this competition' })
+      }
+
+      // Check allowed teams restriction
+      const allowedCaptains = stage.allowed_captain_ids
+      if (allowedCaptains && Array.isArray(allowedCaptains) && allowedCaptains.length > 0) {
+        const captainRows = await query(
+          'SELECT id, player_id FROM captains WHERE competition_id = $1',
+          [compId]
+        )
+        const playerToCaptain = {}
+        for (const cap of captainRows) {
+          if (cap.player_id) playerToCaptain[cap.player_id] = cap.id
+        }
+        for (const cp of compPlayers) {
+          const effectiveCaptainId = cp.drafted_by || playerToCaptain[cp.player_id] || null
+          if (!effectiveCaptainId || !allowedCaptains.includes(effectiveCaptainId)) {
+            return res.status(400).json({ error: 'Some players belong to teams not available for this stage' })
+          }
+        }
       }
 
       // Enforce role restrictions if enabled
@@ -382,12 +442,49 @@ export default function createFantasyRouter(io) {
       if (!roles.includes(role)) return res.status(400).json({ error: 'Invalid role' })
       if (!playerId) return res.status(400).json({ error: 'Player ID required' })
 
+      // Check if the existing pick for this role is locked (from a disallowed team)
+      const allowedCaptains = stage.allowed_captain_ids
+      if (allowedCaptains && Array.isArray(allowedCaptains) && allowedCaptains.length > 0) {
+        const existingPick = await queryOne(
+          'SELECT pick_player_id FROM fantasy_picks WHERE fantasy_stage_id = $1 AND player_id = $2 AND role = $3',
+          [stageId, player.id, role]
+        )
+        if (existingPick) {
+          const existingCp = await queryOne(
+            'SELECT drafted_by FROM competition_players WHERE competition_id = $1 AND player_id = $2',
+            [compId, existingPick.pick_player_id]
+          )
+          const existingCaptainSelf = await queryOne(
+            'SELECT id FROM captains WHERE competition_id = $1 AND player_id = $2',
+            [compId, existingPick.pick_player_id]
+          )
+          const existingCaptainId = existingCp?.drafted_by || (existingCaptainSelf ? existingCaptainSelf.id : null)
+          if (existingCaptainId && !allowedCaptains.includes(existingCaptainId)) {
+            return res.status(400).json({ error: 'This pick is locked — the team has been removed from this stage' })
+          }
+        }
+      }
+
       // Verify player belongs to this competition
       const compPlayer = await queryOne(
-        'SELECT player_id, playing_role FROM competition_players WHERE competition_id = $1 AND player_id = $2',
+        'SELECT player_id, playing_role, drafted_by FROM competition_players WHERE competition_id = $1 AND player_id = $2',
         [compId, playerId]
       )
       if (!compPlayer) return res.status(400).json({ error: 'Player not in this competition' })
+
+      // Check new player's team is allowed
+      if (allowedCaptains && Array.isArray(allowedCaptains) && allowedCaptains.length > 0) {
+        // Find the captain this player belongs to (drafted_by or is captain)
+        const playerCaptainId = compPlayer.drafted_by
+        const isCaptainSelf = await queryOne(
+          'SELECT id FROM captains WHERE competition_id = $1 AND player_id = $2',
+          [compId, playerId]
+        )
+        const effectiveCaptainId = playerCaptainId || (isCaptainSelf ? isCaptainSelf.id : null)
+        if (!effectiveCaptainId || !allowedCaptains.includes(effectiveCaptainId)) {
+          return res.status(400).json({ error: 'This player\'s team is not available for this stage' })
+        }
+      }
 
       // Enforce role restrictions if enabled
       const comp = await getCompetition(compId)
@@ -436,6 +533,29 @@ export default function createFantasyRouter(io) {
       if (!stage) return res.status(404).json({ error: 'Stage not found' })
       if (stage.status !== 'pending') {
         return res.status(400).json({ error: 'Picks are locked for this stage' })
+      }
+
+      // Check if this pick is locked due to team being disallowed
+      const allowedCaptains = stage.allowed_captain_ids
+      if (allowedCaptains && Array.isArray(allowedCaptains) && allowedCaptains.length > 0) {
+        const existingPick = await queryOne(
+          'SELECT pick_player_id FROM fantasy_picks WHERE fantasy_stage_id = $1 AND player_id = $2 AND role = $3',
+          [stageId, player.id, role]
+        )
+        if (existingPick) {
+          const compPlayer = await queryOne(
+            'SELECT drafted_by FROM competition_players WHERE competition_id = $1 AND player_id = $2',
+            [compId, existingPick.pick_player_id]
+          )
+          const isCaptainSelf = await queryOne(
+            'SELECT id FROM captains WHERE competition_id = $1 AND player_id = $2',
+            [compId, existingPick.pick_player_id]
+          )
+          const effectiveCaptainId = compPlayer?.drafted_by || (isCaptainSelf ? isCaptainSelf.id : null)
+          if (effectiveCaptainId && !allowedCaptains.includes(effectiveCaptainId)) {
+            return res.status(400).json({ error: 'This pick is locked — the team has been removed from this stage' })
+          }
+        }
       }
 
       await execute(

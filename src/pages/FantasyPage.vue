@@ -22,6 +22,7 @@ const editingStageId = ref<number | null>(null)
 const stageName = ref('')
 const stageMatchIds = ref<number[]>([])
 const stageStatus = ref('pending')
+const stageAllowedCaptainIds = ref<number[]>([])
 const showDeleteConfirm = ref(false)
 const deleteStageId = ref<number | null>(null)
 
@@ -35,6 +36,7 @@ const compId = store.currentCompetitionId
 const stages = computed(() => store.fantasyData.value?.stages || [])
 const myPicks = computed(() => store.fantasyData.value?.myPicks || {})
 const myRepeats = computed(() => store.fantasyData.value?.myRepeats || {})
+const lockedPicks = computed(() => store.fantasyData.value?.lockedPicks || {})
 const repeatPenalty = computed(() => store.fantasyData.value?.repeatPenalty ?? 0)
 const isAdmin = computed(() =>
   store.hasPerm('manage_competitions') ||
@@ -99,6 +101,10 @@ function isRepeatPick(stageId: number, playerId: number): boolean {
   return repeats.includes(playerId)
 }
 
+function isPickLocked(stageId: number, role: string): boolean {
+  return !!lockedPicks.value[stageId]?.[role]
+}
+
 // Get player info by id (checks players and captains)
 function getPlayerInfo(playerId: number): any {
   const all = (store.players.value || []) as any[]
@@ -155,6 +161,7 @@ function openCreateStage() {
   stageName.value = ''
   stageMatchIds.value = []
   stageStatus.value = 'upcoming'
+  stageAllowedCaptainIds.value = (store.captains.value || []).map((c: any) => c.id)
   showStageModal.value = true
 }
 
@@ -163,22 +170,32 @@ function openEditStage(stage: any) {
   stageName.value = stage.name
   stageMatchIds.value = [...(stage.match_ids || [])]
   stageStatus.value = stage.status
+  const allCaptainIds = (store.captains.value || []).map((c: any) => c.id)
+  stageAllowedCaptainIds.value = stage.allowed_captain_ids && stage.allowed_captain_ids.length > 0
+    ? [...stage.allowed_captain_ids]
+    : [...allCaptainIds]
   showStageModal.value = true
 }
 
 async function saveStage() {
   const cId = compId.value
   if (!cId) return
+  const allCaptainIds = (store.captains.value || []).map((c: any) => c.id)
+  const allSelected = stageAllowedCaptainIds.value.length === allCaptainIds.length &&
+    allCaptainIds.every((id: number) => stageAllowedCaptainIds.value.includes(id))
+  const allowedCaptainIds = allSelected ? null : stageAllowedCaptainIds.value
   if (editingStageId.value) {
     await api.updateFantasyStage(cId, editingStageId.value, {
       name: stageName.value,
       status: stageStatus.value,
       matchIds: stageMatchIds.value,
+      allowedCaptainIds,
     })
   } else {
     await api.createFantasyStage(cId, {
       name: stageName.value,
       matchIds: stageMatchIds.value,
+      allowedCaptainIds,
     })
   }
   showStageModal.value = false
@@ -207,6 +224,12 @@ function toggleMatchId(matchId: number) {
   else stageMatchIds.value.push(matchId)
 }
 
+function toggleCaptainId(captainId: number) {
+  const idx = stageAllowedCaptainIds.value.indexOf(captainId)
+  if (idx >= 0) stageAllowedCaptainIds.value.splice(idx, 1)
+  else stageAllowedCaptainIds.value.push(captainId)
+}
+
 // User picks
 function openPick(stageId: number, role: string) {
   pickStageId.value = stageId
@@ -221,8 +244,13 @@ const filteredTeamGroups = computed(() => {
   const q = pickSearch.value.toLowerCase()
   const enforce = store.fantasyData.value.enforceRoles
   const requiredPos = enforce ? FANTASY_ROLE_TO_POS[pickRole.value] : null
+  // Get allowed captain ids for the current pick stage
+  const stage = pickStageId.value ? stages.value.find((s: any) => s.id === pickStageId.value) : null
+  const allowed = stage?.allowed_captain_ids
   const result: { captain: any; players: any[] }[] = []
   for (const group of teamGroupedPlayers.value) {
+    // Filter out teams not in allowed list
+    if (allowed && Array.isArray(allowed) && allowed.length > 0 && !allowed.includes(group.captain.id)) continue
     const filtered = group.players.filter((p: any) => {
       const name = (p.name || '').toLowerCase()
       if (!name.includes(q)) return false
@@ -499,9 +527,13 @@ function matchLabel(match: any) {
                     :class="(getMyRolePoints(stage.id, role) ?? 0) >= 0 ? 'text-primary' : 'text-red-500'"
                   >{{ (getMyRolePoints(stage.id, role) ?? 0).toFixed(1) }} {{ t('pts') }}</span>
                   <span v-else-if="stage.status === 'pending'" class="text-[11px] font-semibold font-mono text-muted-foreground">—</span>
-                  <div v-if="stage.status === 'pending'" class="flex gap-2">
+                  <div v-if="stage.status === 'pending' && !isPickLocked(stage.id, role)" class="flex gap-2">
                     <button class="text-[10px] text-primary hover:underline" @click="openPick(stage.id, role)">{{ t('changePick') }}</button>
                     <button class="text-[10px] text-destructive hover:underline" @click="clearPick(stage.id, role)">{{ t('clear') }}</button>
+                  </div>
+                  <div v-else-if="stage.status === 'pending' && isPickLocked(stage.id, role)" class="flex items-center gap-1">
+                    <Lock class="w-3 h-3 text-amber-500" />
+                    <span class="text-[9px] text-amber-500 font-medium">{{ t('fantasyPickLocked') }}</span>
                   </div>
                   <Lock v-else class="w-3 h-3 text-text-tertiary" />
                 </template>
@@ -767,6 +799,27 @@ function matchLabel(match: any) {
             <div v-if="allMatches.length === 0" class="text-xs text-muted-foreground text-center py-4">
               {{ t('noMatchesAvailable') }}
             </div>
+          </div>
+        </div>
+
+        <!-- Allowed Teams -->
+        <div v-if="(store.captains.value || []).length > 0" class="flex flex-col gap-1.5">
+          <label class="label-text">{{ t('fantasyAllowedTeams') }}</label>
+          <p class="text-xs text-muted-foreground">{{ t('fantasyAllowedTeamsHint') }}</p>
+          <div class="flex flex-col gap-1 max-h-[200px] overflow-y-auto">
+            <label
+              v-for="cap in (store.captains.value || [])" :key="cap.id"
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-accent/30 cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                class="w-4 h-4 accent-primary"
+                :checked="stageAllowedCaptainIds.includes(cap.id)"
+                @change="toggleCaptainId(cap.id)"
+              />
+              <img v-if="cap.banner_url || cap.avatar_url" :src="cap.banner_url || cap.avatar_url" class="w-5 h-5 object-cover" :class="cap.banner_url ? 'rounded' : 'rounded-full'" />
+              <span class="text-sm text-foreground">{{ cap.team || cap.name }}</span>
+            </label>
           </div>
         </div>
       </div>

@@ -879,4 +879,7 @@ export default {
   recentMatchResults: 'Jaunākie spēļu rezultāti',
   fantasyUpcoming: 'Izvēles būs pieejamas, kad posms tiks atvērts.',
   fantasyUpcomingLabel: 'Gaidāmais',
+  fantasyAllowedTeams: 'Atļautās komandas',
+  fantasyAllowedTeamsHint: 'Izvēlieties, kuru komandu spēlētājus var izvēlēties. Noņemot komandu, esošie izvēlētie spēlētāji tiek bloķēti.',
+  fantasyPickLocked: 'Bloķēts',
 }

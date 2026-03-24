@@ -601,7 +601,7 @@
       "get": {
         "tags": ["Fantasy"],
         "summary": "Get fantasy stages and user picks",
-        "description": "Returns all fantasy stages with match assignments and the current user's picks (if authenticated).",
+        "description": "Returns all fantasy stages (with allowed_captain_ids and match assignments), the current user's picks, lockedPicks (picks from disallowed teams that can't be changed), and repeat info.",
         "parameters": [{ "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }],
         "responses": { "200": { "description": "Fantasy stages and picks" } }
       }
@@ -621,7 +621,7 @@
         "summary": "Create fantasy stage",
         "security": [{ "bearerAuth": [] }],
         "parameters": [{ "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }],
-        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "name": { "type": "string" }, "matchIds": { "type": "array", "items": { "type": "integer" } } }, "required": ["name"] } } } },
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "name": { "type": "string" }, "matchIds": { "type": "array", "items": { "type": "integer" } }, "allowedCaptainIds": { "type": "array", "items": { "type": "integer" }, "nullable": true, "description": "Captain IDs whose players can be picked. Null or omitted = all teams allowed." } }, "required": ["name"] } } } },
         "responses": { "200": { "description": "Stage created" } }
       }
     },
@@ -634,7 +634,7 @@
           { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
           { "name": "stageId", "in": "path", "required": true, "schema": { "type": "integer" } }
         ],
-        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "name": { "type": "string" }, "status": { "type": "string", "enum": ["pending", "active", "completed"] }, "matchIds": { "type": "array", "items": { "type": "integer" } } } } } } },
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "name": { "type": "string" }, "status": { "type": "string", "enum": ["pending", "active", "completed"] }, "matchIds": { "type": "array", "items": { "type": "integer" } }, "allowedCaptainIds": { "type": "array", "items": { "type": "integer" }, "nullable": true, "description": "Captain IDs whose players can be picked. Null = all teams allowed. Existing picks from removed teams become locked." } } } } } },
         "responses": { "200": { "description": "Stage updated" } }
       },
       "delete": {
