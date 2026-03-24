@@ -138,7 +138,7 @@ export default function createFantasyRouter(io) {
 
       const settings = parseCompSettings(comp)
       const stages = await query(
-        "SELECT * FROM fantasy_stages WHERE competition_id = $1 AND status IN ('active', 'completed') ORDER BY stage_order, id",
+        "SELECT * FROM fantasy_stages WHERE competition_id = $1 AND status IN ('pending', 'active', 'completed') ORDER BY stage_order, id",
         [compId]
       )
 

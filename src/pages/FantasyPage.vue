@@ -105,6 +105,10 @@ function isPickLocked(stageId: number, role: string): boolean {
   return !!lockedPicks.value[stageId]?.[role]
 }
 
+function hasLockedPicks(stageId: number): boolean {
+  return !!lockedPicks.value[stageId] && Object.keys(lockedPicks.value[stageId]).length > 0
+}
+
 // Get player info by id (checks players and captains)
 function getPlayerInfo(playerId: number): any {
   const all = (store.players.value || []) as any[]
@@ -437,7 +441,7 @@ function matchLabel(match: any) {
             </div>
             <div class="flex items-center gap-4">
               <!-- Mini stats when collapsed -->
-              <template v-if="!expandedStages.has(stage.id) && stage.status !== 'pending' && stage.status !== 'upcoming'">
+              <template v-if="!expandedStages.has(stage.id) && stage.status !== 'upcoming' && (stage.status !== 'pending' || hasLockedPicks(stage.id))">
                 <span v-if="getMyStageTotal(stage.id) != null" class="text-sm font-semibold font-mono text-primary">
                   {{ (getMyStageTotal(stage.id) ?? 0).toFixed(1) }} pts
                 </span>
@@ -522,7 +526,7 @@ function matchLabel(match: any) {
                     :title="t('repeatPenaltyLabel', { pct: Math.round(repeatPenalty * 100) })"
                   >-{{ Math.round(repeatPenalty * 100) }}%</span>
                   <span
-                    v-if="stage.status !== 'pending' && getMyRolePoints(stage.id, role) != null"
+                    v-if="(stage.status !== 'pending' || isPickLocked(stage.id, role)) && getMyRolePoints(stage.id, role) != null"
                     class="text-[11px] font-semibold font-mono"
                     :class="(getMyRolePoints(stage.id, role) ?? 0) >= 0 ? 'text-primary' : 'text-red-500'"
                   >{{ (getMyRolePoints(stage.id, role) ?? 0).toFixed(1) }} {{ t('pts') }}</span>
@@ -556,7 +560,7 @@ function matchLabel(match: any) {
               <!-- Total card -->
               <div class="flex-1 flex flex-col items-center justify-center gap-2 rounded-lg bg-primary/10 border border-primary/25 p-3">
                 <span class="text-[10px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">TOTAL</span>
-                <span v-if="stage.status !== 'pending' && getMyStageTotal(stage.id) != null"
+                <span v-if="(stage.status !== 'pending' || hasLockedPicks(stage.id)) && getMyStageTotal(stage.id) != null"
                   class="text-[22px] font-bold font-mono text-primary">
                   {{ (getMyStageTotal(stage.id) ?? 0).toFixed(1) }} pts
                 </span>
