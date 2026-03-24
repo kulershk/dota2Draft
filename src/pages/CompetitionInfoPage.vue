@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Calendar, Users, User, Gavel, Trophy, Clock, Settings, DollarSign, Upload, X, Tv, Swords, Info, ChevronRight, Play } from 'lucide-vue-next'
 import { getRank } from '@/utils/ranks'
+import { formatMatchDate as formatMatchDateUtil } from '@/utils/format'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
@@ -88,20 +89,7 @@ const upcomingMatches = computed(() => {
 })
 
 function formatMatchDate(dateStr: string) {
-  const d = new Date(dateStr.replace('Z', ''))
-  const now = new Date()
-  const diffMs = d.getTime() - now.getTime()
-  const diffH = Math.floor(diffMs / 3600000)
-  const diffD = Math.floor(diffMs / 86400000)
-
-  const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-  const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-
-  if (diffMs < 0) return `${date} ${time}`
-  if (diffH < 1) return t('startingSoon')
-  if (diffD === 0) return `${t('today')} ${time}`
-  if (diffD === 1) return `${t('tomorrow')} ${time}`
-  return `${date} ${time}`
+  return formatMatchDateUtil(dateStr, t)
 }
 
 const myCaptain = computed(() => {
