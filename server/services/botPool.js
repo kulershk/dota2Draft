@@ -457,7 +457,15 @@ class BotPool {
 
       let matchWinner = null
       let newStatus = 'live'
-      if (score1 >= winsNeeded) {
+      if (bestOf === 2) {
+        // Bo2: always play both games, then mark completed
+        if (games.length >= 2) {
+          newStatus = 'completed'
+          if (score1 > score2) matchWinner = match.team1_captain_id
+          else if (score2 > score1) matchWinner = match.team2_captain_id
+          // 1-1 draw: matchWinner stays null
+        }
+      } else if (score1 >= winsNeeded) {
         matchWinner = match.team1_captain_id
         newStatus = 'completed'
       } else if (score2 >= winsNeeded) {
