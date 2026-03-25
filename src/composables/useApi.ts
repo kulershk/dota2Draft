@@ -296,5 +296,7 @@ export function useApi() {
       request(`/api/news/${newsId}/comments`, { method: 'POST', body: JSON.stringify({ content }) }),
     deleteComment: (newsId: number, commentId: number) =>
       request(`/api/news/${newsId}/comments/${commentId}`, { method: 'DELETE' }),
+    voteComment: (newsId: number, commentId: number, vote: number) =>
+      request(`/api/news/${newsId}/comments/${commentId}/vote`, { method: 'POST', body: JSON.stringify({ vote }) }),
   }
 }

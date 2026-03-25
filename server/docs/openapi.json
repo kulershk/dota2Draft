@@ -723,6 +723,47 @@
         "responses": { "200": { "description": "Deleted" } }
       }
     },
+    "/api/news/{newsId}/comments/{commentId}/vote": {
+      "post": {
+        "tags": ["News"],
+        "summary": "Like or dislike a comment",
+        "description": "Vote 1 for like, -1 for dislike, 0 to remove vote. Toggles if same vote is sent again.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "newsId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "commentId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": { "vote": { "type": "integer", "enum": [-1, 0, 1] } },
+                "required": ["vote"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Vote recorded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "likes": { "type": "integer" },
+                    "dislikes": { "type": "integer" },
+                    "my_vote": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/users": {
       "get": {
         "tags": ["Users"],

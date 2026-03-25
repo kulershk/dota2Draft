@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Calendar, User, MessageSquare, Send, Trash2, ArrowLeft } from 'lucide-vue-next'
+import { Calendar, User, MessageSquare, Send, Trash2, ArrowLeft, ThumbsUp, ThumbsDown } from 'lucide-vue-next'
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -15,6 +15,9 @@ interface Comment {
   player_avatar: string | null
   content: string
   created_at: string
+  likes: number
+  dislikes: number
+  my_vote: number
 }
 
 const { t } = useI18n()
@@ -66,6 +69,18 @@ async function submitComment() {
 async function deleteComment(commentId: number) {
   await api.deleteComment(postId.value, commentId)
   await fetchComments()
+}
+
+async function voteComment(comment: Comment, vote: 1 | -1) {
+  if (!isLoggedIn.value) return
+  // Toggle: if already voted same way, remove vote
+  const newVote = comment.my_vote === vote ? 0 : vote
+  try {
+    const result = await api.voteComment(postId.value, comment.id, newVote)
+    comment.likes = result.likes
+    comment.dislikes = result.dislikes
+    comment.my_vote = result.my_vote
+  } catch {}
 }
 
 function canDeleteComment(comment: Comment) {
@@ -204,6 +219,26 @@ watch(postId, () => {
                 </button>
               </div>
               <p class="text-sm text-foreground/80 whitespace-pre-wrap break-words">{{ comment.content }}</p>
+              <div class="flex items-center gap-3 mt-1.5">
+                <button
+                  class="flex items-center gap-1 text-xs transition-colors"
+                  :class="comment.my_vote === 1 ? 'text-green-500' : 'text-muted-foreground hover:text-green-500'"
+                  :disabled="!isLoggedIn"
+                  @click="voteComment(comment, 1)"
+                >
+                  <ThumbsUp class="w-3.5 h-3.5" :class="comment.my_vote === 1 ? 'fill-current' : ''" />
+                  <span v-if="comment.likes > 0">{{ comment.likes }}</span>
+                </button>
+                <button
+                  class="flex items-center gap-1 text-xs transition-colors"
+                  :class="comment.my_vote === -1 ? 'text-red-500' : 'text-muted-foreground hover:text-red-500'"
+                  :disabled="!isLoggedIn"
+                  @click="voteComment(comment, -1)"
+                >
+                  <ThumbsDown class="w-3.5 h-3.5" :class="comment.my_vote === -1 ? 'fill-current' : ''" />
+                  <span v-if="comment.dislikes > 0">{{ comment.dislikes }}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

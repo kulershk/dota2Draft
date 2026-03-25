@@ -157,6 +157,17 @@ export async function initDb() {
     )
   `)
 
+  // ─── News comment votes ──────────────────────────────
+  await execute(`
+    CREATE TABLE IF NOT EXISTS news_comment_votes (
+      id SERIAL PRIMARY KEY,
+      comment_id INTEGER NOT NULL REFERENCES news_comments(id) ON DELETE CASCADE,
+      player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      vote SMALLINT NOT NULL CHECK (vote IN (-1, 1)),
+      UNIQUE(comment_id, player_id)
+    )
+  `)
+
   // ─── News table migrations ────────────────────────────
   {
     const has = await queryOne(

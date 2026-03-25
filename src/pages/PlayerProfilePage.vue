@@ -95,6 +95,30 @@ function placementBg(n: number) {
                 <ExternalLink class="w-3.5 h-3.5" />
                 {{ t('steamProfile') }}
               </a>
+              <a v-if="profile.steam_id"
+                :href="`https://www.dotabuff.com/players/${BigInt(profile.steam_id) - 76561197960265728n}`"
+                target="_blank" rel="noopener"
+                class="flex items-center gap-1 hover:text-foreground transition-colors"
+              >
+                <ExternalLink class="w-3.5 h-3.5" />
+                Dotabuff
+              </a>
+              <a v-if="profile.steam_id"
+                :href="`https://www.opendota.com/players/${BigInt(profile.steam_id) - 76561197960265728n}`"
+                target="_blank" rel="noopener"
+                class="flex items-center gap-1 hover:text-foreground transition-colors"
+              >
+                <ExternalLink class="w-3.5 h-3.5" />
+                OpenDota
+              </a>
+              <a v-if="profile.steam_id"
+                :href="`https://stratz.com/players/${BigInt(profile.steam_id) - 76561197960265728n}`"
+                target="_blank" rel="noopener"
+                class="flex items-center gap-1 hover:text-foreground transition-colors"
+              >
+                <ExternalLink class="w-3.5 h-3.5" />
+                Stratz
+              </a>
             </div>
             <p v-if="profile.info" class="text-sm text-muted-foreground mt-2">{{ profile.info }}</p>
           </div>
