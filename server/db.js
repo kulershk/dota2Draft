@@ -257,6 +257,15 @@ export async function initDb() {
   // Add parsed column to match_games if missing (existing databases)
   try { await execute('ALTER TABLE match_games ADD COLUMN parsed BOOLEAN DEFAULT FALSE') } catch {}
 
+  // Backfill: mark games as parsed if they already have detailed stats (items or wards)
+  await execute(`
+    UPDATE match_games SET parsed = true
+    WHERE parsed = false AND id IN (
+      SELECT DISTINCT match_game_id FROM match_game_player_stats
+      WHERE item_0 > 0 OR obs_placed > 0 OR sen_placed > 0
+    )
+  `)
+
   // Matches table migration: add stage column
   {
     const has = await queryOne(
