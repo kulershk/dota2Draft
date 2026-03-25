@@ -245,6 +245,10 @@ function getMultiKillCount(multiKills: Record<string, number>, key: string): num
   return multiKills?.[key] || 0
 }
 
+function playerDisplayName(p: any): string {
+  return p.profile_display_name || p.profile_name || p.player_name || String(p.account_id)
+}
+
 function getPlayerBackpack(p: any): number[] {
   return [p.backpack_0, p.backpack_1, p.backpack_2].filter((id: number) => id > 0)
 }
@@ -545,7 +549,12 @@ function winnerName(game: any) {
                           <img v-if="dota.heroImg(p.hero_id)" :src="dota.heroImg(p.hero_id)" :alt="dota.heroName(p.hero_id)" :title="dota.heroName(p.hero_id)"
                             class="w-7 h-[19px] rounded-sm object-cover flex-shrink-0 border border-border/30" />
                           <div class="flex flex-col min-w-0">
-                            <span class="font-medium truncate text-xs leading-tight">{{ p.player_name || p.account_id }}</span>
+                            <router-link v-if="p.profile_id" :to="{ name: 'player-profile', params: { id: p.profile_id } }"
+                              class="font-medium truncate text-xs leading-tight hover:text-primary transition-colors"
+                              @click.stop="emit('close')">
+                              {{ playerDisplayName(p) }}
+                            </router-link>
+                            <span v-else class="font-medium truncate text-xs leading-tight">{{ playerDisplayName(p) }}</span>
                             <span class="text-[9px] text-muted-foreground leading-tight">{{ dota.heroName(p.hero_id) }}</span>
                           </div>
                         </div>

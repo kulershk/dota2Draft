@@ -342,6 +342,10 @@ function winnerName(game: any) {
   return null
 }
 
+function playerDisplayName(p: any): string {
+  return p.profile_display_name || p.profile_name || p.player_name || String(p.account_id)
+}
+
 function getPlayerItems(p: any): number[] {
   return [p.item_0, p.item_1, p.item_2, p.item_3, p.item_4, p.item_5].filter((id: number) => id > 0)
 }
@@ -812,7 +816,11 @@ function goBack() {
                             <img v-if="dota.heroImg(p.hero_id)" :src="dota.heroImg(p.hero_id)" :alt="dota.heroName(p.hero_id)" :title="dota.heroName(p.hero_id)"
                               class="w-8 h-[22px] rounded-sm object-cover flex-shrink-0 border border-border/30" />
                             <div class="flex flex-col min-w-0">
-                              <span class="font-medium truncate text-xs leading-tight">{{ p.player_name || p.account_id }}</span>
+                              <router-link v-if="p.profile_id" :to="{ name: 'player-profile', params: { id: p.profile_id } }"
+                                class="font-medium truncate text-xs leading-tight hover:text-primary transition-colors">
+                                {{ playerDisplayName(p) }}
+                              </router-link>
+                              <span v-else class="font-medium truncate text-xs leading-tight">{{ playerDisplayName(p) }}</span>
                               <span class="text-[10px] text-muted-foreground leading-tight">{{ dota.heroName(p.hero_id) }}</span>
                             </div>
                           </div>
@@ -884,7 +892,11 @@ function goBack() {
                           <td class="py-1 px-1.5">
                             <div class="flex items-center gap-1.5">
                               <img v-if="dota.heroImg(p.hero_id)" :src="dota.heroImg(p.hero_id)" class="w-6 h-[17px] rounded-sm object-cover flex-shrink-0" />
-                              <span class="font-medium truncate">{{ p.player_name || p.account_id }}</span>
+                              <router-link v-if="p.profile_id" :to="{ name: 'player-profile', params: { id: p.profile_id } }"
+                                class="font-medium truncate hover:text-primary transition-colors">
+                                {{ playerDisplayName(p) }}
+                              </router-link>
+                              <span v-else class="font-medium truncate">{{ playerDisplayName(p) }}</span>
                             </div>
                           </td>
                           <td class="text-center px-1">{{ p.obs_placed }}</td>

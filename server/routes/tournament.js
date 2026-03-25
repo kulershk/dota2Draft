@@ -475,8 +475,13 @@ export default function createTournamentRouter(io) {
     const mg = await queryOne('SELECT id FROM match_games WHERE match_id = $1 AND game_number = $2', [matchId, gameNumber])
     if (!mg) return res.json({ stats: [] })
 
+    // Join with players table to get profile info (Steam32 to Steam64: steam64 = account_id + 76561197960265728)
     const stats = await query(
-      'SELECT * FROM match_game_player_stats WHERE match_game_id = $1 ORDER BY is_radiant DESC, account_id',
+      `SELECT s.*, p.id AS profile_id, p.name AS profile_name, p.display_name AS profile_display_name, p.avatar_url AS profile_avatar
+       FROM match_game_player_stats s
+       LEFT JOIN players p ON p.steam_id = CAST((s.account_id + 76561197960265728) AS TEXT)
+       WHERE s.match_game_id = $1
+       ORDER BY s.is_radiant DESC, s.account_id`,
       [mg.id]
     )
     res.json({ stats })
