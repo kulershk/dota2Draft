@@ -43,7 +43,7 @@ const allGames = computed(() => {
   const list = []
   for (let i = 1; i <= bestOf.value; i++) {
     const g = existing.find((e: any) => e.game_number === i)
-    list.push({ game_number: i, winner_captain_id: g?.winner_captain_id || null, dotabuff_id: g?.dotabuff_id || '', has_stats: g?.has_stats || false })
+    list.push({ game_number: i, winner_captain_id: g?.winner_captain_id || null, dotabuff_id: g?.dotabuff_id || '', has_stats: g?.has_stats || false, parsed: g?.parsed || false })
   }
   return list
 })
