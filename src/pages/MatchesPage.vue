@@ -40,7 +40,27 @@ const filteredMatches = computed(() => {
       (m.competition_name || '').toLowerCase().includes(q)
     )
   }
-  return list
+  // Sort: live first, then upcoming (closest scheduled_at first), completed last
+  const statusOrder: Record<string, number> = { live: 0, pending: 1, completed: 2 }
+  const now = Date.now()
+  return [...list].sort((a, b) => {
+    const oa = statusOrder[a.status] ?? 1
+    const ob = statusOrder[b.status] ?? 1
+    if (oa !== ob) return oa - ob
+    // Within upcoming: closest scheduled_at first
+    if (a.status === 'pending') {
+      const ta = a.scheduled_at ? new Date(a.scheduled_at).getTime() : Infinity
+      const tb = b.scheduled_at ? new Date(b.scheduled_at).getTime() : Infinity
+      return ta - tb
+    }
+    // Within completed: most recent first
+    if (a.status === 'completed') {
+      const ta = a.scheduled_at ? new Date(a.scheduled_at).getTime() : 0
+      const tb = b.scheduled_at ? new Date(b.scheduled_at).getTime() : 0
+      return tb - ta
+    }
+    return 0
+  })
 })
 </script>
 
