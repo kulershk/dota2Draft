@@ -20,6 +20,7 @@ import createTournamentRouter from './routes/tournament.js'
 import createFantasyRouter from './routes/fantasy.js'
 import createLobbyRouter from './routes/lobby.js'
 import { botPool } from './services/botPool.js'
+import dotaRoutes from './routes/dota.js'
 import streamRoutes from './routes/streams.js'
 import permissionRoutes from './routes/permissions.js'
 import settingRoutes from './routes/settings.js'
@@ -72,6 +73,7 @@ app.use(auctionRoutes)
 app.use(createTournamentRouter(io))
 app.use(createFantasyRouter(io))
 app.use(createLobbyRouter(io))
+app.use(dotaRoutes)
 app.use(streamRoutes)
 app.use(permissionRoutes)
 app.use(settingRoutes)

@@ -89,6 +89,9 @@ export function useApi() {
     importSteamParticipant: (compId: number, steamId: string) =>
       request(`/api/competitions/${compId}/import-steam-participants`, { method: 'POST', body: JSON.stringify({ steamId }) }),
 
+    // Dota constants
+    getDotaConstants: () => request('/api/dota/constants'),
+
     // Competition Auction
     getCompAuction: (compId: number) => request(`/api/competitions/${compId}/auction`),
     getCompResults: (compId: number) => request(`/api/competitions/${compId}/auction/results`),

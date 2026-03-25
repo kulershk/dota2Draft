@@ -2,16 +2,21 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ChevronDown, ChevronUp, Check, Gamepad2, X, ArrowLeft, Trophy } from 'lucide-vue-next'
+import { ChevronDown, ChevronUp, Check, Gamepad2, X, ArrowLeft, Trophy, ExternalLink, Clock } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { getSocket } from '@/composables/useSocket'
+import { useDotaConstants } from '@/composables/useDotaConstants'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const api = useApi()
 const store = useDraftStore()
+const dota = useDotaConstants()
+
+// Load Dota constants (heroes/items) on mount
+dota.loadConstants()
 
 const matchId = computed(() => Number(route.params.matchId))
 const compId = store.currentCompetitionId
@@ -335,6 +340,24 @@ function winnerName(game: any) {
   if (game.winner_captain_id === match.value.team1_captain_id) return match.value.team1_name
   if (game.winner_captain_id === match.value.team2_captain_id) return match.value.team2_name
   return null
+}
+
+function getPlayerItems(p: any): number[] {
+  return [p.item_0, p.item_1, p.item_2, p.item_3, p.item_4, p.item_5].filter((id: number) => id > 0)
+}
+
+function getPlayerBackpack(p: any): number[] {
+  return [p.backpack_0, p.backpack_1, p.backpack_2].filter((id: number) => id > 0)
+}
+
+function getGameDuration(gameNumber: number): string {
+  const stats = gameStats.value[gameNumber]
+  if (!stats?.length) return ''
+  const dur = stats[0]?.duration_seconds
+  if (!dur) return ''
+  const min = Math.floor(dur / 60)
+  const sec = dur % 60
+  return `${min}:${sec.toString().padStart(2, '0')}`
 }
 
 function goBack() {
@@ -723,68 +746,161 @@ function goBack() {
             <div v-else-if="!gameStats[game.game_number]?.length" class="text-sm text-muted-foreground text-center py-6">
               {{ t('noStatsYet') }}
             </div>
-            <div v-else class="overflow-x-auto">
-              <table class="w-full text-xs">
-                <thead>
-                  <tr class="text-muted-foreground border-b border-border/30">
-                    <th class="text-left py-1.5 px-1.5">{{ t('playerCol') }}</th>
-                    <th class="text-center px-1">K</th>
-                    <th class="text-center px-1">D</th>
-                    <th class="text-center px-1">A</th>
-                    <th class="text-center px-1">LH</th>
-                    <th class="text-center px-1">DN</th>
-                    <th class="text-center px-1">GPM</th>
-                    <th class="text-center px-1">XPM</th>
-                    <th class="text-center px-1" :title="t('heroDamage')">HD</th>
-                    <th class="text-center px-1" :title="t('towerDamage')">TD</th>
-                    <th class="text-center px-1" :title="t('heroHealing')">HH</th>
-                    <th class="text-center px-1" :title="t('obsPlaced')">OW</th>
-                    <th class="text-center px-1" :title="t('senPlaced')">SW</th>
-                    <th class="text-center px-1" :title="t('obsKilled')">OK</th>
-                    <th class="text-center px-1" :title="t('senKilled')">SK</th>
-                    <th class="text-center px-1" :title="t('campsStacked')">CS</th>
-                    <th class="text-center px-1" :title="t('tripleKills')">3K</th>
-                    <th class="text-center px-1" :title="t('ultraKills')">4K</th>
-                    <th class="text-center px-1" :title="t('rampages')">R</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <template v-for="(side, sideIdx) in [true, false]" :key="sideIdx">
-                    <tr v-if="sideIdx > 0" class="h-1"><td :colspan="19" class="border-t border-border/30"></td></tr>
-                    <tr class="text-[10px] text-muted-foreground">
-                      <td :colspan="19" class="py-1 px-1.5 font-semibold">
-                        {{ side ? 'Radiant' : 'Dire' }}
-                      </td>
+            <div v-else class="flex flex-col gap-4">
+              <!-- Game info bar: duration + external links -->
+              <div class="flex items-center justify-between flex-wrap gap-2">
+                <div v-if="getGameDuration(game.game_number)" class="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <Clock class="w-3.5 h-3.5" />
+                  <span>{{ getGameDuration(game.game_number) }}</span>
+                </div>
+                <div v-if="game.dotabuff_id" class="flex items-center gap-2">
+                  <a :href="`https://www.dotabuff.com/matches/${game.dotabuff_id}`" target="_blank" rel="noopener noreferrer"
+                    class="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium bg-accent hover:bg-accent/80 text-foreground transition-colors">
+                    <ExternalLink class="w-3 h-3" />
+                    Dotabuff
+                  </a>
+                  <a :href="`https://www.opendota.com/matches/${game.dotabuff_id}`" target="_blank" rel="noopener noreferrer"
+                    class="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium bg-accent hover:bg-accent/80 text-foreground transition-colors">
+                    <ExternalLink class="w-3 h-3" />
+                    OpenDota
+                  </a>
+                  <a :href="`https://stratz.com/matches/${game.dotabuff_id}`" target="_blank" rel="noopener noreferrer"
+                    class="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium bg-accent hover:bg-accent/80 text-foreground transition-colors">
+                    <ExternalLink class="w-3 h-3" />
+                    Stratz
+                  </a>
+                </div>
+              </div>
+
+              <!-- Stats table -->
+              <div class="overflow-x-auto">
+                <table class="w-full text-xs">
+                  <thead>
+                    <tr class="text-muted-foreground border-b border-border/30">
+                      <th class="text-left py-1.5 px-1.5 min-w-[180px]">{{ t('playerCol') }}</th>
+                      <th class="text-center px-1">K</th>
+                      <th class="text-center px-1">D</th>
+                      <th class="text-center px-1">A</th>
+                      <th class="text-center px-1">LH</th>
+                      <th class="text-center px-1">DN</th>
+                      <th class="text-center px-1">GPM</th>
+                      <th class="text-center px-1">XPM</th>
+                      <th class="text-center px-1" :title="t('netWorth')">NW</th>
+                      <th class="text-center px-1" :title="t('heroDamage')">HD</th>
+                      <th class="text-center px-1" :title="t('towerDamage')">TD</th>
+                      <th class="text-center px-1" :title="t('heroHealing')">HH</th>
+                      <th class="text-left px-1.5 min-w-[150px]">{{ t('items') }}</th>
                     </tr>
-                    <tr
-                      v-for="p in gameStats[game.game_number]?.filter((s: any) => s.is_radiant === side)"
-                      :key="p.account_id"
-                      class="hover:bg-accent/40"
-                      :class="p.win ? 'text-foreground' : 'text-muted-foreground'"
-                    >
-                      <td class="py-1 px-1.5 font-medium truncate max-w-[120px]">{{ p.player_name || p.account_id }}</td>
-                      <td class="text-center px-1">{{ p.kills }}</td>
-                      <td class="text-center px-1">{{ p.deaths }}</td>
-                      <td class="text-center px-1">{{ p.assists }}</td>
-                      <td class="text-center px-1">{{ p.last_hits }}</td>
-                      <td class="text-center px-1">{{ p.denies }}</td>
-                      <td class="text-center px-1">{{ p.gpm }}</td>
-                      <td class="text-center px-1">{{ p.xpm }}</td>
-                      <td class="text-center px-1">{{ (p.hero_damage / 1000).toFixed(1) }}k</td>
-                      <td class="text-center px-1">{{ (p.tower_damage / 1000).toFixed(1) }}k</td>
-                      <td class="text-center px-1">{{ (p.hero_healing / 1000).toFixed(1) }}k</td>
-                      <td class="text-center px-1">{{ p.obs_placed }}</td>
-                      <td class="text-center px-1">{{ p.sen_placed }}</td>
-                      <td class="text-center px-1">{{ p.observer_kills }}</td>
-                      <td class="text-center px-1">{{ p.sentry_kills }}</td>
-                      <td class="text-center px-1">{{ p.camps_stacked }}</td>
-                      <td class="text-center px-1">{{ getMultiKillCount(p.multi_kills, '3') || '-' }}</td>
-                      <td class="text-center px-1">{{ getMultiKillCount(p.multi_kills, '4') || '-' }}</td>
-                      <td class="text-center px-1">{{ getMultiKillCount(p.multi_kills, '5') || '-' }}</td>
-                    </tr>
-                  </template>
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    <template v-for="(side, sideIdx) in [true, false]" :key="sideIdx">
+                      <tr v-if="sideIdx > 0" class="h-1"><td :colspan="13" class="border-t border-border/30"></td></tr>
+                      <tr class="text-[10px] text-muted-foreground">
+                        <td :colspan="13" class="py-1 px-1.5 font-semibold" :class="side ? 'text-green-500/80' : 'text-red-500/80'">
+                          {{ side ? 'Radiant' : 'Dire' }}
+                          <span v-if="gameStats[game.game_number]?.find((s: any) => s.is_radiant === side)?.win" class="ml-1 text-green-500">({{ t('matchWinner', { team: '' }).replace('!', '').trim() }})</span>
+                        </td>
+                      </tr>
+                      <tr
+                        v-for="p in gameStats[game.game_number]?.filter((s: any) => s.is_radiant === side)"
+                        :key="p.account_id"
+                        class="hover:bg-accent/40 group"
+                        :class="p.win ? 'text-foreground' : 'text-muted-foreground'"
+                      >
+                        <td class="py-1.5 px-1.5">
+                          <div class="flex items-center gap-1.5">
+                            <img v-if="dota.heroImg(p.hero_id)" :src="dota.heroImg(p.hero_id)" :alt="dota.heroName(p.hero_id)" :title="dota.heroName(p.hero_id)"
+                              class="w-8 h-[22px] rounded-sm object-cover flex-shrink-0 border border-border/30" />
+                            <div class="flex flex-col min-w-0">
+                              <span class="font-medium truncate text-xs leading-tight">{{ p.player_name || p.account_id }}</span>
+                              <span class="text-[10px] text-muted-foreground leading-tight">{{ dota.heroName(p.hero_id) }}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td class="text-center px-1 font-medium text-green-500">{{ p.kills }}</td>
+                        <td class="text-center px-1 font-medium text-red-500">{{ p.deaths }}</td>
+                        <td class="text-center px-1">{{ p.assists }}</td>
+                        <td class="text-center px-1">{{ p.last_hits }}</td>
+                        <td class="text-center px-1">{{ p.denies }}</td>
+                        <td class="text-center px-1">{{ p.gpm }}</td>
+                        <td class="text-center px-1">{{ p.xpm }}</td>
+                        <td class="text-center px-1 font-medium text-amber-500">{{ (p.net_worth / 1000).toFixed(1) }}k</td>
+                        <td class="text-center px-1">{{ (p.hero_damage / 1000).toFixed(1) }}k</td>
+                        <td class="text-center px-1">{{ (p.tower_damage / 1000).toFixed(1) }}k</td>
+                        <td class="text-center px-1">{{ (p.hero_healing / 1000).toFixed(1) }}k</td>
+                        <td class="py-1 px-1.5">
+                          <div class="flex items-center gap-0.5">
+                            <template v-for="itemId in [p.item_0, p.item_1, p.item_2, p.item_3, p.item_4, p.item_5]" :key="'item-' + itemId + '-' + Math.random()">
+                              <img v-if="itemId && dota.itemImg(itemId)" :src="dota.itemImg(itemId)" :alt="dota.itemName(itemId)" :title="dota.itemName(itemId)"
+                                class="w-[22px] h-[16px] rounded-[2px] object-cover border border-border/20" />
+                              <div v-else-if="itemId" class="w-[22px] h-[16px] rounded-[2px] bg-accent/50 border border-border/20"></div>
+                            </template>
+                            <img v-if="p.item_neutral && dota.itemImg(p.item_neutral)" :src="dota.itemImg(p.item_neutral)" :alt="dota.itemName(p.item_neutral)" :title="dota.itemName(p.item_neutral)"
+                              class="w-[16px] h-[16px] rounded-full object-cover border border-amber-500/30 ml-0.5" />
+                          </div>
+                          <div v-if="getPlayerBackpack(p).length" class="flex items-center gap-0.5 mt-0.5 opacity-50">
+                            <template v-for="itemId in [p.backpack_0, p.backpack_1, p.backpack_2]" :key="'bp-' + itemId + '-' + Math.random()">
+                              <img v-if="itemId && dota.itemImg(itemId)" :src="dota.itemImg(itemId)" :alt="dota.itemName(itemId)" :title="dota.itemName(itemId)"
+                                class="w-[18px] h-[13px] rounded-[2px] object-cover border border-border/20" />
+                            </template>
+                          </div>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- Detailed stats (wards, stacks, multi-kills) in a collapsible row below the main table -->
+              <details class="group">
+                <summary class="text-[11px] text-muted-foreground cursor-pointer hover:text-foreground transition-colors select-none flex items-center gap-1">
+                  <ChevronDown class="w-3 h-3 group-open:rotate-180 transition-transform" />
+                  {{ t('matchDetails') }}
+                </summary>
+                <div class="overflow-x-auto mt-2">
+                  <table class="w-full text-xs">
+                    <thead>
+                      <tr class="text-muted-foreground border-b border-border/30">
+                        <th class="text-left py-1.5 px-1.5 min-w-[130px]">{{ t('playerCol') }}</th>
+                        <th class="text-center px-1" :title="t('obsPlaced')">OW</th>
+                        <th class="text-center px-1" :title="t('senPlaced')">SW</th>
+                        <th class="text-center px-1" :title="t('obsKilled')">OK</th>
+                        <th class="text-center px-1" :title="t('senKilled')">SK</th>
+                        <th class="text-center px-1" :title="t('campsStacked')">CS</th>
+                        <th class="text-center px-1" :title="t('tripleKills')">3K</th>
+                        <th class="text-center px-1" :title="t('ultraKills')">4K</th>
+                        <th class="text-center px-1" :title="t('rampages')">R</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <template v-for="(side, sideIdx) in [true, false]" :key="'d-' + sideIdx">
+                        <tr v-if="sideIdx > 0" class="h-1"><td :colspan="9" class="border-t border-border/30"></td></tr>
+                        <tr
+                          v-for="p in gameStats[game.game_number]?.filter((s: any) => s.is_radiant === side)"
+                          :key="'d-' + p.account_id"
+                          class="hover:bg-accent/40"
+                          :class="p.win ? 'text-foreground' : 'text-muted-foreground'"
+                        >
+                          <td class="py-1 px-1.5">
+                            <div class="flex items-center gap-1.5">
+                              <img v-if="dota.heroImg(p.hero_id)" :src="dota.heroImg(p.hero_id)" class="w-6 h-[17px] rounded-sm object-cover flex-shrink-0" />
+                              <span class="font-medium truncate">{{ p.player_name || p.account_id }}</span>
+                            </div>
+                          </td>
+                          <td class="text-center px-1">{{ p.obs_placed }}</td>
+                          <td class="text-center px-1">{{ p.sen_placed }}</td>
+                          <td class="text-center px-1">{{ p.observer_kills }}</td>
+                          <td class="text-center px-1">{{ p.sentry_kills }}</td>
+                          <td class="text-center px-1">{{ p.camps_stacked }}</td>
+                          <td class="text-center px-1">{{ getMultiKillCount(p.multi_kills, '3') || '-' }}</td>
+                          <td class="text-center px-1">{{ getMultiKillCount(p.multi_kills, '4') || '-' }}</td>
+                          <td class="text-center px-1">{{ getMultiKillCount(p.multi_kills, '5') || '-' }}</td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </details>
             </div>
           </div>
         </div>

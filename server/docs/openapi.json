@@ -20,7 +20,8 @@
     { "name": "Users", "description": "Global user management (admin)" },
     { "name": "Permissions", "description": "Permission groups" },
     { "name": "Settings", "description": "Site settings" },
-    { "name": "Streams", "description": "Twitch streams" }
+    { "name": "Streams", "description": "Twitch streams" },
+    { "name": "Dota", "description": "Dota 2 constants (heroes, items)" }
   ],
   "components": {
     "securitySchemes": {
@@ -947,6 +948,53 @@
         "tags": ["Streams"],
         "summary": "Get live Dota 2 streamers from registered users",
         "responses": { "200": { "description": "Live streamers list" } }
+      }
+    },
+    "/api/dota/constants": {
+      "get": {
+        "tags": ["Dota"],
+        "summary": "Get Dota 2 hero and item constants",
+        "description": "Returns hero ID-to-name mappings and item ID-to-name mappings fetched from OpenDota API. Cached server-side for 24 hours. Response is also cacheable client-side for 1 hour.",
+        "responses": {
+          "200": {
+            "description": "Hero and item constants",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "heroes": {
+                      "type": "object",
+                      "description": "Map of hero_id to hero data",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "integer" },
+                          "name": { "type": "string", "description": "Internal name without npc_dota_hero_ prefix" },
+                          "localized_name": { "type": "string", "description": "Display name" },
+                          "img": { "type": "string", "description": "Image path on Steam CDN" }
+                        }
+                      }
+                    },
+                    "items": {
+                      "type": "object",
+                      "description": "Map of item_id to item data",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "integer" },
+                          "name": { "type": "string", "description": "Internal item name" },
+                          "dname": { "type": "string", "description": "Display name" },
+                          "img": { "type": "string", "description": "Image path on Steam CDN" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     }
   }

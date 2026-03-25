@@ -339,12 +339,28 @@ export async function initDb() {
       is_radiant BOOLEAN DEFAULT FALSE,
       duration_seconds INTEGER DEFAULT 0,
       lane_role INTEGER DEFAULT NULL,
+      item_0 INTEGER DEFAULT 0,
+      item_1 INTEGER DEFAULT 0,
+      item_2 INTEGER DEFAULT 0,
+      item_3 INTEGER DEFAULT 0,
+      item_4 INTEGER DEFAULT 0,
+      item_5 INTEGER DEFAULT 0,
+      backpack_0 INTEGER DEFAULT 0,
+      backpack_1 INTEGER DEFAULT 0,
+      backpack_2 INTEGER DEFAULT 0,
+      item_neutral INTEGER DEFAULT 0,
       UNIQUE(match_game_id, account_id)
     )
   `)
 
   // Add lane_role column if missing (existing databases)
   try { await execute('ALTER TABLE match_game_player_stats ADD COLUMN lane_role INTEGER DEFAULT NULL') } catch {}
+
+  // Add item columns if missing (existing databases)
+  const itemCols = ['item_0','item_1','item_2','item_3','item_4','item_5','backpack_0','backpack_1','backpack_2','item_neutral']
+  for (const col of itemCols) {
+    try { await execute(`ALTER TABLE match_game_player_stats ADD COLUMN ${col} INTEGER DEFAULT 0`) } catch {}
+  }
 
   // Fantasy league tables
   await execute(`
