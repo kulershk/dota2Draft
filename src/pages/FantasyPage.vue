@@ -109,14 +109,22 @@ function hasLockedPicks(stageId: number): boolean {
   return !!lockedPicks.value[stageId] && Object.keys(lockedPicks.value[stageId]).length > 0
 }
 
-// Get player info by id (checks players and captains)
+// Get player info by id (checks players and captains), includes team data
 function getPlayerInfo(playerId: number): any {
   const all = (store.players.value || []) as any[]
+  const captains = (store.captains.value || []) as any[]
   const found = all.find(p => p.player_id === playerId || p.id === playerId)
-  if (found) return found
-  // Check captains
-  const cap = (store.captains.value || []).find((c: any) => c.player_id === playerId)
-  if (cap) return { id: cap.player_id, name: cap.name, avatar_url: cap.avatar_url }
+  if (found) {
+    // Attach team info from captain
+    const cap = captains.find((c: any) => c.id === found.drafted_by) || captains.find((c: any) => c.player_id === playerId)
+    if (cap) {
+      return { ...found, team_name: cap.team, team_banner: cap.banner_url, team_avatar: cap.avatar_url }
+    }
+    return found
+  }
+  // Check captains (player is the captain themselves)
+  const cap = captains.find((c: any) => c.player_id === playerId)
+  if (cap) return { id: cap.player_id, name: cap.name, avatar_url: cap.avatar_url, team_name: cap.team, team_banner: cap.banner_url, team_avatar: cap.avatar_url }
   return null
 }
 
@@ -520,6 +528,14 @@ function matchLabel(match: any) {
                   <span class="text-xs font-medium text-foreground text-center truncate w-full">
                     {{ getPlayerInfo(getStagePicks(stage.id)[role])?.name || '?' }}
                   </span>
+                  <div v-if="getPlayerInfo(getStagePicks(stage.id)[role])?.team_name" class="flex items-center gap-1 max-w-full">
+                    <div class="w-3.5 h-3.5 rounded-sm bg-surface overflow-hidden shrink-0">
+                      <img v-if="getPlayerInfo(getStagePicks(stage.id)[role])?.team_banner || getPlayerInfo(getStagePicks(stage.id)[role])?.team_avatar"
+                        :src="getPlayerInfo(getStagePicks(stage.id)[role])?.team_banner || getPlayerInfo(getStagePicks(stage.id)[role])?.team_avatar"
+                        class="w-full h-full object-cover" />
+                    </div>
+                    <span class="text-[9px] text-muted-foreground truncate">{{ getPlayerInfo(getStagePicks(stage.id)[role])?.team_name }}</span>
+                  </div>
                   <span
                     v-if="repeatPenalty > 0 && isRepeatPick(stage.id, getStagePicks(stage.id)[role])"
                     class="text-[9px] font-bold text-amber-500 px-1.5 py-0.5 rounded bg-amber-500/10"

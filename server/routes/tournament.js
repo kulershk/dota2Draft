@@ -44,23 +44,28 @@ export default function createTournamentRouter(io) {
       gamesByMatch[g.match_id].push(g)
     }
 
-    // Check which games have stats
+    // Check which games have stats and whether they are fully parsed
     const gameIds = games.map(g => g.id)
     let statsCountMap = {}
+    let parsedMap = {}
     if (gameIds.length > 0) {
       const statsCounts = await query(
-        `SELECT match_game_id, COUNT(*) as count FROM match_game_player_stats WHERE match_game_id = ANY($1) GROUP BY match_game_id`,
+        `SELECT match_game_id, COUNT(*) as count,
+          bool_or(item_0 > 0 OR obs_placed > 0) AS is_parsed
+        FROM match_game_player_stats WHERE match_game_id = ANY($1) GROUP BY match_game_id`,
         [gameIds]
       )
       for (const sc of statsCounts) {
         statsCountMap[sc.match_game_id] = Number(sc.count)
+        parsedMap[sc.match_game_id] = !!sc.is_parsed
       }
     }
 
-    // Attach has_stats flag to each game
+    // Attach has_stats and parsed flags to each game
     for (const matchId in gamesByMatch) {
       for (const g of gamesByMatch[matchId]) {
         g.has_stats = (statsCountMap[g.id] || 0) > 0
+        g.parsed = !!parsedMap[g.id]
       }
     }
 

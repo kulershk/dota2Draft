@@ -608,6 +608,8 @@ export default {
   refetchStats: 'Atjaunot no OpenDota',
   noStatsYet: 'Statistika nav pieejama. Pievienojiet mača ID un saglabājiet, lai automātiski iegūtu.',
   partialStats: 'Detalizēta statistika (vārdi, priekšmeti) vēl nav pieejama. OpenDota joprojām apstrādā šo maču — mēģiniet vēlāk.',
+  statsParsed: 'Pilnībā parsēts',
+  statsPartial: 'Daļēja statistika — gaida OpenDota parsēšanu',
   heroDamage: 'Varoņa bojājumi',
   towerDamage: 'Torņa bojājumi',
   heroHealing: 'Varoņa dziedināšana',

@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ChevronDown, ChevronUp, Check, Gamepad2, X, ArrowLeft, Trophy, ExternalLink, Clock } from 'lucide-vue-next'
+import { ChevronDown, ChevronUp, Check, Gamepad2, X, ArrowLeft, Trophy, ExternalLink, Clock, CheckCircle, AlertCircle, RefreshCw } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { getSocket } from '@/composables/useSocket'
@@ -369,6 +369,21 @@ function getGameDuration(gameNumber: number): string {
   const min = Math.floor(dur / 60)
   const sec = dur % 60
   return `${min}:${sec.toString().padStart(2, '0')}`
+}
+
+const refetchingGame = ref<Record<number, boolean>>({})
+
+async function refetchStats(gameNumber: number) {
+  const cId = compId.value
+  if (!cId || !match.value) return
+  refetchingGame.value[gameNumber] = true
+  try {
+    await api.refetchMatchGameStats(cId, match.value.id, gameNumber)
+    await loadStats(gameNumber)
+    await store.fetchTournament()
+  } catch {} finally {
+    refetchingGame.value[gameNumber] = false
+  }
 }
 
 function goBack() {
@@ -739,11 +754,22 @@ function goBack() {
           >
             <Gamepad2 class="w-4 h-4 text-primary" />
             <span class="text-sm font-semibold text-foreground">{{ t('game') }} {{ game.game_number }}</span>
+            <CheckCircle v-if="game.has_stats && game.parsed" class="w-3.5 h-3.5 text-green-500" :title="t('statsParsed')" />
+            <AlertCircle v-else-if="game.has_stats && !game.parsed" class="w-3.5 h-3.5 text-amber-500" :title="t('statsPartial')" />
             <span class="w-2 h-2 rounded-full"
               :class="game.winner_captain_id ? 'bg-color-success' : 'bg-text-tertiary'" />
             <span v-if="winnerName(game)" class="text-xs text-muted-foreground ml-1">{{ winnerName(game) }}</span>
             <span v-else class="text-xs text-text-tertiary ml-1">—</span>
             <div class="ml-auto flex items-center gap-1">
+              <button
+                v-if="store.isAdmin.value && game.dotabuff_id && game.has_stats && !game.parsed"
+                class="p-1 rounded-md text-amber-500 hover:text-amber-400 hover:bg-accent transition-colors"
+                :disabled="refetchingGame[game.game_number]"
+                :title="t('refetchStats')"
+                @click.stop="refetchStats(game.game_number)"
+              >
+                <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': refetchingGame[game.game_number] }" />
+              </button>
               <span v-if="game.dotabuff_id" class="text-[10px] font-mono text-text-tertiary">#{{ game.dotabuff_id }}</span>
               <component v-if="game.has_stats || game.winner_captain_id" :is="expandedGame === game.game_number ? ChevronUp : ChevronDown" class="w-4 h-4 text-text-tertiary" />
             </div>
