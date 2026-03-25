@@ -248,10 +248,14 @@ export async function initDb() {
       winner_captain_id INTEGER REFERENCES captains(id) ON DELETE SET NULL,
       dotabuff_id TEXT DEFAULT NULL,
       duration_minutes INTEGER DEFAULT NULL,
+      parsed BOOLEAN DEFAULT FALSE,
       created_at TIMESTAMP DEFAULT NOW(),
       UNIQUE(match_id, game_number)
     );
   `)
+
+  // Add parsed column to match_games if missing (existing databases)
+  try { await execute('ALTER TABLE match_games ADD COLUMN parsed BOOLEAN DEFAULT FALSE') } catch {}
 
   // Matches table migration: add stage column
   {

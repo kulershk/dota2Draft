@@ -82,11 +82,10 @@ export async function saveMatchGameStats(matchGameId, matchData) {
     ])
   }
 
-  // Update match_game duration
+  // Update match_game duration and parsed flag
   const durationMinutes = Math.round(duration / 60)
-  if (durationMinutes > 0) {
-    await execute('UPDATE match_games SET duration_minutes = $1 WHERE id = $2', [durationMinutes, matchGameId])
-  }
+  await execute('UPDATE match_games SET duration_minutes = COALESCE($1, duration_minutes), parsed = $2 WHERE id = $3',
+    [durationMinutes > 0 ? durationMinutes : null, parsed, matchGameId])
 
   return { saved: matchData.players.length, parsed }
 }

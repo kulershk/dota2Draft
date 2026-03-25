@@ -385,7 +385,7 @@ class BotPool {
 
   async _pollUnresolvedGames() {
     try {
-      // Poll games that either have no winner yet, or have stats but are missing parsed data (items/wards)
+      // Poll games that either have no winner yet, or have stats but are not fully parsed
       const unresolvedGames = await query(`
         SELECT mg.id, mg.match_id, mg.game_number, mg.dotabuff_id, mg.created_at, mg.winner_captain_id
         FROM match_games mg
@@ -394,17 +394,7 @@ class BotPool {
           AND mg.dotabuff_id != ''
           AND (
             mg.winner_captain_id IS NULL
-            OR (
-              mg.created_at > NOW() - INTERVAL '24 hours'
-              AND EXISTS (
-                SELECT 1 FROM match_game_player_stats s
-                WHERE s.match_game_id = mg.id AND s.item_0 = 0 AND s.obs_placed = 0
-              )
-              AND NOT EXISTS (
-                SELECT 1 FROM match_game_player_stats s
-                WHERE s.match_game_id = mg.id AND (s.item_0 > 0 OR s.obs_placed > 0)
-              )
-            )
+            OR (mg.parsed = false AND mg.created_at > NOW() - INTERVAL '24 hours')
           )
         ORDER BY mg.created_at ASC
         LIMIT 10

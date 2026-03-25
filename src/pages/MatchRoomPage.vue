@@ -355,10 +355,9 @@ function getPlayerBackpack(p: any): number[] {
 }
 
 function isPartialStats(gameNumber: number): boolean {
-  const stats = gameStats.value[gameNumber]
-  if (!stats?.length) return false
-  // If all players have 0 obs_placed and 0 items, data is likely unparsed
-  return stats.every((p: any) => !p.obs_placed && !p.sen_placed && !p.item_0)
+  const game = allGames.value.find(g => g.game_number === gameNumber)
+  if (!game || !game.has_stats) return false
+  return !game.parsed
 }
 
 function getGameDuration(gameNumber: number): string {

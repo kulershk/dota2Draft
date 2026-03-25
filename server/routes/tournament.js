@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { query, queryOne, execute } from '../db.js'
-import { requireCompPermission } from '../middleware/permissions.js'
+import { requireCompPermission, requirePermission } from '../middleware/permissions.js'
 import { getSessionPlayerId, getTokenFromReq } from '../middleware/auth.js'
 import { getCompetition, getCaptains } from '../helpers/competition.js'
 import { advanceWinner, generateEliminationBracket, generateGroupMatches, generateDoubleEliminationBracket } from '../helpers/tournament.js'
@@ -44,28 +44,24 @@ export default function createTournamentRouter(io) {
       gamesByMatch[g.match_id].push(g)
     }
 
-    // Check which games have stats and whether they are fully parsed
+    // Check which games have stats
     const gameIds = games.map(g => g.id)
     let statsCountMap = {}
-    let parsedMap = {}
     if (gameIds.length > 0) {
       const statsCounts = await query(
-        `SELECT match_game_id, COUNT(*) as count,
-          bool_or(item_0 > 0 OR obs_placed > 0) AS is_parsed
-        FROM match_game_player_stats WHERE match_game_id = ANY($1) GROUP BY match_game_id`,
+        `SELECT match_game_id, COUNT(*) as count FROM match_game_player_stats WHERE match_game_id = ANY($1) GROUP BY match_game_id`,
         [gameIds]
       )
       for (const sc of statsCounts) {
         statsCountMap[sc.match_game_id] = Number(sc.count)
-        parsedMap[sc.match_game_id] = !!sc.is_parsed
       }
     }
 
-    // Attach has_stats and parsed flags to each game
+    // Attach has_stats flag; parsed comes directly from the match_games row
     for (const matchId in gamesByMatch) {
       for (const g of gamesByMatch[matchId]) {
         g.has_stats = (statsCountMap[g.id] || 0) > 0
-        g.parsed = !!parsedMap[g.id]
+        // g.parsed is already on the row from the DB query
       }
     }
 
@@ -527,6 +523,47 @@ export default function createTournamentRouter(io) {
 
     io.to(`comp:${compId}`).emit('tournament:updated')
     res.json({ ok: true })
+  })
+
+  // Admin: get all unparsed games across all competitions
+  router.get('/api/admin/games/unparsed', async (req, res) => {
+    const admin = await requirePermission(req, res, 'manage_competitions')
+    if (!admin) return
+
+    const games = await query(`
+      SELECT mg.id, mg.match_id, mg.game_number, mg.dotabuff_id, mg.parsed, mg.duration_minutes, mg.created_at,
+        m.competition_id, m.team1_captain_id, m.team2_captain_id,
+        c.name AS competition_name,
+        c1.team AS team1_name, c2.team AS team2_name
+      FROM match_games mg
+      JOIN matches m ON m.id = mg.match_id
+      JOIN competitions c ON c.id = m.competition_id
+      LEFT JOIN captains c1 ON c1.id = m.team1_captain_id
+      LEFT JOIN captains c2 ON c2.id = m.team2_captain_id
+      WHERE mg.dotabuff_id IS NOT NULL AND mg.dotabuff_id != '' AND mg.parsed = false
+      ORDER BY mg.created_at DESC
+    `)
+    res.json(games)
+  })
+
+  // Admin: refetch a specific game by match_game id
+  router.post('/api/admin/games/:gameId/refetch', async (req, res) => {
+    const admin = await requirePermission(req, res, 'manage_competitions')
+    if (!admin) return
+
+    const mg = await queryOne('SELECT id, dotabuff_id, match_id FROM match_games WHERE id = $1', [req.params.gameId])
+    if (!mg) return res.status(404).json({ error: 'Game not found' })
+    if (!mg.dotabuff_id) return res.status(400).json({ error: 'No match ID set' })
+
+    try {
+      const result = await fetchAndSaveGameStats(mg.id, mg.dotabuff_id)
+      if (result.error) return res.status(404).json({ error: result.error })
+      const match = await queryOne('SELECT competition_id FROM matches WHERE id = $1', [mg.match_id])
+      if (match) io.to(`comp:${match.competition_id}`).emit('tournament:updated')
+      res.json({ ok: true, ...result })
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to fetch from OpenDota: ' + e.message })
+    }
   })
 
   return router

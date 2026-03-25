@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Newspaper, Users, Trophy, ChevronRight, Settings, ShieldCheck, Bot } from 'lucide-vue-next'
+import { Newspaper, Users, Trophy, ChevronRight, Settings, ShieldCheck, Bot, Gamepad2 } from 'lucide-vue-next'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -16,6 +16,7 @@ const allNav = [
   { labelKey: 'siteSettings', icon: Settings, path: '/admin/settings', permissions: ['manage_site_settings'] },
   { labelKey: 'permissionGroups', icon: ShieldCheck, path: '/admin/permissions', permissions: ['manage_permissions'] },
   { labelKey: 'lobbyBots', icon: Bot, path: '/admin/bots', permissions: ['manage_bots'] },
+  { labelKey: 'adminGames', icon: Gamepad2, path: '/admin/games', permissions: ['manage_competitions'] },
 ]
 
 const adminNav = computed(() =>

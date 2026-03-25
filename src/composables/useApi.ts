@@ -92,6 +92,10 @@ export function useApi() {
     // Dota constants
     getDotaConstants: () => request('/api/dota/constants'),
 
+    // Admin games
+    getUnparsedGames: () => request('/api/admin/games/unparsed'),
+    refetchGame: (gameId: number) => request(`/api/admin/games/${gameId}/refetch`, { method: 'POST' }),
+
     // Competition Auction
     getCompAuction: (compId: number) => request(`/api/competitions/${compId}/auction`),
     getCompResults: (compId: number) => request(`/api/competitions/${compId}/auction/results`),

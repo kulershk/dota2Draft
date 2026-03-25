@@ -712,6 +712,17 @@ export default {
   reopenStage: 'Reopen',
   create: 'Create',
 
+  // Admin Games
+  adminGames: 'Games',
+  adminGamesDesc: 'Games waiting for OpenDota to finish parsing. Refetch to pull detailed stats.',
+  allGamesParsed: 'All games are fully parsed.',
+  refetchAll: 'Refetch All',
+  stillParsing: 'Still parsing...',
+  matchCol: 'Match',
+  date: 'Date',
+  actions: 'Actions',
+  refresh: 'Refresh',
+
   // Lobby Bots
   lobbyBots: 'Lobby Bots',
   botManagement: 'Lobby Bot Management',
