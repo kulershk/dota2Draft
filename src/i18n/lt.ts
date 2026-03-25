@@ -607,6 +607,7 @@ export default {
   viewStats: 'Peržiūrėti statistiką',
   refetchStats: 'Atnaujinti iš OpenDota',
   noStatsYet: 'Statistika nepasiekiama. Pridėkite mačo ID ir išsaugokite, kad automatiškai gautumėte.',
+  partialStats: 'Detali statistika (wardai, daiktai) dar nepasiekiama. OpenDota vis dar analizuoja šį mačą — pabandykite vėliau.',
   heroDamage: 'Herojaus žala',
   towerDamage: 'Bokšto žala',
   heroHealing: 'Herojaus gydymas',

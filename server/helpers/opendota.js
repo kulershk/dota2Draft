@@ -96,5 +96,13 @@ export async function fetchAndSaveGameStats(matchGameId, dotabuffId) {
   if (!matchData) return { error: 'Match not found on OpenDota' }
 
   const result = await saveMatchGameStats(matchGameId, matchData)
+
+  // If match data is not fully parsed, request a parse from OpenDota
+  // so detailed stats (ward kills, items, etc.) become available later
+  if (!result.parsed) {
+    requestOpenDotaParse(dotabuffId).catch(() => {})
+    result.parse_requested = true
+  }
+
   return result
 }

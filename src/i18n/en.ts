@@ -608,6 +608,7 @@ export default {
   viewStats: 'View Stats',
   refetchStats: 'Refetch from OpenDota',
   noStatsYet: 'No stats available. Add a match ID and save to fetch automatically.',
+  partialStats: 'Detailed stats (wards, items) are not yet available. OpenDota is still parsing this match — try refreshing later.',
   heroDamage: 'Hero Damage',
   towerDamage: 'Tower Damage',
   heroHealing: 'Hero Healing',

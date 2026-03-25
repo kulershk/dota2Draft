@@ -385,20 +385,34 @@ class BotPool {
 
   async _pollUnresolvedGames() {
     try {
+      // Poll games that either have no winner yet, or have stats but are missing parsed data (items/wards)
       const unresolvedGames = await query(`
-        SELECT mg.id, mg.match_id, mg.game_number, mg.dotabuff_id, mg.created_at
+        SELECT mg.id, mg.match_id, mg.game_number, mg.dotabuff_id, mg.created_at, mg.winner_captain_id
         FROM match_games mg
         JOIN matches m ON m.id = mg.match_id
         WHERE mg.dotabuff_id IS NOT NULL
           AND mg.dotabuff_id != ''
-          AND mg.winner_captain_id IS NULL
+          AND (
+            mg.winner_captain_id IS NULL
+            OR (
+              mg.created_at > NOW() - INTERVAL '24 hours'
+              AND EXISTS (
+                SELECT 1 FROM match_game_player_stats s
+                WHERE s.match_game_id = mg.id AND s.item_0 = 0 AND s.obs_placed = 0
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM match_game_player_stats s
+                WHERE s.match_game_id = mg.id AND (s.item_0 > 0 OR s.obs_placed > 0)
+              )
+            )
+          )
         ORDER BY mg.created_at ASC
         LIMIT 10
       `)
 
       if (unresolvedGames.length === 0) return
 
-      console.log(`[Stats] Polling ${unresolvedGames.length} unresolved game(s)...`)
+      console.log(`[Stats] Polling ${unresolvedGames.length} unresolved/unparsed game(s)...`)
 
       for (const game of unresolvedGames) {
         try {
@@ -409,16 +423,18 @@ class BotPool {
             continue
           }
 
-          // Save stats
-          await saveMatchGameStats(game.id, matchData)
+          // Save stats (will overwrite with parsed data if now available)
+          const result = await saveMatchGameStats(game.id, matchData)
 
-          // Auto-fill winner if OpenDota has the result
-          if (matchData.radiant_win != null) {
+          // Auto-fill winner if OpenDota has the result and winner not yet set
+          if (!game.winner_captain_id && matchData.radiant_win != null) {
             await this._autoFillGameWinner(game.match_id, game.game_number, matchData.radiant_win)
             console.log(`[Stats] Resolved game ${game.game_number} of match ${game.match_id} (dota: ${game.dotabuff_id})`)
-          } else {
-            // Match exists but not fully parsed yet, request parse
+          } else if (!result.parsed) {
+            // Still not fully parsed, request parse again
             await requestOpenDotaParse(game.dotabuff_id).catch(() => {})
+          } else if (game.winner_captain_id) {
+            console.log(`[Stats] Updated parsed stats for game ${game.game_number} of match ${game.match_id}`)
           }
         } catch (e) {
           console.log(`[Stats] Poll failed for ${game.dotabuff_id}: ${e.message}`)

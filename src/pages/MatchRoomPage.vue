@@ -354,6 +354,13 @@ function getPlayerBackpack(p: any): number[] {
   return [p.backpack_0, p.backpack_1, p.backpack_2].filter((id: number) => id > 0)
 }
 
+function isPartialStats(gameNumber: number): boolean {
+  const stats = gameStats.value[gameNumber]
+  if (!stats?.length) return false
+  // If all players have 0 obs_placed and 0 items, data is likely unparsed
+  return stats.every((p: any) => !p.obs_placed && !p.sen_placed && !p.item_0)
+}
+
 function getGameDuration(gameNumber: number): string {
   const stats = gameStats.value[gameNumber]
   if (!stats?.length) return ''
@@ -774,6 +781,11 @@ function goBack() {
                     Stratz
                   </a>
                 </div>
+              </div>
+
+              <!-- Partial stats warning -->
+              <div v-if="isPartialStats(game.game_number)" class="rounded-md bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-xs text-amber-500">
+                {{ t('partialStats') }}
               </div>
 
               <!-- Stats table -->
