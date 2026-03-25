@@ -851,6 +851,9 @@ export default {
   // Player Profile
   playerProfile: 'Žaidėjo profilis',
   memberSince: 'Narys nuo',
+  topHeroes: 'Populiariausi herojai',
+  gamesSingular: 'žaidimas',
+  gamesPlural: 'žaidimai',
   twitchLinked: 'Twitch',
   watchStream: 'Žiūrėti transliaciją',
   competitionHistory: 'Varžybų istorija',

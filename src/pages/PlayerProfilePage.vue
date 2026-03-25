@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { User, Trophy, Swords, ExternalLink, Tv, Calendar, Medal, MessageCircle } from 'lucide-vue-next'
+import { User, Trophy, Swords, ExternalLink, Tv, Calendar, Medal, MessageCircle, Shield } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
+import { useDotaConstants } from '@/composables/useDotaConstants'
 import RoleBadge from '@/components/common/RoleBadge.vue'
 import MmrDisplay from '@/components/common/MmrDisplay.vue'
 import { sortedRoles } from '@/utils/roles'
@@ -11,6 +12,9 @@ import { sortedRoles } from '@/utils/roles'
 const { t } = useI18n()
 const route = useRoute()
 const api = useApi()
+const dota = useDotaConstants()
+
+dota.loadConstants()
 
 const playerId = computed(() => Number(route.params.id))
 const profile = ref<any>(null)
@@ -116,6 +120,31 @@ function placementBg(n: number) {
           <div class="flex-1 min-w-0">
             <p class="text-sm font-medium text-foreground truncate">{{ profile.discord_username }}</p>
             <p class="text-xs text-muted-foreground">{{ t('discordLinked') }}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Top heroes -->
+      <div v-if="profile.top_heroes?.length" class="card">
+        <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
+          <Shield class="w-5 h-5 text-foreground" />
+          <span class="text-sm font-semibold text-foreground">{{ t('topHeroes') }}</span>
+        </div>
+        <div class="p-4 flex gap-4">
+          <div v-for="hero in profile.top_heroes" :key="hero.hero_id" class="flex items-center gap-3 flex-1 p-3 rounded-lg bg-accent/50 border border-border/50">
+            <img v-if="dota.heroImg(hero.hero_id)" :src="dota.heroImg(hero.hero_id)" :alt="dota.heroName(hero.hero_id)"
+              class="w-16 h-9 rounded object-cover border border-border/30 shrink-0" />
+            <div class="min-w-0 flex-1">
+              <p class="text-sm font-semibold text-foreground truncate">{{ dota.heroName(hero.hero_id) || `Hero #${hero.hero_id}` }}</p>
+              <p class="text-xs text-muted-foreground">
+                {{ hero.games }} {{ hero.games === 1 ? t('gamesSingular') : t('gamesPlural') }}
+                <span class="text-green-500 ml-1">{{ hero.wins }}W</span>
+                <span class="text-red-500 ml-0.5">{{ hero.games - hero.wins }}L</span>
+              </p>
+              <div class="mt-1 h-1 rounded-full bg-border/50 overflow-hidden">
+                <div class="h-full rounded-full bg-green-500" :style="{ width: `${hero.games > 0 ? (hero.wins / hero.games * 100) : 0}%` }"></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

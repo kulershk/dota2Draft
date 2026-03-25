@@ -155,6 +155,20 @@ router.get('/api/players/:id/profile', async (req, res) => {
     }
   }
 
+  // Top 3 most played heroes (from match stats, using Steam32/Steam64 conversion)
+  let topHeroes = []
+  if (player.steam_id) {
+    const steam32 = BigInt(player.steam_id) - 76561197960265728n
+    topHeroes = await query(`
+      SELECT hero_id, COUNT(*) AS games, SUM(win) AS wins
+      FROM match_game_player_stats
+      WHERE account_id = $1 AND hero_id > 0
+      GROUP BY hero_id
+      ORDER BY games DESC, wins DESC
+      LIMIT 3
+    `, [steam32.toString()])
+  }
+
   res.json({
     id: player.id,
     name: player.display_name || player.name,
@@ -183,6 +197,11 @@ router.get('/api/players/:id/profile', async (req, res) => {
       drafted_by_name: p.drafted_by_name || null,
     })),
     tournament_results: tournamentResults,
+    top_heroes: topHeroes.map(h => ({
+      hero_id: h.hero_id,
+      games: Number(h.games),
+      wins: Number(h.wins),
+    })),
   })
 })
 

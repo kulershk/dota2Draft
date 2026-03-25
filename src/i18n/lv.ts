@@ -851,6 +851,9 @@ export default {
   // Player Profile
   playerProfile: 'Spēlētāja profils',
   memberSince: 'Dalībnieks kopš',
+  topHeroes: 'Populārākie varoņi',
+  gamesSingular: 'spēle',
+  gamesPlural: 'spēles',
   twitchLinked: 'Twitch',
   watchStream: 'Skatīt translāciju',
   competitionHistory: 'Sacensību vēsture',

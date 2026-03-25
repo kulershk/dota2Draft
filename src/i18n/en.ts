@@ -856,6 +856,9 @@ export default {
   // Player Profile
   playerProfile: 'Player Profile',
   memberSince: 'Member since',
+  topHeroes: 'Top Heroes',
+  gamesSingular: 'game',
+  gamesPlural: 'games',
   twitchLinked: 'Twitch',
   watchStream: 'Watch Stream',
   competitionHistory: 'Competition History',
