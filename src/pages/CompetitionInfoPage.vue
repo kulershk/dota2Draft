@@ -237,7 +237,7 @@ async function removeBanner() {
           <router-link
             v-for="match in upcomingMatches"
             :key="match.id"
-            :to="`/c/${compId}/tournament?match=${match.id}`"
+            :to="`/c/${compId}/match/${match.id}`"
             class="flex items-center gap-3 px-3 py-2.5 border-b border-surface last:border-0 hover:bg-surface/50 transition-colors"
           >
             <!-- BO -->

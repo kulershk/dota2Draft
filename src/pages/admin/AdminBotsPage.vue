@@ -224,7 +224,7 @@ onUnmounted(() => {
           </button>
           <router-link
             v-if="bot.status === 'busy' && bot.active_match_id && bot.active_competition_id"
-            :to="`/c/${bot.active_competition_id}/tournament?match=${bot.active_match_id}`"
+            :to="`/c/${bot.active_competition_id}/match/${bot.active_match_id}`"
             class="btn-primary text-xs px-3 py-1.5"
           >
             <ExternalLink class="w-3.5 h-3.5" />

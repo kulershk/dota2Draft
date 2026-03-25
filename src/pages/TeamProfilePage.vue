@@ -128,7 +128,7 @@ const posLabel: Record<number, string> = { 1: 'Carry', 2: 'Mid', 3: 'Offlane', 4
         <div v-else class="divide-y divide-border">
           <router-link
             v-for="match in profile.matches" :key="match.id"
-            :to="`/c/${profile.competition_id}/tournament?match=${match.id}`"
+            :to="`/c/${profile.competition_id}/match/${match.id}`"
             class="flex items-center gap-3 px-4 py-3 hover:bg-accent/30 transition-colors"
           >
             <!-- Result indicator -->

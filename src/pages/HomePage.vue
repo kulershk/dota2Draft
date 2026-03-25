@@ -350,7 +350,7 @@ const sortedMatches = computed(() => {
                 <router-link
                   v-for="match in sortedMatches"
                   :key="match.id"
-                  :to="`/c/${match.competition_id}/tournament?match=${match.id}`"
+                  :to="`/c/${match.competition_id}/match/${match.id}`"
                   class="flex items-center gap-2 px-4 py-2 hover:bg-surface/50 transition-colors"
                 >
                   <!-- Live indicator -->

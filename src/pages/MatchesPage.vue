@@ -77,7 +77,7 @@ const filteredMatches = computed(() => {
         <router-link
           v-for="match in filteredMatches"
           :key="match.id"
-          :to="`/c/${match.competition_id}/tournament?match=${match.id}`"
+          :to="`/c/${match.competition_id}/match/${match.id}`"
           class="relative flex items-center px-4 py-4 md:px-6 md:py-4 hover:bg-accent/30 transition-colors gap-3 border-b border-border"
             :class="match.my_match ? `bg-primary/5 match-bar match-bar--${match.status}` : ''"
         >
