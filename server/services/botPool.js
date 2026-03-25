@@ -418,7 +418,7 @@ class BotPool {
 
           // Auto-fill winner if OpenDota has the result and winner not yet set
           if (!game.winner_captain_id && matchData.radiant_win != null) {
-            await this._autoFillGameWinner(game.match_id, game.game_number, matchData.radiant_win)
+            await this._autoFillGameWinner(game.match_id, game.game_number, matchData.radiant_win, matchData)
             console.log(`[Stats] Resolved game ${game.game_number} of match ${game.match_id} (dota: ${game.dotabuff_id})`)
           } else if (!result.parsed) {
             // Still not fully parsed, request parse again
@@ -435,13 +435,55 @@ class BotPool {
     }
   }
 
-  async _autoFillGameWinner(matchId, gameNumber, radiantWin) {
+  async _autoFillGameWinner(matchId, gameNumber, radiantWin, matchData) {
     try {
       const match = await queryOne('SELECT * FROM matches WHERE id = $1', [matchId])
       if (!match) return
 
-      // Team 1 = Radiant, Team 2 = Dire
-      const winnerCaptainId = radiantWin ? match.team1_captain_id : match.team2_captain_id
+      // Determine which captain's team was radiant by matching player account_ids
+      let winnerCaptainId = null
+
+      if (matchData?.players?.length) {
+        // Get players for each team
+        const team1Players = await query(
+          `SELECT p.steam_id FROM competition_players cp
+           JOIN players p ON p.id = cp.player_id
+           WHERE cp.drafted_by = $1 AND cp.competition_id = $2
+           UNION
+           SELECT p.steam_id FROM captains c JOIN players p ON p.id = c.player_id WHERE c.id = $1`,
+          [match.team1_captain_id, match.competition_id]
+        )
+        const team1Steam32 = new Set(team1Players.map(p => p.steam_id ? String(BigInt(p.steam_id) - 76561197960265728n) : null).filter(Boolean))
+
+        // Check which side team1 is on by matching account_ids from OpenDota
+        let team1Radiant = 0
+        let team1Dire = 0
+        for (const p of matchData.players) {
+          const accountStr = String(p.account_id || 0)
+          if (team1Steam32.has(accountStr)) {
+            if (p.isRadiant) team1Radiant++
+            else team1Dire++
+          }
+        }
+
+        const team1IsRadiant = team1Radiant > team1Dire
+        if (team1Radiant > 0 || team1Dire > 0) {
+          // We have matches — determine winner based on actual sides
+          if (radiantWin) {
+            winnerCaptainId = team1IsRadiant ? match.team1_captain_id : match.team2_captain_id
+          } else {
+            winnerCaptainId = team1IsRadiant ? match.team2_captain_id : match.team1_captain_id
+          }
+          console.log(`[Auto] Team1 is ${team1IsRadiant ? 'Radiant' : 'Dire'} (matched ${team1Radiant}R/${team1Dire}D players)`)
+        }
+      }
+
+      // Fallback: assume team1=radiant, team2=dire (lobby default)
+      if (!winnerCaptainId) {
+        winnerCaptainId = radiantWin ? match.team1_captain_id : match.team2_captain_id
+        console.log(`[Auto] Fallback: assuming team1=radiant`)
+      }
+
       if (!winnerCaptainId) return
 
       // Set game winner
