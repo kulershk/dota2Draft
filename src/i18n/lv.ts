@@ -717,6 +717,7 @@ export default {
   adminFantasySearchUsers: 'Meklēt dalībniekus...',
   adminFantasyPickPlayer: 'Izvēlēties spēlētāju',
   adminFantasyNoParticipants: 'Neviens dalībnieks vēl nav veicis izvēles.',
+  adminFantasyAddUser: 'Pievienot lietotāju',
   selectCompetition: 'Izvēlēties sacensību',
   pick: 'Izvēlēties',
   searchPlayers: 'Meklēt spēlētājus...',

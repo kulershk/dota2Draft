@@ -703,6 +703,7 @@ export default {
   adminFantasySearchUsers: 'Поиск участников...',
   adminFantasyPickPlayer: 'Выбрать игрока',
   adminFantasyNoParticipants: 'Ни один участник ещё не сделал выбор.',
+  adminFantasyAddUser: 'Добавить пользователя',
   selectCompetition: 'Выбрать соревнование',
   pick: 'Выбрать',
   searchPlayers: 'Поиск игроков...',

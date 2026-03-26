@@ -638,7 +638,6 @@ export default function createFantasyRouter(io) {
       )
       const stageIds = stages.map(s => s.id)
       if (stageIds.length === 0) {
-        // Still return compPlayers and captains so admin can see who's in the competition
         const compPlayers = await query(
           `SELECT cp.player_id, COALESCE(p.display_name, p.name) AS name, p.avatar_url, cp.drafted_by, cp.playing_role
            FROM competition_players cp JOIN players p ON p.id = cp.player_id
@@ -649,13 +648,7 @@ export default function createFantasyRouter(io) {
           'SELECT id, name, team, player_id, banner_url FROM captains WHERE competition_id = $1',
           [compId]
         )
-        const users = await query(
-          `SELECT p.id, COALESCE(p.display_name, p.name) AS name, p.avatar_url
-           FROM competition_players cp JOIN players p ON p.id = cp.player_id
-           WHERE cp.competition_id = $1`,
-          [compId]
-        )
-        return res.json({ stages, picks: {}, users, compPlayers, captains })
+        return res.json({ stages, picks: {}, users: [], compPlayers, captains })
       }
 
       // Get all picks across all stages
@@ -674,7 +667,7 @@ export default function createFantasyRouter(io) {
         picks[p.player_id][p.fantasy_stage_id][p.role] = p.pick_player_id
       }
 
-      // Get ALL competition players (potential fantasy participants)
+      // Get competition players for name/team lookup in pick modal
       const compPlayers = await query(
         `SELECT cp.player_id, COALESCE(p.display_name, p.name) AS name, p.avatar_url, cp.drafted_by, cp.playing_role
          FROM competition_players cp JOIN players p ON p.id = cp.player_id
@@ -682,13 +675,12 @@ export default function createFantasyRouter(io) {
         [compId]
       )
 
-      // Build users list from all competition players (not just those with picks)
-      const allPlayerIds = new Set([...userIds, ...compPlayers.map(cp => cp.player_id)])
+      // Only return users who already have picks (not all comp players)
       let users = []
-      if (allPlayerIds.size > 0) {
+      if (userIds.size > 0) {
         users = await query(
           `SELECT id, COALESCE(display_name, name) AS name, avatar_url FROM players WHERE id = ANY($1)`,
-          [[...allPlayerIds]]
+          [[...userIds]]
         )
       }
 

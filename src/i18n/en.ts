@@ -720,6 +720,7 @@ export default {
   adminFantasySearchUsers: 'Search participants...',
   adminFantasyPickPlayer: 'Pick Player',
   adminFantasyNoParticipants: 'No participants have made picks yet.',
+  adminFantasyAddUser: 'Add User',
   selectCompetition: 'Select competition',
   pick: 'Pick',
   searchPlayers: 'Search players...',

@@ -33,6 +33,30 @@ const pickSearch = ref('')
 // Search/filter for users
 const userSearch = ref('')
 
+// Add user search
+const addUserSearch = ref('')
+const showAddUser = ref(false)
+
+const addableUsers = computed(() => {
+  const existingIds = new Set(users.value.map((u: any) => u.id))
+  const q = addUserSearch.value.toLowerCase()
+  return compPlayers.value
+    .filter((cp: any) => !existingIds.has(cp.player_id))
+    .filter((cp: any) => !q || (cp.name || '').toLowerCase().includes(q))
+    .slice(0, 20) // limit results
+})
+
+function addUser(playerId: number) {
+  const cp = compPlayers.value.find((p: any) => p.player_id === playerId)
+  if (!cp) return
+  // Add to users list locally
+  users.value.push({ id: cp.player_id, name: cp.name, avatar_url: cp.avatar_url })
+  addUserSearch.value = ''
+  showAddUser.value = false
+  // Auto-expand the new user
+  expandedUserId.value = cp.player_id
+}
+
 onMounted(async () => {
   try {
     competitions.value = await api.getCompetitions()
@@ -275,15 +299,53 @@ function getUserName(user: any): string {
         </div>
       </div>
 
-      <!-- User search -->
-      <div class="relative">
-        <Search class="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-        <input
-          v-model="userSearch"
-          type="text"
-          :placeholder="t('adminFantasySearchUsers')"
-          class="w-full pl-9 pr-4 py-2.5 bg-accent border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground"
-        />
+      <!-- User search + add user -->
+      <div class="flex items-center gap-3">
+        <div class="relative flex-1">
+          <Search class="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            v-model="userSearch"
+            type="text"
+            :placeholder="t('adminFantasySearchUsers')"
+            class="w-full pl-9 pr-4 py-2.5 bg-accent border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground"
+          />
+        </div>
+        <div class="relative">
+          <button
+            class="px-4 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors flex items-center gap-1.5 whitespace-nowrap"
+            @click="showAddUser = !showAddUser; addUserSearch = ''"
+          >
+            <Users class="w-4 h-4" />
+            {{ t('adminFantasyAddUser') }}
+          </button>
+          <!-- Add user dropdown -->
+          <div v-if="showAddUser" class="absolute right-0 top-full mt-1 w-72 bg-card border border-border rounded-lg shadow-lg z-20 overflow-hidden">
+            <div class="p-2">
+              <input
+                v-model="addUserSearch"
+                type="text"
+                :placeholder="t('searchPlayers')"
+                class="w-full px-3 py-2 bg-accent border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground"
+              />
+            </div>
+            <div class="max-h-[250px] overflow-y-auto">
+              <button
+                v-for="cp in addableUsers"
+                :key="cp.player_id"
+                class="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-accent transition-colors text-sm text-left"
+                @click="addUser(cp.player_id)"
+              >
+                <div class="w-6 h-6 rounded-full bg-accent overflow-hidden shrink-0">
+                  <img v-if="cp.avatar_url" :src="cp.avatar_url" class="w-full h-full object-cover" />
+                </div>
+                <span class="text-foreground truncate">{{ cp.name }}</span>
+              </button>
+              <div v-if="addableUsers.length === 0" class="px-3 py-3 text-xs text-muted-foreground text-center">
+                {{ t('noResultsFound') }}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Users list -->
