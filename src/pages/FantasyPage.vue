@@ -458,25 +458,28 @@ function matchLabel(match: any) {
 <template>
   <div class="p-4 md:p-8 flex flex-col gap-0 max-w-[1200px] mx-auto w-full">
     <!-- Header -->
-    <div class="flex items-center justify-between py-6">
-      <div class="flex items-center gap-3">
-        <Star class="w-6 h-6 text-primary" />
-        <h1 class="text-2xl md:text-[28px] font-bold text-foreground tracking-tight">{{ t('fantasy') }}</h1>
+    <div class="flex flex-col gap-3 py-6">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <Star class="w-6 h-6 text-primary" />
+          <h1 class="text-2xl md:text-[28px] font-bold text-foreground tracking-tight">{{ t('fantasy') }}</h1>
+        </div>
+        <button v-if="isAdmin && activeTab === 'picks'" class="btn-primary text-sm" @click="openCreateStage">
+          <Plus class="w-4 h-4" />
+          <span class="hidden sm:inline">{{ t('createFantasyStage') }}</span>
+          <span class="sm:hidden">{{ t('create') || 'New' }}</span>
+        </button>
       </div>
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0">
         <button
           v-for="tab in (['picks', 'leaderboard', 'check', 'rules'] as const)" :key="tab"
-          class="px-4 py-2.5 text-sm font-medium rounded-md transition-colors"
+          class="px-3 md:px-4 py-2 md:py-2.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap shrink-0"
           :class="activeTab === tab
             ? 'bg-primary text-primary-foreground font-semibold'
             : 'text-muted-foreground border border-border hover:text-foreground hover:border-muted-foreground'"
           @click="activeTab = tab"
         >
           {{ tab === 'picks' ? t('myPicks') : tab === 'leaderboard' ? t('leaderboard') : tab === 'check' ? t('checkPlayer') : t('fantasyRules') }}
-        </button>
-        <button v-if="isAdmin && activeTab === 'picks'" class="btn-primary text-sm" @click="openCreateStage">
-          <Plus class="w-4 h-4" />
-          {{ t('createFantasyStage') }}
         </button>
       </div>
     </div>
@@ -494,19 +497,19 @@ function matchLabel(match: any) {
         <!-- Stage section -->
         <div class="border-t border-border">
           <!-- Stage header (always visible) -->
-          <div class="flex items-center justify-between py-5 cursor-pointer" @click="toggleStageExpand(stage.id)">
-            <div class="flex items-center gap-3">
-              <h3 class="text-xl font-bold text-foreground">{{ stage.name }}</h3>
-              <span class="inline-flex items-center rounded px-2.5 py-0.5 text-[10px] font-bold font-mono"
+          <div class="flex items-center justify-between py-4 md:py-5 cursor-pointer gap-2" @click="toggleStageExpand(stage.id)">
+            <div class="flex items-center gap-2 md:gap-3 min-w-0">
+              <h3 class="text-base md:text-xl font-bold text-foreground truncate">{{ stage.name }}</h3>
+              <span class="inline-flex items-center rounded px-2 md:px-2.5 py-0.5 text-[10px] font-bold font-mono shrink-0"
                 :class="stage.status === 'active' ? 'bg-color-success/20 text-color-success'
                   : stage.status === 'completed' ? 'bg-color-warning/20 text-color-warning'
                   : stage.status === 'pending' ? 'bg-primary/20 text-primary'
                   : 'bg-accent text-muted-foreground'">
                 {{ stage.status === 'completed' ? 'COMPLETED' : stage.status === 'active' ? 'LIVE' : stage.status === 'pending' ? 'OPEN' : 'UPCOMING' }}
               </span>
-              <span class="text-sm text-text-tertiary">{{ stage.participant_count || 0 }} {{ t('participants') }}</span>
+              <span class="text-sm text-text-tertiary hidden sm:inline shrink-0">{{ stage.participant_count || 0 }} {{ t('participants') }}</span>
             </div>
-            <div class="flex items-center gap-4">
+            <div class="flex items-center gap-2 md:gap-4 shrink-0">
               <!-- Mini stats when collapsed -->
               <template v-if="!expandedStages.has(stage.id) && stage.status !== 'upcoming' && (stage.status !== 'pending' || hasLockedPicks(stage.id))">
                 <span v-if="getMyStageTotal(stage.id) != null" class="text-sm font-semibold font-mono text-primary">
@@ -514,7 +517,7 @@ function matchLabel(match: any) {
                 </span>
               </template>
               <!-- Admin controls -->
-              <div v-if="isAdmin" class="flex items-center gap-2" @click.stop>
+              <div v-if="isAdmin" class="hidden sm:flex items-center gap-2" @click.stop>
                 <button
                   v-if="stage.status === 'upcoming'"
                   class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-primary/20 text-primary hover:bg-primary/30 transition-colors"
@@ -553,7 +556,7 @@ function matchLabel(match: any) {
                 </button>
               </div>
               <!-- Collapse link -->
-              <button v-if="!expandedStages.has(stage.id)" class="text-sm font-medium text-primary" @click.stop="toggleStageExpand(stage.id)">
+              <button v-if="!expandedStages.has(stage.id)" class="text-sm font-medium text-primary hidden sm:block" @click.stop="toggleStageExpand(stage.id)">
                 {{ t('viewAll') || 'View My Picks' }}
               </button>
               <component :is="expandedStages.has(stage.id) ? ChevronUp : ChevronDown" class="w-5 h-5 text-text-tertiary" />
@@ -562,6 +565,35 @@ function matchLabel(match: any) {
 
           <!-- Expanded content -->
           <div v-if="expandedStages.has(stage.id)" class="pb-6 flex flex-col gap-4">
+            <!-- Mobile admin controls -->
+            <div v-if="isAdmin" class="flex sm:hidden items-center gap-2 flex-wrap" @click.stop>
+              <button
+                v-if="stage.status === 'upcoming'"
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-primary/20 text-primary hover:bg-primary/30 transition-colors"
+                @click="setStageStatus(stage.id, 'pending')"
+              >{{ t('openStage') }}</button>
+              <button
+                v-else-if="stage.status === 'pending'"
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-color-warning/20 text-color-warning hover:bg-color-warning/30 transition-colors"
+                @click="setStageStatus(stage.id, 'active')"
+              ><Play class="w-3.5 h-3.5" /> {{ t('matchLive') }}</button>
+              <button
+                v-else-if="stage.status === 'active'"
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-color-success/20 text-color-success hover:bg-color-success/30 transition-colors"
+                @click="setStageStatus(stage.id, 'completed')"
+              ><Square class="w-3.5 h-3.5" /> {{ t('closeStage') }}</button>
+              <button
+                v-else-if="stage.status === 'completed'"
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-accent text-muted-foreground hover:bg-accent/80 transition-colors"
+                @click="setStageStatus(stage.id, 'upcoming')"
+              >{{ t('reopenStage') }}</button>
+              <button class="text-text-tertiary hover:text-foreground transition-colors p-1.5" @click="openEditStage(stage)">
+                <Pencil class="w-4 h-4" />
+              </button>
+              <button class="text-text-tertiary hover:text-destructive transition-colors p-1.5" @click="deleteStageId = stage.id; showDeleteConfirm = true">
+                <Trash2 class="w-4 h-4" />
+              </button>
+            </div>
             <!-- Upcoming — no picks yet -->
             <div v-if="stage.status === 'upcoming'" class="text-sm text-text-tertiary text-center py-6">
               {{ t('fantasyUpcoming') || 'Picks will be available once this stage is opened.' }}
@@ -570,10 +602,10 @@ function matchLabel(match: any) {
             <div v-else-if="!isLoggedIn" class="text-sm text-muted-foreground text-center py-4">
               {{ t('loginToPickFantasy') }}
             </div>
-            <div v-else class="flex gap-3">
+            <div v-else class="grid grid-cols-3 sm:grid-cols-6 gap-2 md:gap-3">
               <!-- Role pick cards -->
               <div v-for="role in roles" :key="role"
-                class="flex-1 flex flex-col items-center gap-2 rounded-lg bg-card p-3 relative overflow-hidden">
+                class="flex flex-col items-center gap-1.5 md:gap-2 rounded-lg bg-card p-2 md:p-3 relative overflow-hidden">
                 <!-- Team logo background -->
                 <img
                   v-if="getStagePicks(stage.id)[role] && (getPlayerInfo(getStagePicks(stage.id)[role])?.team_banner || getPlayerInfo(getStagePicks(stage.id)[role])?.team_avatar)"
@@ -583,7 +615,7 @@ function matchLabel(match: any) {
                 <span class="text-[10px] font-semibold font-mono uppercase tracking-wider text-text-tertiary relative">{{ t('fantasyRole_' + role) }}</span>
 
                 <template v-if="getStagePicks(stage.id)[role]">
-                  <div class="w-12 h-12 rounded-full bg-surface overflow-hidden">
+                  <div class="w-10 h-10 md:w-12 md:h-12 rounded-full bg-surface overflow-hidden">
                     <img
                       v-if="getPlayerInfo(getStagePicks(stage.id)[role])?.avatar_url"
                       :src="getPlayerInfo(getStagePicks(stage.id)[role])?.avatar_url || ''"
@@ -625,7 +657,7 @@ function matchLabel(match: any) {
 
                 <template v-else-if="stage.status === 'pending'">
                   <button
-                    class="w-12 h-12 rounded-full border-2 border-dashed border-border hover:border-primary flex items-center justify-center transition-colors"
+                    class="w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-dashed border-border hover:border-primary flex items-center justify-center transition-colors"
                     @click="openPick(stage.id, role)"
                   >
                     <Plus class="w-4 h-4 text-text-tertiary" />
@@ -633,13 +665,13 @@ function matchLabel(match: any) {
                   <span class="text-[10px] text-text-muted">{{ t('pickPlayer') }}</span>
                 </template>
                 <template v-else>
-                  <div class="w-12 h-12 rounded-full bg-surface" />
+                  <div class="w-10 h-10 md:w-12 md:h-12 rounded-full bg-surface" />
                   <span class="text-xs text-text-tertiary">—</span>
                 </template>
               </div>
 
               <!-- Total card -->
-              <div class="flex-1 flex flex-col items-center justify-center gap-2 rounded-lg bg-primary/10 border border-primary/25 p-3">
+              <div class="flex flex-col items-center justify-center gap-1.5 md:gap-2 rounded-lg bg-primary/10 border border-primary/25 p-2 md:p-3">
                 <span class="text-[10px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">TOTAL</span>
                 <span v-if="(stage.status !== 'pending' || hasLockedPicks(stage.id)) && getMyStageTotal(stage.id) != null"
                   class="text-[22px] font-bold font-mono text-primary">
@@ -660,11 +692,11 @@ function matchLabel(match: any) {
                 <div v-if="loadingTopPicks[stage.id]" class="text-xs text-muted-foreground text-center py-4">{{ t('loading') }}...</div>
                 <div v-else class="rounded-md border border-border overflow-hidden">
                   <!-- Table header -->
-                  <div class="flex items-center bg-surface px-3 py-2">
+                  <div class="flex items-center bg-surface px-2 md:px-3 py-2">
                     <span class="flex-1 text-[10px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">PICK TOP</span>
-                    <span class="w-20 text-[10px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-center">PTS LIVE</span>
-                    <span class="w-20 text-[10px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-center">BANS</span>
-                    <span class="w-20 text-[10px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-right">PICKS</span>
+                    <span class="w-14 md:w-20 text-[10px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-center">PTS</span>
+                    <span class="w-12 md:w-20 text-[10px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-center hidden sm:block">BANS</span>
+                    <span class="w-12 md:w-20 text-[10px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-right">PICKS</span>
                   </div>
                   <!-- Rows per role -->
                   <template v-for="role in roles" :key="role">
@@ -675,23 +707,23 @@ function matchLabel(match: any) {
                     <div
                       v-for="(player, idx) in (topPicksData[stage.id]?.[role] || []).slice(0, 3)"
                       :key="`${role}-${idx}`"
-                      class="flex items-center px-3 py-2 border-t border-border/30"
+                      class="flex items-center px-2 md:px-3 py-2 border-t border-border/30"
                     >
-                      <div class="flex-1 flex items-center gap-2 min-w-0">
+                      <div class="flex-1 flex items-center gap-1.5 md:gap-2 min-w-0">
                         <span class="text-[10px] font-mono text-text-tertiary w-4 text-center shrink-0">{{ idx + 1 }}</span>
-                        <div class="w-6 h-6 rounded-full bg-card overflow-hidden shrink-0">
+                        <div class="w-5 h-5 md:w-6 md:h-6 rounded-full bg-card overflow-hidden shrink-0">
                           <img v-if="player.avatar" :src="player.avatar" class="w-full h-full object-cover" />
                         </div>
-                        <span class="text-xs text-foreground truncate">{{ player.name }}</span>
+                        <span class="text-[11px] md:text-xs text-foreground truncate">{{ player.name }}</span>
                       </div>
-                      <span class="w-20 text-xs font-semibold font-mono text-center" :class="player.points >= 0 ? 'text-primary' : 'text-destructive'">
+                      <span class="w-14 md:w-20 text-xs font-semibold font-mono text-center" :class="player.points >= 0 ? 'text-primary' : 'text-destructive'">
                         {{ player.points.toFixed(1) }}
                       </span>
-                      <div class="w-20 flex justify-center">
+                      <div class="w-12 md:w-20 justify-center hidden sm:flex">
                         <span v-if="player.bans" class="map-loss text-[9px]">{{ player.bans }}</span>
                         <span v-else class="text-xs text-text-tertiary">—</span>
                       </div>
-                      <span class="w-20 text-xs font-mono text-foreground text-right">{{ player.picks || 0 }}</span>
+                      <span class="w-12 md:w-20 text-xs font-mono text-foreground text-right">{{ player.picks || 0 }}</span>
                     </div>
                   </template>
                 </div>
