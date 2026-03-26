@@ -3,7 +3,7 @@ import { query, queryOne, execute } from '../db.js'
 import { getAuthPlayer } from '../middleware/auth.js'
 import { requireCompPermission } from '../middleware/permissions.js'
 import { getCompetition, parseCompSettings } from '../helpers/competition.js'
-import { getStagePoints, getStageTopPicks } from '../helpers/fantasy.js'
+import { getStagePoints, getStageTopPicks, getPlayerCheckData } from '../helpers/fantasy.js'
 
 const FANTASY_ROLE_TO_PLAYING_ROLE = { carry: 1, mid: 2, offlane: 3, pos4: 4, pos5: 5 }
 
@@ -566,6 +566,33 @@ export default function createFantasyRouter(io) {
       res.json({ ok: true })
     } catch (e) {
       console.error('Fantasy clear pick error:', e.message)
+      res.status(500).json({ error: 'Internal error' })
+    }
+  })
+
+  // Check player: detailed per-game point breakdown for a player in a role
+  router.get('/api/competitions/:compId/fantasy/stages/:stageId/player-check', async (req, res) => {
+    try {
+      const compId = Number(req.params.compId)
+      const stageId = Number(req.params.stageId)
+      const playerId = Number(req.query.playerId)
+      const role = req.query.role
+      if (!compId || !stageId || !playerId || !role) return res.status(400).json({ error: 'Missing parameters' })
+
+      const comp = await getCompetition(compId)
+      if (!comp) return res.status(404).json({ error: 'Competition not found' })
+
+      const stage = await queryOne(
+        'SELECT * FROM fantasy_stages WHERE id = $1 AND competition_id = $2',
+        [stageId, compId]
+      )
+      if (!stage) return res.status(404).json({ error: 'Stage not found' })
+
+      const settings = parseCompSettings(comp)
+      const data = await getPlayerCheckData(stageId, playerId, role, settings.fantasyScoring)
+      res.json(data)
+    } catch (e) {
+      console.error('Fantasy player check error:', e.message)
       res.status(500).json({ error: 'Internal error' })
     }
   })

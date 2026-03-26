@@ -32,6 +32,42 @@ const STAT_MAP = {
 // Per-1000 stats (divide by 1000 before applying multiplier)
 const PER_THOUSAND = { hero_damage: 'heroDamage', tower_damage: 'towerDamage', hero_healing: 'heroHealing' }
 
+export function calculatePlayerPointsDetailed(playerStats, roleMultipliers) {
+  const breakdown = {}
+  let total = 0
+
+  // Direct stats
+  for (const [dbField, scoringKey] of Object.entries(STAT_MAP)) {
+    const value = playerStats[dbField] || 0
+    const multiplier = roleMultipliers[scoringKey] || 0
+    const points = Math.round(value * multiplier * 100) / 100
+    breakdown[scoringKey] = { value, multiplier, points }
+    total += points
+  }
+
+  // Per-1000 stats
+  for (const [dbField, scoringKey] of Object.entries(PER_THOUSAND)) {
+    const rawValue = playerStats[dbField] || 0
+    const value = rawValue / 1000
+    const multiplier = roleMultipliers[scoringKey] || 0
+    const points = Math.round(value * multiplier * 100) / 100
+    breakdown[scoringKey] = { value: rawValue, multiplier, points }
+    total += points
+  }
+
+  // Multi-kills
+  const multiKills = playerStats.multi_kills || {}
+  const tripleVal = multiKills['3'] || 0
+  const ultraVal = multiKills['4'] || 0
+  const rampageVal = multiKills['5'] || 0
+  breakdown.tripleKill = { value: tripleVal, multiplier: roleMultipliers.tripleKill || 0, points: Math.round(tripleVal * (roleMultipliers.tripleKill || 0) * 100) / 100 }
+  breakdown.ultraKill = { value: ultraVal, multiplier: roleMultipliers.ultraKill || 0, points: Math.round(ultraVal * (roleMultipliers.ultraKill || 0) * 100) / 100 }
+  breakdown.rampage = { value: rampageVal, multiplier: roleMultipliers.rampage || 0, points: Math.round(rampageVal * (roleMultipliers.rampage || 0) * 100) / 100 }
+  total += breakdown.tripleKill.points + breakdown.ultraKill.points + breakdown.rampage.points
+
+  return { breakdown, total: Math.round(total * 100) / 100 }
+}
+
 export function calculatePlayerPoints(playerStats, roleMultipliers) {
   let points = 0
 
@@ -224,4 +260,69 @@ export async function getStageTopPicks(stageId, compId, fantasyScoring) {
   }
 
   return result
+}
+
+export async function getPlayerCheckData(stageId, playerId, role, fantasyScoring) {
+  const roleMultipliers = fantasyScoring[role]
+  if (!roleMultipliers) return { games: [], total: 0 }
+
+  // Get the player's steam_id
+  const player = await query('SELECT steam_id FROM players WHERE id = $1', [playerId])
+  if (!player.length || !player[0].steam_id) return { games: [], total: 0 }
+
+  const accountId = steamIdToAccountId(player[0].steam_id)
+  if (!accountId) return { games: [], total: 0 }
+
+  // Get all match_games for this stage with match info
+  const gameRows = await query(`
+    SELECT mg.id AS match_game_id, mg.game_number, mg.match_id, mg.dotabuff_id,
+           m.round, m.stage,
+           t1.team AS team1_name, t2.team AS team2_name
+    FROM fantasy_stage_matches fsm
+    JOIN match_games mg ON mg.match_id = fsm.match_id
+    JOIN matches m ON m.id = mg.match_id
+    LEFT JOIN captains t1 ON t1.id = m.team1_captain_id
+    LEFT JOIN captains t2 ON t2.id = m.team2_captain_id
+    WHERE fsm.fantasy_stage_id = $1
+    ORDER BY mg.match_id, mg.game_number
+  `, [stageId])
+
+  if (gameRows.length === 0) return { games: [], total: 0 }
+
+  const gameIds = gameRows.map(r => r.match_game_id)
+
+  // Get this player's stats for all games
+  const stats = await query(
+    'SELECT * FROM match_game_player_stats WHERE match_game_id = ANY($1) AND account_id = $2',
+    [gameIds, accountId]
+  )
+
+  const statsByGame = {}
+  for (const s of stats) {
+    statsByGame[s.match_game_id] = s
+  }
+
+  let grandTotal = 0
+  const games = []
+
+  for (const g of gameRows) {
+    const playerStats = statsByGame[g.match_game_id]
+    if (!playerStats) continue
+
+    const { breakdown, total } = calculatePlayerPointsDetailed(playerStats, roleMultipliers)
+    grandTotal += total
+
+    games.push({
+      matchGameId: g.match_game_id,
+      gameNumber: g.game_number,
+      matchLabel: `${g.team1_name || 'TBD'} vs ${g.team2_name || 'TBD'}`,
+      dotabuffId: g.dotabuff_id,
+      heroId: playerStats.hero_id,
+      win: playerStats.win,
+      breakdown,
+      total,
+    })
+  }
+
+  return { games, total: Math.round(grandTotal * 100) / 100 }
 }

@@ -663,6 +663,53 @@
         "responses": { "200": { "description": "Picks saved" }, "400": { "description": "Picks locked or validation error" } }
       }
     },
+    "/api/competitions/{compId}/fantasy/stages/{stageId}/player-check": {
+      "get": {
+        "tags": ["Fantasy"],
+        "summary": "Get detailed per-game point breakdown for a player",
+        "description": "Returns a detailed per-game, per-stat point breakdown for a specific player evaluated in a given fantasy role within a stage. Used by the 'Check Player' tab.",
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "stageId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "playerId", "in": "query", "required": true, "schema": { "type": "integer" }, "description": "Player ID to check" },
+          { "name": "role", "in": "query", "required": true, "schema": { "type": "string", "enum": ["carry", "mid", "offlane", "pos4", "pos5"] }, "description": "Fantasy role to evaluate points with" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Detailed point breakdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "games": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "matchGameId": { "type": "integer" },
+                          "gameNumber": { "type": "integer" },
+                          "matchLabel": { "type": "string" },
+                          "dotabuffId": { "type": "string" },
+                          "heroId": { "type": "integer" },
+                          "win": { "type": "integer" },
+                          "breakdown": {
+                            "type": "object",
+                            "description": "Per-stat breakdown: { [statKey]: { value, multiplier, points } }"
+                          },
+                          "total": { "type": "number" }
+                        }
+                      }
+                    },
+                    "total": { "type": "number" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/news": {
       "get": {
         "tags": ["News"],

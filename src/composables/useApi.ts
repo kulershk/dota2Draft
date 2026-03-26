@@ -137,6 +137,8 @@ export function useApi() {
       request(`/api/competitions/${compId}/fantasy/stages/${stageId}/pick/${role}`, { method: 'DELETE' }),
     getFantasyTopPicks: (compId: number, stageId: number) =>
       request(`/api/competitions/${compId}/fantasy/stages/${stageId}/top-picks`),
+    getFantasyPlayerCheck: (compId: number, stageId: number, playerId: number, role: string) =>
+      request(`/api/competitions/${compId}/fantasy/stages/${stageId}/player-check?playerId=${playerId}&role=${role}`),
 
     // Lobby Bots
     getBots: () => request('/api/admin/bots'),

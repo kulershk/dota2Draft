@@ -11,7 +11,7 @@ const api = useApi()
 const store = useDraftStore()
 
 const loading = ref(true)
-const activeTab = ref<'picks' | 'leaderboard' | 'rules'>('picks')
+const activeTab = ref<'picks' | 'leaderboard' | 'check' | 'rules'>('picks')
 const leaderboard = ref<{ stages: any[]; users: any[] }>({ stages: [], users: [] })
 const loadingLeaderboard = ref(false)
 const expandedUserId = ref<number | null>(null)
@@ -31,6 +31,15 @@ const showPickModal = ref(false)
 const pickStageId = ref<number | null>(null)
 const pickRole = ref('')
 const pickSearch = ref('')
+
+// Check Player tab
+const checkPlayerId = ref<number | null>(null)
+const checkRole = ref<string>('')
+const checkStageId = ref<number | null>(null)
+const checkData = ref<{ games: any[]; total: number } | null>(null)
+const checkLoading = ref(false)
+const checkExpandedGame = ref<number | null>(null)
+const checkPlayerSearch = ref('')
 
 const compId = store.currentCompetitionId
 const stages = computed(() => store.fantasyData.value?.stages || [])
@@ -386,6 +395,55 @@ const fantasyStats = [
   'firstBlood', 'runePickup', 'tripleKill', 'ultraKill', 'rampage', 'courierKill',
 ] as const
 
+// All competition players flat for check player dropdown
+const allCompPlayers = computed(() => {
+  const players = (store.players.value || []) as any[]
+  const captains = (store.captains.value || []) as any[]
+  const result: any[] = []
+  const seen = new Set<number>()
+  for (const cap of captains) {
+    // Captain as player
+    if (cap.player_id && !seen.has(cap.player_id)) {
+      const p = players.find((pl: any) => pl.id === cap.player_id)
+      if (p) { result.push({ ...p, team_name: cap.team }); seen.add(p.id) }
+    }
+    // Drafted players
+    for (const p of players) {
+      if (p.drafted_by === cap.id && !seen.has(p.id)) {
+        result.push({ ...p, team_name: cap.team })
+        seen.add(p.id)
+      }
+    }
+  }
+  return result.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+})
+
+const filteredCheckPlayers = computed(() => {
+  const q = checkPlayerSearch.value.toLowerCase()
+  if (!q) return allCompPlayers.value
+  return allCompPlayers.value.filter((p: any) => (p.name || '').toLowerCase().includes(q) || (p.team_name || '').toLowerCase().includes(q))
+})
+
+// Non-upcoming stages for the check dropdown
+const checkableStages = computed(() => stages.value.filter((s: any) => s.status !== 'upcoming'))
+
+async function fetchPlayerCheck() {
+  const cId = compId.value
+  if (!cId || !checkStageId.value || !checkPlayerId.value || !checkRole.value) {
+    checkData.value = null
+    return
+  }
+  checkLoading.value = true
+  checkExpandedGame.value = null
+  try {
+    checkData.value = await api.getFantasyPlayerCheck(cId, checkStageId.value, checkPlayerId.value, checkRole.value)
+  } catch {
+    checkData.value = null
+  } finally {
+    checkLoading.value = false
+  }
+}
+
 function matchLabel(match: any) {
   const t1 = match.team1_name || 'TBD'
   const t2 = match.team2_name || 'TBD'
@@ -406,14 +464,14 @@ function matchLabel(match: any) {
       </div>
       <div class="flex items-center gap-3">
         <button
-          v-for="tab in (['picks', 'leaderboard', 'rules'] as const)" :key="tab"
+          v-for="tab in (['picks', 'leaderboard', 'check', 'rules'] as const)" :key="tab"
           class="px-4 py-2.5 text-sm font-medium rounded-md transition-colors"
           :class="activeTab === tab
             ? 'bg-primary text-primary-foreground font-semibold'
             : 'text-muted-foreground border border-border hover:text-foreground hover:border-muted-foreground'"
           @click="activeTab = tab"
         >
-          {{ tab === 'picks' ? t('myPicks') : tab === 'leaderboard' ? t('leaderboard') : t('fantasyRules') }}
+          {{ tab === 'picks' ? t('myPicks') : tab === 'leaderboard' ? t('leaderboard') : tab === 'check' ? t('checkPlayer') : t('fantasyRules') }}
         </button>
         <button v-if="isAdmin && activeTab === 'picks'" class="btn-primary text-sm" @click="openCreateStage">
           <Plus class="w-4 h-4" />
@@ -716,6 +774,142 @@ function matchLabel(match: any) {
             </template>
           </tbody>
         </table>
+      </div>
+    </template>
+
+    <!-- Check Player Tab -->
+    <template v-else-if="activeTab === 'check'">
+      <div class="card">
+        <div class="px-5 py-4 border-b border-border">
+          <h3 class="text-lg font-semibold text-foreground">{{ t('checkPlayer') }}</h3>
+          <p class="text-sm text-muted-foreground mt-1">{{ t('checkPlayerDesc') }}</p>
+        </div>
+        <div class="p-5 flex flex-col gap-4">
+          <!-- Selectors row -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <!-- Player select -->
+            <div class="flex flex-col gap-1.5">
+              <label class="label-text">{{ t('selectPlayer') }}</label>
+              <div class="relative">
+                <input
+                  class="input-field w-full"
+                  v-model="checkPlayerSearch"
+                  :placeholder="checkPlayerId ? allCompPlayers.find(p => p.id === checkPlayerId)?.name || t('selectPlayer') : t('selectPlayer')"
+                  @focus="checkPlayerSearch = ''"
+                />
+                <div v-if="checkPlayerSearch !== '' || !checkPlayerId" class="absolute z-10 top-full left-0 right-0 mt-1 bg-background border border-border rounded-md shadow-lg max-h-[250px] overflow-y-auto">
+                  <button
+                    v-for="player in filteredCheckPlayers" :key="player.id"
+                    class="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-accent/30 transition-colors text-sm"
+                    :class="{ 'bg-primary/10': checkPlayerId === player.id }"
+                    @click="checkPlayerId = player.id; checkPlayerSearch = player.name; fetchPlayerCheck()"
+                  >
+                    <img v-if="player.avatar_url" :src="player.avatar_url" class="w-5 h-5 rounded-full" />
+                    <span class="text-foreground truncate">{{ player.name }}</span>
+                    <span class="text-[10px] text-muted-foreground ml-auto">{{ player.team_name }}</span>
+                  </button>
+                  <div v-if="filteredCheckPlayers.length === 0" class="px-3 py-2 text-xs text-muted-foreground text-center">
+                    {{ t('noPlayersFound') }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Role select -->
+            <div class="flex flex-col gap-1.5">
+              <label class="label-text">{{ t('selectRole') }}</label>
+              <select class="input-field" v-model="checkRole" @change="fetchPlayerCheck()">
+                <option value="" disabled>{{ t('selectRole') }}</option>
+                <option v-for="role in roles" :key="role" :value="role">{{ t('fantasyRole_' + role) }}</option>
+              </select>
+            </div>
+
+            <!-- Stage select -->
+            <div class="flex flex-col gap-1.5">
+              <label class="label-text">{{ t('selectStage') }}</label>
+              <select class="input-field" v-model.number="checkStageId" @change="fetchPlayerCheck()">
+                <option :value="null" disabled>{{ t('selectStage') }}</option>
+                <option v-for="stage in checkableStages" :key="stage.id" :value="stage.id">{{ stage.name }}</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Loading -->
+          <div v-if="checkLoading" class="text-center text-muted-foreground py-8">{{ t('loading') }}...</div>
+
+          <!-- No data -->
+          <div v-else-if="checkData && checkData.games.length === 0 && checkPlayerId && checkRole && checkStageId" class="text-center text-muted-foreground py-8">
+            {{ t('checkPlayerNoData') }}
+          </div>
+
+          <!-- Results -->
+          <template v-else-if="checkData && checkData.games.length > 0">
+            <!-- Grand total -->
+            <div class="flex items-center justify-between px-4 py-3 rounded-md bg-primary/10 border border-primary/20">
+              <span class="text-sm font-semibold text-foreground">{{ t('checkPlayerGrandTotal') }} ({{ checkData.games.length }} {{ checkData.games.length === 1 ? t('checkPlayerGame').toLowerCase() : t('checkPlayerAllGames').toLowerCase() }})</span>
+              <span class="text-lg font-bold font-mono text-primary">{{ checkData.total.toFixed(2) }}</span>
+            </div>
+
+            <!-- Per-game breakdown -->
+            <div v-for="(game, gIdx) in checkData.games" :key="game.matchGameId" class="border border-border rounded-md overflow-hidden">
+              <!-- Game header -->
+              <button
+                class="flex items-center justify-between w-full px-4 py-3 hover:bg-accent/20 transition-colors cursor-pointer"
+                @click="checkExpandedGame = checkExpandedGame === gIdx ? null : gIdx"
+              >
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-semibold text-foreground">{{ game.matchLabel }} — {{ t('checkPlayerGame') }} {{ game.gameNumber }}</span>
+                  <span class="w-2 h-2 rounded-full" :class="game.win ? 'bg-green-500' : 'bg-red-500'" />
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="text-sm font-bold font-mono" :class="game.total >= 0 ? 'text-primary' : 'text-red-500'">{{ game.total.toFixed(2) }}</span>
+                  <component :is="checkExpandedGame === gIdx ? ChevronUp : ChevronDown" class="w-4 h-4 text-muted-foreground" />
+                </div>
+              </button>
+
+              <!-- Detailed stat breakdown -->
+              <div v-if="checkExpandedGame === gIdx" class="border-t border-border">
+                <table class="w-full text-xs">
+                  <thead>
+                    <tr class="border-b border-border bg-accent/10">
+                      <th class="text-left py-2 px-3 text-muted-foreground font-semibold">{{ t('stat') }}</th>
+                      <th class="text-center py-2 px-3 text-muted-foreground font-semibold">{{ t('checkPlayerValue') }}</th>
+                      <th class="text-center py-2 px-3 text-muted-foreground font-semibold">{{ t('checkPlayerMultiplier') }}</th>
+                      <th class="text-right py-2 px-3 text-muted-foreground font-semibold">{{ t('checkPlayerPoints') }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="stat in fantasyStats" :key="stat" class="border-b border-border/20 hover:bg-accent/10"
+                      :class="{ 'opacity-40': !game.breakdown[stat] || game.breakdown[stat].points === 0 }">
+                      <td class="py-1.5 px-3 text-foreground font-medium">{{ t('fantasyStat_' + stat) }}</td>
+                      <td class="text-center py-1.5 px-3 font-mono text-foreground">
+                        {{ ['heroDamage', 'towerDamage', 'heroHealing'].includes(stat)
+                          ? (game.breakdown[stat]?.value || 0).toLocaleString()
+                          : typeof game.breakdown[stat]?.value === 'number'
+                            ? Math.round(game.breakdown[stat].value * 100) / 100
+                            : 0 }}
+                      </td>
+                      <td class="text-center py-1.5 px-3 font-mono text-muted-foreground">
+                        x{{ game.breakdown[stat]?.multiplier ?? 0 }}
+                      </td>
+                      <td class="text-right py-1.5 px-3 font-mono font-medium"
+                        :class="(game.breakdown[stat]?.points || 0) > 0 ? 'text-green-500' : (game.breakdown[stat]?.points || 0) < 0 ? 'text-red-500' : 'text-muted-foreground'">
+                        {{ (game.breakdown[stat]?.points || 0) > 0 ? '+' : '' }}{{ (game.breakdown[stat]?.points || 0).toFixed(2) }}
+                      </td>
+                    </tr>
+                    <!-- Game total row -->
+                    <tr class="bg-accent/20 font-semibold">
+                      <td colspan="3" class="py-2 px-3 text-foreground">{{ t('checkPlayerTotal') }}</td>
+                      <td class="text-right py-2 px-3 font-mono" :class="game.total >= 0 ? 'text-primary' : 'text-red-500'">
+                        {{ game.total.toFixed(2) }}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </template>
+        </div>
       </div>
     </template>
 
