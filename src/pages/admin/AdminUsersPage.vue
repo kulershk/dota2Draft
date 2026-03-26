@@ -196,8 +196,8 @@ const filteredUsers = computed(() => {
       case 'name':
         return a.name.localeCompare(b.name) * dir
       case 'last_online': {
-        // Online users always first when sorting desc (recent first)
-        if (a.online !== b.online) return a.online ? -1 * dir : 1 * dir
+        // Online users always first regardless of sort direction
+        if (a.online !== b.online) return a.online ? -1 : 1
         const aTime = a.last_online ? new Date(a.last_online).getTime() : 0
         const bTime = b.last_online ? new Date(b.last_online).getTime() : 0
         return (aTime - bTime) * dir
