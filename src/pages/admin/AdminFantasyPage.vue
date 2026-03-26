@@ -79,8 +79,8 @@ async function loadData() {
   }
 }
 
-const pendingStages = computed(() => stages.value.filter(s => s.status === 'pending'))
-const activeStages = computed(() => stages.value.filter(s => s.status !== 'upcoming'))
+// Admin sees all stages regardless of status
+const allStages = computed(() => stages.value)
 
 const sortedUsers = computed(() => {
   // Users with picks first, then alphabetical
@@ -304,7 +304,7 @@ function getUserName(user: any): string {
 
           <!-- User picks per stage -->
           <div v-if="expandedUserId === user.id" class="border-t border-border/50">
-            <div v-for="stage in activeStages" :key="stage.id" class="border-b border-border/30 last:border-0">
+            <div v-for="stage in allStages" :key="stage.id" class="border-b border-border/30 last:border-0">
               <div class="px-5 py-2.5 bg-accent/20">
                 <div class="flex items-center gap-2">
                   <span class="text-xs font-semibold text-foreground">{{ stage.name }}</span>

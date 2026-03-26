@@ -637,7 +637,26 @@ export default function createFantasyRouter(io) {
         [compId]
       )
       const stageIds = stages.map(s => s.id)
-      if (stageIds.length === 0) return res.json({ stages, picks: {}, users: [] })
+      if (stageIds.length === 0) {
+        // Still return compPlayers and captains so admin can see who's in the competition
+        const compPlayers = await query(
+          `SELECT cp.player_id, COALESCE(p.display_name, p.name) AS name, p.avatar_url, cp.drafted_by, cp.playing_role
+           FROM competition_players cp JOIN players p ON p.id = cp.player_id
+           WHERE cp.competition_id = $1`,
+          [compId]
+        )
+        const captains = await query(
+          'SELECT id, name, team, player_id, avatar_url, banner_url FROM captains WHERE competition_id = $1',
+          [compId]
+        )
+        const users = await query(
+          `SELECT p.id, COALESCE(p.display_name, p.name) AS name, p.avatar_url
+           FROM competition_players cp JOIN players p ON p.id = cp.player_id
+           WHERE cp.competition_id = $1`,
+          [compId]
+        )
+        return res.json({ stages, picks: {}, users, compPlayers, captains })
+      }
 
       // Get all picks across all stages
       const allPicks = await query(
