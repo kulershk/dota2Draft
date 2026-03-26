@@ -700,8 +700,8 @@ export default function createFantasyRouter(io) {
 
       res.json({ stages, picks, users, compPlayers, captains })
     } catch (e) {
-      console.error('Admin fantasy picks GET error:', e.message)
-      res.status(500).json({ error: 'Internal error' })
+      console.error('Admin fantasy picks GET error:', e.message, e.stack)
+      res.status(500).json({ error: e.message })
     }
   })
 
