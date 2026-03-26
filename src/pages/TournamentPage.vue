@@ -36,7 +36,7 @@ const editStageFormat = ref('')
 const editStageBestOf = ref(3)
 const editSeeds = ref<number[]>([])
 const editSelectedTeams = ref<Set<number>>(new Set())
-const editGroups = ref<{ name: string; teamIds: number[] }[]>([])
+const editGroups = ref<{ name: string; teamIds: number[]; colorLines?: { count: number; color: string }[] }[]>([])
 const editHasMatches = ref(false)
 
 // Add-stage form state
@@ -45,9 +45,9 @@ const format = ref<'single_elimination' | 'double_elimination' | 'group_stage'>(
 const bestOf = ref(3)
 const seeds = ref<number[]>([])
 const selectedTeams = ref<Set<number>>(new Set())
-const groups = ref<{ name: string; teamIds: number[] }[]>([
-  { name: 'Group A', teamIds: [] },
-  { name: 'Group B', teamIds: [] },
+const groups = ref<{ name: string; teamIds: number[]; colorLines?: { count: number; color: string }[] }[]>([
+  { name: 'Group A', teamIds: [], colorLines: [] },
+  { name: 'Group B', teamIds: [], colorLines: [] },
 ])
 
 const tournamentState = computed(() => store.tournamentData.value.tournament_state || {})
@@ -201,7 +201,7 @@ function removeEditGroupTbd(groupIdx: number, nthTbd: number) {
 
 function addGroup() {
   const letter = String.fromCharCode(65 + groups.value.length)
-  groups.value.push({ name: `Group ${letter}`, teamIds: [] })
+  groups.value.push({ name: `Group ${letter}`, teamIds: [], colorLines: [] })
 }
 
 function removeGroup(idx: number) {
@@ -233,8 +233,8 @@ function openAddStage() {
   seeds.value = store.captains.value.map(c => c.id)
   selectedTeams.value = new Set(seeds.value)
   groups.value = [
-    { name: 'Group A', teamIds: [] },
-    { name: 'Group B', teamIds: [] },
+    { name: 'Group A', teamIds: [], colorLines: [] },
+    { name: 'Group B', teamIds: [], colorLines: [] },
   ]
   showAddStage.value = true
 }
@@ -256,8 +256,9 @@ async function addStage() {
       if (filteredSeeds.length > 0) data.seeds = filteredSeeds.map(id => id === 0 ? null : id)
     } else {
       data.groups = groups.value.map(g => ({
-        ...g,
+        name: g.name,
         teamIds: g.teamIds.map(id => id === 0 ? null : id),
+        colorLines: g.colorLines || [],
       }))
     }
     await api.addTournamentStage(compId, data)
@@ -330,7 +331,7 @@ function moveEditSeed(idx: number, dir: -1 | 1) {
 
 function addEditGroup() {
   const letter = String.fromCharCode(65 + editGroups.value.length)
-  editGroups.value.push({ name: `Group ${letter}`, teamIds: [] })
+  editGroups.value.push({ name: `Group ${letter}`, teamIds: [], colorLines: [] })
 }
 
 function removeEditGroup(idx: number) {
@@ -365,9 +366,9 @@ function openEditStage(stage: any) {
 
   // Initialize team selection from existing stage data
   if (stage.format === 'group_stage') {
-    editGroups.value = (stage.groups || []).map((g: any) => ({ name: g.name, teamIds: (g.teamIds || []).map((id: any) => id == null ? 0 : id) }))
+    editGroups.value = (stage.groups || []).map((g: any) => ({ name: g.name, teamIds: (g.teamIds || []).map((id: any) => id == null ? 0 : id), colorLines: g.colorLines || [] }))
     if (editGroups.value.length === 0) {
-      editGroups.value = [{ name: 'Group A', teamIds: [] }, { name: 'Group B', teamIds: [] }]
+      editGroups.value = [{ name: 'Group A', teamIds: [], colorLines: [] }, { name: 'Group B', teamIds: [], colorLines: [] }]
     }
   } else {
     // For elimination: try to reconstruct seeds from existing matches or use all captains
@@ -400,6 +401,15 @@ async function saveEditStage() {
       bestOf: editStageBestOf.value,
     }
 
+    // Pass group data (including colorLines) for group stages without regenerating
+    if (editStageFormat.value === 'group_stage') {
+      data.groups = editGroups.value.map(g => ({
+        name: g.name,
+        teamIds: g.teamIds.map(id => id === 0 ? null : id),
+        colorLines: g.colorLines || [],
+      }))
+    }
+
     await api.updateTournamentStage(compId, editStageId.value, data)
     showEditStage.value = false
     await store.fetchTournament()
@@ -425,8 +435,9 @@ async function confirmRegenerate() {
 
     if (editStageFormat.value === 'group_stage') {
       data.groups = editGroups.value.map(g => ({
-        ...g,
+        name: g.name,
         teamIds: g.teamIds.map(id => id === 0 ? null : id),
+        colorLines: g.colorLines || [],
       }))
     } else {
       const filteredSeeds = editSeeds.value.filter(id => id === 0 || editSelectedTeams.value.has(id))
@@ -699,6 +710,20 @@ function stageStatusClass(stage: any) {
                   @click="addGroupTbd(gi)"
                 >+ {{ t('tbd') }}</button>
               </div>
+              <!-- Color lines config -->
+              <div class="mt-3 pt-3 border-t border-border/50">
+                <div class="flex items-center justify-between mb-1.5">
+                  <span class="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">{{ t('colorLines') }}</span>
+                  <button class="text-[11px] text-primary hover:text-primary/80 transition-colors" @click="group.colorLines = [...(group.colorLines || []), { count: 1, color: '#22c55e' }]">+ {{ t('addColorLine') }}</button>
+                </div>
+                <div v-for="(cl, ci) in (group.colorLines || [])" :key="ci" class="flex items-center gap-2 mb-1.5">
+                  <input type="color" v-model="cl.color" class="w-6 h-6 rounded cursor-pointer border-0 p-0" />
+                  <span class="text-xs text-muted-foreground">{{ t('positions') }}</span>
+                  <input type="number" v-model.number="cl.count" min="1" class="input-field !h-7 !text-xs w-14 text-center" />
+                  <button class="text-destructive text-xs hover:text-destructive/80" @click="group.colorLines!.splice(ci, 1)">&times;</button>
+                </div>
+                <p v-if="!group.colorLines?.length" class="text-[10px] text-muted-foreground italic">{{ t('noColorLines') }}</p>
+              </div>
             </div>
           </div>
         </div>
@@ -859,6 +884,20 @@ function stageStatusClass(stage: any) {
                   class="px-2.5 py-1 rounded-full text-xs font-medium transition-colors bg-accent/60 text-muted-foreground hover:bg-accent border border-dashed border-border"
                   @click="addEditGroupTbd(gi)"
                 >+ {{ t('tbd') }}</button>
+              </div>
+              <!-- Color lines config -->
+              <div class="mt-3 pt-3 border-t border-border/50">
+                <div class="flex items-center justify-between mb-1.5">
+                  <span class="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">{{ t('colorLines') }}</span>
+                  <button class="text-[11px] text-primary hover:text-primary/80 transition-colors" @click="group.colorLines = [...(group.colorLines || []), { count: 1, color: '#22c55e' }]">+ {{ t('addColorLine') }}</button>
+                </div>
+                <div v-for="(cl, ci) in (group.colorLines || [])" :key="ci" class="flex items-center gap-2 mb-1.5">
+                  <input type="color" v-model="cl.color" class="w-6 h-6 rounded cursor-pointer border-0 p-0" />
+                  <span class="text-xs text-muted-foreground">{{ t('positions') }}</span>
+                  <input type="number" v-model.number="cl.count" min="1" class="input-field !h-7 !text-xs w-14 text-center" />
+                  <button class="text-destructive text-xs hover:text-destructive/80" @click="group.colorLines!.splice(ci, 1)">&times;</button>
+                </div>
+                <p v-if="!group.colorLines?.length" class="text-[10px] text-muted-foreground italic">{{ t('noColorLines') }}</p>
               </div>
             </div>
           </div>

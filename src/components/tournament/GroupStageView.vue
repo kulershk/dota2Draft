@@ -32,6 +32,17 @@ function isGroupExpanded(groupName: string) {
 
 const groupsList = computed(() => props.tournamentState.groups || [])
 
+function getRowColor(groupName: string, idx: number): string | null {
+  const group = groupsList.value.find((g: any) => g.name === groupName)
+  if (!group?.colorLines?.length) return null
+  let pos = 0
+  for (const cl of group.colorLines) {
+    pos += cl.count
+    if (idx < pos) return cl.color
+  }
+  return null
+}
+
 // Compute standings per group
 const standings = computed(() => {
   const result: Record<string, any[]> = {}
@@ -117,8 +128,9 @@ const matchesByGroup = computed(() => {
       <div
         v-for="(team, idx) in standings[group.name]"
         :key="team.key"
-        class="flex items-center px-4 py-2.5 border-b border-border"
+        class="flex items-center px-4 py-2.5 border-b border-border relative"
       >
+        <div v-if="getRowColor(group.name, idx)" class="absolute left-0 top-0 bottom-0 w-1 rounded-r-sm" :style="{ backgroundColor: getRowColor(group.name, idx)! }" />
         <span class="w-10 text-sm font-mono"
           :class="idx === 0 ? 'text-primary font-bold' : 'text-muted-foreground'">{{ idx + 1 }}</span>
         <router-link v-if="team.id" :to="{ name: 'team-profile', params: { id: team.id } }" class="flex-1 flex items-center gap-2.5 min-w-0 hover:opacity-80 transition-opacity">
