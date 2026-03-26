@@ -82,10 +82,21 @@ async function loadData() {
 const pendingStages = computed(() => stages.value.filter(s => s.status === 'pending'))
 const activeStages = computed(() => stages.value.filter(s => s.status !== 'upcoming'))
 
+const sortedUsers = computed(() => {
+  // Users with picks first, then alphabetical
+  return [...users.value].sort((a: any, b: any) => {
+    const aPicks = userPickCount(a.id)
+    const bPicks = userPickCount(b.id)
+    if (aPicks > 0 && bPicks === 0) return -1
+    if (aPicks === 0 && bPicks > 0) return 1
+    return (a.name || '').localeCompare(b.name || '')
+  })
+})
+
 const filteredUsers = computed(() => {
   const q = userSearch.value.toLowerCase()
-  if (!q) return users.value
-  return users.value.filter((u: any) => (u.name || '').toLowerCase().includes(q))
+  if (!q) return sortedUsers.value
+  return sortedUsers.value.filter((u: any) => (u.name || '').toLowerCase().includes(q))
 })
 
 function getUserPicks(userId: number, stageId: number): Record<string, number> {

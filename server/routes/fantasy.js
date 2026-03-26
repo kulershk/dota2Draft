@@ -655,22 +655,23 @@ export default function createFantasyRouter(io) {
         picks[p.player_id][p.fantasy_stage_id][p.role] = p.pick_player_id
       }
 
-      // Get user info
-      let users = []
-      if (userIds.size > 0) {
-        users = await query(
-          `SELECT id, COALESCE(display_name, name) AS name, avatar_url FROM players WHERE id = ANY($1)`,
-          [[...userIds]]
-        )
-      }
-
-      // Get competition players for name lookup
+      // Get ALL competition players (potential fantasy participants)
       const compPlayers = await query(
         `SELECT cp.player_id, COALESCE(p.display_name, p.name) AS name, p.avatar_url, cp.drafted_by, cp.playing_role
          FROM competition_players cp JOIN players p ON p.id = cp.player_id
          WHERE cp.competition_id = $1`,
         [compId]
       )
+
+      // Build users list from all competition players (not just those with picks)
+      const allPlayerIds = new Set([...userIds, ...compPlayers.map(cp => cp.player_id)])
+      let users = []
+      if (allPlayerIds.size > 0) {
+        users = await query(
+          `SELECT id, COALESCE(display_name, name) AS name, avatar_url FROM players WHERE id = ANY($1)`,
+          [[...allPlayerIds]]
+        )
+      }
 
       // Get captains for team info
       const captains = await query(
