@@ -54,6 +54,7 @@ const router = createRouter({
         { path: 'permissions', name: 'admin-permissions', meta: { permissions: ['manage_permissions'] }, component: () => import('@/pages/admin/AdminPermissionsPage.vue') },
         { path: 'bots', name: 'admin-bots', meta: { permissions: ['manage_bots'] }, component: () => import('@/pages/admin/AdminBotsPage.vue') },
         { path: 'games', name: 'admin-games', meta: { permissions: ['manage_competitions'] }, component: () => import('@/pages/admin/AdminGamesPage.vue') },
+        { path: 'fantasy', name: 'admin-fantasy', meta: { permissions: ['manage_competitions', 'manage_own_competitions'] }, component: () => import('@/pages/admin/AdminFantasyPage.vue') },
       ],
     },
   ],

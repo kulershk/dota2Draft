@@ -714,6 +714,16 @@ export default {
 
   // Admin Games
   adminGames: 'Games',
+  adminFantasy: 'Fantasy Picks',
+  adminFantasySelectComp: 'Select a competition to manage fantasy picks.',
+  adminFantasyNoStages: 'No fantasy stages found for this competition.',
+  adminFantasySearchUsers: 'Search participants...',
+  adminFantasyPickPlayer: 'Pick Player',
+  adminFantasyNoParticipants: 'No participants have made picks yet.',
+  selectCompetition: 'Select competition',
+  pick: 'Pick',
+  searchPlayers: 'Search players...',
+  noResultsFound: 'No results found.',
   adminGamesDesc: 'Games waiting for OpenDota to finish parsing. Refetch to pull detailed stats.',
   allGamesParsed: 'All games are fully parsed.',
   refetchAll: 'Refetch All',

@@ -622,5 +622,141 @@ export default function createFantasyRouter(io) {
     }
   })
 
+  // ─── Admin Fantasy Picks ────────────────────────────────────
+
+  // Get all users' picks for a competition (admin)
+  router.get('/api/competitions/:compId/fantasy/admin/picks', async (req, res) => {
+    try {
+      const compId = Number(req.params.compId)
+      if (!compId) return res.status(400).json({ error: 'Invalid competition ID' })
+      const admin = await requireCompPermission(req, res, compId)
+      if (!admin) return
+
+      const stages = await query(
+        'SELECT * FROM fantasy_stages WHERE competition_id = $1 ORDER BY stage_order, id',
+        [compId]
+      )
+      const stageIds = stages.map(s => s.id)
+      if (stageIds.length === 0) return res.json({ stages, picks: {}, users: [] })
+
+      // Get all picks across all stages
+      const allPicks = await query(
+        'SELECT * FROM fantasy_picks WHERE fantasy_stage_id = ANY($1)',
+        [stageIds]
+      )
+
+      // Group: { playerId: { stageId: { role: pickPlayerId } } }
+      const picks = {}
+      const userIds = new Set()
+      for (const p of allPicks) {
+        userIds.add(p.player_id)
+        if (!picks[p.player_id]) picks[p.player_id] = {}
+        if (!picks[p.player_id][p.fantasy_stage_id]) picks[p.player_id][p.fantasy_stage_id] = {}
+        picks[p.player_id][p.fantasy_stage_id][p.role] = p.pick_player_id
+      }
+
+      // Get user info
+      let users = []
+      if (userIds.size > 0) {
+        users = await query(
+          `SELECT id, COALESCE(display_name, name) AS name, avatar_url FROM players WHERE id = ANY($1)`,
+          [[...userIds]]
+        )
+      }
+
+      // Get competition players for name lookup
+      const compPlayers = await query(
+        `SELECT cp.player_id, COALESCE(p.display_name, p.name) AS name, p.avatar_url, cp.drafted_by, cp.playing_role
+         FROM competition_players cp JOIN players p ON p.id = cp.player_id
+         WHERE cp.competition_id = $1`,
+        [compId]
+      )
+
+      // Get captains for team info
+      const captains = await query(
+        'SELECT id, name, team, player_id, avatar_url, banner_url FROM captains WHERE competition_id = $1',
+        [compId]
+      )
+
+      res.json({ stages, picks, users, compPlayers, captains })
+    } catch (e) {
+      console.error('Admin fantasy picks GET error:', e.message)
+      res.status(500).json({ error: 'Internal error' })
+    }
+  })
+
+  // Admin: set a pick for a specific user
+  router.put('/api/competitions/:compId/fantasy/admin/picks/:userId/stages/:stageId/pick', async (req, res) => {
+    try {
+      const compId = Number(req.params.compId)
+      const userId = Number(req.params.userId)
+      const stageId = Number(req.params.stageId)
+      if (!compId || !userId || !stageId) return res.status(400).json({ error: 'Invalid IDs' })
+      const admin = await requireCompPermission(req, res, compId)
+      if (!admin) return
+
+      const stage = await queryOne(
+        'SELECT * FROM fantasy_stages WHERE id = $1 AND competition_id = $2',
+        [stageId, compId]
+      )
+      if (!stage) return res.status(404).json({ error: 'Stage not found' })
+
+      const { role, playerId } = req.body
+      const roles = ['carry', 'mid', 'offlane', 'pos4', 'pos5']
+      if (!roles.includes(role)) return res.status(400).json({ error: 'Invalid role' })
+      if (!playerId) return res.status(400).json({ error: 'Player ID required' })
+
+      // Verify pick player belongs to competition
+      const compPlayer = await queryOne(
+        'SELECT player_id FROM competition_players WHERE competition_id = $1 AND player_id = $2',
+        [compId, playerId]
+      )
+      if (!compPlayer) return res.status(400).json({ error: 'Player not in this competition' })
+
+      // Check player isn't already picked for another role by this user in this stage
+      const existing = await queryOne(
+        'SELECT role FROM fantasy_picks WHERE fantasy_stage_id = $1 AND player_id = $2 AND pick_player_id = $3 AND role != $4',
+        [stageId, userId, playerId, role]
+      )
+      if (existing) return res.status(400).json({ error: `Player already picked as ${existing.role}` })
+
+      await execute(`
+        INSERT INTO fantasy_picks (fantasy_stage_id, player_id, role, pick_player_id)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (fantasy_stage_id, player_id, role) DO UPDATE SET pick_player_id = $4
+      `, [stageId, userId, role, playerId])
+
+      io.to(`comp:${compId}`).emit('fantasy:updated')
+      res.json({ ok: true })
+    } catch (e) {
+      console.error('Admin fantasy set pick error:', e.message)
+      res.status(500).json({ error: 'Internal error' })
+    }
+  })
+
+  // Admin: clear a pick for a specific user
+  router.delete('/api/competitions/:compId/fantasy/admin/picks/:userId/stages/:stageId/pick/:role', async (req, res) => {
+    try {
+      const compId = Number(req.params.compId)
+      const userId = Number(req.params.userId)
+      const stageId = Number(req.params.stageId)
+      const role = req.params.role
+      if (!compId || !userId || !stageId) return res.status(400).json({ error: 'Invalid IDs' })
+      const admin = await requireCompPermission(req, res, compId)
+      if (!admin) return
+
+      await execute(
+        'DELETE FROM fantasy_picks WHERE fantasy_stage_id = $1 AND player_id = $2 AND role = $3',
+        [stageId, userId, role]
+      )
+
+      io.to(`comp:${compId}`).emit('fantasy:updated')
+      res.json({ ok: true })
+    } catch (e) {
+      console.error('Admin fantasy clear pick error:', e.message)
+      res.status(500).json({ error: 'Internal error' })
+    }
+  })
+
   return router
 }

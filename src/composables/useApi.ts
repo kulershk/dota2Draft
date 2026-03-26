@@ -140,6 +140,14 @@ export function useApi() {
     getFantasyPlayerCheck: (compId: number, stageId: number, playerId: number, role: string) =>
       request(`/api/competitions/${compId}/fantasy/stages/${stageId}/player-check?playerId=${playerId}&role=${role}`),
 
+    // Admin Fantasy Picks
+    getAdminFantasyPicks: (compId: number) =>
+      request(`/api/competitions/${compId}/fantasy/admin/picks`),
+    adminSetFantasyPick: (compId: number, userId: number, stageId: number, role: string, playerId: number) =>
+      request(`/api/competitions/${compId}/fantasy/admin/picks/${userId}/stages/${stageId}/pick`, { method: 'PUT', body: JSON.stringify({ role, playerId }) }),
+    adminClearFantasyPick: (compId: number, userId: number, stageId: number, role: string) =>
+      request(`/api/competitions/${compId}/fantasy/admin/picks/${userId}/stages/${stageId}/pick/${role}`, { method: 'DELETE' }),
+
     // Lobby Bots
     getBots: () => request('/api/admin/bots'),
     addBot: (data: { username: string; password: string }) =>

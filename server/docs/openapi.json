@@ -710,6 +710,48 @@
         }
       }
     },
+    "/api/competitions/{compId}/fantasy/admin/picks": {
+      "get": {
+        "tags": ["Fantasy"],
+        "summary": "Get all users' fantasy picks (admin)",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Returns all users' picks across all stages for a competition. Requires competition admin permission.",
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "All picks, stages, users, competition players, and captains" } }
+      }
+    },
+    "/api/competitions/{compId}/fantasy/admin/picks/{userId}/stages/{stageId}/pick": {
+      "put": {
+        "tags": ["Fantasy"],
+        "summary": "Set a fantasy pick for a user (admin)",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Admin sets or updates a fantasy pick for a specific user, stage, and role. No stage status restriction.",
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "userId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "stageId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "role": { "type": "string", "enum": ["carry", "mid", "offlane", "pos4", "pos5"] }, "playerId": { "type": "integer" } }, "required": ["role", "playerId"] } } } },
+        "responses": { "200": { "description": "Pick saved" }, "400": { "description": "Validation error" } }
+      }
+    },
+    "/api/competitions/{compId}/fantasy/admin/picks/{userId}/stages/{stageId}/pick/{role}": {
+      "delete": {
+        "tags": ["Fantasy"],
+        "summary": "Clear a fantasy pick for a user (admin)",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Admin clears a specific fantasy pick for a user. No stage status restriction.",
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "userId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "stageId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "role", "in": "path", "required": true, "schema": { "type": "string", "enum": ["carry", "mid", "offlane", "pos4", "pos5"] } }
+        ],
+        "responses": { "200": { "description": "Pick cleared" } }
+      }
+    },
     "/api/news": {
       "get": {
         "tags": ["News"],
