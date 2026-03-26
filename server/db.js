@@ -509,6 +509,16 @@ export async function initDb() {
 
   // Add playing_role column if missing (existing databases)
   try { await execute('ALTER TABLE competition_players ADD COLUMN playing_role INTEGER DEFAULT NULL') } catch {}
+
+  // Add team_ids JSONB column to match_lobbies (stores radiant/dire team IDs + names)
+  {
+    const has = await queryOne(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'match_lobbies' AND column_name = 'team_ids'`
+    )
+    if (!has) {
+      await execute("ALTER TABLE match_lobbies ADD COLUMN team_ids JSONB DEFAULT NULL")
+    }
+  }
 }
 
 async function createFreshCompetitionTables() {

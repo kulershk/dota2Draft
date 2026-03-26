@@ -178,7 +178,16 @@ async function fetchLobbyStatus(gameNumber: number) {
   if (!cId) return
   try {
     const data = await api.getLobbyStatus(cId, props.match.id, gameNumber)
-    if (data.lobby) lobbyStatuses.value[gameNumber] = data.lobby
+    if (data.lobby) {
+      lobbyStatuses.value[gameNumber] = data.lobby
+      if (data.lobby.team_ids && !lobbyTeamIds.value[gameNumber]) {
+        const t = data.lobby.team_ids
+        lobbyTeamIds.value = { ...lobbyTeamIds.value, [gameNumber]: {
+          radiant: t.radiant || 0, dire: t.dire || 0,
+          radiantName: t.radiantName || '', direName: t.direName || '',
+        }}
+      }
+    }
   } catch {}
 }
 
@@ -263,6 +272,25 @@ function getPlayerStatuses(gameNumber: number) {
       correctTeam: j ? (j.team || j.Team) === p.team : false,
     }
   })
+}
+
+function getTeamPlayerStatuses(gameNumber: number, team: 'radiant' | 'dire') {
+  return getPlayerStatuses(gameNumber).filter((p: any) => p.expectedTeam === team)
+}
+
+function getLobbyTeamName(gameNumber: number, side: 'radiant' | 'dire'): string {
+  const teamIds = lobbyTeamIds.value[gameNumber]
+  const radiantId = teamIds?.radiant || 0
+  const direId = teamIds?.dire || 0
+  if (side === 'radiant') {
+    if (props.match.team1_dota_id && radiantId === props.match.team1_dota_id) return props.match.team1_name || ''
+    if (props.match.team2_dota_id && radiantId === props.match.team2_dota_id) return props.match.team2_name || ''
+    return teamIds?.radiantName || ''
+  } else {
+    if (props.match.team1_dota_id && direId === props.match.team1_dota_id) return props.match.team1_name || ''
+    if (props.match.team2_dota_id && direId === props.match.team2_dota_id) return props.match.team2_name || ''
+    return teamIds?.direName || ''
+  }
 }
 
 // Detected Dota team IDs from lobby
@@ -526,13 +554,31 @@ onUnmounted(() => {
                 </button>
               </div>
             </div>
-            <!-- Player list -->
-            <div class="px-4 py-2.5 grid grid-cols-2 gap-x-4 gap-y-1 border-b border-border/30">
-              <div v-for="p in getPlayerStatuses(game.game_number)" :key="p.steamId" class="flex items-center gap-1.5 text-xs py-0.5">
-                <span class="w-2 h-2 rounded-full flex-shrink-0" :class="p.joined ? (p.correctTeam ? 'bg-green-500' : 'bg-amber-500') : 'bg-muted-foreground/30'"></span>
-                <span :class="p.joined ? 'text-foreground' : 'text-muted-foreground'" class="truncate">{{ p.name }}</span>
-                <span class="text-[10px] text-muted-foreground">({{ p.expectedTeam === 'radiant' ? 'R' : 'D' }})</span>
-                <span v-if="p.joined && !p.correctTeam" class="text-amber-500 text-[10px]">wrong side</span>
+            <!-- Player list grouped by team -->
+            <div class="px-4 py-2.5 grid grid-cols-2 gap-x-4 border-b border-border/30">
+              <!-- Radiant -->
+              <div class="flex flex-col gap-1">
+                <div class="flex items-center gap-1.5 text-[10px] font-semibold text-green-500/80 pb-0.5 border-b border-border/20">
+                  <span>Radiant</span>
+                  <span v-if="getLobbyTeamName(game.game_number, 'radiant')" class="text-muted-foreground font-normal">— {{ getLobbyTeamName(game.game_number, 'radiant') }}</span>
+                </div>
+                <div v-for="p in getTeamPlayerStatuses(game.game_number, 'radiant')" :key="p.steamId" class="flex items-center gap-1.5 text-xs py-0.5">
+                  <span class="w-2 h-2 rounded-full flex-shrink-0" :class="p.joined ? (p.correctTeam ? 'bg-green-500' : 'bg-amber-500') : 'bg-red-500/60'"></span>
+                  <span :class="p.joined ? 'text-foreground' : 'text-muted-foreground'" class="truncate">{{ p.name }}</span>
+                  <span v-if="p.joined && !p.correctTeam" class="text-amber-500 text-[10px] ml-auto">{{ t('wrongSide') }}</span>
+                </div>
+              </div>
+              <!-- Dire -->
+              <div class="flex flex-col gap-1">
+                <div class="flex items-center gap-1.5 text-[10px] font-semibold text-red-500/80 pb-0.5 border-b border-border/20">
+                  <span>Dire</span>
+                  <span v-if="getLobbyTeamName(game.game_number, 'dire')" class="text-muted-foreground font-normal">— {{ getLobbyTeamName(game.game_number, 'dire') }}</span>
+                </div>
+                <div v-for="p in getTeamPlayerStatuses(game.game_number, 'dire')" :key="p.steamId" class="flex items-center gap-1.5 text-xs py-0.5">
+                  <span class="w-2 h-2 rounded-full flex-shrink-0" :class="p.joined ? (p.correctTeam ? 'bg-green-500' : 'bg-amber-500') : 'bg-red-500/60'"></span>
+                  <span :class="p.joined ? 'text-foreground' : 'text-muted-foreground'" class="truncate">{{ p.name }}</span>
+                  <span v-if="p.joined && !p.correctTeam" class="text-amber-500 text-[10px] ml-auto">{{ t('wrongSide') }}</span>
+                </div>
               </div>
             </div>
             <!-- Team IDs -->

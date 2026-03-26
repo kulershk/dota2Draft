@@ -829,6 +829,7 @@ export default {
   createLobbyConfirm: 'Tiks izveidota Dota 2 spēles telpa un uzaicināti visi paredzētie spēlētāji.',
   cancelLobbyConfirm: 'Tiks atcelta pašreizējā spēles telpa. Spēlētāji tiks atvienoti un būs jāizveido jauna telpa.',
   noTeamSet: 'Nav komandas',
+  wrongSide: 'nepareizā puse',
   showMatches: 'Rādīt spēles',
   hideMatches: 'Slēpt spēles',
   bye: 'BYE',

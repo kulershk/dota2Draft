@@ -830,6 +830,7 @@ export default {
   createLobbyConfirm: 'This will create a Dota 2 lobby for this game and invite all expected players.',
   cancelLobbyConfirm: 'This will cancel the current lobby. Players will be disconnected and a new lobby will need to be created.',
   noTeamSet: 'No team',
+  wrongSide: 'wrong side',
 
   scheduledTime: 'Scheduled',
   upcomingMatches: 'Upcoming Matches',

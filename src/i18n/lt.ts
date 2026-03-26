@@ -829,6 +829,7 @@ export default {
   createLobbyConfirm: 'Bus sukurtas Dota 2 žaidimo kambarys ir pakviesti visi numatyti žaidėjai.',
   cancelLobbyConfirm: 'Bus atšauktas dabartinis kambarys. Žaidėjai bus atjungti ir reikės sukurti naują kambarį.',
   noTeamSet: 'Nėra komandos',
+  wrongSide: 'neteisinga pusė',
   showMatches: 'Rodyti rungtynes',
   hideMatches: 'Slėpti rungtynes',
   bye: 'BYE',

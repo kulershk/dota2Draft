@@ -310,6 +310,10 @@ class BotPool {
     const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyId])
     if (!lobby) return
 
+    // Persist team IDs to database so they survive page refresh
+    const teamIdsJson = JSON.stringify({ radiant: radiantTeamId, dire: direTeamId, radiantName: radiantTeamName, direName: direTeamName })
+    await execute('UPDATE match_lobbies SET team_ids = $1 WHERE id = $2', [teamIdsJson, lobbyId])
+
     // Broadcast to frontend
     if (this.io) {
       this.io.to(`comp:${lobby.competition_id}`).to(`match:${lobby.match_id}`).emit('lobby:teamIds', {
