@@ -228,6 +228,20 @@ export async function getStageTopPicks(stageId, compId, fantasyScoring) {
     WHERE cp.competition_id = $1
   `, [compId])
 
+  // Count how many participants picked each player per role
+  const pickCounts = await query(`
+    SELECT role, pick_player_id, COUNT(*)::int AS picks
+    FROM fantasy_picks
+    WHERE fantasy_stage_id = $1
+    GROUP BY role, pick_player_id
+  `, [stageId])
+
+  const pickCountMap = {}
+  for (const row of pickCounts) {
+    if (!pickCountMap[row.role]) pickCountMap[row.role] = {}
+    pickCountMap[row.role][row.pick_player_id] = row.picks
+  }
+
   const roles = ['carry', 'mid', 'offlane', 'pos4', 'pos5']
   const result = {}
 
@@ -252,6 +266,7 @@ export async function getStageTopPicks(stageId, compId, fantasyScoring) {
         name: player.name,
         avatar: player.avatar_url || '',
         points,
+        picks: pickCountMap[role]?.[player.player_id] || 0,
       })
     }
 
