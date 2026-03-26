@@ -87,4 +87,22 @@ router.delete('/api/site-settings/logo', async (req, res) => {
   res.json({ ok: true })
 })
 
+// Deploy status — lightweight endpoint for deploy banner
+router.get('/api/deploy-status', async (req, res) => {
+  const row = await queryOne("SELECT value FROM settings WHERE key = 'deploy_status'")
+  res.json({ deploying: row?.value === 'true' })
+})
+
+router.post('/api/deploy-status', async (req, res) => {
+  const token = req.headers['x-deploy-token'] || req.body?.token
+  const expected = process.env.DEPLOY_TOKEN
+  if (!expected || token !== expected) return res.status(403).json({ error: 'Forbidden' })
+  const { deploying } = req.body
+  await execute(
+    "INSERT INTO settings (key, value) VALUES ('deploy_status', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
+    [deploying ? 'true' : 'false']
+  )
+  res.json({ ok: true })
+})
+
 export default router

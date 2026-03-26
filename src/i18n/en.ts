@@ -535,6 +535,7 @@ export default {
 
   // Footer
   allRightsReserved: 'All rights reserved.',
+  deployInProgress: 'Deployment in progress — the site may restart momentarily.',
 
   // Language
   language: 'Language',

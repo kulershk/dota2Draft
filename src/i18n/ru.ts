@@ -534,6 +534,7 @@ export default {
 
   // Footer
   allRightsReserved: 'Все права защищены.',
+  deployInProgress: 'Идёт обновление — сайт может кратковременно перезагрузиться.',
 
   // Language
   language: 'Язык',

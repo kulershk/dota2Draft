@@ -534,6 +534,7 @@ export default {
 
   // Footer
   allRightsReserved: 'Visos teisės saugomos.',
+  deployInProgress: 'Vyksta atnaujinimas — svetainė gali trumpam persikrauti.',
 
   // Language
   language: 'Kalba',
