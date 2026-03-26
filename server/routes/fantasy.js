@@ -646,7 +646,7 @@ export default function createFantasyRouter(io) {
           [compId]
         )
         const captains = await query(
-          'SELECT id, name, team, player_id, avatar_url, banner_url FROM captains WHERE competition_id = $1',
+          'SELECT id, name, team, player_id, banner_url FROM captains WHERE competition_id = $1',
           [compId]
         )
         const users = await query(
@@ -694,14 +694,14 @@ export default function createFantasyRouter(io) {
 
       // Get captains for team info
       const captains = await query(
-        'SELECT id, name, team, player_id, avatar_url, banner_url FROM captains WHERE competition_id = $1',
+        'SELECT id, name, team, player_id, banner_url FROM captains WHERE competition_id = $1',
         [compId]
       )
 
       res.json({ stages, picks, users, compPlayers, captains })
     } catch (e) {
-      console.error('Admin fantasy picks GET error:', e.message, e.stack)
-      res.status(500).json({ error: e.message })
+      console.error('Admin fantasy picks GET error:', e.message)
+      res.status(500).json({ error: 'Internal error' })
     }
   })
 
