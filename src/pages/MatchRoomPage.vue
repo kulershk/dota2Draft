@@ -87,6 +87,15 @@ const isCaptainInMatch = computed(() => {
   if (!myCaptainId.value || !match.value) return false
   return match.value.team1_captain_id === myCaptainId.value || match.value.team2_captain_id === myCaptainId.value
 })
+const isTeamMember = computed(() => {
+  if (isCaptainInMatch.value) return true
+  if (!match.value || !store.currentUser.value) return false
+  const myId = store.currentUser.value.id
+  const players = (store.players.value || []) as any[]
+  const me = players.find((p: any) => p.id === myId)
+  if (!me || !me.drafted_by) return false
+  return me.drafted_by === match.value.team1_captain_id || me.drafted_by === match.value.team2_captain_id
+})
 const bothTeamsAssigned = computed(() => !!match.value?.team1_captain_id && !!match.value?.team2_captain_id)
 
 const nextGameNumber = computed(() => {
@@ -664,8 +673,8 @@ function goBack() {
         </div>
       </div>
 
-      <!-- Spectator view: show lobby status for non-captains -->
-      <div v-else-if="(store.isAdmin.value || isCaptainInMatch) && bothTeamsAssigned && match.status !== 'completed'" class="flex flex-col gap-4 mb-6">
+      <!-- Spectator view: show lobby status for non-captains (admins + team members) -->
+      <div v-else-if="(store.isAdmin.value || isTeamMember) && bothTeamsAssigned && match.status !== 'completed'" class="flex flex-col gap-4 mb-6">
         <div v-for="g in allGames" :key="'spec-' + g.game_number">
           <template v-if="!g.dotabuff_id && g.game_number === nextGameNumber">
             <div class="card overflow-hidden">
@@ -715,8 +724,15 @@ function goBack() {
                     </span>
                   </div>
                   <div class="w-full border-t border-border/30 pt-3 mt-1">
+                    <div v-if="isTeamMember && lobbyStatuses[g.game_number].game_name" class="flex items-center gap-2 text-sm mb-2">
+                      <span class="text-muted-foreground">{{ t('lobbyName') }}:</span>
+                      <span class="font-medium text-foreground">{{ lobbyStatuses[g.game_number].game_name }}</span>
+                    </div>
                     <div class="flex items-center justify-between mb-2">
-                      <span class="text-sm text-muted-foreground">{{ t('lobbyPassword') }}:</span>
+                      <div class="flex items-center gap-2 text-sm">
+                        <span class="text-muted-foreground">{{ t('lobbyPassword') }}:</span>
+                        <code v-if="isTeamMember" class="font-mono font-bold bg-accent px-2.5 py-1 rounded text-foreground text-base">{{ lobbyStatuses[g.game_number].password }}</code>
+                      </div>
                       <span class="text-sm font-medium" :class="allPlayersJoined(g.game_number) ? 'text-green-500' : 'text-muted-foreground'">
                         {{ (lobbyStatuses[g.game_number].players_joined || []).length }}/{{ (lobbyStatuses[g.game_number].players_expected || []).length }} {{ t('players') }}
                       </span>
