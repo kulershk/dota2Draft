@@ -162,8 +162,8 @@ async function saveEditUser() {
 }
 
 type SortKey = 'id' | 'name' | 'last_online' | 'status' | 'joined'
-const sortKey = ref<SortKey>('id')
-const sortDir = ref<'asc' | 'desc'>('asc')
+const sortKey = ref<SortKey>('last_online')
+const sortDir = ref<'asc' | 'desc'>('desc')
 
 function toggleSort(key: SortKey) {
   if (sortKey.value === key) {
@@ -196,6 +196,8 @@ const filteredUsers = computed(() => {
       case 'name':
         return a.name.localeCompare(b.name) * dir
       case 'last_online': {
+        // Online users always first when sorting desc (recent first)
+        if (a.online !== b.online) return a.online ? -1 * dir : 1 * dir
         const aTime = a.last_online ? new Date(a.last_online).getTime() : 0
         const bTime = b.last_online ? new Date(b.last_online).getTime() : 0
         return (aTime - bTime) * dir
@@ -498,9 +500,17 @@ function formatRelativeTime(dateStr: string | null) {
                 </div>
               </td>
               <td class="px-4 py-3">
-                <div v-if="user.online" class="flex items-center gap-1.5">
-                  <span class="w-2 h-2 rounded-full bg-green-500 shrink-0 animate-pulse"></span>
-                  <span class="text-xs text-green-500 font-medium">{{ getActivityLabel(user) }}</span>
+                <div v-if="user.online" class="flex flex-col gap-0.5">
+                  <div class="flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full bg-green-500 shrink-0 animate-pulse"></span>
+                    <span class="text-xs text-green-500 font-medium">Online</span>
+                  </div>
+                  <a
+                    v-if="user.activity?.path"
+                    :href="user.activity.path"
+                    class="text-[10px] text-primary hover:underline truncate max-w-[160px]"
+                    :title="user.activity.path"
+                  >{{ getActivityLabel(user) }}</a>
                 </div>
                 <span v-else class="text-xs text-muted-foreground">{{ formatRelativeTime(user.last_online) }}</span>
               </td>
