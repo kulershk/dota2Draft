@@ -512,7 +512,7 @@
         "tags": ["Tournament"],
         "summary": "Get tournament state and matches",
         "parameters": [{ "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }],
-        "responses": { "200": { "description": "Tournament state with matches" } }
+        "responses": { "200": { "description": "Tournament state with matches and team rosters. Response includes `rosters` object keyed by captain ID, each containing array of {name, avatar, playing_role, is_captain}" } }
       },
       "delete": {
         "tags": ["Tournament"],

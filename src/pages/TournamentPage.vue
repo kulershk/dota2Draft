@@ -574,6 +574,7 @@ function stageStatusClass(stage: any) {
           :matches="stageMatches"
           :tournament-state="activeStage"
           :captains="store.captains.value"
+          :rosters="store.tournamentData.value.rosters || {}"
           :is-admin="isCompAdmin && showHidden"
           @edit-match="onMatchClick"
         />

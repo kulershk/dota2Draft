@@ -10,12 +10,15 @@ const props = defineProps<{
   matches: any[]
   tournamentState: any
   captains: any[]
+  rosters: Record<number, any[]>
   isAdmin: boolean
 }>()
 
 const emit = defineEmits<{
   'edit-match': [match: any]
 }>()
+
+const posLabel: Record<number, string> = { 1: 'Carry', 2: 'Mid', 3: 'Offlane', 4: 'Pos 4', 5: 'Pos 5' }
 
 const collapsedGroups = ref<Set<string>>(new Set())
 
@@ -131,21 +134,36 @@ const matchesByGroup = computed(() => {
         class="flex items-center px-4 py-2.5 border-b border-border relative"
       >
         <div v-if="getRowColor(group.name, idx)" class="absolute left-0 top-0 bottom-0 w-1 rounded-r-sm" :style="{ backgroundColor: getRowColor(group.name, idx)! }" />
-        <span class="w-10 text-sm font-mono"
+        <span class="w-10 text-sm font-mono self-start mt-0.5"
           :class="idx === 0 ? 'text-primary font-bold' : 'text-muted-foreground'">{{ idx + 1 }}</span>
-        <router-link v-if="team.id" :to="{ name: 'team-profile', params: { id: team.id } }" class="flex-1 flex items-center gap-2.5 min-w-0 hover:opacity-80 transition-opacity">
-          <div class="w-7 h-7 rounded bg-surface overflow-hidden shrink-0">
-            <img v-if="team.avatar" :src="team.avatar" class="w-full h-full object-cover" />
+        <div class="flex-1 min-w-0">
+          <router-link v-if="team.id" :to="{ name: 'team-profile', params: { id: team.id } }" class="flex items-center gap-2.5 min-w-0 hover:opacity-80 transition-opacity">
+            <div class="w-7 h-7 rounded bg-surface overflow-hidden shrink-0">
+              <img v-if="team.avatar" :src="team.avatar" class="w-full h-full object-cover" />
+            </div>
+            <span class="text-sm font-medium truncate text-foreground hover:text-primary transition-colors">{{ team.team }}</span>
+          </router-link>
+          <div v-else class="flex items-center gap-2.5 min-w-0">
+            <div class="w-7 h-7 rounded bg-surface overflow-hidden shrink-0"></div>
+            <span class="text-sm font-medium truncate text-muted-foreground italic">{{ team.team }}</span>
           </div>
-          <span class="text-sm font-medium truncate text-foreground hover:text-primary transition-colors">{{ team.team }}</span>
-        </router-link>
-        <div v-else class="flex-1 flex items-center gap-2.5 min-w-0">
-          <div class="w-7 h-7 rounded bg-surface overflow-hidden shrink-0"></div>
-          <span class="text-sm font-medium truncate text-muted-foreground italic">{{ team.team }}</span>
+          <!-- Team members -->
+          <div v-if="team.id && props.rosters[team.id]?.length" class="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 ml-[38px]">
+            <span
+              v-for="player in props.rosters[team.id]"
+              :key="player.name"
+              class="flex items-center gap-1"
+            >
+              <img v-if="player.avatar" :src="player.avatar" class="w-4 h-4 rounded-full object-cover" />
+              <div v-else class="w-4 h-4 rounded-full bg-surface"></div>
+              <span class="text-[11px] text-muted-foreground" :class="player.is_captain ? 'font-semibold text-amber-500' : ''">{{ player.name }}</span>
+              <span v-if="player.playing_role" class="text-[9px] text-text-tertiary">{{ posLabel[player.playing_role] || 'P' + player.playing_role }}</span>
+            </span>
+          </div>
         </div>
-        <span class="w-[50px] text-sm font-mono font-semibold text-center text-color-success">{{ team.mw }}</span>
-        <span class="w-[50px] text-sm font-mono text-center text-destructive">{{ team.ml }}</span>
-        <span class="w-[60px] text-sm font-mono font-bold text-right text-foreground">{{ team.pts }}</span>
+        <span class="w-[50px] text-sm font-mono font-semibold text-center text-color-success self-start mt-0.5">{{ team.mw }}</span>
+        <span class="w-[50px] text-sm font-mono text-center text-destructive self-start mt-0.5">{{ team.ml }}</span>
+        <span class="w-[60px] text-sm font-mono font-bold text-right text-foreground self-start mt-0.5">{{ team.pts }}</span>
       </div>
     </div>
 

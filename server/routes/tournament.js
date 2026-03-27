@@ -65,9 +65,32 @@ export default function createTournamentRouter(io) {
       }
     }
 
+    // Fetch rosters for all captains in this tournament
+    const captainIds = [...new Set(matches.flatMap(m => [m.team1_captain_id, m.team2_captain_id].filter(Boolean)))]
+    const rosterMap = {}
+    if (captainIds.length > 0) {
+      const rosterRows = await query(`
+        SELECT cap.id AS captain_id, COALESCE(p.display_name, p.name) AS name, p.avatar_url, cp.playing_role,
+               (cp.player_id = cap.player_id) AS is_captain
+        FROM captains cap
+        JOIN competition_players cp ON cp.competition_id = cap.competition_id
+          AND (cp.drafted_by = cap.id OR (cap.player_id IS NOT NULL AND cp.player_id = cap.player_id))
+        JOIN players p ON p.id = cp.player_id
+        WHERE cap.id = ANY($1)
+        ORDER BY (cp.player_id = cap.player_id) DESC, cp.playing_role ASC NULLS LAST, p.name
+      `, [captainIds])
+      for (const r of rosterRows) {
+        if (!rosterMap[r.captain_id]) rosterMap[r.captain_id] = []
+        if (!rosterMap[r.captain_id].some(p => p.name === r.name)) {
+          rosterMap[r.captain_id].push({ name: r.name, avatar: r.avatar_url || '', playing_role: r.playing_role, is_captain: r.is_captain })
+        }
+      }
+    }
+
     res.json({
       tournament_state: comp.tournament_state || {},
       matches: matches.map(m => ({ ...m, games: gamesByMatch[m.id] || [] })),
+      rosters: rosterMap,
     })
   })
 
