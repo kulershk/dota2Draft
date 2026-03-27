@@ -214,23 +214,24 @@ async function removeBanner() {
           </div>
         </div>
 
-        <!-- Join CTA -->
-        <router-link v-if="canJoinAsParticipant" :to="`/c/${compId}/players`"
-          class="flex items-center justify-center gap-2.5 w-full py-3.5 rounded-lg bg-primary text-primary-foreground font-semibold text-base hover:bg-primary/90 transition-colors">
-          <UserPlus class="w-5 h-5" />
-          {{ t('joinAsParticipant') }}
-        </router-link>
-        <a v-else-if="showSteamLogin" href="/api/auth/steam"
-          class="flex items-center justify-center gap-2.5 w-full py-3.5 rounded-lg bg-primary text-primary-foreground font-semibold text-base hover:bg-primary/90 transition-colors">
-          <LogIn class="w-5 h-5" />
-          {{ t('loginToJoin') }}
-        </a>
       </div>
     </div>
     <div class="h-px bg-border" />
 
     <!-- Main Content — two column layout -->
     <div class="max-w-[1200px] mx-auto w-full px-6 md:px-12 py-8 flex flex-col lg:flex-row gap-8">
+
+      <!-- Join CTA (mobile) -->
+      <router-link v-if="canJoinAsParticipant" :to="`/c/${compId}/players`"
+        class="flex lg:hidden items-center justify-center gap-2.5 w-full py-3.5 rounded-lg bg-primary text-primary-foreground font-semibold text-base hover:bg-primary/90 transition-colors">
+        <UserPlus class="w-5 h-5" />
+        {{ t('joinAsParticipant') }}
+      </router-link>
+      <a v-else-if="showSteamLogin" href="/api/auth/steam"
+        class="flex lg:hidden items-center justify-center gap-2.5 w-full py-3.5 rounded-lg bg-primary text-primary-foreground font-semibold text-base hover:bg-primary/90 transition-colors">
+        <LogIn class="w-5 h-5" />
+        {{ t('loginToJoin') }}
+      </a>
 
       <!-- Left Column -->
       <div class="flex-1 flex flex-col gap-8 min-w-0">
@@ -301,6 +302,18 @@ async function removeBanner() {
 
       <!-- Right Column (sidebar) -->
       <div class="w-full lg:w-[380px] flex flex-col gap-6 shrink-0">
+
+        <!-- Join CTA (desktop) -->
+        <router-link v-if="canJoinAsParticipant" :to="`/c/${compId}/players`"
+          class="hidden lg:flex items-center justify-center gap-2.5 w-full py-3.5 rounded-lg bg-primary text-primary-foreground font-semibold text-base hover:bg-primary/90 transition-colors">
+          <UserPlus class="w-5 h-5" />
+          {{ t('joinAsParticipant') }}
+        </router-link>
+        <a v-else-if="showSteamLogin" href="/api/auth/steam"
+          class="hidden lg:flex items-center justify-center gap-2.5 w-full py-3.5 rounded-lg bg-primary text-primary-foreground font-semibold text-base hover:bg-primary/90 transition-colors">
+          <LogIn class="w-5 h-5" />
+          {{ t('loginToJoin') }}
+        </a>
 
         <!-- Official Streams -->
         <div class="rounded-lg bg-card p-5 flex flex-col gap-4">
