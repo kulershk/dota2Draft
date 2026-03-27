@@ -2,7 +2,7 @@ import { getServerNow } from '@/composables/useSocket'
 
 export function formatMatchDate(dateStr: string, t?: (key: string) => string): string {
   if (!dateStr) return '—'
-  const d = new Date(dateStr.replace('Z', ''))
+  const d = new Date(dateStr)
   const now = new Date(getServerNow())
   const diffMs = d.getTime() - now.getTime()
   const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
@@ -19,29 +19,31 @@ export function formatMatchDate(dateStr: string, t?: (key: string) => string): s
 
 export function formatDate(dateStr: string): string {
   if (!dateStr) return '—'
-  const d = new Date(dateStr.replace('Z', ''))
+  const d = new Date(dateStr)
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
 export function formatDateShort(dateStr: string): string {
   if (!dateStr) return '—'
-  const d = new Date(dateStr.replace('Z', ''))
+  const d = new Date(dateStr)
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-/** Convert a server date string to a datetime-local input value (no timezone conversion) */
+/** Convert a UTC date string to a local datetime string for datetime-local inputs */
 export function toLocalDatetime(dateStr: string): string {
-  return dateStr.replace('Z', '').replace(/\.\d+$/, '').slice(0, 16)
+  const d = new Date(dateStr)
+  const off = d.getTimezoneOffset()
+  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 16)
 }
 
-/** Convert a datetime-local input value back to a UTC ISO string for the server */
+/** Convert a local datetime-local input value to a UTC ISO string for the server */
 export function localDatetimeToISO(localStr: string): string {
-  return localStr + ':00.000Z'
+  return new Date(localStr).toISOString()
 }
 
 export function formatRelativeTime(dateStr: string | null): string {
   if (!dateStr) return '—'
-  const d = new Date(dateStr.replace('Z', ''))
+  const d = new Date(dateStr)
   const now = new Date(getServerNow())
   const diffMs = now.getTime() - d.getTime()
   const diffMin = Math.floor(diffMs / 60000)
