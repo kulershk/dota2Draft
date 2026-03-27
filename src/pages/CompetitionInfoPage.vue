@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Calendar, Users, User, Gavel, Trophy, Clock, Settings, DollarSign, Upload, X, Tv, Swords, Info, ChevronRight, Play } from 'lucide-vue-next'
+import { Calendar, Users, User, UserPlus, LogIn, Gavel, Trophy, Clock, Settings, DollarSign, Upload, X, Tv, Swords, Info, ChevronRight, Play } from 'lucide-vue-next'
 import { getRank } from '@/utils/ranks'
 import { formatMatchDate as formatMatchDateUtil } from '@/utils/format'
 import { computed, ref, watch } from 'vue'
@@ -48,6 +48,16 @@ const registrationStatus = computed(() => {
     return { label: t('registrationOpen'), open: true }
   }
   return { label: t('registrationOpen'), open: true }
+})
+
+const canJoinAsParticipant = computed(() => {
+  if (!store.currentUser.value) return false
+  if (store.compUser.value?.in_pool || store.compUser.value?.captain) return false
+  return registrationStatus.value.open || store.isAdmin.value
+})
+
+const showSteamLogin = computed(() => {
+  return !store.currentUser.value && store.settings.allowSteamRegistration && registrationStatus.value.open
 })
 
 const participantCount = computed(() => store.players.value.length)
@@ -203,6 +213,18 @@ async function removeBanner() {
             <span class="text-[11px] font-semibold font-mono uppercase tracking-[2px] text-text-tertiary">AVG MMR</span>
           </div>
         </div>
+
+        <!-- Join CTA -->
+        <router-link v-if="canJoinAsParticipant" :to="`/c/${compId}/players`"
+          class="flex items-center justify-center gap-2.5 w-full py-3.5 rounded-lg bg-primary text-primary-foreground font-semibold text-base hover:bg-primary/90 transition-colors">
+          <UserPlus class="w-5 h-5" />
+          {{ t('joinAsParticipant') }}
+        </router-link>
+        <a v-else-if="showSteamLogin" href="/api/auth/steam"
+          class="flex items-center justify-center gap-2.5 w-full py-3.5 rounded-lg bg-primary text-primary-foreground font-semibold text-base hover:bg-primary/90 transition-colors">
+          <LogIn class="w-5 h-5" />
+          {{ t('loginToJoin') }}
+        </a>
       </div>
     </div>
     <div class="h-px bg-border" />
