@@ -33,6 +33,13 @@ const addParticipantPage = ref(1)
 const promoteSearchQuery = ref('')
 const PAGE_SIZE = 20
 
+function toLocalDatetime(dateStr: string): string {
+  const d = new Date(dateStr)
+  const off = d.getTimezoneOffset()
+  const local = new Date(d.getTime() - off * 60000)
+  return local.toISOString().slice(0, 16)
+}
+
 const compName = ref('')
 const compDescription = ref('')
 const compRulesTitle = ref('')
@@ -158,9 +165,9 @@ onMounted(async () => {
   compType.value = comp.competition_type || ''
   compStatus.value = comp.status || 'draft'
   compIsPublic.value = !!comp.is_public
-  compStartsAt.value = comp.starts_at ? new Date(comp.starts_at).toISOString().slice(0, 16) : ''
-  compRegStart.value = comp.registration_start ? new Date(comp.registration_start).toISOString().slice(0, 16) : ''
-  compRegEnd.value = comp.registration_end ? new Date(comp.registration_end).toISOString().slice(0, 16) : ''
+  compStartsAt.value = comp.starts_at ? toLocalDatetime(comp.starts_at) : ''
+  compRegStart.value = comp.registration_start ? toLocalDatetime(comp.registration_start) : ''
+  compRegEnd.value = comp.registration_end ? toLocalDatetime(comp.registration_end) : ''
   Object.assign(localSettings, comp.settings)
   // Load all users for promote
   allUsers.value = await api.getUsers()
@@ -245,9 +252,9 @@ async function saveAll() {
       competition_type: compType.value,
       status: compStatus.value,
       is_public: compIsPublic.value,
-      starts_at: compStartsAt.value || null,
-      registration_start: compRegStart.value || null,
-      registration_end: compRegEnd.value || null,
+      starts_at: compStartsAt.value ? new Date(compStartsAt.value).toISOString() : null,
+      registration_start: compRegStart.value ? new Date(compRegStart.value).toISOString() : null,
+      registration_end: compRegEnd.value ? new Date(compRegEnd.value).toISOString() : null,
       settings: { ...localSettings },
     })
     // Sync store

@@ -23,6 +23,12 @@ const emit = defineEmits<{
   save: [data: any]
 }>()
 
+function toLocalDatetime(dateStr: string): string {
+  const d = new Date(dateStr)
+  const off = d.getTimezoneOffset()
+  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 16)
+}
+
 const bestOf = computed(() => props.match.best_of || 3)
 const games = ref<{ game_number: number; winner_captain_id: number | null; dotabuff_id: string; has_stats?: boolean }[]>([])
 const isHidden = ref(false)
@@ -37,7 +43,7 @@ const refetchingGame = ref<Record<number, boolean>>({})
 onMounted(() => {
   isHidden.value = !!props.match.hidden
   matchStatus.value = props.match.status || 'pending'
-  scheduledAt.value = props.match.scheduled_at ? String(props.match.scheduled_at).slice(0, 16) : ''
+  scheduledAt.value = props.match.scheduled_at ? toLocalDatetime(props.match.scheduled_at) : ''
   const existing = props.match.games || []
   for (let i = 1; i <= bestOf.value; i++) {
     const g = existing.find((e: any) => e.game_number === i)
@@ -75,7 +81,7 @@ function save() {
     status: matchStatus.value,
     games: games.value,
     hidden: isHidden.value,
-    scheduled_at: scheduledAt.value || null,
+    scheduled_at: scheduledAt.value ? new Date(scheduledAt.value).toISOString() : null,
   })
 }
 
