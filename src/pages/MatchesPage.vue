@@ -3,6 +3,7 @@ import { Swords, Search, Calendar } from 'lucide-vue-next'
 import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
+import { getServerNow } from '@/composables/useSocket'
 import { formatMatchDate } from '@/utils/format'
 import { MATCH_STATUS } from '@/utils/constants'
 
@@ -42,7 +43,7 @@ const filteredMatches = computed(() => {
   }
   // Sort: live first, then upcoming (closest scheduled_at first), completed last
   const statusOrder: Record<string, number> = { live: 0, pending: 1, completed: 2 }
-  const now = Date.now()
+  const now = getServerNow()
   return [...list].sort((a, b) => {
     const oa = statusOrder[a.status] ?? 1
     const ob = statusOrder[b.status] ?? 1

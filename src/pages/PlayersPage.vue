@@ -4,6 +4,7 @@ import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { useApi } from '@/composables/useApi'
+import { getServerNow } from '@/composables/useSocket'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 import InputGroup from '@/components/common/InputGroup.vue'
 import RoleBadge from '@/components/common/RoleBadge.vue'
@@ -51,7 +52,7 @@ function loginWithSteam() {
 const registrationOpen = computed(() => {
   const comp = store.currentCompetition.value
   if (!comp) return false
-  const now = new Date()
+  const now = new Date(getServerNow())
   if (comp.registration_start && new Date(comp.registration_start) > now) return false
   if (comp.registration_end && new Date(comp.registration_end) < now) return false
   return true
@@ -60,7 +61,7 @@ const registrationOpen = computed(() => {
 const registrationStatus = computed(() => {
   const comp = store.currentCompetition.value
   if (!comp) return ''
-  const now = new Date()
+  const now = new Date(getServerNow())
   if (comp.registration_start && new Date(comp.registration_start) > now) {
     return t('registrationOpensAt', { date: new Date(comp.registration_start).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) })
   }

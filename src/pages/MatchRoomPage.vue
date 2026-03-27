@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { ChevronDown, ChevronUp, Check, Gamepad2, X, ArrowLeft, Trophy, ExternalLink, Clock, CheckCircle, AlertCircle, RefreshCw } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
-import { getSocket } from '@/composables/useSocket'
+import { getSocket, getServerNow } from '@/composables/useSocket'
 import { useDotaConstants } from '@/composables/useDotaConstants'
 
 const { t } = useI18n()
@@ -63,7 +63,7 @@ const lobbyCreateError = ref<Record<number, string | null>>({})
 
 // Lobby countdown timer (5 min from lobby creation)
 const LOBBY_TIMEOUT_MS = 5 * 60 * 1000
-const now = ref(Date.now())
+const now = ref(getServerNow())
 let tickInterval: ReturnType<typeof setInterval> | null = null
 
 function getLobbyTimeLeft(gameNumber: number): number | null {
@@ -289,7 +289,7 @@ onMounted(() => {
   sock.on('lobby:statusUpdate', onLobbyStatusUpdate)
   sock.on('lobby:teamIds', onLobbyTeamIds)
   sock.on('tournament:updated', onTournamentUpdated)
-  tickInterval = setInterval(() => { now.value = Date.now() }, 1000)
+  tickInterval = setInterval(() => { now.value = getServerNow() }, 1000)
 })
 
 // Once match data is available, fetch ready states and lobby statuses

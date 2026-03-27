@@ -7,6 +7,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { useApi } from '@/composables/useApi'
+import { getServerNow } from '@/composables/useSocket'
 import ImageCropper from '@/components/common/ImageCropper.vue'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 
@@ -38,7 +39,7 @@ const statusLabel = computed(() => compStatusLabels.value[displayStatus.value] |
 
 const registrationStatus = computed(() => {
   if (!comp.value) return { label: '—', open: false }
-  const now = new Date()
+  const now = new Date(getServerNow())
   if (comp.value.registration_start && new Date(comp.value.registration_start) > now) {
     return { label: t('registrationNotYetOpen'), open: false }
   }

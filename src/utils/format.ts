@@ -1,7 +1,9 @@
+import { getServerNow } from '@/composables/useSocket'
+
 export function formatMatchDate(dateStr: string, t?: (key: string) => string): string {
   if (!dateStr) return '—'
   const d = new Date(dateStr.replace('Z', ''))
-  const now = new Date()
+  const now = new Date(getServerNow())
   const diffMs = d.getTime() - now.getTime()
   const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
   const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -30,7 +32,7 @@ export function formatDateShort(dateStr: string): string {
 export function formatRelativeTime(dateStr: string | null): string {
   if (!dateStr) return '—'
   const d = new Date(dateStr.replace('Z', ''))
-  const now = new Date()
+  const now = new Date(getServerNow())
   const diffMs = now.getTime() - d.getTime()
   const diffMin = Math.floor(diffMs / 60000)
   if (diffMin < 1) return 'Just now'

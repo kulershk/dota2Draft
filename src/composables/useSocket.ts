@@ -2,6 +2,7 @@ import { io, Socket } from 'socket.io-client'
 
 let socket: Socket | null = null
 let serverTimeOffset = 0
+let syncInterval: ReturnType<typeof setInterval> | null = null
 
 export function getSocket(): Socket {
   if (!socket) {
@@ -13,6 +14,12 @@ export function getSocket(): Socket {
     })
     socket.on('connect', () => {
       socket!.emit('time:sync')
+      // Re-sync every 60 seconds
+      if (syncInterval) clearInterval(syncInterval)
+      syncInterval = setInterval(() => { socket!.emit('time:sync') }, 60_000)
+    })
+    socket.on('disconnect', () => {
+      if (syncInterval) { clearInterval(syncInterval); syncInterval = null }
     })
   }
   return socket

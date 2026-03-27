@@ -5,7 +5,7 @@ import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
-import { getSocket } from '@/composables/useSocket'
+import { getSocket, getServerNow } from '@/composables/useSocket'
 
 interface Comment {
   id: number
@@ -95,7 +95,7 @@ function formatDate(dateStr: string) {
 
 function formatCommentDate(dateStr: string) {
   const d = new Date(dateStr)
-  const now = new Date()
+  const now = new Date(getServerNow())
   const diff = now.getTime() - d.getTime()
   const mins = Math.floor(diff / 60000)
   if (mins < 1) return t('justNow')
