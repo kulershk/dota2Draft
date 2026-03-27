@@ -117,6 +117,7 @@ function formatCommentDate(dateStr: string) {
 const statusLabel = computed<Record<string, string>>(() => ({
   draft: t('statusSetup'),
   registration: t('statusRegistrationOpen'),
+  registration_closed: t('statusRegistrationClosed'),
   active: t('statusInProgress'),
   finished: t('statusCompleted'),
 }))
@@ -124,6 +125,7 @@ const statusLabel = computed<Record<string, string>>(() => ({
 const statusClass: Record<string, string> = {
   draft: 'bg-accent text-muted-foreground',
   registration: 'bg-primary/20 text-primary',
+  registration_closed: 'bg-amber-500/20 text-amber-600 dark:text-amber-400',
   active: 'bg-color-success/20 text-color-success',
   finished: 'bg-color-success/20 text-color-success',
 }

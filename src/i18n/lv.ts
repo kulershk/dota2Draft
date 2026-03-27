@@ -94,6 +94,7 @@ export default {
   // Competition statuses
   statusSetup: 'Iestatīšana',
   statusRegistrationOpen: 'Reģistrācija atvērta',
+  statusRegistrationClosed: 'Reģistrācija slēgta',
   statusInProgress: 'Notiek',
   statusCompleted: 'Notiek',
   statusFinished: 'Pabeigts',

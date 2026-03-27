@@ -422,6 +422,7 @@ async function deleteStream(id: number) {
           <select class="input-field" v-model="compStatus">
             <option value="draft">{{ t('statusSetup') }}</option>
             <option value="registration">{{ t('statusRegistrationOpen') }}</option>
+            <option value="registration_closed">{{ t('statusRegistrationClosed') }}</option>
             <option value="active">{{ t('statusInProgress') }}</option>
             <option value="finished">{{ t('statusFinished') }}</option>
           </select>

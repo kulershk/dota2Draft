@@ -196,14 +196,14 @@ export async function computeAndSyncCompStatus(comp) {
   const now = new Date()
   let newStatus = stored
 
-  if (stored === 'draft' || stored === 'registration') {
+  if (stored === 'draft' || stored === 'registration' || stored === 'registration_closed') {
     const regStart = comp.registration_start ? new Date(comp.registration_start) : null
     const regEnd = comp.registration_end ? new Date(comp.registration_end) : null
 
     if (regStart && regStart <= now && (!regEnd || regEnd > now)) {
       newStatus = 'registration'
-    } else if (regEnd && regEnd <= now && stored === 'registration') {
-      newStatus = 'draft'
+    } else if (regEnd && regEnd <= now && (stored === 'registration' || stored === 'registration_closed')) {
+      newStatus = 'registration_closed'
     }
   }
 

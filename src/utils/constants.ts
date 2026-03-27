@@ -10,6 +10,7 @@ export const MATCH_STATUS = {
 export const COMP_STATUS = {
   DRAFT: 'draft',
   REGISTRATION: 'registration',
+  REGISTRATION_CLOSED: 'registration_closed',
   ACTIVE: 'active',
   FINISHED: 'finished',
 } as const

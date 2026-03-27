@@ -94,6 +94,7 @@ export default {
   // Competition statuses
   statusSetup: 'Setup',
   statusRegistrationOpen: 'Registration Open',
+  statusRegistrationClosed: 'Registration Closed',
   statusInProgress: 'In Progress',
   statusCompleted: 'Live',
   statusFinished: 'Finished',

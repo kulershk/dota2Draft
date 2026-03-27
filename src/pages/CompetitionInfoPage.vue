@@ -22,6 +22,7 @@ const comp = computed(() => store.currentCompetition.value)
 const compStatusLabels = computed<Record<string, string>>(() => ({
   draft: t('statusSetup'),
   registration: t('statusRegistrationOpen'),
+  registration_closed: t('statusRegistrationClosed'),
   active: t('statusInProgress'),
   finished: t('statusFinished'),
 }))
@@ -170,11 +171,13 @@ async function removeBanner() {
             :class="displayStatus === 'active' ? 'bg-color-success/20 text-color-success' :
                      displayStatus === 'finished' ? 'bg-color-success/20 text-color-success' :
                      displayStatus === 'registration' ? 'bg-primary/20 text-primary' :
+                     displayStatus === 'registration_closed' ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400' :
                      'bg-accent text-muted-foreground'">
             <span class="w-2 h-2 rounded-full"
               :class="displayStatus === 'active' ? 'bg-color-success' :
                        displayStatus === 'finished' ? 'bg-color-success' :
                        displayStatus === 'registration' ? 'bg-primary' :
+                       displayStatus === 'registration_closed' ? 'bg-amber-500' :
                        'bg-muted-foreground'" />
             {{ statusLabel }}
           </span>

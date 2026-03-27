@@ -19,6 +19,7 @@ onMounted(() => {
 const statusLabel = computed<Record<string, string>>(() => ({
   draft: t('statusSetup'),
   registration: t('statusRegistrationOpen'),
+  registration_closed: t('statusRegistrationClosed'),
   active: t('statusInProgress'),
   finished: t('statusFinished'),
 }))
@@ -26,6 +27,7 @@ const statusLabel = computed<Record<string, string>>(() => ({
 const statusClass: Record<string, string> = {
   draft: 'bg-accent text-muted-foreground',
   registration: 'bg-primary/10 text-primary',
+  registration_closed: 'bg-amber-500/20 text-amber-600 dark:text-amber-400',
   active: 'bg-color-success text-color-success-foreground',
   finished: 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400',
 }

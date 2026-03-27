@@ -94,6 +94,7 @@ export default {
   // Competition statuses
   statusSetup: 'Nustatymas',
   statusRegistrationOpen: 'Registracija atidaryta',
+  statusRegistrationClosed: 'Registracija uždaryta',
   statusInProgress: 'Vyksta',
   statusCompleted: 'Vyksta',
   statusFinished: 'Baigta',
