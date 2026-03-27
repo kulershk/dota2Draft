@@ -61,8 +61,13 @@ watch(compId, (newId) => {
     <div class="h-px bg-border" />
 
     <!-- Page Content -->
-    <div class="flex-1 overflow-y-auto">
-      <router-view />
+    <div class="flex-1 overflow-y-auto flex flex-col">
+      <router-view class="flex-1" />
+      <footer class="border-t border-border bg-sidebar">
+        <div class="max-w-[1200px] mx-auto px-4 md:px-6 py-6 flex items-center justify-center">
+          <p class="text-xs text-muted-foreground">&copy; {{ new Date().getFullYear() }} {{ t('appTitle') }}</p>
+        </div>
+      </footer>
     </div>
   </div>
 </template>
