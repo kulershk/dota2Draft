@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n'
 import { Swords, ChevronDown, ChevronUp, EyeOff } from 'lucide-vue-next'
 import { computed, ref } from 'vue'
 import { MATCH_STATUS } from '@/utils/constants'
+import RankBadge from '@/components/common/RankBadge.vue'
 
 const { t } = useI18n()
 
@@ -17,8 +18,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   'edit-match': [match: any]
 }>()
-
-const posLabel: Record<number, string> = { 1: 'Carry', 2: 'Mid', 3: 'Offlane', 4: 'Pos 4', 5: 'Pos 5' }
 
 const collapsedGroups = ref<Set<string>>(new Set())
 
@@ -157,7 +156,7 @@ const matchesByGroup = computed(() => {
               <img v-if="player.avatar" :src="player.avatar" class="w-4 h-4 rounded-full object-cover" />
               <div v-else class="w-4 h-4 rounded-full bg-surface"></div>
               <span class="text-[11px] text-muted-foreground" :class="player.is_captain ? 'font-semibold text-amber-500' : ''">{{ player.name }}</span>
-              <span v-if="player.playing_role" class="text-[9px] text-text-tertiary">{{ posLabel[player.playing_role] || 'P' + player.playing_role }}</span>
+              <RankBadge v-if="player.mmr" :mmr="player.mmr" size="sm" />
             </span>
           </div>
         </div>

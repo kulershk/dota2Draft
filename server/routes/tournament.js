@@ -70,7 +70,7 @@ export default function createTournamentRouter(io) {
     const rosterMap = {}
     if (captainIds.length > 0) {
       const rosterRows = await query(`
-        SELECT cap.id AS captain_id, COALESCE(p.display_name, p.name) AS name, p.avatar_url, cp.playing_role,
+        SELECT cap.id AS captain_id, COALESCE(p.display_name, p.name) AS name, p.avatar_url, cp.mmr,
                (cp.player_id = cap.player_id) AS is_captain
         FROM captains cap
         JOIN competition_players cp ON cp.competition_id = cap.competition_id
@@ -82,7 +82,7 @@ export default function createTournamentRouter(io) {
       for (const r of rosterRows) {
         if (!rosterMap[r.captain_id]) rosterMap[r.captain_id] = []
         if (!rosterMap[r.captain_id].some(p => p.name === r.name)) {
-          rosterMap[r.captain_id].push({ name: r.name, avatar: r.avatar_url || '', playing_role: r.playing_role, is_captain: r.is_captain })
+          rosterMap[r.captain_id].push({ name: r.name, avatar: r.avatar_url || '', mmr: r.mmr || 0, is_captain: r.is_captain })
         }
       }
     }
