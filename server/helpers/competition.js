@@ -191,19 +191,19 @@ export async function getNextNominator(compId, round, captains, settings) {
 
 export async function computeAndSyncCompStatus(comp) {
   const stored = comp.status || 'draft'
-  if (stored === 'active' || stored === 'finished') return stored
+  if (stored === 'active' || stored === 'finished' || stored === 'registration_closed') return stored
 
   const now = new Date()
   let newStatus = stored
 
-  if (stored === 'draft' || stored === 'registration' || stored === 'registration_closed') {
+  if (stored === 'draft' || stored === 'registration') {
     const regStart = comp.registration_start ? new Date(comp.registration_start) : null
     const regEnd = comp.registration_end ? new Date(comp.registration_end) : null
 
-    if (regStart && regStart <= now && (!regEnd || regEnd > now)) {
-      newStatus = 'registration'
-    } else if (regEnd && regEnd <= now && (stored === 'registration' || stored === 'registration_closed')) {
+    if (regEnd && regEnd <= now && stored === 'registration') {
       newStatus = 'registration_closed'
+    } else if (regStart && regStart <= now && (!regEnd || regEnd > now)) {
+      newStatus = 'registration'
     }
   }
 
