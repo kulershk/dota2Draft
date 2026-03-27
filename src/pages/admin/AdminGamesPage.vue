@@ -11,6 +11,8 @@ const games = ref<any[]>([])
 const loading = ref(true)
 const refetching = ref<Record<number, boolean>>({})
 const refetchResults = ref<Record<number, { ok?: boolean; parsed?: boolean; error?: string }>>({})
+const forceFetching = ref(false)
+const forceProgress = ref({ done: 0, total: 0, errors: 0 })
 
 async function fetchGames() {
   loading.value = true
@@ -46,6 +48,26 @@ async function refetchAll() {
   }
 }
 
+async function forceFetchAll() {
+  forceFetching.value = true
+  forceProgress.value = { done: 0, total: 0, errors: 0 }
+  try {
+    const allGames = await api.getAllGames()
+    forceProgress.value.total = allGames.length
+    for (const game of allGames) {
+      try {
+        await api.refetchGame(game.id)
+      } catch {
+        forceProgress.value.errors++
+      }
+      forceProgress.value.done++
+    }
+    await fetchGames()
+  } finally {
+    forceFetching.value = false
+  }
+}
+
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
@@ -69,7 +91,24 @@ onMounted(fetchGames)
           <RefreshCw class="w-3.5 h-3.5" />
           {{ t('refetchAll') }}
         </button>
+        <button class="btn-destructive text-sm" :disabled="forceFetching" @click="forceFetchAll">
+          <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': forceFetching }" />
+          {{ t('forceFetchAll') }}
+        </button>
       </div>
+    </div>
+
+    <!-- Force fetch progress -->
+    <div v-if="forceFetching || forceProgress.total > 0" class="rounded-lg bg-card border border-border p-4 flex flex-col gap-2">
+      <div class="flex items-center justify-between text-sm">
+        <span class="font-medium text-foreground">{{ t('forceFetchAll') }}</span>
+        <span class="text-muted-foreground font-mono">{{ forceProgress.done }} / {{ forceProgress.total }}</span>
+      </div>
+      <div class="w-full h-2 bg-surface rounded-full overflow-hidden">
+        <div class="h-full bg-primary rounded-full transition-all" :style="{ width: forceProgress.total ? (forceProgress.done / forceProgress.total * 100) + '%' : '0%' }" />
+      </div>
+      <div v-if="forceProgress.errors > 0" class="text-xs text-red-500">{{ forceProgress.errors }} {{ t('errors') || 'errors' }}</div>
+      <div v-if="!forceFetching && forceProgress.done === forceProgress.total && forceProgress.total > 0" class="text-xs text-color-success">{{ t('done') || 'Done' }}</div>
     </div>
 
     <div class="card">

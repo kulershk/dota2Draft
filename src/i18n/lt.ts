@@ -731,6 +731,7 @@ export default {
   adminGamesDesc: 'Žaidimai, laukiantys OpenDota analizės pabaigos. Atnaujinkite, kad gautumėte detalią statistiką.',
   allGamesParsed: 'Visi žaidimai pilnai išanalizuoti.',
   refetchAll: 'Atnaujinti visus',
+  forceFetchAll: 'Priverstinis atnaujinimas',
   stillParsing: 'Vis dar analizuoja...',
   matchCol: 'Mačas',
   date: 'Data',

@@ -731,6 +731,7 @@ export default {
   adminGamesDesc: 'Spēles, kas gaida OpenDota parsēšanas pabeigšanu. Atjaunojiet, lai iegūtu detalizētu statistiku.',
   allGamesParsed: 'Visas spēles ir pilnībā parsētas.',
   refetchAll: 'Atjaunot visas',
+  forceFetchAll: 'Piespiedu atjaunošana',
   stillParsing: 'Joprojām parsē...',
   matchCol: 'Mačs',
   date: 'Datums',

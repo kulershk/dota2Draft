@@ -94,6 +94,7 @@ export function useApi() {
 
     // Admin games
     getUnparsedGames: () => request('/api/admin/games/unparsed'),
+    getAllGames: () => request('/api/admin/games/all'),
     refetchGame: (gameId: number) => request(`/api/admin/games/${gameId}/refetch`, { method: 'POST' }),
 
     // Competition Auction

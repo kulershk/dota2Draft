@@ -734,6 +734,7 @@ export default {
   adminGamesDesc: 'Games waiting for OpenDota to finish parsing. Refetch to pull detailed stats.',
   allGamesParsed: 'All games are fully parsed.',
   refetchAll: 'Refetch All',
+  forceFetchAll: 'Force Fetch All',
   stillParsing: 'Still parsing...',
   matchCol: 'Match',
   date: 'Date',

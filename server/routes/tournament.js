@@ -569,6 +569,27 @@ export default function createTournamentRouter(io) {
     res.json(games)
   })
 
+  // Admin: get all games with dotabuff IDs (for force refetch all)
+  router.get('/api/admin/games/all', async (req, res) => {
+    const admin = await requirePermission(req, res, 'manage_competitions')
+    if (!admin) return
+
+    const games = await query(`
+      SELECT mg.id, mg.match_id, mg.game_number, mg.dotabuff_id, mg.parsed, mg.duration_minutes, mg.created_at,
+        m.competition_id, m.team1_captain_id, m.team2_captain_id,
+        c.name AS competition_name,
+        c1.team AS team1_name, c2.team AS team2_name
+      FROM match_games mg
+      JOIN matches m ON m.id = mg.match_id
+      JOIN competitions c ON c.id = m.competition_id
+      LEFT JOIN captains c1 ON c1.id = m.team1_captain_id
+      LEFT JOIN captains c2 ON c2.id = m.team2_captain_id
+      WHERE mg.dotabuff_id IS NOT NULL AND mg.dotabuff_id != ''
+      ORDER BY mg.created_at DESC
+    `)
+    res.json(games)
+  })
+
   // Admin: refetch a specific game by match_game id
   router.post('/api/admin/games/:gameId/refetch', async (req, res) => {
     const admin = await requirePermission(req, res, 'manage_competitions')
