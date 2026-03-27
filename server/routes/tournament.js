@@ -496,8 +496,8 @@ export default function createTournamentRouter(io) {
     const match = await queryOne('SELECT id FROM matches WHERE id = $1 AND competition_id = $2', [matchId, compId])
     if (!match) return res.status(404).json({ error: 'Match not found' })
 
-    const mg = await queryOne('SELECT id FROM match_games WHERE match_id = $1 AND game_number = $2', [matchId, gameNumber])
-    if (!mg) return res.json({ stats: [] })
+    const mg = await queryOne('SELECT id, picks_bans FROM match_games WHERE match_id = $1 AND game_number = $2', [matchId, gameNumber])
+    if (!mg) return res.json({ stats: [], picks_bans: [] })
 
     // Join with players table to get profile info (Steam32 to Steam64: steam64 = account_id + 76561197960265728)
     const stats = await query(
@@ -508,7 +508,7 @@ export default function createTournamentRouter(io) {
        ORDER BY s.is_radiant DESC, s.account_id`,
       [mg.id]
     )
-    res.json({ stats })
+    res.json({ stats, picks_bans: mg.picks_bans || [] })
   })
 
   // Refetch OpenDota stats for a specific match game

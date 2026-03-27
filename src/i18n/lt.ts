@@ -615,6 +615,7 @@ export default {
   partialStats: 'Detali statistika (wardai, daiktai) dar nepasiekiama. OpenDota vis dar analizuoja šį mačą — pabandykite vėliau.',
   statsParsed: 'Pilnai išanalizuota',
   statsPartial: 'Dalinė statistika — laukiama OpenDota analizės',
+  picksBans: 'Pikai ir banai',
   heroDamage: 'Herojaus žala',
   towerDamage: 'Bokšto žala',
   heroHealing: 'Herojaus gydymas',

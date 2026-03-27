@@ -256,6 +256,8 @@ export async function initDb() {
 
   // Add parsed column to match_games if missing (existing databases)
   try { await execute('ALTER TABLE match_games ADD COLUMN parsed BOOLEAN DEFAULT FALSE') } catch {}
+  // Add picks_bans JSONB column to match_games (stores draft picks and bans from OpenDota)
+  try { await execute("ALTER TABLE match_games ADD COLUMN picks_bans JSONB DEFAULT '[]'") } catch {}
 
   // Backfill: mark games as parsed if they already have detailed stats (items or wards)
   await execute(`

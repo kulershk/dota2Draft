@@ -571,13 +571,13 @@
       "get": {
         "tags": ["Tournament"],
         "summary": "Get player stats for a match game",
-        "description": "Returns OpenDota player stats (kills, deaths, assists, wards, multi-kills, etc.) for a specific game in a match.",
+        "description": "Returns OpenDota player stats (kills, deaths, assists, wards, multi-kills, etc.) and picks_bans array for a specific game in a match.",
         "parameters": [
           { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
           { "name": "matchId", "in": "path", "required": true, "schema": { "type": "integer" } },
           { "name": "gameNumber", "in": "path", "required": true, "schema": { "type": "integer" } }
         ],
-        "responses": { "200": { "description": "Player stats array" } }
+        "responses": { "200": { "description": "Player stats array and picks_bans array with {hero_id, is_pick, team, order}" } }
       }
     },
     "/api/competitions/{compId}/tournament/matches/{matchId}/games/{gameNumber}/refetch": {

@@ -82,10 +82,11 @@ export async function saveMatchGameStats(matchGameId, matchData) {
     ])
   }
 
-  // Update match_game duration and parsed flag
+  // Update match_game duration, parsed flag, and picks/bans
   const durationMinutes = Math.round(duration / 60)
-  await execute('UPDATE match_games SET duration_minutes = COALESCE($1, duration_minutes), parsed = $2 WHERE id = $3',
-    [durationMinutes > 0 ? durationMinutes : null, parsed, matchGameId])
+  const picksBans = matchData.picks_bans || []
+  await execute('UPDATE match_games SET duration_minutes = COALESCE($1, duration_minutes), parsed = $2, picks_bans = $3 WHERE id = $4',
+    [durationMinutes > 0 ? durationMinutes : null, parsed, JSON.stringify(picksBans), matchGameId])
 
   return { saved: matchData.players.length, parsed }
 }

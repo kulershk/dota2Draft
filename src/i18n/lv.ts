@@ -615,6 +615,7 @@ export default {
   partialStats: 'Detalizēta statistika (vārdi, priekšmeti) vēl nav pieejama. OpenDota joprojām apstrādā šo maču — mēģiniet vēlāk.',
   statsParsed: 'Pilnībā parsēts',
   statsPartial: 'Daļēja statistika — gaida OpenDota parsēšanu',
+  picksBans: 'Piki un bani',
   heroDamage: 'Varoņa bojājumi',
   towerDamage: 'Torņa bojājumi',
   heroHealing: 'Varoņa dziedināšana',

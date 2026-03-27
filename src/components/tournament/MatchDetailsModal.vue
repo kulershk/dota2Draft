@@ -43,6 +43,7 @@ const score2 = computed(() => (props.match.games || []).filter((g: any) => g.win
 
 const expandedGame = ref<number | null>(null)
 const gameStats = ref<Record<number, any[]>>({})
+const gamePicksBans = ref<Record<number, any[]>>({})
 const loadingStats = ref<Record<number, boolean>>({})
 
 // Match ready state
@@ -262,6 +263,7 @@ async function loadStats(gameNumber: number) {
   try {
     const data = await api.getMatchGameStats(cId, props.match.id, gameNumber)
     gameStats.value[gameNumber] = data.stats || []
+    gamePicksBans.value[gameNumber] = data.picks_bans || []
   } catch {
     gameStats.value[gameNumber] = []
   } finally {
@@ -630,6 +632,28 @@ function winnerName(game: any) {
                   </template>
                 </tbody>
               </table>
+            </div>
+
+            <!-- Picks & Bans -->
+            <div v-if="gamePicksBans[game.game_number]?.length" class="mt-3">
+              <p class="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">{{ t('picksBans') || 'Picks & Bans' }}</p>
+              <div class="flex flex-wrap gap-1.5">
+                <div
+                  v-for="(pb, pbIdx) in gamePicksBans[game.game_number]"
+                  :key="pbIdx"
+                  class="relative"
+                  :title="(pb.is_pick ? 'Pick' : 'Ban') + ': ' + dota.heroName(pb.hero_id) + (pb.team === 0 ? ' (Radiant)' : ' (Dire)')"
+                >
+                  <img v-if="dota.heroImg(pb.hero_id)" :src="dota.heroImg(pb.hero_id)"
+                    class="w-8 h-[22px] rounded-sm object-cover border"
+                    :class="pb.is_pick
+                      ? (pb.team === 0 ? 'border-green-500/50' : 'border-red-500/50')
+                      : 'border-border/30 grayscale opacity-50'" />
+                  <div v-if="!pb.is_pick" class="absolute inset-0 flex items-center justify-center">
+                    <X class="w-3.5 h-3.5 text-red-500/80" />
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
