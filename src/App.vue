@@ -442,7 +442,7 @@ async function handleClaimAdmin() {
       <div v-else-if="!route.path.startsWith('/admin')" class="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-muted to-background pointer-events-none z-0" />
       <router-view class="relative z-[1]" />
       <!-- Footer (only on public pages) -->
-      <footer v-if="!route.path.startsWith('/admin')" class="mt-auto border-t border-border bg-sidebar relative z-[1]">
+      <footer v-if="!route.path.startsWith('/admin') && !route.path.startsWith('/c/')" class="mt-auto border-t border-border bg-sidebar relative z-[1]">
         <div class="max-w-[1200px] mx-auto px-4 md:px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div class="flex items-center gap-2">
             <img v-if="customLogoUrl" :src="customLogoUrl" class="w-6 h-6 rounded object-contain" />
