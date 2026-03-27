@@ -84,7 +84,7 @@ export async function getCompPlayers(compId) {
     FROM competition_players cp
     JOIN players p ON cp.player_id = p.id
     WHERE cp.competition_id = $1
-    ORDER BY cp.id
+    ORDER BY cp.created_at ASC, cp.id ASC
   `, [compId])
 
   return rows.filter(p => p.in_pool || captainPlayerIds.includes(p.player_id)).map(p => ({
@@ -103,6 +103,7 @@ export async function getCompPlayers(compId) {
     is_captain: captainPlayerIds.includes(p.player_id),
     in_pool: !!p.in_pool,
     playing_role: p.playing_role ?? null,
+    joined_at: p.created_at || null,
   }))
 }
 

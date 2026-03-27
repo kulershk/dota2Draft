@@ -511,6 +511,8 @@ export async function initDb() {
 
   // Add playing_role column if missing (existing databases)
   try { await execute('ALTER TABLE competition_players ADD COLUMN playing_role INTEGER DEFAULT NULL') } catch {}
+  // Add created_at column to competition_players (join timestamp)
+  try { await execute('ALTER TABLE competition_players ADD COLUMN created_at TIMESTAMP DEFAULT NOW()') } catch {}
 
   // Add team_ids JSONB column to match_lobbies (stores radiant/dire team IDs + names)
   {
