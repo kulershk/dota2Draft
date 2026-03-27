@@ -29,6 +29,16 @@ export function formatDateShort(dateStr: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
+/** Convert a server date string to a datetime-local input value (no timezone conversion) */
+export function toLocalDatetime(dateStr: string): string {
+  return dateStr.replace('Z', '').replace(/\.\d+$/, '').slice(0, 16)
+}
+
+/** Convert a datetime-local input value back to a UTC ISO string for the server */
+export function localDatetimeToISO(localStr: string): string {
+  return localStr + ':00.000Z'
+}
+
 export function formatRelativeTime(dateStr: string | null): string {
   if (!dateStr) return '—'
   const d = new Date(dateStr.replace('Z', ''))

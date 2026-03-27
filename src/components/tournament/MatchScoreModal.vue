@@ -8,6 +8,7 @@ import DatePicker from '@/components/common/DatePicker.vue'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { getSocket } from '@/composables/useSocket'
+import { toLocalDatetime, localDatetimeToISO } from '@/utils/format'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -22,12 +23,6 @@ const emit = defineEmits<{
   close: []
   save: [data: any]
 }>()
-
-function toLocalDatetime(dateStr: string): string {
-  const d = new Date(dateStr)
-  const off = d.getTimezoneOffset()
-  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 16)
-}
 
 const bestOf = computed(() => props.match.best_of || 3)
 const games = ref<{ game_number: number; winner_captain_id: number | null; dotabuff_id: string; has_stats?: boolean }[]>([])
@@ -81,7 +76,7 @@ function save() {
     status: matchStatus.value,
     games: games.value,
     hidden: isHidden.value,
-    scheduled_at: scheduledAt.value ? new Date(scheduledAt.value).toISOString() : null,
+    scheduled_at: scheduledAt.value ? localDatetimeToISO(scheduledAt.value) : null,
   })
 }
 

@@ -11,6 +11,7 @@ import CaptainAvatar from '@/components/common/CaptainAvatar.vue'
 import RichTextEditor from '@/components/common/RichTextEditor.vue'
 import DatePicker from '@/components/common/DatePicker.vue'
 import { getDefaultFantasyScoring } from '@/utils/fantasyDefaults'
+import { toLocalDatetime, localDatetimeToISO } from '@/utils/format'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -33,12 +34,6 @@ const addParticipantPage = ref(1)
 const promoteSearchQuery = ref('')
 const PAGE_SIZE = 20
 
-function toLocalDatetime(dateStr: string): string {
-  const d = new Date(dateStr)
-  const off = d.getTimezoneOffset()
-  const local = new Date(d.getTime() - off * 60000)
-  return local.toISOString().slice(0, 16)
-}
 
 const compName = ref('')
 const compDescription = ref('')
@@ -252,9 +247,9 @@ async function saveAll() {
       competition_type: compType.value,
       status: compStatus.value,
       is_public: compIsPublic.value,
-      starts_at: compStartsAt.value ? new Date(compStartsAt.value).toISOString() : null,
-      registration_start: compRegStart.value ? new Date(compRegStart.value).toISOString() : null,
-      registration_end: compRegEnd.value ? new Date(compRegEnd.value).toISOString() : null,
+      starts_at: compStartsAt.value ? localDatetimeToISO(compStartsAt.value) : null,
+      registration_start: compRegStart.value ? localDatetimeToISO(compRegStart.value) : null,
+      registration_end: compRegEnd.value ? localDatetimeToISO(compRegEnd.value) : null,
       settings: { ...localSettings },
     })
     // Sync store
