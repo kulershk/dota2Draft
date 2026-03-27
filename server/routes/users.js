@@ -57,7 +57,7 @@ router.get('/api/players/:id/profile', async (req, res) => {
   const participations = await query(`
     SELECT
       c.id AS competition_id, c.name AS competition_name, c.status AS competition_status,
-      cp.roles, cp.mmr AS comp_mmr, cp.drafted, cp.draft_price, cp.draft_round,
+      cp.roles, cp.mmr AS comp_mmr, cp.drafted, cp.draft_price, cp.draft_round, cp.drafted_by,
       cap.id AS captain_id, cap.team AS captain_team,
       drafted_cap.team AS drafted_by_team, drafted_cap.name AS drafted_by_name
     FROM competition_players cp
@@ -68,11 +68,15 @@ router.get('/api/players/:id/profile', async (req, res) => {
     ORDER BY c.created_at DESC
   `, [playerId])
 
-  // Get tournament placements for competitions where player was a captain
-  const captainIds = participations.filter(p => p.captain_id).map(p => p.captain_id)
+  // Get tournament placements — for captains use their own captain_id, for team members use drafted_by
+  const captainIdSet = new Set()
+  for (const p of participations) {
+    if (p.captain_id) captainIdSet.add(p.captain_id)
+    else if (p.drafted_by) captainIdSet.add(p.drafted_by)
+  }
+  const captainIds = [...captainIdSet]
   let placements = []
   if (captainIds.length > 0) {
-    // For each captain entry, find their best tournament result
     placements = await query(`
       SELECT
         cap.id AS captain_id, cap.competition_id, c.name AS competition_name,
