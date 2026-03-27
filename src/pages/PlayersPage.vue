@@ -250,7 +250,7 @@ watch(searchQuery, () => { playersPage.value = 1 })
         <span class="flex-1 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">{{ t('playerName') }}</span>
         <span class="w-[120px] text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">{{ t('role') }}</span>
         <span class="w-20 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-right">{{ t('mmr') }}</span>
-        <span class="w-20 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-right">{{ t('info') }}</span>
+        <span class="w-32 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-right">{{ t('info') }}</span>
         <span v-if="store.isAdmin.value" class="w-20 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-right">{{ t('actions') }}</span>
       </div>
 
@@ -292,7 +292,7 @@ watch(searchQuery, () => { playersPage.value = 1 })
           <MmrDisplay :mmr="player.mmr" size="md" />
         </div>
         <!-- Info -->
-        <span class="w-20 text-right text-xs font-mono text-muted-foreground truncate">{{ player.info }}</span>
+        <span class="w-32 text-right text-sm text-muted-foreground truncate" :title="player.info">{{ player.info }}</span>
         <!-- Actions -->
         <div v-if="store.isAdmin.value" class="w-20 flex items-center justify-end gap-2">
           <button class="text-text-tertiary hover:text-foreground transition-colors" @click="openEditPlayer(player)"><Pencil class="w-4 h-4" /></button>
