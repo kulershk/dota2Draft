@@ -196,13 +196,13 @@ watch(searchQuery, () => { playersPage.value = 1 })
     </div>
 
     <!-- Stats Row -->
-    <div class="flex gap-4">
-      <div class="flex-1 stat-card-accented cursor-pointer transition-colors" :class="!activeRoleFilter ? 'ring-2 ring-primary' : 'hover:brightness-110'" @click="activeRoleFilter = null">
+    <div class="flex gap-2 md:gap-4 overflow-x-auto">
+      <div class="flex-1 min-w-[60px] stat-card-accented cursor-pointer transition-colors" :class="!activeRoleFilter ? 'ring-2 ring-primary' : 'hover:brightness-110'" @click="activeRoleFilter = null">
         <span class="stat-card-label">{{ t('total') }}</span>
         <span class="stat-card-value">{{ store.players.value.length }}</span>
       </div>
       <div v-for="role in ['Carry', 'Mid', 'Offlane', 'Pos4', 'Pos5']" :key="role"
-        class="flex-1 stat-card cursor-pointer transition-colors"
+        class="flex-1 min-w-[60px] stat-card cursor-pointer transition-colors"
         :class="activeRoleFilter === role ? 'ring-2 ring-primary' : 'hover:brightness-110'"
         @click="toggleRoleFilter(role)">
         <span class="stat-card-label">{{ t(role.toLowerCase()) }}</span>
@@ -245,7 +245,7 @@ watch(searchQuery, () => { playersPage.value = 1 })
       </div>
 
       <!-- Table header -->
-      <div class="flex items-center rounded-t-md bg-surface px-4 py-3">
+      <div class="hidden md:flex items-center rounded-t-md bg-surface px-4 py-3">
         <span class="w-10 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">#</span>
         <span class="flex-1 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">{{ t('playerName') }}</span>
         <span class="w-[120px] text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">{{ t('role') }}</span>
@@ -254,9 +254,9 @@ watch(searchQuery, () => { playersPage.value = 1 })
         <span v-if="store.isAdmin.value" class="w-20 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-right">{{ t('actions') }}</span>
       </div>
 
-      <!-- Table rows -->
+      <!-- Desktop table rows -->
       <div v-for="(player, i) in paginatedPlayers" :key="player.id"
-        class="flex items-center px-4 py-3 border-b border-border hover:bg-surface/50 transition-colors">
+        class="hidden md:flex items-center px-4 py-3 border-b border-border hover:bg-surface/50 transition-colors">
         <!-- Rank -->
         <span class="w-10 text-sm font-mono text-text-tertiary">{{ String(i + 1).padStart(2, '0') }}</span>
         <!-- Player name -->
@@ -297,6 +297,36 @@ watch(searchQuery, () => { playersPage.value = 1 })
         <div v-if="store.isAdmin.value" class="w-20 flex items-center justify-end gap-2">
           <button class="text-text-tertiary hover:text-foreground transition-colors" @click="openEditPlayer(player)"><Pencil class="w-4 h-4" /></button>
           <button class="text-text-tertiary hover:text-destructive transition-colors" @click="store.deletePlayer(player.id)"><Trash2 class="w-4 h-4" /></button>
+        </div>
+      </div>
+
+      <!-- Mobile card rows -->
+      <div v-for="(player, i) in paginatedPlayers" :key="'m-' + player.id"
+        class="flex md:hidden items-start gap-3 px-3 py-3 border-b border-border">
+        <span class="text-xs font-mono text-text-tertiary mt-1 w-6 shrink-0">{{ i + 1 }}</span>
+        <img v-if="player.avatar_url" :src="player.avatar_url" class="w-8 h-8 rounded-full object-cover shrink-0 mt-0.5" />
+        <div v-else class="w-8 h-8 rounded-full bg-surface flex items-center justify-center text-xs font-semibold text-muted-foreground shrink-0 mt-0.5">
+          {{ player.name.charAt(0) }}
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between gap-2">
+            <router-link :to="{ name: 'player-profile', params: { id: player.id } }" class="text-sm font-medium text-foreground hover:text-primary transition-colors flex items-center gap-1.5 truncate">
+              <Shield v-if="player.is_captain" class="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+              {{ player.name }}
+            </router-link>
+            <MmrDisplay :mmr="player.mmr" size="sm" />
+          </div>
+          <div class="flex flex-wrap gap-1 mt-1">
+            <RoleBadge v-for="role in sortedRoles(player.roles)" :key="role" :role="role" />
+            <span v-if="player.playing_role" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-primary/15 text-primary border border-primary/25">
+              P{{ player.playing_role }}
+            </span>
+          </div>
+          <div v-if="player.info" class="text-[11px] text-muted-foreground mt-1 truncate">{{ player.info }}</div>
+          <div v-if="store.isAdmin.value" class="flex gap-3 mt-1.5">
+            <button class="text-text-tertiary hover:text-foreground transition-colors" @click="openEditPlayer(player)"><Pencil class="w-3.5 h-3.5" /></button>
+            <button class="text-text-tertiary hover:text-destructive transition-colors" @click="store.deletePlayer(player.id)"><Trash2 class="w-3.5 h-3.5" /></button>
+          </div>
         </div>
       </div>
 
