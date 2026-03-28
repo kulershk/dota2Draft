@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Users, UserPlus, Search, Pencil, Trash2, ExternalLink, LogIn, Shield, RefreshCw } from 'lucide-vue-next'
+import { Users, UserPlus, Search, Pencil, Trash2, LogIn, Shield, RefreshCw } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDraftStore } from '@/composables/useDraftStore'
@@ -268,14 +268,6 @@ watch(searchQuery, () => { playersPage.value = 1 })
             <div class="flex items-center gap-1.5">
               <UserName :id="player.id" :name="player.name" :avatar-url="player.avatar_url" />
               <Shield v-if="player.is_captain" class="w-3.5 h-3.5 text-amber-500 flex-shrink-0" :title="t('captainCol')" />
-            </div>
-            <div v-if="player.steam_id" class="flex items-center gap-2 mt-0.5">
-              <a :href="`https://steamcommunity.com/profiles/${player.steam_id}`" target="_blank" rel="noopener" class="text-[10px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-0.5">
-                Steam <ExternalLink class="w-2.5 h-2.5" />
-              </a>
-              <a v-if="player.steam_id && /^\d{10,}$/.test(player.steam_id)" :href="`https://www.dotabuff.com/players/${BigInt(player.steam_id) - BigInt('76561197960265728')}`" target="_blank" rel="noopener" class="text-[10px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-0.5">
-                Dotabuff <ExternalLink class="w-2.5 h-2.5" />
-              </a>
             </div>
           </div>
         </div>
