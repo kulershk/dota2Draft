@@ -200,13 +200,13 @@ watch(searchQuery, () => { playersPage.value = 1 })
 
     <!-- Stats Row -->
     <div class="flex gap-2 md:gap-4 overflow-x-auto">
-      <div class="flex-1 min-w-[60px] stat-card cursor-pointer transition-colors" :class="!activeRoleFilter ? 'ring-2 ring-primary' : 'hover:brightness-110'" @click="activeRoleFilter = null">
+      <div class="flex-1 min-w-[60px] stat-card cursor-pointer transition-colors" :class="!activeRoleFilter ? 'shadow-[inset_0_0_0_2px_rgb(var(--primary))]' : 'hover:brightness-110'" @click="activeRoleFilter = null">
         <span class="stat-card-label">{{ t('total') }}</span>
         <span class="stat-card-value">{{ store.players.value.length }}</span>
       </div>
       <div v-for="role in ['Carry', 'Mid', 'Offlane', 'Pos4', 'Pos5']" :key="role"
         class="flex-1 min-w-[60px] stat-card cursor-pointer transition-colors"
-        :class="activeRoleFilter === role ? 'ring-2 ring-primary' : 'hover:brightness-110'"
+        :class="activeRoleFilter === role ? 'shadow-[inset_0_0_0_2px_rgb(var(--primary))]' : 'hover:brightness-110'"
         @click="toggleRoleFilter(role)">
         <span class="stat-card-label">{{ t(role.toLowerCase()) }}</span>
         <span class="stat-card-value">{{ store.roleCounts.value[role as keyof typeof store.roleCounts.value] }}</span>
