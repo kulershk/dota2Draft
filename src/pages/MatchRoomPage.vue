@@ -505,14 +505,14 @@ function goBack() {
             <div class="w-6 h-6 rounded bg-accent overflow-hidden shrink-0"></div>
             <span class="text-sm font-semibold text-muted-foreground truncate">{{ t('tbd') }}</span>
           </div>
-          <div v-for="p in teamRosters.team1" :key="p.id" class="flex items-center gap-2 py-0.5">
+          <router-link v-for="p in teamRosters.team1" :key="p.id" :to="{ name: 'player-profile', params: { id: p.id } }" class="flex items-center gap-2 py-0.5 hover:bg-accent/50 rounded transition-colors">
             <div class="w-5 h-5 rounded-full bg-accent overflow-hidden shrink-0">
               <img v-if="p.avatar_url" :src="p.avatar_url" class="w-full h-full object-cover" />
             </div>
             <span class="text-sm text-foreground truncate">{{ p.name }}</span>
             <span v-if="p.is_captain" class="text-[10px] font-medium text-primary bg-primary/10 px-1.5 py-0.5 rounded">C</span>
             <span v-if="p.mmr" class="text-[10px] text-muted-foreground ml-auto">{{ p.mmr }}</span>
-          </div>
+          </router-link>
         </div>
         <!-- Team 2 -->
         <div class="card px-4 py-3 flex flex-col gap-2">
@@ -526,14 +526,14 @@ function goBack() {
             <div class="w-6 h-6 rounded bg-accent overflow-hidden shrink-0"></div>
             <span class="text-sm font-semibold text-muted-foreground truncate">{{ t('tbd') }}</span>
           </div>
-          <div v-for="p in teamRosters.team2" :key="p.id" class="flex items-center gap-2 py-0.5">
+          <router-link v-for="p in teamRosters.team2" :key="p.id" :to="{ name: 'player-profile', params: { id: p.id } }" class="flex items-center gap-2 py-0.5 hover:bg-accent/50 rounded transition-colors">
             <div class="w-5 h-5 rounded-full bg-accent overflow-hidden shrink-0">
               <img v-if="p.avatar_url" :src="p.avatar_url" class="w-full h-full object-cover" />
             </div>
             <span class="text-sm text-foreground truncate">{{ p.name }}</span>
             <span v-if="p.is_captain" class="text-[10px] font-medium text-primary bg-primary/10 px-1.5 py-0.5 rounded">C</span>
             <span v-if="p.mmr" class="text-[10px] text-muted-foreground ml-auto">{{ p.mmr }}</span>
-          </div>
+          </router-link>
         </div>
       </div>
 
