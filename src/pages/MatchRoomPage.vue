@@ -489,9 +489,13 @@ function goBack() {
             </div>
           </div>
         </div>
-        <div class="flex items-center justify-center gap-2">
-          <span class="badge-info">{{ match.status === 'completed' ? t('matchCompleted') : match.status === 'live' ? t('matchLive') : t('matchPending') }}</span>
-          <span class="text-xs text-text-tertiary">Best of {{ bestOf }}</span>
+        <div class="flex items-center gap-4">
+          <div class="flex-1"></div>
+          <div class="flex items-center gap-2 shrink-0">
+            <span class="badge-info">{{ match.status === 'completed' ? t('matchCompleted') : match.status === 'live' ? t('matchLive') : t('matchPending') }}</span>
+            <span class="text-xs text-text-tertiary">Best of {{ bestOf }}</span>
+          </div>
+          <div class="flex-1"></div>
         </div>
       </div>
 
