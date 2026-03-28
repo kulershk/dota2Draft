@@ -112,9 +112,9 @@ const matchesByGroup = computed(() => {
 <template>
   <div class="flex flex-col gap-8">
     <!-- Group standings tables -->
-    <div v-for="group in groupsList" :key="group.name" class="flex flex-col gap-0">
+    <div v-for="group in groupsList" :key="group.name" class="card overflow-hidden flex flex-col gap-0">
       <!-- Group title bar -->
-      <div class="flex items-center rounded-t-md bg-card px-4 py-3">
+      <div class="flex items-center bg-card px-4 py-3">
         <span class="text-sm font-bold text-foreground uppercase tracking-wider">{{ group.name }}</span>
       </div>
 
@@ -131,16 +131,16 @@ const matchesByGroup = computed(() => {
       <div
         v-for="(team, idx) in standings[group.name]"
         :key="team.key"
-        class="flex items-center px-4 py-2.5 border-b border-border relative"
+        class="flex items-center px-4 py-2.5 border-b border-border last:border-0 relative"
       >
         <div v-if="getRowColor(group.name, idx)" class="absolute left-0 top-0 bottom-0 w-1 rounded-r-sm" :style="{ backgroundColor: getRowColor(group.name, idx)! }" />
-        <span class="w-10 text-sm font-mono self-start mt-0.5"
+        <span class="w-10 text-sm font-mono"
           :class="idx === 0 ? 'text-primary font-bold' : 'text-muted-foreground'">{{ idx + 1 }}</span>
         <div class="flex-1 min-w-0">
           <TeamName v-if="team.id" :id="team.id" :name="team.team" :avatar-url="team.avatar" />
           <span v-else class="text-sm font-medium truncate text-muted-foreground italic">{{ team.team }}</span>
           <!-- Team members -->
-          <div v-if="team.id && props.rosters[team.id]?.length" class="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 ml-[38px]">
+          <div v-if="team.id && props.rosters[team.id]?.length" class="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 ml-[30px]">
             <UserName
               v-for="player in props.rosters[team.id]"
               :key="player.player_id"
@@ -151,9 +151,9 @@ const matchesByGroup = computed(() => {
             />
           </div>
         </div>
-        <span class="w-[50px] text-sm font-mono font-semibold text-center text-color-success self-start mt-0.5">{{ team.mw }}</span>
-        <span class="w-[50px] text-sm font-mono text-center text-destructive self-start mt-0.5">{{ team.ml }}</span>
-        <span class="w-[60px] text-sm font-mono font-bold text-right text-foreground self-start mt-0.5">{{ team.pts }}</span>
+        <span class="w-[50px] text-sm font-mono font-semibold text-center text-color-success">{{ team.mw }}</span>
+        <span class="w-[50px] text-sm font-mono text-center text-destructive">{{ team.ml }}</span>
+        <span class="w-[60px] text-sm font-mono font-bold text-right text-foreground">{{ team.pts }}</span>
       </div>
     </div>
 
