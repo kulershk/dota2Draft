@@ -27,6 +27,7 @@ const showEditCaptain = ref(false)
 const showResetConfirm = ref(false)
 const showAddParticipant = ref(false)
 const saving = ref(false)
+const loaded = ref(false)
 const participantSearchQuery = ref('')
 const participantTableSearch = ref('')
 const participantTablePage = ref(1)
@@ -164,6 +165,7 @@ onMounted(async () => {
   compRegStart.value = comp.registration_start ? toLocalDatetime(comp.registration_start) : ''
   compRegEnd.value = comp.registration_end ? toLocalDatetime(comp.registration_end) : ''
   Object.assign(localSettings, comp.settings)
+  loaded.value = true
   // Load all users for promote
   allUsers.value = await api.getUsers()
   // Load streams
@@ -383,6 +385,10 @@ async function deleteStream(id: number) {
       </div>
     </div>
 
+    <div v-if="!loaded" class="flex items-center justify-center py-16">
+      <div class="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full"></div>
+    </div>
+    <template v-else>
     <!-- Tabs -->
     <div class="flex gap-1 border-b border-border overflow-x-auto">
       <button v-for="tab in ['settings', 'rules', 'lobby', 'fantasy', 'captains', 'other']" :key="tab"
@@ -1246,5 +1252,6 @@ async function deleteStream(id: number) {
         <button class="btn-secondary w-full justify-center" @click="showAssignModal = false">{{ t('cancel') }}</button>
       </div>
     </ModalOverlay>
+    </template>
   </div>
 </template>
