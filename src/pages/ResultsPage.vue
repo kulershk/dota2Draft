@@ -7,6 +7,7 @@ import RoleBadge from '@/components/common/RoleBadge.vue'
 import MmrDisplay from '@/components/common/MmrDisplay.vue'
 import CaptainAvatar from '@/components/common/CaptainAvatar.vue'
 import UserName from '@/components/common/UserName.vue'
+import TeamName from '@/components/common/TeamName.vue'
 import { sortedRoles } from '@/utils/roles'
 
 interface TeamPlayer {

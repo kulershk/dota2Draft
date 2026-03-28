@@ -4,6 +4,7 @@ import { Swords, ChevronDown, ChevronUp, EyeOff } from 'lucide-vue-next'
 import { computed, ref } from 'vue'
 import { MATCH_STATUS } from '@/utils/constants'
 import UserName from '@/components/common/UserName.vue'
+import TeamName from '@/components/common/TeamName.vue'
 
 const { t } = useI18n()
 
@@ -136,16 +137,8 @@ const matchesByGroup = computed(() => {
         <span class="w-10 text-sm font-mono self-start mt-0.5"
           :class="idx === 0 ? 'text-primary font-bold' : 'text-muted-foreground'">{{ idx + 1 }}</span>
         <div class="flex-1 min-w-0">
-          <router-link v-if="team.id" :to="{ name: 'team-profile', params: { id: team.id } }" class="flex items-center gap-2.5 min-w-0 hover:opacity-80 transition-opacity">
-            <div class="w-7 h-7 rounded bg-surface overflow-hidden shrink-0">
-              <img v-if="team.avatar" :src="team.avatar" class="w-full h-full object-cover" />
-            </div>
-            <span class="text-sm font-medium truncate text-foreground hover:text-primary transition-colors">{{ team.team }}</span>
-          </router-link>
-          <div v-else class="flex items-center gap-2.5 min-w-0">
-            <div class="w-7 h-7 rounded bg-surface overflow-hidden shrink-0"></div>
-            <span class="text-sm font-medium truncate text-muted-foreground italic">{{ team.team }}</span>
-          </div>
+          <TeamName v-if="team.id" :id="team.id" :name="team.team" :avatar-url="team.avatar" />
+          <span v-else class="text-sm font-medium truncate text-muted-foreground italic">{{ team.team }}</span>
           <!-- Team members -->
           <div v-if="team.id && props.rosters[team.id]?.length" class="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 ml-[38px]">
             <UserName

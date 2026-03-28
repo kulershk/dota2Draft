@@ -8,6 +8,7 @@ import { useDraftStore } from '@/composables/useDraftStore'
 import { getSocket, getServerNow } from '@/composables/useSocket'
 import { useDotaConstants } from '@/composables/useDotaConstants'
 import UserName from '@/components/common/UserName.vue'
+import TeamName from '@/components/common/TeamName.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -504,16 +505,8 @@ function goBack() {
       <div v-if="teamRosters.team1.length || teamRosters.team2.length" class="grid grid-cols-2 gap-4 mb-6">
         <!-- Team 1 -->
         <div class="card px-4 py-3 flex flex-col gap-2">
-          <router-link v-if="match.team1_captain_id" :to="{ name: 'team-profile', params: { id: match.team1_captain_id } }" class="flex items-center gap-2 mb-1 hover:opacity-80 transition-opacity">
-            <div class="w-6 h-6 rounded bg-accent overflow-hidden shrink-0">
-              <img v-if="match.team1_banner || match.team1_avatar" :src="match.team1_banner || match.team1_avatar" class="w-full h-full object-cover" />
-            </div>
-            <span class="text-sm font-semibold text-foreground truncate hover:text-primary transition-colors">{{ match.team1_name || t('tbd') }}</span>
-          </router-link>
-          <div v-else class="flex items-center gap-2 mb-1">
-            <div class="w-6 h-6 rounded bg-accent overflow-hidden shrink-0"></div>
-            <span class="text-sm font-semibold text-muted-foreground truncate">{{ t('tbd') }}</span>
-          </div>
+          <TeamName v-if="match.team1_captain_id" :id="match.team1_captain_id" :name="match.team1_name || t('tbd')" :banner-url="match.team1_banner" :avatar-url="match.team1_avatar" class="mb-1" />
+          <span v-else class="text-sm font-semibold text-muted-foreground truncate mb-1">{{ t('tbd') }}</span>
           <div v-for="p in teamRosters.team1" :key="p.id" class="flex items-center gap-2 py-0.5">
             <UserName :id="p.id" :name="p.name" :avatar-url="p.avatar_url" size="sm" />
             <span v-if="p.is_captain" class="text-[10px] font-medium text-primary bg-primary/10 px-1.5 py-0.5 rounded">C</span>
@@ -522,12 +515,7 @@ function goBack() {
         </div>
         <!-- Team 2 -->
         <div class="card px-4 py-3 flex flex-col gap-2">
-          <router-link v-if="match.team2_captain_id" :to="{ name: 'team-profile', params: { id: match.team2_captain_id } }" class="flex items-center gap-2 mb-1 hover:opacity-80 transition-opacity">
-            <div class="w-6 h-6 rounded bg-accent overflow-hidden shrink-0">
-              <img v-if="match.team2_banner || match.team2_avatar" :src="match.team2_banner || match.team2_avatar" class="w-full h-full object-cover" />
-            </div>
-            <span class="text-sm font-semibold text-foreground truncate hover:text-primary transition-colors">{{ match.team2_name || t('tbd') }}</span>
-          </router-link>
+          <TeamName v-if="match.team2_captain_id" :id="match.team2_captain_id" :name="match.team2_name || t('tbd')" :banner-url="match.team2_banner" :avatar-url="match.team2_avatar" class="mb-1" />
           <div v-else class="flex items-center gap-2 mb-1">
             <div class="w-6 h-6 rounded bg-accent overflow-hidden shrink-0"></div>
             <span class="text-sm font-semibold text-muted-foreground truncate">{{ t('tbd') }}</span>
