@@ -4,6 +4,7 @@ defineProps<{
   name: string
   avatarUrl?: string | null
   size?: 'xs' | 'sm' | 'md'
+  noLink?: boolean
 }>()
 
 const avatarClass: Record<string, string> = {
@@ -20,14 +21,16 @@ const textClass: Record<string, string> = {
 </script>
 
 <template>
-  <router-link
-    :to="{ name: 'player-profile', params: { id } }"
-    class="inline-flex items-center gap-1.5 hover:text-primary transition-colors min-w-0"
+  <component
+    :is="noLink ? 'span' : 'router-link'"
+    v-bind="noLink ? {} : { to: { name: 'player-profile', params: { id } } }"
+    class="inline-flex items-center gap-1.5 min-w-0"
+    :class="noLink ? '' : 'hover:text-primary transition-colors'"
   >
     <div class="rounded-full bg-surface overflow-hidden shrink-0 flex items-center justify-center font-semibold text-muted-foreground" :class="avatarClass[size || 'md']">
       <img v-if="avatarUrl" :src="avatarUrl" class="w-full h-full object-cover" />
       <span v-else>{{ name.charAt(0).toUpperCase() }}</span>
     </div>
     <span class="font-medium text-foreground truncate" :class="textClass[size || 'md']"><slot>{{ name }}</slot></span>
-  </router-link>
+  </component>
 </template>

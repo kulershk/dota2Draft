@@ -6,6 +6,7 @@ import { useApi } from '@/composables/useApi'
 import { getServerNow } from '@/composables/useSocket'
 import { formatMatchDate } from '@/utils/format'
 import { MATCH_STATUS } from '@/utils/constants'
+import TeamName from '@/components/common/TeamName.vue'
 
 const { t } = useI18n()
 const api = useApi()
@@ -109,11 +110,8 @@ const filteredMatches = computed(() => {
           </span>
 
           <!-- Team 1 -->
-          <div class="flex-1 flex items-center justify-end gap-2 min-w-0">
-            <span class="text-sm font-medium text-foreground truncate">{{ match.team1_name || t('tbd') }}</span>
-            <div class="w-7 h-7 rounded bg-surface overflow-hidden shrink-0">
-              <img v-if="match.team1_banner || match.team1_avatar" :src="match.team1_banner || match.team1_avatar" class="w-full h-full object-cover" />
-            </div>
+          <div class="flex-1 flex items-center justify-end min-w-0">
+            <TeamName :id="match.team1_captain_id || 0" :name="match.team1_name || t('tbd')" :banner-url="match.team1_banner" :avatar-url="match.team1_avatar" no-link />
           </div>
 
           <!-- Score -->
@@ -128,11 +126,8 @@ const filteredMatches = computed(() => {
           </div>
 
           <!-- Team 2 -->
-          <div class="flex-1 flex items-center gap-2 min-w-0">
-            <div class="w-7 h-7 rounded bg-surface overflow-hidden shrink-0">
-              <img v-if="match.team2_banner || match.team2_avatar" :src="match.team2_banner || match.team2_avatar" class="w-full h-full object-cover" />
-            </div>
-            <span class="text-sm font-medium text-foreground truncate">{{ match.team2_name || t('tbd') }}</span>
+          <div class="flex-1 flex items-center min-w-0">
+            <TeamName :id="match.team2_captain_id || 0" :name="match.team2_name || t('tbd')" :banner-url="match.team2_banner" :avatar-url="match.team2_avatar" no-link />
           </div>
 
           <!-- Meta -->

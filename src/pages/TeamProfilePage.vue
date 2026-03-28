@@ -9,6 +9,7 @@ import RoleBadge from '@/components/common/RoleBadge.vue'
 import RankBadge from '@/components/common/RankBadge.vue'
 import MmrDisplay from '@/components/common/MmrDisplay.vue'
 import UserName from '@/components/common/UserName.vue'
+import TeamName from '@/components/common/TeamName.vue'
 import { sortedRoles } from '@/utils/roles'
 
 const { t } = useI18n()
@@ -137,21 +138,15 @@ const posLabel: Record<number, string> = { 1: 'Carry', 2: 'Mid', 3: 'Offlane', 4
             ></div>
             <!-- Teams -->
             <div class="flex-1 min-w-0 flex items-center gap-3">
-              <div class="flex items-center gap-2 flex-1 min-w-0" :class="match.is_team1 ? 'font-semibold' : ''">
-                <div class="w-7 h-7 rounded-full bg-surface overflow-hidden shrink-0">
-                  <img v-if="match.team1_banner || match.team1_avatar" :src="match.team1_banner || match.team1_avatar" class="w-full h-full object-cover" />
-                </div>
-                <span class="text-sm text-foreground truncate">{{ match.team1_name || t('tbd') }}</span>
+              <div class="flex items-center flex-1 min-w-0" :class="match.is_team1 ? 'font-semibold' : ''">
+                <TeamName :id="match.team1_captain_id || 0" :name="match.team1_name || t('tbd')" :banner-url="match.team1_banner" :avatar-url="match.team1_avatar" no-link />
               </div>
               <div class="flex flex-col items-center shrink-0 w-16">
                 <span class="text-sm font-bold font-mono text-foreground">{{ match.score1 ?? 0 }} : {{ match.score2 ?? 0 }}</span>
                 <span class="text-[9px] text-muted-foreground">BO{{ match.best_of }}</span>
               </div>
-              <div class="flex items-center gap-2 flex-1 min-w-0 justify-end" :class="!match.is_team1 ? 'font-semibold' : ''">
-                <span class="text-sm text-foreground truncate text-right">{{ match.team2_name || t('tbd') }}</span>
-                <div class="w-7 h-7 rounded-full bg-surface overflow-hidden shrink-0">
-                  <img v-if="match.team2_banner || match.team2_avatar" :src="match.team2_banner || match.team2_avatar" class="w-full h-full object-cover" />
-                </div>
+              <div class="flex items-center flex-1 min-w-0 justify-end" :class="!match.is_team1 ? 'font-semibold' : ''">
+                <TeamName :id="match.team2_captain_id || 0" :name="match.team2_name || t('tbd')" :banner-url="match.team2_banner" :avatar-url="match.team2_avatar" no-link />
               </div>
             </div>
             <!-- Status / Date -->
