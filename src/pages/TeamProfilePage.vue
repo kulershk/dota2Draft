@@ -8,6 +8,7 @@ import { useApi } from '@/composables/useApi'
 import RoleBadge from '@/components/common/RoleBadge.vue'
 import RankBadge from '@/components/common/RankBadge.vue'
 import MmrDisplay from '@/components/common/MmrDisplay.vue'
+import UserName from '@/components/common/UserName.vue'
 import { sortedRoles } from '@/utils/roles'
 
 const { t } = useI18n()
@@ -92,17 +93,14 @@ const posLabel: Record<number, string> = { 1: 'Carry', 2: 'Mid', 3: 'Offlane', 4
           {{ t('noTeamMembers') }}
         </div>
         <div v-else class="divide-y divide-border">
-          <router-link
+          <div
             v-for="player in profile.roster" :key="player.player_id"
-            :to="{ name: 'player-profile', params: { id: player.player_id } }"
             class="flex items-center gap-3 px-4 py-3 hover:bg-accent/30 transition-colors"
           >
-            <img v-if="player.avatar_url" :src="player.avatar_url" class="w-9 h-9 rounded-full shrink-0" />
-            <div v-else class="w-9 h-9 rounded-full bg-surface flex items-center justify-center text-xs font-semibold text-muted-foreground shrink-0">{{ player.name.charAt(0) }}</div>
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2">
+                <UserName :id="player.player_id" :name="player.name" :avatar-url="player.avatar_url" />
                 <Shield v-if="player.is_captain" class="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                <span class="text-sm font-medium text-foreground truncate">{{ player.name }}</span>
                 <span v-if="player.is_captain" class="text-[9px] font-bold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded">{{ t('captainLabel') }}</span>
                 <span v-if="player.playing_role" class="text-[9px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded">{{ posLabel[player.playing_role] || 'P' + player.playing_role }}</span>
               </div>
@@ -114,7 +112,7 @@ const posLabel: Record<number, string> = { 1: 'Carry', 2: 'Mid', 3: 'Offlane', 4
               </div>
             </div>
             <MmrDisplay v-if="player.mmr" :mmr="player.mmr" size="sm" />
-          </router-link>
+          </div>
         </div>
       </div>
 

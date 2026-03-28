@@ -6,6 +6,7 @@ import { useDraftStore } from '@/composables/useDraftStore'
 import RoleBadge from '@/components/common/RoleBadge.vue'
 import MmrDisplay from '@/components/common/MmrDisplay.vue'
 import CaptainAvatar from '@/components/common/CaptainAvatar.vue'
+import UserName from '@/components/common/UserName.vue'
 import { sortedRoles } from '@/utils/roles'
 
 interface TeamPlayer {
@@ -117,15 +118,9 @@ function totalSpent(team: TeamResult) {
               <tbody>
                 <tr v-for="player in team.players" :key="player.id" class="border-b border-foreground/10 last:border-0">
                   <td class="py-2 pr-2">
-                    <div class="flex items-center gap-2">
-                      <img v-if="player.avatar_url" :src="player.avatar_url" class="w-6 h-6 rounded-full shrink-0" />
-                      <div v-else class="w-6 h-6 rounded-full bg-secondary flex items-center justify-center text-[10px] font-semibold text-secondary-foreground shrink-0">
-                        {{ player.name.charAt(0) }}
-                      </div>
-                      <router-link :to="{ name: 'player-profile', params: { id: player.id } }" class="font-medium text-foreground hover:text-primary transition-colors flex items-center gap-1.5 truncate">
-                        <Shield v-if="player.is_captain" class="w-3.5 h-3.5 text-amber-500 shrink-0" :title="t('captain')" />
-                        {{ player.name }}
-                      </router-link>
+                    <div class="flex items-center gap-1.5">
+                      <UserName :id="player.id" :name="player.name" :avatar-url="player.avatar_url" />
+                      <Shield v-if="player.is_captain" class="w-3.5 h-3.5 text-amber-500 shrink-0" :title="t('captain')" />
                     </div>
                   </td>
                   <td class="py-2 px-2">

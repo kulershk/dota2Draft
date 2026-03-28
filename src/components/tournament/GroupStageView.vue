@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n'
 import { Swords, ChevronDown, ChevronUp, EyeOff } from 'lucide-vue-next'
 import { computed, ref } from 'vue'
 import { MATCH_STATUS } from '@/utils/constants'
+import UserName from '@/components/common/UserName.vue'
 
 const { t } = useI18n()
 
@@ -147,16 +148,14 @@ const matchesByGroup = computed(() => {
           </div>
           <!-- Team members -->
           <div v-if="team.id && props.rosters[team.id]?.length" class="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 ml-[38px]">
-            <router-link
+            <UserName
               v-for="player in props.rosters[team.id]"
               :key="player.player_id"
-              :to="{ name: 'player-profile', params: { id: player.player_id } }"
-              class="flex items-center gap-1 hover:opacity-80 transition-opacity"
-            >
-              <img v-if="player.avatar" :src="player.avatar" class="w-4 h-4 rounded-full object-cover" />
-              <div v-else class="w-4 h-4 rounded-full bg-surface"></div>
-              <span class="text-[11px] text-muted-foreground hover:text-primary transition-colors" :class="player.is_captain ? 'font-semibold text-amber-500' : ''">{{ player.name }}</span>
-            </router-link>
+              :id="player.player_id"
+              :name="player.name"
+              :avatar-url="player.avatar"
+              size="xs"
+            />
           </div>
         </div>
         <span class="w-[50px] text-sm font-mono font-semibold text-center text-color-success self-start mt-0.5">{{ team.mw }}</span>

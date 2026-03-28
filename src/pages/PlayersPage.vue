@@ -11,6 +11,7 @@ import RoleBadge from '@/components/common/RoleBadge.vue'
 import MmrDisplay from '@/components/common/MmrDisplay.vue'
 import { sortedRoles } from '@/utils/roles'
 import { fmtDateTime } from '@/utils/format'
+import UserName from '@/components/common/UserName.vue'
 
 const { t } = useI18n()
 const store = useDraftStore()
@@ -263,15 +264,11 @@ watch(searchQuery, () => { playersPage.value = 1 })
         <span class="w-10 text-sm font-mono text-text-tertiary">{{ String(i + 1).padStart(2, '0') }}</span>
         <!-- Player name -->
         <div class="flex-1 flex items-center gap-2.5 min-w-0">
-          <img v-if="player.avatar_url" :src="player.avatar_url" class="w-8 h-8 rounded-full object-cover shrink-0" />
-          <div v-else class="w-8 h-8 rounded-full bg-surface flex items-center justify-center text-xs font-semibold text-muted-foreground shrink-0">
-            {{ player.name.charAt(0) }}
-          </div>
           <div class="flex flex-col min-w-0">
-            <router-link :to="{ name: 'player-profile', params: { id: player.id } }" class="text-sm font-medium text-foreground hover:text-primary transition-colors flex items-center gap-1.5 truncate">
+            <div class="flex items-center gap-1.5">
+              <UserName :id="player.id" :name="player.name" :avatar-url="player.avatar_url" />
               <Shield v-if="player.is_captain" class="w-3.5 h-3.5 text-amber-500 flex-shrink-0" :title="t('captainCol')" />
-              {{ player.name }}
-            </router-link>
+            </div>
             <div v-if="player.steam_id" class="flex items-center gap-2 mt-0.5">
               <a :href="`https://steamcommunity.com/profiles/${player.steam_id}`" target="_blank" rel="noopener" class="text-[10px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-0.5">
                 Steam <ExternalLink class="w-2.5 h-2.5" />
@@ -306,16 +303,12 @@ watch(searchQuery, () => { playersPage.value = 1 })
       <div v-for="(player, i) in paginatedPlayers" :key="'m-' + player.id"
         class="flex md:hidden items-start gap-3 px-3 py-3 border-b border-border">
         <span class="text-xs font-mono text-text-tertiary mt-1 w-6 shrink-0">{{ i + 1 }}</span>
-        <img v-if="player.avatar_url" :src="player.avatar_url" class="w-8 h-8 rounded-full object-cover shrink-0 mt-0.5" />
-        <div v-else class="w-8 h-8 rounded-full bg-surface flex items-center justify-center text-xs font-semibold text-muted-foreground shrink-0 mt-0.5">
-          {{ player.name.charAt(0) }}
-        </div>
         <div class="flex-1 min-w-0">
           <div class="flex items-center justify-between gap-2">
-            <router-link :to="{ name: 'player-profile', params: { id: player.id } }" class="text-sm font-medium text-foreground hover:text-primary transition-colors flex items-center gap-1.5 truncate">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <UserName :id="player.id" :name="player.name" :avatar-url="player.avatar_url" />
               <Shield v-if="player.is_captain" class="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
-              {{ player.name }}
-            </router-link>
+            </div>
             <MmrDisplay :mmr="player.mmr" size="sm" />
           </div>
           <div class="flex flex-wrap gap-1 mt-1">

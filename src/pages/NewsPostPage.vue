@@ -7,6 +7,7 @@ import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { getSocket, getServerNow } from '@/composables/useSocket'
 import { fmtDateTime, fmtDateOnly } from '@/utils/format'
+import UserName from '@/components/common/UserName.vue'
 
 interface Comment {
   id: number
@@ -138,13 +139,7 @@ watch(postId, () => {
       <article class="flex flex-col gap-4">
         <h1 class="text-2xl md:text-3xl font-bold text-foreground tracking-tight">{{ post.title }}</h1>
         <div class="flex items-center gap-4">
-          <router-link v-if="post.created_by" :to="{ name: 'player-profile', params: { id: post.created_by } }" class="flex items-center gap-2 hover:opacity-80 transition-opacity">
-            <img v-if="post.created_by_avatar" :src="post.created_by_avatar" class="w-8 h-8 rounded-full" />
-            <div v-else class="w-8 h-8 rounded-full bg-surface flex items-center justify-center text-xs font-semibold text-muted-foreground">
-              {{ (post.created_by_name || '?').charAt(0) }}
-            </div>
-            <span class="text-sm font-medium text-foreground hover:text-primary transition-colors">{{ post.created_by_name }}</span>
-          </router-link>
+          <UserName v-if="post.created_by" :id="post.created_by" :name="post.created_by_name || '?'" :avatar-url="post.created_by_avatar" />
           <span class="text-sm text-text-tertiary">{{ formatDate(post.created_at) }}</span>
         </div>
         <div v-if="post.image_url" class="rounded-lg overflow-hidden">
@@ -198,17 +193,9 @@ watch(postId, () => {
             :key="comment.id"
             class="flex gap-3 py-4 border-b border-foreground/10 last:border-0"
           >
-            <router-link :to="{ name: 'player-profile', params: { id: comment.player_id } }" class="shrink-0">
-              <img v-if="comment.player_avatar" :src="comment.player_avatar" class="w-9 h-9 rounded-full" />
-              <div v-else class="w-9 h-9 rounded-full bg-surface flex items-center justify-center text-xs font-semibold text-muted-foreground">
-                {{ comment.player_name.charAt(0) }}
-              </div>
-            </router-link>
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2 mb-1">
-                <router-link :to="{ name: 'player-profile', params: { id: comment.player_id } }" class="text-sm font-semibold text-foreground hover:text-primary transition-colors">
-                  {{ comment.player_name }}
-                </router-link>
+                <UserName :id="comment.player_id" :name="comment.player_name" :avatar-url="comment.player_avatar" />
                 <span class="text-xs text-text-tertiary">{{ formatCommentDate(comment.created_at) }}</span>
                 <button
                   v-if="canDeleteComment(comment)"
