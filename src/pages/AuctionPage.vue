@@ -388,10 +388,8 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
       <router-link :to="`/c/${store.currentCompetitionId.value}/results`" class="btn-primary mt-4 inline-flex">{{ t('viewResults') }}</router-link>
     </div>
 
-    <!-- Active auction: main + sidebar layout -->
-    <div v-if="isActive || isPaused" class="flex flex-col lg:flex-row gap-4 md:gap-5">
-      <!-- Left: auction content -->
-      <div class="flex-1 flex flex-col gap-4 md:gap-5 min-w-0">
+    <!-- Active auction layout -->
+    <div v-if="isActive || isPaused" class="flex flex-col gap-4 md:gap-5">
         <!-- Nominating phase -->
         <div v-if="isNominating" class="card">
           <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
@@ -682,10 +680,9 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
             </table>
           </div>
         </div>
-      </div>
 
-      <!-- Right sidebar: Captain Rosters -->
-      <div class="w-full lg:w-[640px] flex-shrink-0 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 gap-3">
+      <!-- Captain Rosters -->
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
         <div v-for="roster in captainRosters" :key="roster.id" class="card transition-all" :class="roster.players.length >= store.settings.playersPerTeam ? 'ring-2 ring-green-500 border-green-500' : highlightedCaptainId === roster.id ? 'ring-2 ring-primary border-primary' : ''">
           <div class="flex items-center justify-between px-3 py-2.5 border-b border-border">
             <div class="flex items-center gap-2">

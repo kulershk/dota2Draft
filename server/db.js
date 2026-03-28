@@ -259,15 +259,6 @@ export async function initDb() {
   // Add picks_bans JSONB column to match_games (stores draft picks and bans from OpenDota)
   try { await execute("ALTER TABLE match_games ADD COLUMN picks_bans JSONB DEFAULT '[]'") } catch {}
 
-  // Backfill: mark games as parsed if they already have detailed stats (items or wards)
-  await execute(`
-    UPDATE match_games SET parsed = true
-    WHERE parsed = false AND id IN (
-      SELECT DISTINCT match_game_id FROM match_game_player_stats
-      WHERE item_0 > 0 OR obs_placed > 0 OR sen_placed > 0
-    )
-  `)
-
   // Matches table migration: add stage column
   {
     const has = await queryOne(
@@ -387,6 +378,15 @@ export async function initDb() {
   for (const col of itemCols) {
     try { await execute(`ALTER TABLE match_game_player_stats ADD COLUMN ${col} INTEGER DEFAULT 0`) } catch {}
   }
+
+  // Backfill: mark games as parsed if they already have detailed stats (items or wards)
+  await execute(`
+    UPDATE match_games SET parsed = true
+    WHERE parsed = false AND id IN (
+      SELECT DISTINCT match_game_id FROM match_game_player_stats
+      WHERE item_0 > 0 OR obs_placed > 0 OR sen_placed > 0
+    )
+  `)
 
   // Fantasy league tables
   await execute(`
