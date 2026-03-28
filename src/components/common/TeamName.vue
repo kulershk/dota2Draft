@@ -6,6 +6,7 @@ defineProps<{
   bannerUrl?: string | null
   size?: 'xs' | 'sm' | 'md'
   noLink?: boolean
+  reverse?: boolean
 }>()
 
 const imgClass: Record<string, string> = {
@@ -26,7 +27,7 @@ const textClass: Record<string, string> = {
     :is="noLink ? 'span' : 'router-link'"
     v-bind="noLink ? {} : { to: { name: 'team-profile', params: { id } } }"
     class="inline-flex items-center gap-1.5 min-w-0"
-    :class="noLink ? '' : 'hover:text-primary transition-colors'"
+    :class="[noLink ? '' : 'hover:text-primary transition-colors', reverse ? 'flex-row-reverse' : '']"
   >
     <div class="rounded bg-surface overflow-hidden shrink-0 flex items-center justify-center font-semibold text-muted-foreground" :class="imgClass[size || 'md']">
       <img v-if="bannerUrl || avatarUrl" :src="(bannerUrl || avatarUrl)!" class="w-full h-full object-cover" />

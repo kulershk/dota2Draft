@@ -93,7 +93,7 @@ watch([searchQuery, statusFilter], () => {})
 
           <!-- Team 1 -->
           <div class="flex-1 flex items-center justify-end min-w-0">
-            <TeamName :id="match.team1_captain_id || 0" :name="match.team1_name || t('tbd')" :banner-url="match.team1_banner" :avatar-url="match.team1_avatar" no-link />
+            <TeamName :id="match.team1_captain_id || 0" :name="match.team1_name || t('tbd')" :banner-url="match.team1_banner" :avatar-url="match.team1_avatar" no-link reverse />
           </div>
 
           <!-- Score -->

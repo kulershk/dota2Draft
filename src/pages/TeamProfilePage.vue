@@ -139,7 +139,7 @@ const posLabel: Record<number, string> = { 1: 'Carry', 2: 'Mid', 3: 'Offlane', 4
             <!-- Teams -->
             <div class="flex-1 min-w-0 flex items-center gap-3">
               <div class="flex items-center flex-1 min-w-0" :class="match.is_team1 ? 'font-semibold' : ''">
-                <TeamName :id="match.team1_captain_id || 0" :name="match.team1_name || t('tbd')" :banner-url="match.team1_banner" :avatar-url="match.team1_avatar" no-link />
+                <TeamName :id="match.team1_captain_id || 0" :name="match.team1_name || t('tbd')" :banner-url="match.team1_banner" :avatar-url="match.team1_avatar" no-link reverse />
               </div>
               <div class="flex flex-col items-center shrink-0 w-16">
                 <span class="text-sm font-bold font-mono text-foreground">{{ match.score1 ?? 0 }} : {{ match.score2 ?? 0 }}</span>
