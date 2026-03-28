@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Gamepad2, RefreshCw, CheckCircle, ExternalLink } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
+import { fmtDateTime } from '@/utils/format'
 
 const { t } = useI18n()
 const api = useApi()
@@ -69,7 +70,7 @@ async function forceFetchAll() {
 }
 
 function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return fmtDateTime(new Date(dateStr))
 }
 
 onMounted(fetchGames)

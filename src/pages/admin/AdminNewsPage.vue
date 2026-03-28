@@ -7,6 +7,7 @@ import ModalOverlay from '@/components/common/ModalOverlay.vue'
 import InputGroup from '@/components/common/InputGroup.vue'
 import RichTextEditor from '@/components/common/RichTextEditor.vue'
 import ImageCropper from '@/components/common/ImageCropper.vue'
+import { fmtDateTime } from '@/utils/format'
 
 const { t } = useI18n()
 const api = useApi()
@@ -76,8 +77,7 @@ async function deleteNews(id: number) {
 }
 
 function formatDate(dateStr: string) {
-  const d = new Date(dateStr)
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return fmtDateTime(new Date(dateStr))
 }
 </script>
 

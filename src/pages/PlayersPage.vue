@@ -10,6 +10,7 @@ import InputGroup from '@/components/common/InputGroup.vue'
 import RoleBadge from '@/components/common/RoleBadge.vue'
 import MmrDisplay from '@/components/common/MmrDisplay.vue'
 import { sortedRoles } from '@/utils/roles'
+import { fmtDateTime } from '@/utils/format'
 
 const { t } = useI18n()
 const store = useDraftStore()
@@ -63,7 +64,7 @@ const registrationStatus = computed(() => {
   if (!comp) return ''
   const now = new Date(getServerNow())
   if (comp.registration_start && new Date(comp.registration_start) > now) {
-    return t('registrationOpensAt', { date: new Date(comp.registration_start).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) })
+    return t('registrationOpensAt', { date: fmtDateTime(new Date(comp.registration_start)) })
   }
   if (comp.registration_end && new Date(comp.registration_end) < now) {
     return t('registrationClosedLabel')

@@ -2,6 +2,7 @@
 import { ChevronLeft, ChevronRight, Calendar, Clock } from 'lucide-vue-next'
 import { ref, computed, nextTick, onBeforeUnmount, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { fmtDateTime, fmtDateOnly } from '@/utils/format'
 
 const { t } = useI18n()
 
@@ -72,11 +73,10 @@ function formatDisplay(str: string | undefined): string {
   if (!str) return props.placeholder
   const d = new Date(str)
   if (isNaN(d.getTime())) return props.placeholder
-  let result = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   if (props.showTime && str.length >= 16) {
-    result += ` ${str.slice(11, 16)}`
+    return fmtDateTime(d)
   }
-  return result
+  return fmtDateOnly(d)
 }
 
 function toDateStr(y: number, m: number, d: number, hour = '00', minute = '00'): string {

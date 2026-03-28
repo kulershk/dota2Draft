@@ -11,7 +11,7 @@ import CaptainAvatar from '@/components/common/CaptainAvatar.vue'
 import RichTextEditor from '@/components/common/RichTextEditor.vue'
 import DatePicker from '@/components/common/DatePicker.vue'
 import { getDefaultFantasyScoring } from '@/utils/fantasyDefaults'
-import { toLocalDatetime, localDatetimeToISO } from '@/utils/format'
+import { toLocalDatetime, localDatetimeToISO, fmtDateTime } from '@/utils/format'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -974,7 +974,7 @@ async function deleteStream(id: number) {
               </td>
               <td class="px-4 py-2.5 text-xs text-muted-foreground">{{ (player.roles || []).join(', ') || '—' }}</td>
               <td class="px-4 py-2.5 text-xs text-muted-foreground">{{ player.mmr || 0 }}</td>
-              <td class="px-4 py-2.5 text-xs text-muted-foreground">{{ player.joined_at ? new Date(player.joined_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—' }}</td>
+              <td class="px-4 py-2.5 text-xs text-muted-foreground">{{ player.joined_at ? fmtDateTime(new Date(player.joined_at)) : '—' }}</td>
               <td class="px-4 py-2.5">
                 <div class="flex items-center gap-1">
                   <button class="btn-ghost p-1.5" :title="t('promoteToCaptain')" @click="promptPromoteParticipant(player)">

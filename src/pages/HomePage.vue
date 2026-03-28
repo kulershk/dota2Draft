@@ -111,7 +111,7 @@ function formatCommentDate(dateStr: string) {
   if (hours < 24) return t('hAgo', { n: hours })
   const days = Math.floor(hours / 24)
   if (days < 7) return t('dAgo', { n: days })
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return fmtDateOnly(d)
 }
 
 const statusLabel = computed<Record<string, string>>(() => ({
@@ -190,7 +190,7 @@ async function fetchUpcomingMatches() {
   }
 }
 
-import { formatMatchDate, formatDate as formatDateUtil } from '@/utils/format'
+import { formatMatchDate, formatDate as formatDateUtil, fmtDateOnly } from '@/utils/format'
 
 const isLoggedIn = computed(() => !!store.currentUser.value)
 

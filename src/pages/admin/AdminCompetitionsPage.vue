@@ -6,6 +6,7 @@ import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
+import { fmtDateOnly } from '@/utils/format'
 import InputGroup from '@/components/common/InputGroup.vue'
 import RichTextEditor from '@/components/common/RichTextEditor.vue'
 import DatePicker from '@/components/common/DatePicker.vue'
@@ -52,8 +53,7 @@ const visibleCompetitions = computed(() => {
 })
 
 function formatDate(dateStr: string) {
-  const d = new Date(dateStr)
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+  return fmtDateOnly(new Date(dateStr))
 }
 </script>
 

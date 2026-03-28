@@ -6,6 +6,7 @@ import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { getSocket, getServerNow } from '@/composables/useSocket'
+import { fmtDateTime, fmtDateOnly } from '@/utils/format'
 
 interface Comment {
   id: number
@@ -89,8 +90,7 @@ function canDeleteComment(comment: Comment) {
 }
 
 function formatDate(dateStr: string) {
-  const d = new Date(dateStr)
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return fmtDateTime(new Date(dateStr))
 }
 
 function formatCommentDate(dateStr: string) {
@@ -104,7 +104,7 @@ function formatCommentDate(dateStr: string) {
   if (hours < 24) return t('hAgo', { n: hours })
   const days = Math.floor(hours / 24)
   if (days < 7) return t('dAgo', { n: days })
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return fmtDateOnly(d)
 }
 
 onMounted(() => {

@@ -3,6 +3,7 @@ import { Newspaper, Search, Calendar, User } from 'lucide-vue-next'
 import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
+import { fmtDateTime } from '@/utils/format'
 
 const { t } = useI18n()
 const api = useApi()
@@ -20,7 +21,7 @@ onMounted(async () => {
 })
 
 function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return fmtDateTime(new Date(dateStr))
 }
 
 const filteredNews = computed(() => {

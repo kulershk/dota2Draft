@@ -8,6 +8,7 @@ import { useDotaConstants } from '@/composables/useDotaConstants'
 import RoleBadge from '@/components/common/RoleBadge.vue'
 import MmrDisplay from '@/components/common/MmrDisplay.vue'
 import { sortedRoles } from '@/utils/roles'
+import { fmtDateOnly } from '@/utils/format'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -36,7 +37,7 @@ watch(playerId, async (id) => {
 }, { immediate: true })
 
 function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+  return fmtDateOnly(new Date(dateStr))
 }
 
 function placementLabel(n: number) {

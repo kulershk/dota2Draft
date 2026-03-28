@@ -9,6 +9,7 @@ import RankBadge from '@/components/common/RankBadge.vue'
 import CaptainAvatar from '@/components/common/CaptainAvatar.vue'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 import { sortedRoles } from '@/utils/roles'
+import { fmtTime } from '@/utils/format'
 import { getServerNow } from '@/composables/useSocket'
 
 const store = useDraftStore()
@@ -727,7 +728,7 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
       </div>
       <div class="divide-y divide-border max-h-[200px] md:max-h-[300px] overflow-y-auto">
         <div v-for="(entry, i) in store.activityLog.value" :key="i" class="flex items-center gap-2 md:gap-3 px-3 md:px-4 py-2">
-          <span class="text-[10px] font-mono text-muted-foreground flex-shrink-0 hidden sm:inline">{{ new Date(entry.time).toLocaleTimeString() }}</span>
+          <span class="text-[10px] font-mono text-muted-foreground flex-shrink-0 hidden sm:inline">{{ fmtTime(new Date(entry.time)) }}</span>
           <span class="w-2 h-2 rounded-full flex-shrink-0" :class="{
             'bg-green-500': entry.type === 'sold',
             'bg-blue-500': entry.type === 'nomination',

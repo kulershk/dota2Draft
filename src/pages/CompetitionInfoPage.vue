@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Calendar, Users, User, UserPlus, LogIn, Gavel, Trophy, Clock, Settings, DollarSign, Upload, X, Tv, Swords, Info, ChevronRight, Play } from 'lucide-vue-next'
 import { getRank } from '@/utils/ranks'
-import { formatMatchDate as formatMatchDateUtil } from '@/utils/format'
+import { formatMatchDate as formatMatchDateUtil, fmtDateTime } from '@/utils/format'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
@@ -73,8 +73,7 @@ const avgRank = computed(() => getRank(avgMmr.value))
 
 function formatDate(dateStr: string | null) {
   if (!dateStr) return '—'
-  const d = new Date(dateStr)
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return fmtDateTime(new Date(dateStr))
 }
 
 // Streams
