@@ -29,7 +29,7 @@ const statusClass: Record<string, string> = {
   draft: 'bg-accent text-muted-foreground',
   registration: 'bg-primary/10 text-primary',
   registration_closed: 'bg-amber-500/20 text-amber-600 dark:text-amber-400',
-  active: 'bg-color-success text-color-success-foreground',
+  active: 'bg-color-success text-black',
   finished: 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400',
 }
 
