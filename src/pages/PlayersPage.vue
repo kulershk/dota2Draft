@@ -263,27 +263,23 @@ watch(searchQuery, () => { playersPage.value = 1 })
         <!-- Rank -->
         <span class="w-10 text-sm font-mono text-text-tertiary">{{ String(i + 1).padStart(2, '0') }}</span>
         <!-- Player name -->
-        <div class="flex-1 flex items-center gap-2.5 min-w-0">
-          <div class="flex flex-col min-w-0">
-            <div class="flex items-center gap-1.5">
-              <UserName :id="player.id" :name="player.name" :avatar-url="player.avatar_url" />
-              <Shield v-if="player.is_captain" class="w-3.5 h-3.5 text-amber-500 flex-shrink-0" :title="t('captainCol')" />
-            </div>
-          </div>
+        <div class="w-[180px] flex items-center gap-1.5 min-w-0 shrink-0">
+          <UserName :id="player.id" :name="player.name" :avatar-url="player.avatar_url" />
+          <Shield v-if="player.is_captain" class="w-3.5 h-3.5 text-amber-500 flex-shrink-0" :title="t('captainCol')" />
         </div>
         <!-- Roles -->
-        <div class="w-[120px] flex flex-wrap gap-1 items-center">
+        <div class="w-[120px] flex flex-wrap gap-1 items-center shrink-0">
           <RoleBadge v-for="role in sortedRoles(player.roles)" :key="role" :role="role" />
           <span v-if="player.playing_role" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-primary/15 text-primary border border-primary/25" :title="t('playingRole')">
             P{{ player.playing_role }}
           </span>
         </div>
         <!-- MMR -->
-        <div class="w-20 text-right">
+        <div class="w-16 text-right shrink-0">
           <MmrDisplay :mmr="player.mmr" size="md" />
         </div>
         <!-- Info -->
-        <span class="w-32 text-right text-sm text-muted-foreground truncate" :title="player.info">{{ player.info }}</span>
+        <span class="flex-1 text-sm text-muted-foreground truncate ml-3 min-w-0" :title="player.info">{{ player.info }}</span>
         <!-- Actions -->
         <div v-if="store.isAdmin.value" class="w-20 flex items-center justify-end gap-2">
           <button class="text-text-tertiary hover:text-foreground transition-colors" @click="openEditPlayer(player)"><Pencil class="w-4 h-4" /></button>
