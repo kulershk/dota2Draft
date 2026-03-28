@@ -339,6 +339,7 @@ const sortedMatches = computed(() => {
               </router-link>
             </div>
           </div>
+          <div v-if="upcomingMatches.length > 0" class="border-t border-border"></div>
           <!-- Matches (separate block, grouped by competition) -->
           <div v-if="upcomingMatches.length > 0" class="rounded-lg bg-card overflow-hidden">
             <div class="flex items-center justify-between px-5 py-4 border-b border-surface">
@@ -389,6 +390,7 @@ const sortedMatches = computed(() => {
                 </router-link>
             </div>
           </div>
+          <div v-if="streamers.length > 0" class="border-t border-border"></div>
           <!-- Live Streams -->
           <div v-if="streamers.length > 0" class="rounded-lg bg-card overflow-hidden">
             <!-- Header -->
