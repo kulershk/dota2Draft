@@ -607,7 +607,7 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
                       <button class="btn-outline justify-center" :disabled="bidCooldown" @click="placeBid(10)">+10g</button>
                       <button class="btn-outline justify-center" :disabled="bidCooldown" @click="placeBid(25)">+25g</button>
                       <button class="btn-primary justify-center col-span-2 md:flex-1" :disabled="bidCooldown" @click="placeBid(store.settings.bidIncrement)">
-                        <Zap class="w-4 h-4" /> {{ bidCooldown ? t('waitBid') : t('placeBid') }}
+                        <Zap class="w-4 h-4" /> {{ bidCooldown ? t('waitBid') : t('placeBid') }} +{{ store.settings.bidIncrement }}g
                       </button>
                     </template>
                     <p v-else class="text-sm text-muted-foreground italic py-2 col-span-2">{{ t('notQualifiedBlind') }}</p>
