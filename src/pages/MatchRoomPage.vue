@@ -462,27 +462,31 @@ function goBack() {
           <Gamepad2 class="w-5 h-5 text-primary" />
           <span class="text-lg font-semibold text-foreground">{{ t('matchRoom') }}</span>
         </div>
-        <div class="flex items-center justify-center gap-6">
-          <router-link v-if="match.team1_captain_id" :to="{ name: 'team-profile', params: { id: match.team1_captain_id } }" class="flex items-center gap-3 hover:opacity-80 transition-opacity">
-            <div class="w-10 h-10 rounded-lg bg-accent overflow-hidden shrink-0">
-              <img v-if="match.team1_banner || match.team1_avatar" :src="match.team1_banner || match.team1_avatar" class="w-full h-full object-cover" />
+        <div class="flex items-center gap-4">
+          <div class="flex-1 flex items-center justify-end gap-3 min-w-0">
+            <router-link v-if="match.team1_captain_id" :to="{ name: 'team-profile', params: { id: match.team1_captain_id } }" class="flex items-center gap-3 hover:opacity-80 transition-opacity min-w-0">
+              <div class="w-10 h-10 rounded-lg bg-accent overflow-hidden shrink-0">
+                <img v-if="match.team1_banner || match.team1_avatar" :src="match.team1_banner || match.team1_avatar" class="w-full h-full object-cover" />
+              </div>
+              <span class="text-base font-semibold text-foreground hover:text-primary transition-colors truncate">{{ match.team1_name || t('tbd') }}</span>
+            </router-link>
+            <div v-else class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-lg bg-accent overflow-hidden shrink-0"></div>
+              <span class="text-base font-semibold text-muted-foreground">{{ t('tbd') }}</span>
             </div>
-            <span class="text-base font-semibold text-foreground hover:text-primary transition-colors">{{ match.team1_name || t('tbd') }}</span>
-          </router-link>
-          <div v-else class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-lg bg-accent overflow-hidden shrink-0"></div>
-            <span class="text-base font-semibold text-muted-foreground">{{ t('tbd') }}</span>
           </div>
-          <span class="text-3xl font-bold font-mono text-foreground">{{ score1 }} : {{ score2 }}</span>
-          <router-link v-if="match.team2_captain_id" :to="{ name: 'team-profile', params: { id: match.team2_captain_id } }" class="flex items-center gap-3 hover:opacity-80 transition-opacity">
-            <span class="text-base font-semibold text-foreground hover:text-primary transition-colors">{{ match.team2_name || t('tbd') }}</span>
-            <div class="w-10 h-10 rounded-lg bg-accent overflow-hidden shrink-0">
-              <img v-if="match.team2_banner || match.team2_avatar" :src="match.team2_banner || match.team2_avatar" class="w-full h-full object-cover" />
+          <span class="text-3xl font-bold font-mono text-foreground shrink-0">{{ score1 }} : {{ score2 }}</span>
+          <div class="flex-1 flex items-center justify-start gap-3 min-w-0">
+            <router-link v-if="match.team2_captain_id" :to="{ name: 'team-profile', params: { id: match.team2_captain_id } }" class="flex items-center gap-3 hover:opacity-80 transition-opacity min-w-0">
+              <span class="text-base font-semibold text-foreground hover:text-primary transition-colors truncate">{{ match.team2_name || t('tbd') }}</span>
+              <div class="w-10 h-10 rounded-lg bg-accent overflow-hidden shrink-0">
+                <img v-if="match.team2_banner || match.team2_avatar" :src="match.team2_banner || match.team2_avatar" class="w-full h-full object-cover" />
+              </div>
+            </router-link>
+            <div v-else class="flex items-center gap-3">
+              <span class="text-base font-semibold text-muted-foreground">{{ t('tbd') }}</span>
+              <div class="w-10 h-10 rounded-lg bg-accent overflow-hidden shrink-0"></div>
             </div>
-          </router-link>
-          <div v-else class="flex items-center gap-3">
-            <span class="text-base font-semibold text-muted-foreground">{{ t('tbd') }}</span>
-            <div class="w-10 h-10 rounded-lg bg-accent overflow-hidden shrink-0"></div>
           </div>
         </div>
         <div class="flex items-center justify-center gap-2">
