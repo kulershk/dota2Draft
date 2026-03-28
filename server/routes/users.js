@@ -252,11 +252,12 @@ router.get('/api/teams/:captainId/profile', async (req, res) => {
     ORDER BY m.stage, m.round, m.match_order
   `, [captain.competition_id, captainId])
 
-  // Win/loss stats
-  let wins = 0, losses = 0
+  // Win/loss/draw stats
+  let wins = 0, losses = 0, draws = 0
   for (const m of matches) {
-    if (m.status === 'completed' && m.winner_captain_id) {
+    if (m.status === 'completed') {
       if (m.winner_captain_id === captainId) wins++
+      else if (!m.winner_captain_id) draws++
       else losses++
     }
   }
@@ -288,8 +289,9 @@ router.get('/api/teams/:captainId/profile', async (req, res) => {
       ...m,
       is_team1: m.team1_captain_id === captainId,
       won: m.winner_captain_id === captainId,
+      draw: m.status === 'completed' && !m.winner_captain_id,
     })),
-    stats: { wins, losses },
+    stats: { wins, losses, draws },
   })
 })
 

@@ -910,6 +910,7 @@ export default {
   matchHistory: 'Spēļu vēsture',
   noMatches: 'Vēl nav spēļu.',
   win: 'UZVARA',
+  draw: 'NEIZŠĶIRTS',
   loss: 'ZAUDĒJUMS',
   actionCol: 'DARBĪBA',
   startBidCol: 'SĀKUMA LIKME',

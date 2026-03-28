@@ -910,6 +910,7 @@ export default {
   matchHistory: 'Rungtynių istorija',
   noMatches: 'Rungtynių dar nėra.',
   win: 'PERGALĖ',
+  draw: 'LYGIOSIOS',
   loss: 'PRALAIMĖJIMAS',
   actionCol: 'VEIKSMAS',
   startBidCol: 'PRADINIS PASIŪLYMAS',

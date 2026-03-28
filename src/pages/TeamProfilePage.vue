@@ -72,6 +72,8 @@ const posLabel: Record<number, string> = { 1: 'Carry', 2: 'Mid', 3: 'Offlane', 4
               <div class="flex items-center gap-1.5 text-sm">
                 <span class="font-mono font-bold text-green-500">{{ profile.stats.wins }}W</span>
                 <span class="text-muted-foreground">/</span>
+                <span v-if="profile.stats.draws" class="font-mono font-bold text-amber-500">{{ profile.stats.draws }}D</span>
+                <span v-if="profile.stats.draws" class="text-muted-foreground">/</span>
                 <span class="font-mono font-bold text-red-500">{{ profile.stats.losses }}L</span>
               </div>
               <span class="text-sm font-mono text-primary font-semibold">{{ profile.budget?.toLocaleString() }}g</span>
@@ -133,7 +135,7 @@ const posLabel: Record<number, string> = { 1: 'Carry', 2: 'Mid', 3: 'Offlane', 4
           >
             <!-- Result indicator -->
             <div class="w-1.5 h-10 rounded-full shrink-0"
-              :class="match.status !== 'completed' ? 'bg-muted-foreground/30' : match.won ? 'bg-green-500' : 'bg-red-500'"
+              :class="match.status !== 'completed' ? 'bg-muted-foreground/30' : match.won ? 'bg-green-500' : match.draw ? 'bg-amber-500' : 'bg-red-500'"
             ></div>
             <!-- Teams -->
             <div class="flex-1 min-w-0 flex items-center gap-3">
@@ -157,8 +159,8 @@ const posLabel: Record<number, string> = { 1: 'Carry', 2: 'Mid', 3: 'Offlane', 4
             <!-- Status / Date -->
             <div class="shrink-0 text-right w-24">
               <span v-if="match.status === 'live'" class="badge-success text-[10px]">LIVE</span>
-              <span v-else-if="match.status === 'completed'" class="text-[10px] font-semibold" :class="match.won ? 'text-green-500' : 'text-red-500'">
-                {{ match.won ? t('win') : t('loss') }}
+              <span v-else-if="match.status === 'completed'" class="text-[10px] font-semibold" :class="match.won ? 'text-green-500' : match.draw ? 'text-amber-500' : 'text-red-500'">
+                {{ match.won ? t('win') : match.draw ? t('draw') : t('loss') }}
               </span>
               <span v-else class="text-[10px] text-muted-foreground">{{ formatMatchDate(match.scheduled_at, t) }}</span>
               <div v-if="match.bracket" class="text-[9px] text-muted-foreground mt-0.5">{{ match.bracket }}</div>

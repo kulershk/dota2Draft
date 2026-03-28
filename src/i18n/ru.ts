@@ -882,6 +882,7 @@ export default {
   matchHistory: 'История матчей',
   noMatches: 'Матчей пока нет.',
   win: 'ПОБЕДА',
+  draw: 'НИЧЬЯ',
   loss: 'ПОРАЖЕНИЕ',
   actionCol: 'ДЕЙСТВИЕ',
   startBidCol: 'СТАРТОВАЯ СТАВКА',

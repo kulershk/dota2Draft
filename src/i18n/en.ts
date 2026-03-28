@@ -917,6 +917,7 @@ export default {
   matchHistory: 'Match History',
   noMatches: 'No matches yet.',
   win: 'WIN',
+  draw: 'DRAW',
   loss: 'LOSS',
   actionCol: 'ACTION',
   startBidCol: 'START BID',
