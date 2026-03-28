@@ -194,7 +194,6 @@ async function handleClaimAdmin() {
               <Swords class="w-[15px] h-[15px]" />
               {{ t('competitions') }}
             </router-link>
-            <div class="w-px h-4 bg-border" />
             <router-link
               to="/matches"
               class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] tracking-wide transition-colors"
@@ -206,7 +205,6 @@ async function handleClaimAdmin() {
               {{ t('navMatches') }}
               <span v-if="myMatchCount > 0" class="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full px-1 text-[10px] font-bold bg-primary text-primary-foreground">{{ myMatchCount }}</span>
             </router-link>
-            <div class="w-px h-4 bg-border" />
             <router-link
               to="/news"
               class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] tracking-wide transition-colors"
@@ -217,7 +215,6 @@ async function handleClaimAdmin() {
               <Newspaper class="w-[15px] h-[15px]" />
               {{ t('newsNav') }}
             </router-link>
-            <div class="w-px h-4 bg-border" />
             <router-link
               to="/how-it-works"
               class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] tracking-wide transition-colors"
