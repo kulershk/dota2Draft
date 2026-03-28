@@ -33,6 +33,6 @@ const textClass: Record<string, string> = {
       <img v-if="bannerUrl || avatarUrl" :src="(bannerUrl || avatarUrl)!" class="w-full h-full object-cover" />
       <span v-else class="text-[9px]">{{ name.charAt(0).toUpperCase() }}</span>
     </div>
-    <span class="font-medium text-foreground truncate transition-colors" :class="[textClass[size || 'md'], noLink ? '' : 'group-hover:text-primary']"><slot>{{ name }}</slot></span>
+    <span class="font-medium text-foreground truncate transition-colors" :class="[textClass[size || 'md'], noLink ? '' : 'group-hover:!text-primary']"><slot>{{ name }}</slot></span>
   </component>
 </template>
