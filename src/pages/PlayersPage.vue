@@ -200,7 +200,7 @@ watch(searchQuery, () => { playersPage.value = 1 })
 
     <!-- Stats Row -->
     <div class="flex gap-2 md:gap-4 overflow-x-auto">
-      <div class="flex-1 min-w-[60px] stat-card-accented cursor-pointer transition-colors" :class="!activeRoleFilter ? 'ring-2 ring-primary' : 'hover:brightness-110'" @click="activeRoleFilter = null">
+      <div class="flex-1 min-w-[60px] stat-card cursor-pointer transition-colors" :class="!activeRoleFilter ? 'ring-2 ring-primary' : 'hover:brightness-110'" @click="activeRoleFilter = null">
         <span class="stat-card-label">{{ t('total') }}</span>
         <span class="stat-card-value">{{ store.players.value.length }}</span>
       </div>
