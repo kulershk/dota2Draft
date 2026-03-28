@@ -197,9 +197,6 @@ export function useApi() {
     setPlayerGroups: (playerId: number, groupIds: number[]) =>
       request(`/api/players/${playerId}/groups`, { method: 'PUT', body: JSON.stringify({ groupIds }) }),
 
-    // Deploy Status
-    getDeployStatus: () => request('/api/deploy-status'),
-
     // Site Settings
     getSiteSettings: () => request('/api/site-settings'),
     updateSiteSettings: (data: Record<string, string>) =>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Gamepad2, Shield, LogOut, Sun, Moon, Menu, X, Home, LogIn, Lock, Globe, Settings, Swords, Info, Radio, ChevronDown, Check, LayoutDashboard, Bell, User, Newspaper, Calendar, Loader2 } from 'lucide-vue-next'
+import { Gamepad2, Shield, LogOut, Sun, Moon, Menu, X, Home, LogIn, Lock, Globe, Settings, Swords, Info, Radio, ChevronDown, Check, LayoutDashboard, Bell, User, Newspaper, Calendar } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { onMounted, ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -155,27 +155,6 @@ function handleLogout() {
     router.push('/')
   }
 }
-
-// Deploy status banner for admins
-const isDeploying = ref(false)
-let deployPollInterval: ReturnType<typeof setInterval> | null = null
-
-async function checkDeployStatus() {
-  try {
-    const data = await useApi().getDeployStatus()
-    isDeploying.value = !!data.deploying
-  } catch { isDeploying.value = false }
-}
-
-watch(() => store.isAdmin.value, (admin) => {
-  if (admin) {
-    checkDeployStatus()
-    deployPollInterval = setInterval(checkDeployStatus, 15000)
-  } else {
-    isDeploying.value = false
-    if (deployPollInterval) { clearInterval(deployPollInterval); deployPollInterval = null }
-  }
-}, { immediate: true })
 
 async function handleClaimAdmin() {
   claimError.value = ''
@@ -424,12 +403,6 @@ async function handleClaimAdmin() {
         </button>
       </nav>
     </header>
-
-    <!-- Deploy banner (admin only) -->
-    <div v-if="isDeploying && store.isAdmin.value" class="bg-amber-500 text-black px-4 py-2 flex items-center justify-center gap-2 text-sm font-medium">
-      <Loader2 class="w-4 h-4 animate-spin" />
-      {{ t('deployInProgress') }}
-    </div>
 
     <!-- Main Content -->
     <main ref="mainRef" class="flex-1 overflow-hidden flex flex-col relative" :class="(route.path.startsWith('/admin') || route.path.startsWith('/c/')) ? '' : 'overflow-y-auto'">
