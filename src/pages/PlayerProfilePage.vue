@@ -100,7 +100,7 @@ function placementBg(n: number) {
                   class="w-8 h-8 rounded-lg bg-accent flex items-center justify-center hover:bg-accent/70 transition-colors"
                   title="Dotabuff"
                 >
-                  <img src="/icons/dotabuff.svg" class="w-5 h-5" alt="Dotabuff" />
+                  <img src="/icons/dotabuff.png" class="w-5 h-5 rounded" alt="Dotabuff" />
                 </a>
                 <a :href="`https://www.opendota.com/players/${BigInt(profile.steam_id) - 76561197960265728n}`"
                   target="_blank" rel="noopener"
