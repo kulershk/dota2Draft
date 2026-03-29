@@ -107,7 +107,7 @@ function placementBg(n: number) {
                   class="w-8 h-8 rounded-lg bg-accent flex items-center justify-center hover:bg-accent/70 transition-colors"
                   title="OpenDota"
                 >
-                  <img src="/icons/opendota.svg" class="w-5 h-5" alt="OpenDota" />
+                  <img src="/icons/opendota.png" class="w-5 h-5" alt="OpenDota" />
                 </a>
                 <a :href="`https://stratz.com/players/${BigInt(profile.steam_id) - 76561197960265728n}`"
                   target="_blank" rel="noopener"
