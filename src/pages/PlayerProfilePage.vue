@@ -114,7 +114,7 @@ function placementBg(n: number) {
                   class="w-8 h-8 rounded-lg bg-accent flex items-center justify-center hover:bg-accent/70 transition-colors"
                   title="Stratz"
                 >
-                  <img src="/icons/stratz.svg" class="w-5 h-5" alt="Stratz" />
+                  <img src="/icons/stratz.ico" class="w-5 h-5" alt="Stratz" />
                 </a>
               </div>
             </div>
