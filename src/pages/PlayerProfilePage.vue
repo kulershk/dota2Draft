@@ -93,28 +93,28 @@ function placementBg(n: number) {
                   class="w-8 h-8 rounded-lg bg-accent flex items-center justify-center hover:bg-accent/70 transition-colors"
                   title="Steam"
                 >
-                  <svg class="w-4 h-4 text-muted-foreground" viewBox="0 0 24 24" fill="currentColor"><path d="M11.979 0C5.678 0 .511 4.86.022 10.94l6.432 2.658a3.387 3.387 0 0 1 1.912-.588c.063 0 .125.002.188.006l2.861-4.142V8.77c0-2.427 1.975-4.402 4.402-4.402 2.427 0 4.402 1.975 4.402 4.402 0 2.427-1.975 4.402-4.402 4.402h-.103l-4.077 2.911c0 .052.003.104.003.157 0 1.82-1.48 3.3-3.3 3.3-1.62 0-2.97-1.17-3.25-2.71L.636 14.352C1.985 19.71 6.767 23.73 12.479 23.73c6.627 0 12-5.373 12-12s-5.373-12-12-12h-.5zM7.54 18.21l-1.473-.61c.262.543.714.985 1.3 1.2a2.476 2.476 0 0 0 3.227-1.395 2.46 2.46 0 0 0-.003-1.893 2.466 2.466 0 0 0-1.313-1.329 2.477 2.477 0 0 0-1.81-.063l1.522.63a1.82 1.82 0 0 1-.67 3.51 1.82 1.82 0 0 1-.78-.05zm8.277-6.03a2.935 2.935 0 0 1-2.934-2.934 2.935 2.935 0 0 1 2.934-2.934 2.935 2.935 0 0 1 2.934 2.934 2.935 2.935 0 0 1-2.934 2.934zm-.001-5.137a2.2 2.2 0 0 0-2.198 2.198 2.2 2.2 0 0 0 2.198 2.198 2.2 2.2 0 0 0 2.198-2.198 2.2 2.2 0 0 0-2.198-2.198z"/></svg>
+                  <img src="/icons/steam.svg" class="w-5 h-5" alt="Steam" />
                 </a>
                 <a :href="`https://www.dotabuff.com/players/${BigInt(profile.steam_id) - 76561197960265728n}`"
                   target="_blank" rel="noopener"
                   class="w-8 h-8 rounded-lg bg-accent flex items-center justify-center hover:bg-accent/70 transition-colors"
                   title="Dotabuff"
                 >
-                  <svg class="w-4 h-4 text-muted-foreground" viewBox="0 0 24 24" fill="currentColor"><path d="M2.88 9.6 0 12l2.88 2.4V9.6zm5.28-4.8L3.84 8.4v7.2l4.32 3.6V4.8zm5.28-4.8L9.12 3.6v16.8l4.32 3.6V0zm5.28 4.8-4.32 3.6v7.2l4.32 3.6V4.8zM24 9.6l-2.88 2.4L24 14.4V9.6z"/></svg>
+                  <img src="/icons/dotabuff.svg" class="w-5 h-5" alt="Dotabuff" />
                 </a>
                 <a :href="`https://www.opendota.com/players/${BigInt(profile.steam_id) - 76561197960265728n}`"
                   target="_blank" rel="noopener"
                   class="w-8 h-8 rounded-lg bg-accent flex items-center justify-center hover:bg-accent/70 transition-colors"
                   title="OpenDota"
                 >
-                  <svg class="w-4 h-4 text-muted-foreground" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 2a10 10 0 0 1 10 10 10 10 0 0 1-10 10A10 10 0 0 1 2 12 10 10 0 0 1 12 2zm0 3a7 7 0 0 0-7 7 7 7 0 0 0 7 7 7 7 0 0 0 7-7 7 7 0 0 0-7-7zm0 2.5a4.5 4.5 0 0 1 4.5 4.5 4.5 4.5 0 0 1-4.5 4.5A4.5 4.5 0 0 1 7.5 12 4.5 4.5 0 0 1 12 7.5z"/></svg>
+                  <img src="/icons/opendota.svg" class="w-5 h-5" alt="OpenDota" />
                 </a>
                 <a :href="`https://stratz.com/players/${BigInt(profile.steam_id) - 76561197960265728n}`"
                   target="_blank" rel="noopener"
                   class="w-8 h-8 rounded-lg bg-accent flex items-center justify-center hover:bg-accent/70 transition-colors"
                   title="Stratz"
                 >
-                  <svg class="w-4 h-4 text-muted-foreground" viewBox="0 0 24 24" fill="currentColor"><path d="M3.5 0L0 7h7L3.5 0zM12 0L8.5 7h7L12 0zM20.5 0L17 7h7l-3.5-7zM3.5 8.5L0 15.5h7l-3.5-7zM12 8.5l-3.5 7h7l-3.5-7zM20.5 8.5l-3.5 7h7l-3.5-7zM12 17l-3.5 7h7l-3.5-7z"/></svg>
+                  <img src="/icons/stratz.svg" class="w-5 h-5" alt="Stratz" />
                 </a>
               </div>
             </div>
