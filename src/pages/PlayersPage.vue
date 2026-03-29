@@ -250,10 +250,10 @@ watch(searchQuery, () => { playersPage.value = 1 })
       <!-- Table header -->
       <div class="hidden md:flex items-center rounded-t-md bg-surface px-4 py-3">
         <span class="w-10 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">#</span>
-        <span class="flex-1 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">{{ t('playerName') }}</span>
-        <span class="w-[120px] text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">{{ t('role') }}</span>
-        <span class="w-20 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-right">{{ t('mmr') }}</span>
-        <span class="w-32 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-right">{{ t('info') }}</span>
+        <span class="w-[180px] shrink-0 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">{{ t('playerName') }}</span>
+        <span class="w-[120px] shrink-0 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">{{ t('role') }}</span>
+        <span class="w-16 shrink-0 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-right">{{ t('mmr') }}</span>
+        <span class="flex-1 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary ml-3">{{ t('info') }}</span>
         <span v-if="store.isAdmin.value" class="w-20 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-right">{{ t('actions') }}</span>
       </div>
 
