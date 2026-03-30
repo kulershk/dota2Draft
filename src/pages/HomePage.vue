@@ -201,6 +201,7 @@ const dailyClaiming = ref(false)
 const dailyClaimed = ref<{ xp: number; streak: number } | null>(null)
 
 async function fetchDailyStatus() {
+  await store.authReady
   if (!store.currentUser.value) return
   try {
     dailyStatus.value = await api.getDailyStatus()
