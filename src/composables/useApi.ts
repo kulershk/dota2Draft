@@ -254,6 +254,10 @@ export function useApi() {
       const qs = params ? '?' + new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString() : ''
       return request(`/api/admin/xp-log${qs}`)
     },
+    getLeaderboard: (params?: { limit?: number; offset?: number }) => {
+      const qs = params ? '?' + new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString() : ''
+      return request(`/api/leaderboard${qs}`)
+    },
     getTeamProfile: (captainId: number) => request(`/api/teams/${captainId}/profile`),
     getUsers: () => request('/api/users'),
     updatePlayer: (id: number, data: Record<string, any>) =>

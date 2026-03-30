@@ -11,6 +11,7 @@ const router = createRouter({
     { path: '/settings', name: 'settings', component: () => import('@/pages/SettingsPage.vue') },
     { path: '/news', name: 'news', component: () => import('@/pages/NewsPage.vue') },
     { path: '/news/:id', name: 'news-post', component: () => import('@/pages/NewsPostPage.vue') },
+    { path: '/leaderboard', name: 'leaderboard', component: () => import('@/pages/LeaderboardPage.vue') },
     { path: '/player/:id', name: 'player-profile', component: () => import('@/pages/PlayerProfilePage.vue') },
     { path: '/team/:id', name: 'team-profile', component: () => import('@/pages/TeamProfilePage.vue') },
     {

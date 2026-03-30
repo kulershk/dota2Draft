@@ -248,6 +248,34 @@ router.get('/api/admin/xp-log', async (req, res) => {
   res.json({ rows, total: Number(countResult[0]?.total || 0) })
 })
 
+// Public leaderboard — top players by XP
+router.get('/api/leaderboard', async (req, res) => {
+  const limit = Math.min(Math.max(1, Number(req.query.limit) || 50), 100)
+  const offset = Math.max(0, Number(req.query.offset) || 0)
+
+  const rows = await query(
+    `SELECT id, COALESCE(display_name, name) AS name, avatar_url, total_xp
+     FROM players
+     WHERE total_xp > 0
+     ORDER BY total_xp DESC, id ASC
+     LIMIT $1 OFFSET $2`,
+    [limit, offset]
+  )
+  const countResult = await queryOne('SELECT COUNT(*) AS total FROM players WHERE total_xp > 0')
+  res.json({
+    rows: rows.map((r, i) => ({
+      rank: offset + i + 1,
+      id: r.id,
+      name: r.name,
+      avatar_url: r.avatar_url || null,
+      total_xp: r.total_xp || 0,
+      level: Math.floor((r.total_xp || 0) / 1000) + 1,
+      level_progress: (r.total_xp || 0) % 1000,
+    })),
+    total: Number(countResult?.total || 0),
+  })
+})
+
 // Public team profile
 router.get('/api/teams/:captainId/profile', async (req, res) => {
   const captainId = Number(req.params.captainId)

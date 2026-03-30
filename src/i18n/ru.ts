@@ -900,4 +900,13 @@ export default {
   fantasyAllowedTeams: 'Разрешённые команды',
   fantasyAllowedTeamsHint: 'Выберите, из каких команд можно выбирать игроков. Снятие команды блокирует существующие выборы из неё.',
   fantasyPickLocked: 'Заблокировано',
+  leaderboard: 'Таблица лидеров',
+  leaderboardDesc: 'Лучшие игроки по уровню и XP.',
+  leaderboardRank: 'Место',
+  leaderboardPlayer: 'Игрок',
+  leaderboardLevel: 'Уровень',
+  leaderboardXp: 'XP',
+  leaderboardProgress: 'Прогресс',
+  leaderboardEmpty: 'Пока нет игроков с XP.',
+  leaderboardShowMore: 'Показать ещё',
 }

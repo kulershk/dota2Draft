@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Gamepad2, Shield, LogOut, Sun, Moon, Menu, X, Home, LogIn, Lock, Globe, Settings, Swords, Info, Radio, ChevronDown, Check, LayoutDashboard, Bell, User, Newspaper, Calendar } from 'lucide-vue-next'
+import { Gamepad2, Shield, LogOut, Sun, Moon, Menu, X, Home, LogIn, Lock, Globe, Settings, Swords, Info, Radio, ChevronDown, Check, LayoutDashboard, Bell, User, Newspaper, Calendar, Trophy } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { onMounted, ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -216,6 +216,16 @@ async function handleClaimAdmin() {
               {{ t('newsNav') }}
             </router-link>
             <router-link
+              to="/leaderboard"
+              class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] tracking-wide transition-colors"
+              :class="route.path === '/leaderboard'
+                ? 'bg-primary/15 text-primary font-semibold border border-primary/30'
+                : 'text-muted-foreground hover:text-foreground'"
+            >
+              <Trophy class="w-[15px] h-[15px]" />
+              {{ t('leaderboard') }}
+            </router-link>
+            <router-link
               to="/how-it-works"
               class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] tracking-wide transition-colors"
               :class="route.path === '/how-it-works'
@@ -380,6 +390,10 @@ async function handleClaimAdmin() {
         <router-link to="/news" class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-muted-foreground hover:bg-accent hover:text-foreground" @click="mobileMenuOpen = false">
           <Newspaper class="w-[18px] h-[18px]" />
           {{ t('newsNav') }}
+        </router-link>
+        <router-link to="/leaderboard" class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-muted-foreground hover:bg-accent hover:text-foreground" @click="mobileMenuOpen = false">
+          <Trophy class="w-[18px] h-[18px]" />
+          {{ t('leaderboard') }}
         </router-link>
         <router-link to="/how-it-works" class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-muted-foreground hover:bg-accent hover:text-foreground" @click="mobileMenuOpen = false">
           <Info class="w-[18px] h-[18px]" />
