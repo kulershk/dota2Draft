@@ -71,6 +71,8 @@ export async function initDb() {
     ['steam_synced_at', 'TIMESTAMP DEFAULT NULL'],
     ['display_name', 'TEXT DEFAULT NULL'],
     ['total_xp', 'INTEGER NOT NULL DEFAULT 0'],
+    ['daily_last_claimed', 'DATE DEFAULT NULL'],
+    ['daily_streak', 'INTEGER NOT NULL DEFAULT 0'],
   ]) {
     const has = await queryOne(
       `SELECT 1 FROM information_schema.columns WHERE table_name = 'players' AND column_name = $1`, [col]

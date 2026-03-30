@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Newspaper, Trophy, Users, Swords, User, MessageSquare, Send, Trash2, ChevronDown, ChevronUp, Twitch, Eye, Radio, ArrowRight, Clock } from 'lucide-vue-next'
+import { Newspaper, Trophy, Users, Swords, User, MessageSquare, Send, Trash2, ChevronDown, ChevronUp, Twitch, Eye, Radio, ArrowRight, Clock, Gift, Flame } from 'lucide-vue-next'
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
@@ -89,6 +89,7 @@ onMounted(async () => {
   fetchStreamers()
   fetchSiteSettings()
   fetchUpcomingMatches()
+  fetchDailyStatus()
   getSocket().on('news:updated', fetchNews)
   getSocket().on('news:commented', ({ newsId }: { newsId: number }) => {
     fetchComments(newsId)
@@ -193,6 +194,28 @@ async function fetchUpcomingMatches() {
 import { formatMatchDate, formatDate as formatDateUtil, fmtDateOnly } from '@/utils/format'
 
 const isLoggedIn = computed(() => !!store.currentUser.value)
+
+// Daily bonus
+const dailyStatus = ref<{ claimed_today: boolean; streak: number; next_xp: number } | null>(null)
+const dailyClaiming = ref(false)
+const dailyClaimed = ref<{ xp: number; streak: number } | null>(null)
+
+async function fetchDailyStatus() {
+  if (!store.currentUser.value) return
+  try {
+    dailyStatus.value = await api.getDailyStatus()
+  } catch {}
+}
+
+async function claimDaily() {
+  dailyClaiming.value = true
+  try {
+    const result = await api.claimDaily()
+    dailyClaimed.value = { xp: result.xp, streak: result.streak }
+    dailyStatus.value = { claimed_today: true, streak: result.streak, next_xp: result.streak >= 7 ? 20 : 10 }
+  } catch {}
+  dailyClaiming.value = false
+}
 
 // Flat list: live first, then by scheduled_at
 const sortedMatches = computed(() => {
@@ -305,6 +328,53 @@ const sortedMatches = computed(() => {
       <!-- Sidebar -->
       <div class="lg:w-[320px] shrink-0">
         <div class="flex flex-col gap-4 lg:sticky lg:top-4">
+          <!-- Daily Bonus -->
+          <div v-if="isLoggedIn && dailyStatus" class="rounded-lg bg-card overflow-hidden">
+            <div class="flex items-center gap-2 px-5 py-3 border-b border-surface">
+              <Gift class="w-[18px] h-[18px] text-primary" />
+              <span class="text-sm font-semibold text-foreground">{{ t('dailyBonus') }}</span>
+            </div>
+            <div class="px-5 py-4 flex flex-col gap-3">
+              <!-- Streak -->
+              <div class="flex items-center gap-2">
+                <Flame class="w-4 h-4 text-orange-500" />
+                <span class="text-sm text-foreground">
+                  {{ t('dailyStreak', { n: dailyStatus.streak }) }}
+                </span>
+              </div>
+              <!-- 7-day tracker -->
+              <div class="flex items-center gap-1.5">
+                <div
+                  v-for="day in 7"
+                  :key="day"
+                  class="flex-1 h-7 rounded flex items-center justify-center text-[10px] font-bold font-mono"
+                  :class="day <= dailyStatus.streak
+                    ? 'bg-primary/20 text-primary border border-primary/30'
+                    : day === dailyStatus.streak + 1 && !dailyStatus.claimed_today
+                      ? 'bg-primary/10 text-primary border border-primary/20 animate-pulse'
+                      : 'bg-surface text-muted-foreground'"
+                >
+                  {{ day >= 7 ? '20' : '10' }}
+                </div>
+              </div>
+              <!-- Claim button or claimed state -->
+              <div v-if="dailyClaimed" class="flex items-center justify-center gap-2 py-2 rounded-lg bg-color-success/15 text-color-success">
+                <span class="text-sm font-semibold">+{{ dailyClaimed.xp }} XP</span>
+                <span class="text-xs text-color-success/70">{{ t('dailyClaimed') }}</span>
+              </div>
+              <button
+                v-else-if="!dailyStatus.claimed_today"
+                class="w-full py-2 rounded-lg text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+                :disabled="dailyClaiming"
+                @click="claimDaily"
+              >
+                {{ dailyClaiming ? '...' : t('dailyClaim', { xp: dailyStatus.next_xp }) }}
+              </button>
+              <div v-else class="text-center text-xs text-muted-foreground py-1">
+                {{ t('dailyAlreadyClaimed') }}
+              </div>
+            </div>
+          </div>
           <!-- Competitions -->
           <div class="rounded-lg bg-card overflow-hidden">
             <div class="flex items-center justify-between px-5 py-4 border-b border-surface">

@@ -311,6 +311,73 @@ router.post('/api/auth/discord/unlink', async (req, res) => {
   res.json({ ok: true })
 })
 
+// Daily login bonus
+router.get('/api/auth/daily-status', async (req, res) => {
+  const player = await getAuthPlayer(req)
+  if (!player) return res.status(401).json({ error: 'Not authenticated' })
+
+  const today = new Date().toISOString().slice(0, 10)
+  const lastClaimed = player.daily_last_claimed ? new Date(player.daily_last_claimed).toISOString().slice(0, 10) : null
+  const claimedToday = lastClaimed === today
+
+  // Check if streak is still valid (last claim was yesterday or today)
+  let streak = player.daily_streak || 0
+  if (lastClaimed && !claimedToday) {
+    const yesterday = new Date()
+    yesterday.setDate(yesterday.getDate() - 1)
+    const yesterdayStr = yesterday.toISOString().slice(0, 10)
+    if (lastClaimed !== yesterdayStr) streak = 0
+  }
+
+  res.json({
+    claimed_today: claimedToday,
+    streak,
+    next_xp: (streak + 1) >= 7 ? 20 : 10,
+  })
+})
+
+router.post('/api/auth/daily-claim', async (req, res) => {
+  const player = await getAuthPlayer(req)
+  if (!player) return res.status(401).json({ error: 'Not authenticated' })
+
+  const today = new Date().toISOString().slice(0, 10)
+  const lastClaimed = player.daily_last_claimed ? new Date(player.daily_last_claimed).toISOString().slice(0, 10) : null
+
+  if (lastClaimed === today) {
+    return res.status(400).json({ error: 'Already claimed today' })
+  }
+
+  // Compute new streak
+  let streak = player.daily_streak || 0
+  if (lastClaimed) {
+    const yesterday = new Date()
+    yesterday.setDate(yesterday.getDate() - 1)
+    const yesterdayStr = yesterday.toISOString().slice(0, 10)
+    streak = lastClaimed === yesterdayStr ? streak + 1 : 1
+  } else {
+    streak = 1
+  }
+
+  const xpAmount = streak >= 7 ? 20 : 10
+
+  await execute(
+    'UPDATE players SET daily_last_claimed = $1, daily_streak = $2 WHERE id = $3',
+    [today, streak, player.id]
+  )
+
+  const result = await awardXp(player.id, xpAmount, 'daily_login', 'daily', today, {
+    detail: `Day ${streak} streak`,
+  })
+
+  res.json({
+    awarded: result.awarded,
+    xp: xpAmount,
+    streak,
+    total_xp: result.total_xp,
+    level: result.level,
+  })
+})
+
 router.post('/api/auth/logout', (req, res) => {
   res.json({ ok: true })
 })

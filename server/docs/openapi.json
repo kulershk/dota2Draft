@@ -217,6 +217,34 @@
         "responses": { "200": { "description": "Admin claimed" } }
       }
     },
+    "/api/auth/daily-status": {
+      "get": {
+        "tags": ["Auth"],
+        "summary": "Get daily login bonus status",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Daily bonus status",
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "claimed_today": { "type": "boolean" }, "streak": { "type": "integer" }, "next_xp": { "type": "integer", "description": "10 for days 1-6, 20 for day 7+" } } } } }
+          }
+        }
+      }
+    },
+    "/api/auth/daily-claim": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Claim daily login XP bonus",
+        "description": "Awards 10 XP for days 1-6, 20 XP for day 7+. Streak resets if a day is missed.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "XP awarded",
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "awarded": { "type": "boolean" }, "xp": { "type": "integer" }, "streak": { "type": "integer" }, "total_xp": { "type": "integer" }, "level": { "type": "integer" } } } } }
+          },
+          "400": { "description": "Already claimed today" }
+        }
+      }
+    },
     "/api/auth/logout": {
       "post": {
         "tags": ["Auth"],

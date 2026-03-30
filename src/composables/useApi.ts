@@ -24,6 +24,8 @@ export function useApi() {
     claimAdmin: (password: string) =>
       request('/api/auth/claim-admin', { method: 'POST', body: JSON.stringify({ password }) }),
     logout: () => request('/api/auth/logout', { method: 'POST' }),
+    getDailyStatus: () => request('/api/auth/daily-status'),
+    claimDaily: () => request('/api/auth/daily-claim', { method: 'POST' }),
 
     // Competitions
     getCompetitions: () => request('/api/competitions'),
