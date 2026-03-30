@@ -249,6 +249,11 @@ export function useApi() {
 
     // Users (global)
     getPlayerProfile: (id: number) => request(`/api/players/${id}/profile`),
+    getPlayerXpLog: (id: number) => request(`/api/players/${id}/xp-log`),
+    getAdminXpLog: (params?: Record<string, string | number>) => {
+      const qs = params ? '?' + new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString() : ''
+      return request(`/api/admin/xp-log${qs}`)
+    },
     getTeamProfile: (captainId: number) => request(`/api/teams/${captainId}/profile`),
     getUsers: () => request('/api/users'),
     updatePlayer: (id: number, data: Record<string, any>) =>

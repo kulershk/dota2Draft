@@ -78,6 +78,18 @@ const localSettings = reactive({
   lobbyPenaltyRadiant: 0,
   lobbyPenaltyDire: 0,
   lobbySeriesType: 0,
+  // XP settings
+  xpGameWin: 30,
+  xpGameLoss: 10,
+  xpMatchWin: 50,
+  xpPlacement1st: 500,
+  xpPlacement2nd: 300,
+  xpPlacement3rd: 150,
+  xpFantasyParticipation: 10,
+  xpFantasyStageWinner: 50,
+  xpFantasyOverall1st: 150,
+  xpFantasyOverall2nd: 75,
+  xpFantasyOverall3rd: 35,
 })
 
 const showFantasyScoring = ref(false)
@@ -742,6 +754,62 @@ async function deleteStream(id: number) {
               </tr>
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- XP Settings -->
+    <div class="card">
+      <div class="px-4 py-3 border-b border-border">
+        <div class="flex items-center gap-2">
+          <span class="text-sm font-semibold text-foreground">{{ t('xpSettings') }}</span>
+        </div>
+        <p class="text-xs text-muted-foreground mt-0.5">{{ t('xpSettingsHint') }}</p>
+      </div>
+      <div class="p-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div class="flex flex-col gap-1">
+          <label class="text-[11px] font-medium text-muted-foreground">{{ t('xpReason_game_win') }}</label>
+          <input type="number" min="0" class="input-field text-sm" v-model.number="localSettings.xpGameWin" />
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-[11px] font-medium text-muted-foreground">{{ t('xpReason_game_loss') }}</label>
+          <input type="number" min="0" class="input-field text-sm" v-model.number="localSettings.xpGameLoss" />
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-[11px] font-medium text-muted-foreground">{{ t('xpReason_match_win') }}</label>
+          <input type="number" min="0" class="input-field text-sm" v-model.number="localSettings.xpMatchWin" />
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-[11px] font-medium text-muted-foreground">{{ t('xpReason_placement_1') }}</label>
+          <input type="number" min="0" class="input-field text-sm" v-model.number="localSettings.xpPlacement1st" />
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-[11px] font-medium text-muted-foreground">{{ t('xpReason_placement_2') }}</label>
+          <input type="number" min="0" class="input-field text-sm" v-model.number="localSettings.xpPlacement2nd" />
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-[11px] font-medium text-muted-foreground">{{ t('xpReason_placement_3') }}</label>
+          <input type="number" min="0" class="input-field text-sm" v-model.number="localSettings.xpPlacement3rd" />
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-[11px] font-medium text-muted-foreground">{{ t('xpReason_fantasy_participation') }}</label>
+          <input type="number" min="0" class="input-field text-sm" v-model.number="localSettings.xpFantasyParticipation" />
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-[11px] font-medium text-muted-foreground">{{ t('xpReason_fantasy_stage_winner') }}</label>
+          <input type="number" min="0" class="input-field text-sm" v-model.number="localSettings.xpFantasyStageWinner" />
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-[11px] font-medium text-muted-foreground">{{ t('xpReason_fantasy_overall_1st') }}</label>
+          <input type="number" min="0" class="input-field text-sm" v-model.number="localSettings.xpFantasyOverall1st" />
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-[11px] font-medium text-muted-foreground">{{ t('xpReason_fantasy_overall_2nd') }}</label>
+          <input type="number" min="0" class="input-field text-sm" v-model.number="localSettings.xpFantasyOverall2nd" />
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-[11px] font-medium text-muted-foreground">{{ t('xpReason_fantasy_overall_3rd') }}</label>
+          <input type="number" min="0" class="input-field text-sm" v-model.number="localSettings.xpFantasyOverall3rd" />
         </div>
       </div>
     </div>

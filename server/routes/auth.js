@@ -6,6 +6,7 @@ import { getTwitchAppToken } from '../helpers/twitch.js'
 import { BASE_URL, TWITCH_CLIENT_ID, TWITCH_CLIENT_SECRET, DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET } from '../config.js'
 import { getCompetition } from '../helpers/competition.js'
 import { fetchSteamProfile } from '../helpers/steam.js'
+import { awardXp } from '../helpers/xp.js'
 
 const router = Router()
 
@@ -82,6 +83,7 @@ router.get('/api/auth/me', async (req, res) => {
     roles: JSON.parse(player.roles || '[]'),
     mmr: player.mmr,
     info: player.info || '',
+    total_xp: player.total_xp || 0,
     twitch_username: player.twitch_username || null,
     discord_username: player.discord_username || null,
   })
@@ -101,6 +103,11 @@ router.put('/api/auth/me', async (req, res) => {
       player.id,
     ]
   )
+  // XP: first time setting bio
+  if (info && !player.info) {
+    awardXp(player.id, 25, 'set_bio', 'profile', String(player.id))
+  }
+
   const updated = await queryOne('SELECT * FROM players WHERE id = $1', [player.id])
   const updatedPerms = await getPlayerPermissions(updated.id)
   res.json({
@@ -115,6 +122,7 @@ router.put('/api/auth/me', async (req, res) => {
     roles: JSON.parse(updated.roles || '[]'),
     mmr: updated.mmr,
     info: updated.info || '',
+    total_xp: updated.total_xp || 0,
     twitch_username: updated.twitch_username || null,
     discord_username: updated.discord_username || null,
   })
@@ -217,6 +225,7 @@ router.get('/api/auth/twitch/callback', async (req, res) => {
       'UPDATE players SET twitch_id = $1, twitch_username = $2 WHERE id = $3',
       [twitchUser.id, twitchUser.login, playerId]
     )
+    awardXp(playerId, 50, 'link_twitch', 'profile', String(playerId))
 
     res.redirect(`${BASE_URL}/settings?twitch_linked=1`)
   } catch (e) {
@@ -287,6 +296,7 @@ router.get('/api/auth/discord/callback', async (req, res) => {
       'UPDATE players SET discord_id = $1, discord_username = $2 WHERE id = $3',
       [discordUser.id, username, playerId]
     )
+    awardXp(playerId, 50, 'link_discord', 'profile', String(playerId))
 
     res.redirect(`${BASE_URL}/settings?discord_linked=1`)
   } catch (e) {

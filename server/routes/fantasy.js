@@ -4,6 +4,7 @@ import { getAuthPlayer } from '../middleware/auth.js'
 import { requireCompPermission } from '../middleware/permissions.js'
 import { getCompetition, parseCompSettings } from '../helpers/competition.js'
 import { getStagePoints, getStageTopPicks, getPlayerCheckData } from '../helpers/fantasy.js'
+import { awardXp } from '../helpers/xp.js'
 
 const FANTASY_ROLE_TO_PLAYING_ROLE = { carry: 1, mid: 2, offlane: 3, pos4: 4, pos5: 5 }
 
@@ -269,6 +270,71 @@ export default function createFantasyRouter(io) {
 
       if (status !== undefined && ['upcoming', 'pending', 'active', 'completed'].includes(status)) {
         await execute('UPDATE fantasy_stages SET status = $1 WHERE id = $2', [status, stageId])
+
+        // ── XP: fantasy stage completed ──
+        if (status === 'completed') {
+          const comp = await getCompetition(compId)
+          const settings = parseCompSettings(comp)
+
+          // Participation XP — users who submitted all 5 picks
+          const FANTASY_ROLES = ['carry', 'mid', 'offlane', 'pos4', 'pos5']
+          const picks = await query('SELECT player_id, role FROM fantasy_picks WHERE fantasy_stage_id = $1', [stageId])
+          const picksByUser = {}
+          for (const p of picks) {
+            if (!picksByUser[p.player_id]) picksByUser[p.player_id] = new Set()
+            picksByUser[p.player_id].add(p.role)
+          }
+          for (const [userId, roles] of Object.entries(picksByUser)) {
+            if (FANTASY_ROLES.every(r => roles.has(r))) {
+              awardXp(Number(userId), settings.xpFantasyParticipation, 'fantasy_participation', 'fantasy_stage', `${stageId}:${userId}`, {
+                competitionId: compId, competitionName: comp.name,
+                detail: `Participated in ${stage.name || 'Fantasy Stage'}`,
+              })
+            }
+          }
+
+          // Stage winner XP — highest score
+          const stagePoints = await getStagePoints(stageId, settings.fantasyScoring, settings.fantasyRepeatPenalty)
+          let bestUserId = null, bestTotal = -1
+          for (const [userId, data] of Object.entries(stagePoints)) {
+            if (data.total > bestTotal) { bestTotal = data.total; bestUserId = Number(userId) }
+          }
+          if (bestUserId) {
+            awardXp(bestUserId, settings.xpFantasyStageWinner, 'fantasy_stage_winner', 'fantasy_stage', `${stageId}`, {
+              competitionId: compId, competitionName: comp.name,
+              detail: `Won ${stage.name || 'Fantasy Stage'} (${Math.round(bestTotal * 100) / 100} pts)`,
+            })
+          }
+
+          // Overall fantasy XP — if ALL stages are completed
+          const allStages = await query(
+            'SELECT id, status FROM fantasy_stages WHERE competition_id = $1',
+            [compId]
+          )
+          const allCompleted = allStages.length > 0 && allStages.every(s => s.status === 'completed')
+          if (allCompleted) {
+            // Compute overall leaderboard
+            const overallPoints = {}
+            for (const s of allStages) {
+              const sp = await getStagePoints(s.id, settings.fantasyScoring, settings.fantasyRepeatPenalty)
+              for (const [uid, data] of Object.entries(sp)) {
+                overallPoints[uid] = (overallPoints[uid] || 0) + data.total
+              }
+            }
+            const sorted = Object.entries(overallPoints).sort((a, b) => b[1] - a[1])
+            const overallXp = [settings.xpFantasyOverall1st, settings.xpFantasyOverall2nd, settings.xpFantasyOverall3rd]
+            const labels = ['1st', '2nd', '3rd']
+            for (let i = 0; i < Math.min(3, sorted.length); i++) {
+              const [uid, pts] = sorted[i]
+              if (overallXp[i]) {
+                awardXp(Number(uid), overallXp[i], `fantasy_overall_${labels[i]}`, 'fantasy_overall', `${compId}:${uid}`, {
+                  competitionId: compId, competitionName: comp.name,
+                  detail: `${labels[i]} place in Fantasy (${Math.round(pts * 100) / 100} pts)`,
+                })
+              }
+            }
+          }
+        }
       }
 
       if (allowedCaptainIds !== undefined) {

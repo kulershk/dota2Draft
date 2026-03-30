@@ -45,6 +45,18 @@ export function parseCompSettings(comp) {
     lobbyPenaltyRadiant: Number(s.lobbyPenaltyRadiant) || 0,
     lobbyPenaltyDire: Number(s.lobbyPenaltyDire) || 0,
     lobbySeriesType: Number(s.lobbySeriesType) || 0,
+    // XP / Leveling
+    xpGameWin: Number(s.xpGameWin ?? 30),
+    xpGameLoss: Number(s.xpGameLoss ?? 10),
+    xpMatchWin: Number(s.xpMatchWin ?? 50),
+    xpPlacement1st: Number(s.xpPlacement1st ?? 500),
+    xpPlacement2nd: Number(s.xpPlacement2nd ?? 300),
+    xpPlacement3rd: Number(s.xpPlacement3rd ?? 150),
+    xpFantasyParticipation: Number(s.xpFantasyParticipation ?? 10),
+    xpFantasyStageWinner: Number(s.xpFantasyStageWinner ?? 50),
+    xpFantasyOverall1st: Number(s.xpFantasyOverall1st ?? 150),
+    xpFantasyOverall2nd: Number(s.xpFantasyOverall2nd ?? 75),
+    xpFantasyOverall3rd: Number(s.xpFantasyOverall3rd ?? 35),
   }
 }
 

@@ -136,6 +136,7 @@ export interface CurrentUser {
   roles: string[]
   mmr: number
   info: string
+  total_xp: number
   twitch_username: string | null
   discord_username: string | null
 }

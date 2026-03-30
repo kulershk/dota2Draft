@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { User, Trophy, Swords, Tv, Calendar, Medal, MessageCircle, Shield } from 'lucide-vue-next'
+import { User, Trophy, Swords, Tv, Calendar, Medal, MessageCircle, Shield, Star } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -7,8 +7,10 @@ import { useApi } from '@/composables/useApi'
 import { useDotaConstants } from '@/composables/useDotaConstants'
 import RoleBadge from '@/components/common/RoleBadge.vue'
 import MmrDisplay from '@/components/common/MmrDisplay.vue'
+import LevelBadge from '@/components/common/LevelBadge.vue'
+import XpProgressBar from '@/components/common/XpProgressBar.vue'
 import { sortedRoles } from '@/utils/roles'
-import { fmtDateOnly } from '@/utils/format'
+import { fmtDateOnly, fmtDateTime } from '@/utils/format'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -19,6 +21,7 @@ dota.loadConstants()
 
 const playerId = computed(() => Number(route.params.id))
 const profile = ref<any>(null)
+const xpLog = ref<any[]>([])
 const loading = ref(true)
 const error = ref(false)
 
@@ -28,6 +31,7 @@ watch(playerId, async (id) => {
   error.value = false
   try {
     profile.value = await api.getPlayerProfile(id)
+    api.getPlayerXpLog(id).then(logs => { xpLog.value = logs }).catch(() => {})
   } catch {
     error.value = true
     profile.value = null
@@ -80,10 +84,15 @@ function placementBg(n: number) {
               <div class="min-w-0">
                 <h1 class="text-2xl font-bold text-foreground truncate">{{ profile.name }}</h1>
                 <div class="flex flex-wrap items-center gap-2 mt-1.5">
+                  <LevelBadge :level="profile.level || 1" size="md" />
+                  <span class="text-xs font-semibold text-primary">{{ t('levelN', { n: profile.level || 1 }) }}</span>
                   <div v-if="profile.roles?.length" class="flex flex-wrap gap-1">
                     <RoleBadge v-for="role in sortedRoles(profile.roles)" :key="role" :role="role" />
                   </div>
                   <MmrDisplay v-if="profile.mmr" :mmr="profile.mmr" />
+                </div>
+                <div class="mt-1.5 max-w-[240px]">
+                  <XpProgressBar :current="profile.level_progress || 0" />
                 </div>
               </div>
               <!-- External links -->
@@ -199,6 +208,28 @@ function placementBg(n: number) {
             <span class="text-xs font-medium shrink-0" :class="placementClass(result.placement)">
               {{ placementLabel(result.placement) }}
             </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- XP History -->
+      <div v-if="xpLog.length > 0" class="card">
+        <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
+          <Star class="w-5 h-5 text-foreground" />
+          <span class="text-sm font-semibold text-foreground">{{ t('xpHistory') }}</span>
+          <span class="text-xs font-mono text-muted-foreground ml-auto">{{ t('xpTotal') }}: {{ (profile.total_xp || 0).toLocaleString() }}</span>
+        </div>
+        <div class="divide-y divide-border max-h-[300px] overflow-y-auto">
+          <div v-for="log in xpLog" :key="log.created_at" class="flex items-center gap-3 px-4 py-2.5">
+            <span class="text-sm font-bold font-mono text-primary shrink-0">+{{ log.amount }}</span>
+            <div class="flex-1 min-w-0">
+              <p class="text-sm text-foreground truncate">{{ t(`xpReason_${log.reason}`) }}</p>
+              <p v-if="log.detail" class="text-xs text-muted-foreground truncate">{{ log.detail }}</p>
+            </div>
+            <div class="text-right shrink-0">
+              <p v-if="log.competition_name" class="text-xs text-muted-foreground truncate max-w-[140px]">{{ log.competition_name }}</p>
+              <p class="text-[10px] text-text-tertiary">{{ fmtDateTime(new Date(log.created_at)) }}</p>
+            </div>
           </div>
         </div>
       </div>

@@ -44,7 +44,25 @@
           "mmr": { "type": "integer" },
           "info": { "type": "string" },
           "twitch_username": { "type": "string", "nullable": true },
-          "discord_username": { "type": "string", "nullable": true }
+          "discord_username": { "type": "string", "nullable": true },
+          "total_xp": { "type": "integer", "description": "Total XP earned" },
+          "level": { "type": "integer", "description": "Current level (floor(total_xp / 1000) + 1)" },
+          "level_progress": { "type": "integer", "description": "XP progress within current level (0-999)" }
+        }
+      },
+      "XpLogEntry": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "player_id": { "type": "integer" },
+          "player_name": { "type": "string" },
+          "avatar_url": { "type": "string", "nullable": true },
+          "amount": { "type": "integer" },
+          "reason": { "type": "string" },
+          "competition_id": { "type": "integer", "nullable": true },
+          "competition_name": { "type": "string", "nullable": true },
+          "detail": { "type": "string", "nullable": true },
+          "created_at": { "type": "string", "format": "date-time" }
         }
       },
       "Competition": {
@@ -81,7 +99,18 @@
           "biddingType": { "type": "string", "enum": ["default", "blind"], "default": "default" },
           "blindBidTimer": { "type": "integer", "default": 30, "description": "Seconds for blind bid phase (separate from open bid timer)" },
           "blindTopBidders": { "type": "integer", "default": 3 },
-          "autoFinish": { "type": "boolean", "default": true, "description": "Auto-finish draft when all teams are full. If false, admin must end manually." }
+          "autoFinish": { "type": "boolean", "default": true, "description": "Auto-finish draft when all teams are full. If false, admin must end manually." },
+          "xpGameWin": { "type": "integer", "default": 30, "description": "XP for winning a game" },
+          "xpGameLoss": { "type": "integer", "default": 10, "description": "XP for losing a game" },
+          "xpMatchWin": { "type": "integer", "default": 50, "description": "XP for winning a match series" },
+          "xpPlacement1st": { "type": "integer", "default": 500, "description": "XP for 1st place" },
+          "xpPlacement2nd": { "type": "integer", "default": 300, "description": "XP for 2nd place" },
+          "xpPlacement3rd": { "type": "integer", "default": 150, "description": "XP for 3rd place" },
+          "xpFantasyParticipation": { "type": "integer", "default": 10, "description": "XP for participating in a fantasy stage" },
+          "xpFantasyStageWinner": { "type": "integer", "default": 50, "description": "XP for winning a fantasy stage" },
+          "xpFantasyOverall1st": { "type": "integer", "default": 150, "description": "XP for 1st overall fantasy" },
+          "xpFantasyOverall2nd": { "type": "integer", "default": 75, "description": "XP for 2nd overall fantasy" },
+          "xpFantasyOverall3rd": { "type": "integer", "default": 35, "description": "XP for 3rd overall fantasy" }
         }
       },
       "Captain": {
@@ -868,6 +897,39 @@
         "summary": "Get public player profile",
         "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
         "responses": { "200": { "description": "Player profile with competition history and tournament results" } }
+      }
+    },
+    "/api/players/{id}/xp-log": {
+      "get": {
+        "tags": ["Users"],
+        "summary": "Get player XP history",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": {
+            "description": "Array of XP log entries (most recent 50)",
+            "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/XpLogEntry" } } } }
+          }
+        }
+      }
+    },
+    "/api/admin/xp-log": {
+      "get": {
+        "tags": ["Users"],
+        "summary": "Admin: browse all XP logs",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "player_id", "in": "query", "schema": { "type": "integer" }, "description": "Filter by player" },
+          { "name": "competition_id", "in": "query", "schema": { "type": "integer" }, "description": "Filter by competition" },
+          { "name": "reason", "in": "query", "schema": { "type": "string" }, "description": "Filter by reason type" },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "default": 0 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated XP log with total count",
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "rows": { "type": "array", "items": { "$ref": "#/components/schemas/XpLogEntry" } }, "total": { "type": "integer" } } } } }
+          }
+        }
       }
     },
     "/api/teams/{captainId}/profile": {

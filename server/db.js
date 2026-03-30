@@ -70,6 +70,7 @@ export async function initDb() {
     ['last_online', 'TIMESTAMP DEFAULT NULL'],
     ['steam_synced_at', 'TIMESTAMP DEFAULT NULL'],
     ['display_name', 'TEXT DEFAULT NULL'],
+    ['total_xp', 'INTEGER NOT NULL DEFAULT 0'],
   ]) {
     const has = await queryOne(
       `SELECT 1 FROM information_schema.columns WHERE table_name = 'players' AND column_name = $1`, [col]
@@ -422,6 +423,26 @@ export async function initDb() {
       UNIQUE(fantasy_stage_id, player_id, role)
     )
   `)
+
+  // ─── XP / Leveling system ──────────────────────────────
+  await execute(`
+    CREATE TABLE IF NOT EXISTS xp_log (
+      id SERIAL PRIMARY KEY,
+      player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      amount INTEGER NOT NULL,
+      reason TEXT NOT NULL,
+      ref_type TEXT DEFAULT NULL,
+      ref_id TEXT DEFAULT NULL,
+      competition_id INTEGER DEFAULT NULL,
+      competition_name TEXT DEFAULT NULL,
+      detail TEXT DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_xp_log_player ON xp_log(player_id);
+    CREATE INDEX IF NOT EXISTS idx_xp_log_competition ON xp_log(competition_id);
+  `)
+  // Idempotency index (separate because CREATE UNIQUE INDEX IF NOT EXISTS may not be in the same block)
+  try { await execute('CREATE UNIQUE INDEX idx_xp_log_idempotent ON xp_log(player_id, reason, ref_type, ref_id)') } catch {}
 
   // Lobby bot pool
   await execute(`

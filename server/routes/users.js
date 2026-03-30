@@ -50,7 +50,7 @@ router.get('/api/users', async (req, res) => {
 // Public player profile
 router.get('/api/players/:id/profile', async (req, res) => {
   const playerId = Number(req.params.id)
-  const player = await queryOne('SELECT id, name, display_name, steam_id, avatar_url, roles, mmr, info, twitch_username, discord_username, created_at FROM players WHERE id = $1', [playerId])
+  const player = await queryOne('SELECT id, name, display_name, steam_id, avatar_url, roles, mmr, info, twitch_username, discord_username, total_xp, created_at FROM players WHERE id = $1', [playerId])
   if (!player) return res.status(404).json({ error: 'Player not found' })
 
   // Get all competitions this player participated in (as player or captain)
@@ -183,6 +183,9 @@ router.get('/api/players/:id/profile', async (req, res) => {
     roles: JSON.parse(player.roles || '[]'),
     mmr: player.mmr,
     info: player.info || '',
+    total_xp: player.total_xp || 0,
+    level: Math.floor((player.total_xp || 0) / 1000) + 1,
+    level_progress: (player.total_xp || 0) % 1000,
     twitch_username: player.twitch_username || null,
     discord_username: player.discord_username || null,
     created_at: player.created_at,
@@ -207,6 +210,42 @@ router.get('/api/players/:id/profile', async (req, res) => {
       wins: Number(h.wins),
     })),
   })
+})
+
+// Player XP log
+router.get('/api/players/:id/xp-log', async (req, res) => {
+  const playerId = Number(req.params.id)
+  const logs = await query(
+    'SELECT amount, reason, competition_id, competition_name, detail, created_at FROM xp_log WHERE player_id = $1 ORDER BY created_at DESC LIMIT 50',
+    [playerId]
+  )
+  res.json(logs)
+})
+
+// Admin XP log (all users)
+router.get('/api/admin/xp-log', async (req, res) => {
+  const admin = await requirePermission(req, res, 'manage_users')
+  if (!admin) return
+  const { player_id, competition_id, reason, limit: lim, offset: off } = req.query
+  const conditions = []
+  const params = []
+  let idx = 1
+  if (player_id) { conditions.push(`x.player_id = $${idx++}`); params.push(Number(player_id)) }
+  if (competition_id) { conditions.push(`x.competition_id = $${idx++}`); params.push(Number(competition_id)) }
+  if (reason) { conditions.push(`x.reason = $${idx++}`); params.push(reason) }
+  const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : ''
+  const rows = await query(
+    `SELECT x.id, x.player_id, COALESCE(p.display_name, p.name) AS player_name, p.avatar_url,
+            x.amount, x.reason, x.competition_id, x.competition_name, x.detail, x.created_at
+     FROM xp_log x
+     JOIN players p ON p.id = x.player_id
+     ${where}
+     ORDER BY x.created_at DESC
+     LIMIT $${idx++} OFFSET $${idx++}`,
+    [...params, Number(lim) || 50, Number(off) || 0]
+  )
+  const countResult = await query(`SELECT COUNT(*) AS total FROM xp_log x ${where}`, params)
+  res.json({ rows, total: Number(countResult[0]?.total || 0) })
 })
 
 // Public team profile
