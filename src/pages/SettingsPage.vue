@@ -9,7 +9,6 @@ const { t } = useI18n()
 const api = useApi()
 const store = useDraftStore()
 
-const displayName = ref('')
 const mmr = ref(0)
 const info = ref('')
 const selectedRoles = ref<string[]>([])
@@ -27,7 +26,6 @@ const allRoles = ['Carry', 'Mid', 'Offlane', 'Pos4', 'Pos5']
 onMounted(async () => {
   await store.authReady
   if (store.currentUser.value) {
-    displayName.value = store.currentUser.value.display_name || ''
     mmr.value = store.currentUser.value.mmr || 0
     info.value = store.currentUser.value.info || ''
     selectedRoles.value = [...(store.currentUser.value.roles || [])]
@@ -76,14 +74,12 @@ async function saveProfile() {
   saved.value = false
   try {
     const updated = await api.updateMe({
-      display_name: displayName.value,
       mmr: mmr.value,
       info: info.value,
       roles: selectedRoles.value,
     })
     if (store.currentUser.value) {
       store.currentUser.value.name = updated.name
-      store.currentUser.value.display_name = updated.display_name
       store.currentUser.value.mmr = updated.mmr
       store.currentUser.value.info = updated.info
       store.currentUser.value.roles = updated.roles
@@ -174,11 +170,6 @@ const hasDiscord = computed(() => !!store.currentUser.value?.discord_username)
           <span class="text-sm font-semibold text-foreground">{{ t('profileInfo') }}</span>
         </div>
         <div class="px-5 py-4 flex flex-col gap-4">
-          <div>
-            <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('displayName') }}</label>
-            <input type="text" v-model="displayName" class="input-field w-full max-w-[300px]" :placeholder="store.currentUser.value?.steam_name || store.currentUser.value?.name" maxlength="50" />
-            <p class="text-xs text-muted-foreground mt-1">{{ t('displayNameHint') }}</p>
-          </div>
           <div>
             <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('yourRoles') }}</label>
             <div class="flex flex-wrap gap-2">
