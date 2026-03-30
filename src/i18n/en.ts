@@ -979,6 +979,7 @@ export default {
   dailyClaim: 'Claim +{xp} XP',
   dailyClaimed: 'Claimed!',
   dailyAlreadyClaimed: 'Come back tomorrow for more XP!',
+  dailyNextIn: 'Next claim in',
   leaderboard: 'Leaderboard',
   leaderboardDesc: 'Top players ranked by level and XP.',
   leaderboardRank: 'Rank',

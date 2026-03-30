@@ -972,6 +972,7 @@ export default {
   dailyClaim: 'Gauti +{xp} XP',
   dailyClaimed: 'Gauta!',
   dailyAlreadyClaimed: 'Grįžkite rytoj daugiau XP!',
+  dailyNextIn: 'Kitas po',
   leaderboard: 'Lyderių lentelė',
   leaderboardDesc: 'Geriausi žaidėjai pagal lygį ir XP.',
   leaderboardRank: 'Vieta',

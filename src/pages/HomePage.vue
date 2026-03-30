@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Newspaper, Trophy, Users, Swords, User, MessageSquare, Send, Trash2, ChevronDown, ChevronUp, Twitch, Eye, Radio, ArrowRight, Clock, Gift, Flame } from 'lucide-vue-next'
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
@@ -205,8 +205,30 @@ async function fetchDailyStatus() {
   if (!store.currentUser.value) return
   try {
     dailyStatus.value = await api.getDailyStatus()
+    if (dailyStatus.value?.claimed_today) startCountdown()
   } catch {}
 }
+
+// Countdown to next UTC midnight
+const dailyCountdown = ref('')
+let countdownTimer: ReturnType<typeof setInterval> | null = null
+
+function updateCountdown() {
+  const now = new Date()
+  const tomorrow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1))
+  const diff = tomorrow.getTime() - now.getTime()
+  const h = Math.floor(diff / 3600000)
+  const m = Math.floor((diff % 3600000) / 60000)
+  const s = Math.floor((diff % 60000) / 1000)
+  dailyCountdown.value = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
+
+function startCountdown() {
+  updateCountdown()
+  countdownTimer = setInterval(updateCountdown, 1000)
+}
+
+onUnmounted(() => { if (countdownTimer) clearInterval(countdownTimer) })
 
 async function claimDaily() {
   dailyClaiming.value = true
@@ -214,6 +236,7 @@ async function claimDaily() {
     const result = await api.claimDaily()
     dailyClaimed.value = { xp: result.xp, streak: result.streak }
     dailyStatus.value = { claimed_today: true, streak: result.streak, next_xp: result.streak >= 7 ? 20 : 10 }
+    startCountdown()
   } catch {}
   dailyClaiming.value = false
 }
@@ -371,8 +394,9 @@ const sortedMatches = computed(() => {
               >
                 {{ dailyClaiming ? '...' : t('dailyClaim', { xp: dailyStatus.next_xp }) }}
               </button>
-              <div v-else class="text-center text-xs text-muted-foreground py-1">
-                {{ t('dailyAlreadyClaimed') }}
+              <div v-else class="flex items-center justify-center gap-2 py-1">
+                <span class="text-xs text-muted-foreground">{{ t('dailyNextIn') }}</span>
+                <span class="text-xs font-mono font-semibold text-foreground">{{ dailyCountdown }}</span>
               </div>
             </div>
           </div>

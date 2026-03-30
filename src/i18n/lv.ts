@@ -972,6 +972,7 @@ export default {
   dailyClaim: 'Saņemt +{xp} XP',
   dailyClaimed: 'Saņemts!',
   dailyAlreadyClaimed: 'Atgriezieties rīt, lai saņemtu vairāk XP!',
+  dailyNextIn: 'Nākamais pēc',
   leaderboard: 'Līderu tabula',
   leaderboardDesc: 'Labākie spēlētāji pēc līmeņa un XP.',
   leaderboardRank: 'Vieta',

@@ -906,6 +906,7 @@ export default {
   dailyClaim: 'Получить +{xp} XP',
   dailyClaimed: 'Получено!',
   dailyAlreadyClaimed: 'Возвращайтесь завтра за XP!',
+  dailyNextIn: 'Следующий через',
   leaderboard: 'Таблица лидеров',
   leaderboardDesc: 'Лучшие игроки по уровню и XP.',
   leaderboardRank: 'Место',
