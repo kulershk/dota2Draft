@@ -444,6 +444,29 @@ export async function initDb() {
   // Idempotency index (separate because CREATE UNIQUE INDEX IF NOT EXISTS may not be in the same block)
   try { await execute('CREATE UNIQUE INDEX idx_xp_log_idempotent ON xp_log(player_id, reason, ref_type, ref_id)') } catch {}
 
+  // Backfill XP for existing Twitch/Discord links and bios (idempotent via ON CONFLICT)
+  await execute(`
+    INSERT INTO xp_log (player_id, amount, reason, ref_type, ref_id)
+    SELECT id, 50, 'link_twitch', 'profile', CAST(id AS TEXT) FROM players WHERE twitch_id IS NOT NULL
+    ON CONFLICT (player_id, reason, ref_type, ref_id) DO NOTHING
+  `)
+  await execute(`
+    INSERT INTO xp_log (player_id, amount, reason, ref_type, ref_id)
+    SELECT id, 50, 'link_discord', 'profile', CAST(id AS TEXT) FROM players WHERE discord_id IS NOT NULL
+    ON CONFLICT (player_id, reason, ref_type, ref_id) DO NOTHING
+  `)
+  await execute(`
+    INSERT INTO xp_log (player_id, amount, reason, ref_type, ref_id)
+    SELECT id, 25, 'set_bio', 'profile', CAST(id AS TEXT) FROM players WHERE info IS NOT NULL AND info != ''
+    ON CONFLICT (player_id, reason, ref_type, ref_id) DO NOTHING
+  `)
+  // Sync total_xp from xp_log for all players who have entries
+  await execute(`
+    UPDATE players SET total_xp = sub.total FROM (
+      SELECT player_id, COALESCE(SUM(amount), 0) AS total FROM xp_log GROUP BY player_id
+    ) sub WHERE players.id = sub.player_id AND players.total_xp != sub.total
+  `)
+
   // Lobby bot pool
   await execute(`
     CREATE TABLE IF NOT EXISTS lobby_bots (
