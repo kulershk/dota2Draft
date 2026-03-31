@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { getSocket } from '@/composables/useSocket'
-import { formatMatchDate } from '@/utils/format'
+import { formatMatchDate, localDatetimeToISO } from '@/utils/format'
 import { CalendarDays, Plus, X, Trash2, Check } from 'lucide-vue-next'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 import DatePicker from '@/components/common/DatePicker.vue'
@@ -114,7 +114,7 @@ async function postScrim() {
   posting.value = true
   try {
     await api.postScrim(compId.value, {
-      scheduled_at: new Date(newScheduledAt.value).toISOString(),
+      scheduled_at: localDatetimeToISO(newScheduledAt.value),
       message: newMessage.value || undefined,
     })
     showPostModal.value = false
