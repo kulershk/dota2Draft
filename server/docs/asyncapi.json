@@ -823,62 +823,6 @@
           ]
         }
       }
-    },
-    "scrims:created": {
-      "subscribe": {
-        "summary": "A new scrim was posted to the bulletin board",
-        "description": "Broadcast to `comp:${compId}` room when a player/captain posts a new scrim.",
-        "message": {
-          "payload": {
-            "type": "object",
-            "properties": {
-              "scrim": { "type": "object", "description": "Full scrim object with joined names and team info" }
-            }
-          }
-        }
-      }
-    },
-    "scrims:claimed": {
-      "subscribe": {
-        "summary": "A scrim was accepted by another team",
-        "description": "Broadcast to `comp:${compId}` room when a captain claims an open scrim.",
-        "message": {
-          "payload": {
-            "type": "object",
-            "properties": {
-              "scrim": { "type": "object", "description": "Updated scrim object with claimer info" }
-            }
-          }
-        }
-      }
-    },
-    "scrims:cancelled": {
-      "subscribe": {
-        "summary": "A scrim was cancelled or a claim was withdrawn",
-        "description": "Broadcast to `comp:${compId}` room. If claimer cancels, scrim reverts to open. If poster cancels, scrim is cancelled.",
-        "message": {
-          "payload": {
-            "type": "object",
-            "properties": {
-              "scrim": { "type": "object", "description": "Updated scrim object" }
-            }
-          }
-        }
-      }
-    },
-    "scrims:deleted": {
-      "subscribe": {
-        "summary": "A scrim was deleted by an admin",
-        "description": "Broadcast to `comp:${compId}` room when an admin hard-deletes a scrim.",
-        "message": {
-          "payload": {
-            "type": "object",
-            "properties": {
-              "scrimId": { "type": "integer", "description": "ID of the deleted scrim" }
-            }
-          }
-        }
-      }
     }
   }
 }

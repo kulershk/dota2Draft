@@ -57,8 +57,6 @@ export function parseCompSettings(comp) {
     xpFantasyOverall1st: Number(s.xpFantasyOverall1st ?? 150),
     xpFantasyOverall2nd: Number(s.xpFantasyOverall2nd ?? 75),
     xpFantasyOverall3rd: Number(s.xpFantasyOverall3rd ?? 35),
-    // Scrims
-    scrimAccess: s.scrimAccess || 'captains_only',
   }
 }
 

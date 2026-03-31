@@ -91,17 +91,6 @@ export function useApi() {
     importSteamParticipant: (compId: number, steamId: string) =>
       request(`/api/competitions/${compId}/import-steam-participants`, { method: 'POST', body: JSON.stringify({ steamId }) }),
 
-    // Scrims
-    getScrims: (compId: number) => request(`/api/competitions/${compId}/scrims`),
-    postScrim: (compId: number, data: { scheduled_at: string; message?: string }) =>
-      request(`/api/competitions/${compId}/scrims`, { method: 'POST', body: JSON.stringify(data) }),
-    claimScrim: (compId: number, scrimId: number) =>
-      request(`/api/competitions/${compId}/scrims/${scrimId}/claim`, { method: 'POST', body: '{}' }),
-    cancelScrim: (compId: number, scrimId: number) =>
-      request(`/api/competitions/${compId}/scrims/${scrimId}/cancel`, { method: 'POST', body: '{}' }),
-    deleteScrim: (compId: number, scrimId: number) =>
-      request(`/api/competitions/${compId}/scrims/${scrimId}`, { method: 'DELETE' }),
-
     // Dota constants
     getDotaConstants: () => request('/api/dota/constants'),
 

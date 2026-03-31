@@ -26,7 +26,6 @@ import permissionRoutes from './routes/permissions.js'
 import settingRoutes from './routes/settings.js'
 import userRoutes from './routes/users.js'
 import createNewsRouter from './routes/news.js'
-import createScrimsRouter from './routes/scrims.js'
 
 // Socket
 import { initSocket } from './socket/index.js'
@@ -80,7 +79,6 @@ app.use(permissionRoutes)
 app.use(settingRoutes)
 app.use(userRoutes)
 app.use(createNewsRouter(io))
-app.use(createScrimsRouter(io))
 
 // Socket.io
 initSocket(io)

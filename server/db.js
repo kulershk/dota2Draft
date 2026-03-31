@@ -621,22 +621,6 @@ async function createFreshCompetitionTables() {
       amount INTEGER NOT NULL,
       created_at TIMESTAMP DEFAULT NOW()
     );
-
-    CREATE TABLE IF NOT EXISTS scrims (
-      id SERIAL PRIMARY KEY,
-      competition_id INTEGER NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
-      posted_by INTEGER NOT NULL REFERENCES players(id),
-      captain_id INTEGER REFERENCES captains(id) ON DELETE SET NULL,
-      scheduled_at TIMESTAMP NOT NULL,
-      message TEXT DEFAULT '',
-      status TEXT NOT NULL DEFAULT 'open',
-      claimed_by INTEGER REFERENCES players(id),
-      claimed_captain_id INTEGER REFERENCES captains(id) ON DELETE SET NULL,
-      claimed_at TIMESTAMP,
-      cancelled_by INTEGER REFERENCES players(id),
-      created_at TIMESTAMP DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS idx_scrims_comp_status ON scrims(competition_id, status);
   `)
 }
 

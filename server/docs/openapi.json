@@ -21,8 +21,7 @@
     { "name": "Permissions", "description": "Permission groups" },
     { "name": "Settings", "description": "Site settings" },
     { "name": "Streams", "description": "Twitch streams" },
-    { "name": "Dota", "description": "Dota 2 constants (heroes, items)" },
-    { "name": "Scrims", "description": "Scrim scheduling bulletin board" }
+    { "name": "Dota", "description": "Dota 2 constants (heroes, items)" }
   ],
   "components": {
     "securitySchemes": {
@@ -32,30 +31,6 @@
       }
     },
     "schemas": {
-      "Scrim": {
-        "type": "object",
-        "properties": {
-          "id": { "type": "integer" },
-          "competition_id": { "type": "integer" },
-          "posted_by": { "type": "integer", "description": "Player ID of poster" },
-          "captain_id": { "type": "integer", "nullable": true, "description": "Captain ID of poster's team" },
-          "scheduled_at": { "type": "string", "format": "date-time" },
-          "message": { "type": "string" },
-          "status": { "type": "string", "enum": ["open", "claimed", "cancelled"] },
-          "claimed_by": { "type": "integer", "nullable": true },
-          "claimed_captain_id": { "type": "integer", "nullable": true },
-          "claimed_at": { "type": "string", "format": "date-time", "nullable": true },
-          "created_at": { "type": "string", "format": "date-time" },
-          "posted_by_name": { "type": "string" },
-          "posted_by_avatar": { "type": "string" },
-          "posted_by_team": { "type": "string" },
-          "posted_by_banner": { "type": "string", "nullable": true },
-          "claimed_by_name": { "type": "string", "nullable": true },
-          "claimed_by_avatar": { "type": "string", "nullable": true },
-          "claimed_by_team": { "type": "string", "nullable": true },
-          "claimed_by_banner": { "type": "string", "nullable": true }
-        }
-      },
       "User": {
         "type": "object",
         "properties": {
@@ -1307,135 +1282,6 @@
                 }
               }
             }
-          }
-        }
-      },
-      "/api/competitions/{compId}/scrims": {
-        "get": {
-          "tags": ["Scrims"],
-          "summary": "List scrims for a competition",
-          "parameters": [
-            { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }
-          ],
-          "responses": {
-            "200": {
-              "description": "Array of scrim objects",
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "type": "array",
-                    "items": { "$ref": "#/components/schemas/Scrim" }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "post": {
-          "tags": ["Scrims"],
-          "summary": "Post a new scrim",
-          "security": [{ "bearerAuth": [] }],
-          "parameters": [
-            { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }
-          ],
-          "requestBody": {
-            "required": true,
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "required": ["scheduled_at"],
-                  "properties": {
-                    "scheduled_at": { "type": "string", "format": "date-time", "description": "Must be in the future" },
-                    "message": { "type": "string", "maxLength": 500 }
-                  }
-                }
-              }
-            }
-          },
-          "responses": {
-            "201": {
-              "description": "Created scrim",
-              "content": {
-                "application/json": {
-                  "schema": { "$ref": "#/components/schemas/Scrim" }
-                }
-              }
-            },
-            "400": { "description": "Validation error" },
-            "401": { "description": "Not authenticated" },
-            "403": { "description": "Not allowed by scrimAccess setting" }
-          }
-        }
-      },
-      "/api/competitions/{compId}/scrims/{scrimId}/claim": {
-        "post": {
-          "tags": ["Scrims"],
-          "summary": "Claim (accept) an open scrim",
-          "security": [{ "bearerAuth": [] }],
-          "parameters": [
-            { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
-            { "name": "scrimId", "in": "path", "required": true, "schema": { "type": "integer" } }
-          ],
-          "responses": {
-            "200": {
-              "description": "Updated scrim",
-              "content": {
-                "application/json": {
-                  "schema": { "$ref": "#/components/schemas/Scrim" }
-                }
-              }
-            },
-            "400": { "description": "Scrim not open or same team" },
-            "403": { "description": "Must be a captain" }
-          }
-        }
-      },
-      "/api/competitions/{compId}/scrims/{scrimId}/cancel": {
-        "post": {
-          "tags": ["Scrims"],
-          "summary": "Cancel a scrim or withdraw a claim",
-          "description": "Poster cancels open/claimed scrim → cancelled. Claimer cancels claimed scrim → reverts to open.",
-          "security": [{ "bearerAuth": [] }],
-          "parameters": [
-            { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
-            { "name": "scrimId", "in": "path", "required": true, "schema": { "type": "integer" } }
-          ],
-          "responses": {
-            "200": {
-              "description": "Updated scrim",
-              "content": {
-                "application/json": {
-                  "schema": { "$ref": "#/components/schemas/Scrim" }
-                }
-              }
-            },
-            "403": { "description": "Not poster, claimer, or admin" }
-          }
-        }
-      },
-      "/api/competitions/{compId}/scrims/{scrimId}": {
-        "delete": {
-          "tags": ["Scrims"],
-          "summary": "Delete a scrim (admin only)",
-          "security": [{ "bearerAuth": [] }],
-          "parameters": [
-            { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
-            { "name": "scrimId", "in": "path", "required": true, "schema": { "type": "integer" } }
-          ],
-          "responses": {
-            "200": {
-              "description": "Deleted",
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "type": "object",
-                    "properties": { "ok": { "type": "boolean" } }
-                  }
-                }
-              }
-            },
-            "403": { "description": "Permission denied" }
           }
         }
       }

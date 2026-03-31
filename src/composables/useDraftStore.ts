@@ -99,7 +99,6 @@ export interface Settings {
   lobbyAutoAssignTeams: boolean
   lobbyLeagueId: number
   lobbyDotaTvDelay: number
-  scrimAccess: string
 }
 
 export interface RevealedBid {
@@ -175,7 +174,6 @@ const settings = reactive<Settings>({
   lobbyAutoAssignTeams: true,
   lobbyLeagueId: 0,
   lobbyDotaTvDelay: 1,
-  scrimAccess: 'captains_only',
 })
 
 const captains = ref<Captain[]>([])

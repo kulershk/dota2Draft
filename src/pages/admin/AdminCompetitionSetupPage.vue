@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Settings, DollarSign, Users, UserPlus, RotateCcw, Play, Pencil, ArrowDown, Wifi, ArrowLeft, Plus, Trash2, Search, Tv, Upload, Swords, ChevronDown, ChevronRight, X, CalendarDays } from 'lucide-vue-next'
+import { Settings, DollarSign, Users, UserPlus, RotateCcw, Play, Pencil, ArrowDown, Wifi, ArrowLeft, Plus, Trash2, Search, Tv, Upload, Swords, ChevronDown, ChevronRight, X } from 'lucide-vue-next'
 import { ref, computed, onMounted, reactive, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
@@ -90,8 +90,6 @@ const localSettings = reactive({
   xpFantasyOverall1st: 150,
   xpFantasyOverall2nd: 75,
   xpFantasyOverall3rd: 35,
-  // Scrims
-  scrimAccess: 'captains_only' as string,
 })
 
 const showFantasyScoring = ref(false)
@@ -828,29 +826,6 @@ async function deleteStream(id: number) {
     <!-- Tab: Captains & Participants -->
     <!-- Tab: Other -->
     <template v-if="activeTab === 'other'">
-
-    <!-- Scrim Settings -->
-    <div class="card">
-      <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
-        <CalendarDays class="w-5 h-5 text-foreground" />
-        <span class="text-sm font-semibold text-foreground">{{ t('scrimAccessLabel') }}</span>
-      </div>
-      <div class="px-4 py-4 flex flex-col gap-3">
-        <p class="text-xs text-muted-foreground">{{ t('scrimAccessDescription') }}</p>
-        <div class="flex gap-2">
-          <button
-            class="px-3 py-1.5 rounded text-sm font-medium transition-colors"
-            :class="localSettings.scrimAccess === 'captains_only' ? 'bg-primary text-primary-foreground' : 'bg-accent text-muted-foreground hover:text-foreground'"
-            @click="localSettings.scrimAccess = 'captains_only'"
-          >{{ t('scrimAccessCaptainsOnly') }}</button>
-          <button
-            class="px-3 py-1.5 rounded text-sm font-medium transition-colors"
-            :class="localSettings.scrimAccess === 'all_players' ? 'bg-primary text-primary-foreground' : 'bg-accent text-muted-foreground hover:text-foreground'"
-            @click="localSettings.scrimAccess = 'all_players'"
-          >{{ t('scrimAccessAllPlayers') }}</button>
-        </div>
-      </div>
-    </div>
 
     <!-- Official Streams -->
     <div class="card">
