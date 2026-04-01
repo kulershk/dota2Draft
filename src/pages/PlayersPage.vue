@@ -252,7 +252,7 @@ watch(searchQuery, () => { playersPage.value = 1 })
         <span class="w-10 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">#</span>
         <span class="w-[180px] shrink-0 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">{{ t('playerName') }}</span>
         <span class="w-[120px] shrink-0 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">{{ t('role') }}</span>
-        <span class="w-16 shrink-0 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-right">{{ t('mmr') }}</span>
+        <span class="w-[120px] shrink-0 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-right">{{ t('mmr') }}</span>
         <span class="flex-1 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary ml-3">{{ t('info') }}</span>
         <span v-if="store.isAdmin.value" class="w-20 text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-right">{{ t('actions') }}</span>
       </div>
@@ -275,7 +275,7 @@ watch(searchQuery, () => { playersPage.value = 1 })
           </span>
         </div>
         <!-- MMR -->
-        <div class="w-16 text-right shrink-0">
+        <div class="w-[120px] text-right shrink-0">
           <MmrDisplay :mmr="player.mmr" size="md" />
         </div>
         <!-- Info -->

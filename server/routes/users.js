@@ -187,6 +187,7 @@ router.get('/api/players/:id/profile', async (req, res) => {
     level: Math.floor((player.total_xp || 0) / 1000) + 1,
     level_progress: (player.total_xp || 0) % 1000,
     twitch_username: player.twitch_username || null,
+    is_admin: !!player.is_admin,
     discord_username: player.discord_username || null,
     created_at: player.created_at,
     competitions: participations.map(p => ({
