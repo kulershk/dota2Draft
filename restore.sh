@@ -45,11 +45,37 @@ if [ "$CONFIRM" != "y" ] && [ "$CONFIRM" != "Y" ]; then
 fi
 
 echo "Restoring..."
-gunzip -c "$BACKUP_FILE" | docker exec -i draft-db psql -U draft -d draft --single-transaction
 
-if [ $? -eq 0 ]; then
+# Stop the app so it doesn't hold DB connections
+echo "Stopping app container..."
+docker stop draft-app 2>/dev/null || docker stop draft-dev-app 2>/dev/null || true
+
+# Drop all tables/sequences/functions in the draft database
+echo "Dropping all existing objects..."
+docker exec draft-db psql -U draft -d draft -c "
+  DO \$\$ DECLARE r RECORD;
+  BEGIN
+    FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+      EXECUTE 'DROP TABLE IF EXISTS public.' || quote_ident(r.tablename) || ' CASCADE';
+    END LOOP;
+    FOR r IN (SELECT sequence_name FROM information_schema.sequences WHERE sequence_schema = 'public') LOOP
+      EXECUTE 'DROP SEQUENCE IF EXISTS public.' || quote_ident(r.sequence_name) || ' CASCADE';
+    END LOOP;
+  END \$\$;"
+
+# Restore the backup
+echo "Loading backup..."
+gunzip -c "$BACKUP_FILE" | docker exec -i draft-db psql -U draft -d draft -v ON_ERROR_STOP=1
+
+RESULT=$?
+
+# Restart the app
+echo "Starting app container..."
+docker start draft-app 2>/dev/null || docker start draft-dev-app 2>/dev/null || true
+
+if [ $RESULT -eq 0 ]; then
   echo "Restore complete!"
 else
-  echo "Restore failed!"
+  echo "Restore failed! The database may be empty — re-run with a different backup or check errors above."
   exit 1
 fi
