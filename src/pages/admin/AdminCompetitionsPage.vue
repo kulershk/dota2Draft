@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Trophy, Plus, Trash2, Pencil, Calendar, User } from 'lucide-vue-next'
+import { Trophy, Plus, Trash2, Pencil, Calendar, User, Copy } from 'lucide-vue-next'
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -19,21 +19,38 @@ const router = useRouter()
 const showCreate = ref(false)
 const showDeleteConfirm = ref<number | null>(null)
 const newComp = ref({ name: '', description: '', starts_at: '', registration_start: '', registration_end: '' })
+const selectedTemplateId = ref<number | null>(null)
+const templates = ref<any[]>([])
+const showDeleteTemplate = ref<number | null>(null)
 
 onMounted(() => {
   store.fetchCompetitions()
+  fetchTemplates()
 })
+
+async function fetchTemplates() {
+  try { templates.value = await api.getCompetitionTemplates() } catch { templates.value = [] }
+}
+
+async function deleteTemplate(id: number) {
+  await api.deleteCompetitionTemplate(id)
+  showDeleteTemplate.value = null
+  await fetchTemplates()
+}
 
 async function createCompetition() {
   if (!newComp.value.name) return
+  const template = templates.value.find(t => t.id === selectedTemplateId.value)
   await api.createCompetition({
     name: newComp.value.name,
     description: newComp.value.description,
     starts_at: newComp.value.starts_at || undefined,
     registration_start: newComp.value.registration_start || undefined,
     registration_end: newComp.value.registration_end || undefined,
+    settings: template?.settings || undefined,
   })
   newComp.value = { name: '', description: '', starts_at: '', registration_start: '', registration_end: '' }
+  selectedTemplateId.value = null
   showCreate.value = false
   await store.fetchCompetitions()
 }
@@ -114,6 +131,40 @@ function formatDate(dateStr: string) {
       </div>
     </div>
 
+    <!-- Templates -->
+    <div v-if="templates.length" class="card">
+      <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
+        <Copy class="w-5 h-5 text-foreground" />
+        <span class="text-sm font-semibold text-foreground">{{ t('templates') }} ({{ templates.length }})</span>
+      </div>
+      <div class="divide-y divide-border">
+        <div v-for="tmpl in templates" :key="tmpl.id" class="flex items-center justify-between px-4 py-3">
+          <div class="min-w-0">
+            <span class="text-sm font-medium text-foreground">{{ tmpl.name }}</span>
+            <span v-if="tmpl.description" class="text-xs text-muted-foreground ml-2">{{ tmpl.description }}</span>
+          </div>
+          <button class="btn-ghost p-1.5 text-destructive" @click="showDeleteTemplate = tmpl.id">
+            <Trash2 class="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Delete Template Confirmation -->
+    <ModalOverlay :show="showDeleteTemplate !== null" @close="showDeleteTemplate = null">
+      <div class="px-7 py-6">
+        <h2 class="text-xl font-semibold text-foreground">{{ t('deleteTemplateTitle') }}</h2>
+        <p class="text-sm text-muted-foreground mt-2">{{ t('deleteTemplateMessage') }}</p>
+      </div>
+      <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
+        <button class="btn-destructive w-full justify-center" @click="showDeleteTemplate !== null && deleteTemplate(showDeleteTemplate)">
+          <Trash2 class="w-4 h-4" />
+          {{ t('delete') }}
+        </button>
+        <button class="btn-secondary w-full justify-center" @click="showDeleteTemplate = null">{{ t('cancel') }}</button>
+      </div>
+    </ModalOverlay>
+
     <!-- Create Modal -->
     <ModalOverlay :show="showCreate" wide @close="showCreate = false">
       <div class="border-b border-border px-7 py-6">
@@ -121,6 +172,13 @@ function formatDate(dateStr: string) {
         <p class="text-sm text-muted-foreground mt-1">{{ t('newCompModal.subtitle') }}</p>
       </div>
       <div class="px-7 py-5 flex flex-col gap-5">
+        <div v-if="templates.length" class="flex flex-col gap-1.5">
+          <label class="label-text">{{ t('templateSelect') }}</label>
+          <select class="input-field" v-model="selectedTemplateId">
+            <option :value="null">{{ t('templateNone') }}</option>
+            <option v-for="tmpl in templates" :key="tmpl.id" :value="tmpl.id">{{ tmpl.name }}</option>
+          </select>
+        </div>
         <InputGroup :label="t('newCompModal.name')" :model-value="newComp.name" :placeholder="t('newCompModal.namePlaceholder')" @update:model-value="newComp.name = $event" />
         <div class="flex flex-col gap-1.5">
           <label class="label-text">{{ t('newCompModal.descriptionOptional') }}</label>

@@ -325,6 +325,18 @@ export async function initDb() {
   try { await execute('ALTER TABLE matches ADD COLUMN penalty_radiant INTEGER DEFAULT NULL') } catch {}
   try { await execute('ALTER TABLE matches ADD COLUMN penalty_dire INTEGER DEFAULT NULL') } catch {}
 
+  // Competition templates
+  await execute(`
+    CREATE TABLE IF NOT EXISTS competition_templates (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      settings JSONB NOT NULL DEFAULT '{}',
+      created_by INTEGER REFERENCES players(id) ON DELETE SET NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `)
+
   // Match game player stats (OpenDota parsed data)
   await execute(`
     CREATE TABLE IF NOT EXISTS match_game_player_stats (

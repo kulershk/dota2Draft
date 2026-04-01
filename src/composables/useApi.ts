@@ -99,6 +99,13 @@ export function useApi() {
     getAllGames: () => request('/api/admin/games/all'),
     refetchGame: (gameId: number) => request(`/api/admin/games/${gameId}/refetch`, { method: 'POST' }),
 
+    // Competition Templates
+    getCompetitionTemplates: () => request('/api/competition-templates'),
+    createTemplateFromCompetition: (compId: number, data: { name: string; description?: string }) =>
+      request(`/api/competition-templates/from-competition/${compId}`, { method: 'POST', body: JSON.stringify(data) }),
+    deleteCompetitionTemplate: (id: number) =>
+      request(`/api/competition-templates/${id}`, { method: 'DELETE' }),
+
     // Competition Auction
     getCompAuction: (compId: number) => request(`/api/competitions/${compId}/auction`),
     getCompResults: (compId: number) => request(`/api/competitions/${compId}/auction/results`),

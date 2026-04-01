@@ -383,6 +383,22 @@ async function deleteStream(id: number) {
   await api.deleteCompStream(compId.value, id)
   await fetchStreams()
 }
+
+// Save as Template
+const showSaveTemplate = ref(false)
+const templateName = ref('')
+const savingTemplate = ref(false)
+
+async function saveAsTemplate() {
+  if (!templateName.value) return
+  savingTemplate.value = true
+  try {
+    await api.createTemplateFromCompetition(compId.value, { name: templateName.value })
+    templateName.value = ''
+    showSaveTemplate.value = false
+  } catch {}
+  savingTemplate.value = false
+}
 </script>
 
 <template>
@@ -535,7 +551,10 @@ async function deleteStream(id: number) {
     </div>
 
     <!-- Save -->
-    <div class="flex justify-end">
+    <div class="flex items-center justify-between">
+      <button class="btn-ghost text-sm" @click="showSaveTemplate = true">
+        {{ t('saveAsTemplate') }}
+      </button>
       <button class="btn-outline text-sm" :disabled="saving" @click="saveAll">
         {{ saving ? t('saving') : t('saveSettings') }}
       </button>
@@ -676,7 +695,10 @@ async function deleteStream(id: number) {
     </div>
 
     <!-- Save -->
-    <div class="flex justify-end">
+    <div class="flex items-center justify-between">
+      <button class="btn-ghost text-sm" @click="showSaveTemplate = true">
+        {{ t('saveAsTemplate') }}
+      </button>
       <button class="btn-outline text-sm" :disabled="saving" @click="saveAll">
         {{ saving ? t('saving') : t('saveSettings') }}
       </button>
@@ -815,7 +837,10 @@ async function deleteStream(id: number) {
     </div>
 
     <!-- Save -->
-    <div class="flex justify-end">
+    <div class="flex items-center justify-between">
+      <button class="btn-ghost text-sm" @click="showSaveTemplate = true">
+        {{ t('saveAsTemplate') }}
+      </button>
       <button class="btn-outline text-sm" :disabled="saving" @click="saveAll">
         {{ saving ? t('saving') : t('saveSettings') }}
       </button>
@@ -1321,5 +1346,22 @@ async function deleteStream(id: number) {
       </div>
     </ModalOverlay>
     </template>
+
+    <!-- Save as Template Modal -->
+    <ModalOverlay :show="showSaveTemplate" @close="showSaveTemplate = false">
+      <div class="px-7 py-6">
+        <h2 class="text-xl font-semibold text-foreground">{{ t('saveAsTemplate') }}</h2>
+        <p class="text-sm text-muted-foreground mt-1">{{ t('saveAsTemplateDesc') }}</p>
+      </div>
+      <div class="px-7 py-5 flex flex-col gap-4">
+        <InputGroup :label="t('templateName')" :model-value="templateName" :placeholder="t('templateNamePlaceholder')" @update:model-value="templateName = $event" />
+      </div>
+      <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
+        <button class="btn-primary w-full justify-center" :disabled="!templateName || savingTemplate" @click="saveAsTemplate">
+          {{ savingTemplate ? '...' : t('saveAsTemplate') }}
+        </button>
+        <button class="btn-secondary w-full justify-center" @click="showSaveTemplate = false">{{ t('cancel') }}</button>
+      </div>
+    </ModalOverlay>
   </div>
 </template>

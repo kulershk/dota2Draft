@@ -611,6 +611,33 @@
         "responses": { "200": { "description": "Deleted" } }
       }
     },
+    "/api/competition-templates": {
+      "get": {
+        "tags": ["Templates"],
+        "summary": "List competition templates",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Array of templates" } }
+      }
+    },
+    "/api/competition-templates/from-competition/{compId}": {
+      "post": {
+        "tags": ["Templates"],
+        "summary": "Create a template from an existing competition's settings",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "required": ["name"], "properties": { "name": { "type": "string" }, "description": { "type": "string" } } } } } },
+        "responses": { "201": { "description": "Template created" } }
+      }
+    },
+    "/api/competition-templates/{id}": {
+      "delete": {
+        "tags": ["Templates"],
+        "summary": "Delete a competition template",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Deleted" } }
+      }
+    },
     "/api/competitions/{compId}/tournament/matches/{matchId}/penalties": {
       "put": {
         "tags": ["Tournament"],
