@@ -287,10 +287,7 @@ function placementBg(n: number) {
                   <span v-if="comp.draft_price" class="text-xs font-mono text-primary font-semibold">{{ comp.draft_price }}g</span>
                 </div>
               </div>
-              <div class="flex items-center gap-2 shrink-0">
-                <div v-if="comp.roles?.length" class="flex gap-0.5">
-                  <RoleBadge v-for="role in sortedRoles(comp.roles)" :key="role" :role="role" />
-                </div>
+              <div class="shrink-0">
                 <MmrDisplay v-if="comp.mmr" :mmr="comp.mmr" size="sm" />
               </div>
             </div>
