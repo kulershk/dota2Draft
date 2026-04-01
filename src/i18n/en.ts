@@ -817,6 +817,8 @@ export default {
   cmPickDire: 'Dire',
   lobbyPenaltyRadiant: 'Radiant Penalty (sec)',
   lobbyPenaltyDire: 'Dire Penalty (sec)',
+  penaltyNone: 'No penalty',
+  penaltyLevel: 'Level {n}',
   lobbySeriesType: 'Series',
   seriesNone: 'No Series',
   seriesBo2: 'Best of 2',

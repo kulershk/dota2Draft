@@ -812,6 +812,8 @@ export default {
   cmPickDire: 'Dire',
   lobbyPenaltyRadiant: 'Radiant sods (sek)',
   lobbyPenaltyDire: 'Dire sods (sek)',
+  penaltyNone: 'Nav soda',
+  penaltyLevel: '{n}. līmenis',
   lobbySeriesType: 'Sērija',
   seriesNone: 'Nav sērijas',
   seriesBo2: 'Best of 2',

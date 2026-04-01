@@ -787,6 +787,8 @@ export default {
   cmPickDire: 'Dire',
   lobbyPenaltyRadiant: 'Штраф Radiant (сек)',
   lobbyPenaltyDire: 'Штраф Dire (сек)',
+  penaltyNone: 'Без штрафа',
+  penaltyLevel: 'Уровень {n}',
   lobbySeriesType: 'Серия',
   seriesNone: 'Без серии',
   seriesBo2: 'Best of 2',

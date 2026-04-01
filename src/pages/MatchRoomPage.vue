@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ChevronDown, ChevronUp, Check, Gamepad2, X, ArrowLeft, Trophy, ExternalLink, Clock, CheckCircle, AlertCircle, RefreshCw } from 'lucide-vue-next'
@@ -430,20 +430,25 @@ async function refetchStats(gameNumber: number) {
   }
 }
 
-// Penalty settings
-const penaltyRadiant = computed(() => match.value?.penalty_radiant ?? 0)
-const penaltyDire = computed(() => match.value?.penalty_dire ?? 0)
+// Per-game penalty settings (local state, sent when lobby is created)
+const gamePenalties = reactive<Record<number, { radiant: number; dire: number }>>({})
 
-async function updatePenalty(side: 'radiant' | 'dire', value: number) {
+function getGamePenalty(gameNumber: number, side: 'radiant' | 'dire'): number {
+  if (gamePenalties[gameNumber]) return gamePenalties[gameNumber][side]
+  return side === 'radiant' ? (match.value?.penalty_radiant ?? 0) : (match.value?.penalty_dire ?? 0)
+}
+
+function setGamePenalty(gameNumber: number, side: 'radiant' | 'dire', value: number) {
+  if (!gamePenalties[gameNumber]) gamePenalties[gameNumber] = { radiant: 0, dire: 0 }
+  gamePenalties[gameNumber][side] = value
+  // Also persist to match for defaults
   const cId = compId.value
-  if (!cId || !match.value) return
-  const data = {
-    penalty_radiant: side === 'radiant' ? (value || null) : (match.value.penalty_radiant ?? null),
-    penalty_dire: side === 'dire' ? (value || null) : (match.value.penalty_dire ?? null),
+  if (cId) {
+    api.updateMatchPenalties(cId, matchId.value, {
+      penalty_radiant: side === 'radiant' ? (value || null) : (match.value?.penalty_radiant ?? null),
+      penalty_dire: side === 'dire' ? (value || null) : (match.value?.penalty_dire ?? null),
+    }).catch(() => {})
   }
-  try {
-    await api.updateMatchPenalties(cId, matchId.value, data)
-  } catch {}
 }
 
 function goBack() {
@@ -510,31 +515,6 @@ function goBack() {
             <span class="text-xs text-text-tertiary">Best of {{ bestOf }}</span>
           </div>
           <div class="flex-1"></div>
-        </div>
-        <!-- Admin: Team Penalty Settings -->
-        <div v-if="store.isAdmin.value && match.status !== 'completed'" class="border-t border-border/30 pt-3 mt-1">
-          <div class="flex items-center justify-center gap-6">
-            <div class="flex items-center gap-2">
-              <span class="text-xs text-muted-foreground">{{ t('lobbyPenaltyRadiant') }}</span>
-              <input
-                type="number"
-                min="0"
-                class="input-field w-16 text-center text-xs py-1 px-2"
-                :value="penaltyRadiant"
-                @change="updatePenalty('radiant', Number(($event.target as HTMLInputElement).value))"
-              />
-            </div>
-            <div class="flex items-center gap-2">
-              <span class="text-xs text-muted-foreground">{{ t('lobbyPenaltyDire') }}</span>
-              <input
-                type="number"
-                min="0"
-                class="input-field w-16 text-center text-xs py-1 px-2"
-                :value="penaltyDire"
-                @change="updatePenalty('dire', Number(($event.target as HTMLInputElement).value))"
-              />
-            </div>
-          </div>
         </div>
       </div>
 
@@ -791,6 +771,37 @@ function goBack() {
                   </div>
                 </div>
                 <p class="text-sm text-muted-foreground">{{ t('matchReadyDesc') }}</p>
+
+                <!-- Admin: Per-game penalty settings -->
+                <div v-if="store.isAdmin.value && !lobbyStatuses[g.game_number]?.status" class="w-full flex items-center justify-center gap-4 py-2 border-t border-border/20 mt-1">
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-[11px] text-muted-foreground">{{ match.team1_name || 'T1' }}</span>
+                    <select
+                      class="input-field text-[11px] py-0.5 px-1.5 w-auto"
+                      :value="getGamePenalty(g.game_number, 'radiant')"
+                      @change="setGamePenalty(g.game_number, 'radiant', Number(($event.target as HTMLSelectElement).value))"
+                    >
+                      <option :value="0">{{ t('penaltyNone') }}</option>
+                      <option :value="1">{{ t('penaltyLevel', { n: 1 }) }}</option>
+                      <option :value="2">{{ t('penaltyLevel', { n: 2 }) }}</option>
+                      <option :value="3">{{ t('penaltyLevel', { n: 3 }) }}</option>
+                    </select>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-[11px] text-muted-foreground">{{ match.team2_name || 'T2' }}</span>
+                    <select
+                      class="input-field text-[11px] py-0.5 px-1.5 w-auto"
+                      :value="getGamePenalty(g.game_number, 'dire')"
+                      @change="setGamePenalty(g.game_number, 'dire', Number(($event.target as HTMLSelectElement).value))"
+                    >
+                      <option :value="0">{{ t('penaltyNone') }}</option>
+                      <option :value="1">{{ t('penaltyLevel', { n: 1 }) }}</option>
+                      <option :value="2">{{ t('penaltyLevel', { n: 2 }) }}</option>
+                      <option :value="3">{{ t('penaltyLevel', { n: 3 }) }}</option>
+                    </select>
+                  </div>
+                </div>
+
                 <span v-if="noBotAvailable[g.game_number] && bothCaptainsReady(g.game_number)" class="text-sm text-amber-500">{{ t('noBotAvailable') }}</span>
                 <span v-if="lobbyCreateError[g.game_number]" class="text-sm text-red-500">{{ lobbyCreateError[g.game_number] }}</span>
 

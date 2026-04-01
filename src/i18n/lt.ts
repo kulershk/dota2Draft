@@ -812,6 +812,8 @@ export default {
   cmPickDire: 'Dire',
   lobbyPenaltyRadiant: 'Radiant bauda (sek)',
   lobbyPenaltyDire: 'Dire bauda (sek)',
+  penaltyNone: 'Nėra baudos',
+  penaltyLevel: '{n} lygis',
   lobbySeriesType: 'Serija',
   seriesNone: 'Nėra serijos',
   seriesBo2: 'Best of 2',
