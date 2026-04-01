@@ -1,5 +1,7 @@
 import { query, queryOne, execute } from '../db.js'
 import { fetchAndSaveGameStats, fetchOpenDotaMatch, saveMatchGameStats, requestOpenDotaParse } from '../helpers/opendota.js'
+import { awardXp, getTeamPlayerIds } from '../helpers/xp.js'
+import { getCompetition, parseCompSettings } from '../helpers/competition.js'
 
 class BotPool {
   constructor() {
@@ -497,6 +499,27 @@ class BotPool {
       )
       console.log(`[Auto] Game ${gameNumber} of match ${matchId} won by captain ${winnerCaptainId} (${radiantWin ? 'radiant' : 'dire'})`)
 
+      // ── XP: game win/loss ──
+      const comp = await getCompetition(match.competition_id)
+      const settings = parseCompSettings(comp)
+      const loserCaptainId = winnerCaptainId === match.team1_captain_id ? match.team2_captain_id : match.team1_captain_id
+      const winPlayers = await getTeamPlayerIds(winnerCaptainId, match.competition_id)
+      const losePlayers = loserCaptainId ? await getTeamPlayerIds(loserCaptainId, match.competition_id) : []
+      const winCap = await queryOne('SELECT team FROM captains WHERE id = $1', [winnerCaptainId])
+      const loseCap = loserCaptainId ? await queryOne('SELECT team FROM captains WHERE id = $1', [loserCaptainId]) : null
+      for (const pid of winPlayers) {
+        awardXp(pid, settings.xpGameWin, 'game_win', 'match_game', `${matchId}:${gameNumber}:${pid}`, {
+          competitionId: match.competition_id, competitionName: comp.name,
+          detail: `Game ${gameNumber} win vs ${loseCap?.team || 'TBD'}`,
+        })
+      }
+      for (const pid of losePlayers) {
+        awardXp(pid, settings.xpGameLoss, 'game_loss', 'match_game', `${matchId}:${gameNumber}:${pid}`, {
+          competitionId: match.competition_id, competitionName: comp.name,
+          detail: `Game ${gameNumber} loss vs ${winCap?.team || 'TBD'}`,
+        })
+      }
+
       // Recalculate match score from all games
       const games = await query(
         'SELECT winner_captain_id FROM match_games WHERE match_id = $1 AND winner_captain_id IS NOT NULL',
@@ -530,10 +553,79 @@ class BotPool {
         [score1, score2, matchWinner, newStatus, matchId]
       )
 
+      // ── XP: match win (series) ──
+      if (matchWinner && newStatus === 'completed') {
+        const matchWinPlayers = await getTeamPlayerIds(matchWinner, match.competition_id)
+        const matchLoserId = matchWinner === match.team1_captain_id ? match.team2_captain_id : match.team1_captain_id
+        const matchLoseCap = matchLoserId ? await queryOne('SELECT team FROM captains WHERE id = $1', [matchLoserId]) : null
+        for (const pid of matchWinPlayers) {
+          awardXp(pid, settings.xpMatchWin, 'match_win', 'match', `${matchId}:${pid}`, {
+            competitionId: match.competition_id, competitionName: comp.name,
+            detail: `Series win vs ${matchLoseCap?.team || 'TBD'}`,
+          })
+        }
+      }
+
       // Advance winner in bracket if match is completed
       if (matchWinner && (match.next_match_id || match.loser_next_match_id)) {
         const { advanceWinner } = await import('../helpers/tournament.js')
         await advanceWinner(matchId, matchWinner)
+      }
+
+      // ── XP: tournament placements (when stage completes) ──
+      const ts = comp.tournament_state || {}
+      if (ts.stages) {
+        const stage = ts.stages.find(s => s.id === match.stage)
+        if (stage) {
+          const stageMatches = await query(
+            "SELECT id FROM matches WHERE competition_id = $1 AND stage = $2 AND status != 'completed'",
+            [match.competition_id, match.stage]
+          )
+          if (stageMatches.length === 0) {
+            stage.status = 'completed'
+            await execute('UPDATE competitions SET tournament_state = $1 WHERE id = $2', [JSON.stringify(ts), match.competition_id])
+
+            if (stage.format !== 'group_stage') {
+              const allStageMatches = await query(
+                'SELECT * FROM matches WHERE competition_id = $1 AND stage = $2 ORDER BY round DESC, match_order',
+                [match.competition_id, match.stage]
+              )
+              const finalMatch = allStageMatches.find(m => !m.next_match_id && m.winner_captain_id && m.bracket !== 'lower')
+              if (finalMatch) {
+                const placementMap = new Map()
+                placementMap.set(finalMatch.winner_captain_id, 1)
+                const finalistLoser = finalMatch.team1_captain_id === finalMatch.winner_captain_id
+                  ? finalMatch.team2_captain_id : finalMatch.team1_captain_id
+                if (finalistLoser) placementMap.set(finalistLoser, 2)
+                if (stage.format === 'single_elimination' && stage.totalRounds) {
+                  const semiRound = stage.totalRounds - 1
+                  const semis = allStageMatches.filter(m => m.round === semiRound && m.bracket !== 'lower')
+                  for (const semi of semis) {
+                    if (semi.winner_captain_id) {
+                      const loser = semi.team1_captain_id === semi.winner_captain_id
+                        ? semi.team2_captain_id : semi.team1_captain_id
+                      if (loser && !placementMap.has(loser)) placementMap.set(loser, 3)
+                    }
+                  }
+                }
+                const xpAmounts = { 1: settings.xpPlacement1st, 2: settings.xpPlacement2nd, 3: settings.xpPlacement3rd }
+                const placementLabels = { 1: '1st place', 2: '2nd place', 3: '3rd place' }
+                for (const [captainId, place] of placementMap) {
+                  const xp = xpAmounts[place]
+                  if (!xp) continue
+                  const players = await getTeamPlayerIds(captainId, match.competition_id)
+                  const cap = await queryOne('SELECT team FROM captains WHERE id = $1', [captainId])
+                  for (const pid of players) {
+                    awardXp(pid, xp, `placement_${place}`, 'stage', `${match.competition_id}:${match.stage}:${pid}`, {
+                      competitionId: match.competition_id, competitionName: comp.name,
+                      detail: `${placementLabels[place]} — ${cap?.team || 'Team'} in ${stage.name || 'Stage'}`,
+                    })
+                  }
+                }
+              }
+            }
+          }
+        }
       }
 
       // Notify clients
