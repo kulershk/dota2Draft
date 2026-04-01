@@ -76,14 +76,14 @@ watch(searchQuery, () => { page.value = 1 })
             <div class="min-w-0">
               <h3 class="text-base font-semibold text-foreground truncate">{{ post.title }}</h3>
               <p class="text-xs text-muted-foreground mt-0.5 line-clamp-1">{{ post.content.replace(/<[^>]*>/g, '').slice(0, 200) }}</p>
-              <div class="flex items-center gap-3 mt-1 flex-wrap">
-                <span class="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Calendar class="w-3 h-3" />
-                  {{ formatDate(post.created_at) }}
+              <div class="flex items-center gap-3 mt-1">
+                <span class="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
+                  <Calendar class="w-3 h-3 shrink-0" />
+                  <span class="font-mono">{{ formatDate(post.created_at) }}</span>
                 </span>
-                <span v-if="post.created_by_name" class="flex items-center gap-1 text-xs text-muted-foreground">
-                  <User class="w-3 h-3" />
-                  {{ post.created_by_name }}
+                <span v-if="post.created_by_name" class="flex items-center gap-1 text-xs text-muted-foreground min-w-0">
+                  <User class="w-3 h-3 shrink-0" />
+                  <span class="truncate">{{ post.created_by_name }}</span>
                 </span>
               </div>
             </div>
