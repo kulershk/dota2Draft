@@ -395,6 +395,25 @@ export default function createTournamentRouter(io) {
     res.json({ ok: true })
   })
 
+  router.put('/api/competitions/:compId/tournament/matches/:matchId/penalties', async (req, res) => {
+    const compId = Number(req.params.compId)
+    const matchId = Number(req.params.matchId)
+    const admin = await requireCompPermission(req, res, compId)
+    if (!admin) return
+
+    const match = await queryOne('SELECT * FROM matches WHERE id = $1 AND competition_id = $2', [matchId, compId])
+    if (!match) return res.status(404).json({ error: 'Match not found' })
+
+    const { penalty_radiant, penalty_dire } = req.body
+    await execute(
+      'UPDATE matches SET penalty_radiant = $1, penalty_dire = $2 WHERE id = $3',
+      [penalty_radiant ?? null, penalty_dire ?? null, matchId]
+    )
+
+    if (io) io.to(`comp:${compId}`).emit('tournament:updated')
+    res.json({ ok: true })
+  })
+
   router.put('/api/competitions/:compId/tournament/matches/:matchId/score', async (req, res) => {
     const compId = Number(req.params.compId)
     const matchId = Number(req.params.matchId)

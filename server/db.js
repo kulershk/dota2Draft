@@ -321,6 +321,10 @@ export async function initDb() {
     }
   }
 
+  // Per-match penalty overrides
+  try { await execute('ALTER TABLE matches ADD COLUMN penalty_radiant INTEGER DEFAULT NULL') } catch {}
+  try { await execute('ALTER TABLE matches ADD COLUMN penalty_dire INTEGER DEFAULT NULL') } catch {}
+
   // Match game player stats (OpenDota parsed data)
   await execute(`
     CREATE TABLE IF NOT EXISTS match_game_player_stats (

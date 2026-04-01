@@ -767,8 +767,8 @@ class BotPool {
     const pauseSetting = compSettings.lobbyPauseSetting || 0
     const selectionPriority = compSettings.lobbySelectionPriority || 0
     const cmPick = compSettings.lobbyCmPick || 0
-    const penaltyRadiant = compSettings.lobbyPenaltyRadiant || 0
-    const penaltyDire = compSettings.lobbyPenaltyDire || 0
+    const penaltyRadiant = match.penalty_radiant ?? compSettings.lobbyPenaltyRadiant ?? 0
+    const penaltyDire = match.penalty_dire ?? compSettings.lobbyPenaltyDire ?? 0
     const seriesType = compSettings.lobbySeriesType || 0
 
     const gameName = options.game_name || `${match.team1_name || 'Team 1'} vs ${match.team2_name || 'Team 2'} - Game ${gameNumber}`

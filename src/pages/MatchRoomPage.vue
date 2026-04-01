@@ -430,6 +430,22 @@ async function refetchStats(gameNumber: number) {
   }
 }
 
+// Penalty settings
+const penaltyRadiant = computed(() => match.value?.penalty_radiant ?? 0)
+const penaltyDire = computed(() => match.value?.penalty_dire ?? 0)
+
+async function updatePenalty(side: 'radiant' | 'dire', value: number) {
+  const cId = compId.value
+  if (!cId || !match.value) return
+  const data = {
+    penalty_radiant: side === 'radiant' ? (value || null) : (match.value.penalty_radiant ?? null),
+    penalty_dire: side === 'dire' ? (value || null) : (match.value.penalty_dire ?? null),
+  }
+  try {
+    await api.updateMatchPenalties(cId, matchId.value, data)
+  } catch {}
+}
+
 function goBack() {
   const cId = compId.value
   if (cId) {
@@ -494,6 +510,31 @@ function goBack() {
             <span class="text-xs text-text-tertiary">Best of {{ bestOf }}</span>
           </div>
           <div class="flex-1"></div>
+        </div>
+        <!-- Admin: Team Penalty Settings -->
+        <div v-if="store.isAdmin.value && match.status !== 'completed'" class="border-t border-border/30 pt-3 mt-1">
+          <div class="flex items-center justify-center gap-6">
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-muted-foreground">{{ t('lobbyPenaltyRadiant') }}</span>
+              <input
+                type="number"
+                min="0"
+                class="input-field w-16 text-center text-xs py-1 px-2"
+                :value="penaltyRadiant"
+                @change="updatePenalty('radiant', Number(($event.target as HTMLInputElement).value))"
+              />
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-muted-foreground">{{ t('lobbyPenaltyDire') }}</span>
+              <input
+                type="number"
+                min="0"
+                class="input-field w-16 text-center text-xs py-1 px-2"
+                :value="penaltyDire"
+                @change="updatePenalty('dire', Number(($event.target as HTMLInputElement).value))"
+              />
+            </div>
+          </div>
         </div>
       </div>
 

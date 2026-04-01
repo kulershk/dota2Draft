@@ -611,6 +611,19 @@
         "responses": { "200": { "description": "Deleted" } }
       }
     },
+    "/api/competitions/{compId}/tournament/matches/{matchId}/penalties": {
+      "put": {
+        "tags": ["Tournament"],
+        "summary": "Update match team penalty settings (overrides competition defaults for this match)",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "matchId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "penalty_radiant": { "type": "integer", "nullable": true, "description": "Radiant time penalty in seconds" }, "penalty_dire": { "type": "integer", "nullable": true, "description": "Dire time penalty in seconds" } } } } } },
+        "responses": { "200": { "description": "Updated" } }
+      }
+    },
     "/api/competitions/{compId}/tournament/matches/{matchId}/score": {
       "put": {
         "tags": ["Tournament"],
