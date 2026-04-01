@@ -1,9 +1,9 @@
 /**
- * Backfill XP for all completed match games and matches that were
- * auto-resolved by the bot but never received XP awards.
+ * Recalculate all match/game/placement XP from scratch.
+ * Deletes old game_win, game_loss, match_win, and placement XP entries,
+ * then re-awards based on current competition settings.
  *
- * Safe to run multiple times — awardXp is idempotent via
- * UNIQUE(player_id, reason, ref_type, ref_id).
+ * Safe to run multiple times.
  *
  * Usage: node --experimental-vm-modules server/scripts/backfill-xp.js
  */
@@ -11,23 +11,19 @@ import { query, queryOne, execute, initDb } from '../db.js'
 import { awardXp, getTeamPlayerIds } from '../helpers/xp.js'
 import { getCompetition, parseCompSettings } from '../helpers/competition.js'
 
-async function backfill() {
+async function recalculate() {
   await initDb()
+
+  // ── Delete all old game/match/placement XP ──
+  console.log('[Recalc] Removing old game/match/placement XP entries...')
+  const deleted = await execute(
+    `DELETE FROM xp_log WHERE reason IN ('game_win', 'game_loss', 'match_win', 'placement_1', 'placement_2', 'placement_3')`
+  )
+  console.log(`[Recalc] Deleted ${deleted.rowCount} old XP entries`)
 
   let totalAwarded = 0
 
-  // ── 1. Game win/loss XP ──
-  console.log('[Backfill] Scanning completed match games...')
-  const games = await query(`
-    SELECT mg.match_id, mg.game_number, mg.winner_captain_id,
-           m.team1_captain_id, m.team2_captain_id, m.competition_id
-    FROM match_games mg
-    JOIN matches m ON m.id = mg.match_id
-    WHERE mg.winner_captain_id IS NOT NULL
-    ORDER BY mg.match_id, mg.game_number
-  `)
-
-  // Group by competition to avoid repeated settings lookups
+  // Cache competition settings
   const compCache = new Map()
   async function getCompSettings(compId) {
     if (compCache.has(compId)) return compCache.get(compId)
@@ -38,6 +34,17 @@ async function backfill() {
     compCache.set(compId, result)
     return result
   }
+
+  // ── 1. Game win/loss XP ──
+  console.log('[Recalc] Scanning completed match games...')
+  const games = await query(`
+    SELECT mg.match_id, mg.game_number, mg.winner_captain_id,
+           m.team1_captain_id, m.team2_captain_id, m.competition_id
+    FROM match_games mg
+    JOIN matches m ON m.id = mg.match_id
+    WHERE mg.winner_captain_id IS NOT NULL
+    ORDER BY mg.match_id, mg.game_number
+  `)
 
   for (const game of games) {
     const cached = await getCompSettings(game.competition_id)
@@ -67,10 +74,10 @@ async function backfill() {
       if (r.awarded) totalAwarded++
     }
   }
-  console.log(`[Backfill] Processed ${games.length} games`)
+  console.log(`[Recalc] Processed ${games.length} games`)
 
   // ── 2. Match win XP ──
-  console.log('[Backfill] Scanning completed matches...')
+  console.log('[Recalc] Scanning completed matches...')
   const matches = await query(`
     SELECT id, team1_captain_id, team2_captain_id, winner_captain_id, competition_id
     FROM matches
@@ -95,10 +102,10 @@ async function backfill() {
       if (r.awarded) totalAwarded++
     }
   }
-  console.log(`[Backfill] Processed ${matches.length} matches`)
+  console.log(`[Recalc] Processed ${matches.length} matches`)
 
   // ── 3. Placement XP ──
-  console.log('[Backfill] Scanning tournament placements...')
+  console.log('[Recalc] Scanning tournament placements...')
   const comps = await query(`
     SELECT id, name, tournament_state, settings FROM competitions
     WHERE tournament_state IS NOT NULL AND tournament_state != '{}'::jsonb
@@ -154,13 +161,21 @@ async function backfill() {
       }
     }
   }
-  console.log(`[Backfill] Processed ${comps.length} competitions for placements`)
+  console.log(`[Recalc] Processed ${comps.length} competitions for placements`)
 
-  console.log(`\n[Backfill] Done! ${totalAwarded} new XP entries awarded.`)
+  // ── 4. Recalculate total_xp for all players ──
+  console.log('[Recalc] Updating player total_xp...')
+  await execute(`
+    UPDATE players SET total_xp = COALESCE((
+      SELECT SUM(amount) FROM xp_log WHERE xp_log.player_id = players.id
+    ), 0)
+  `)
+
+  console.log(`\n[Recalc] Done! ${totalAwarded} XP entries created.`)
   process.exit(0)
 }
 
-backfill().catch(e => {
-  console.error('[Backfill] Fatal error:', e)
+recalculate().catch(e => {
+  console.error('[Recalc] Fatal error:', e)
   process.exit(1)
 })

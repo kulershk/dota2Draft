@@ -46,9 +46,9 @@ export function parseCompSettings(comp) {
     lobbyPenaltyDire: Number(s.lobbyPenaltyDire) || 0,
     lobbySeriesType: Number(s.lobbySeriesType) || 0,
     // XP / Leveling
-    xpGameWin: Number(s.xpGameWin ?? 30),
-    xpGameLoss: Number(s.xpGameLoss ?? 10),
-    xpMatchWin: Number(s.xpMatchWin ?? 50),
+    xpGameWin: Number(s.xpGameWin ?? 10),
+    xpGameLoss: Number(s.xpGameLoss ?? 5),
+    xpMatchWin: Number(s.xpMatchWin ?? 10),
     xpPlacement1st: Number(s.xpPlacement1st ?? 500),
     xpPlacement2nd: Number(s.xpPlacement2nd ?? 300),
     xpPlacement3rd: Number(s.xpPlacement3rd ?? 150),
