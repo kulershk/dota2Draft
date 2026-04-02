@@ -315,6 +315,7 @@ watch(match, (m, oldM) => {
   for (const g of allGames.value) {
     store.getMatchReadyState(m.id, g.game_number)
     fetchLobbyStatus(g.game_number)
+    if (g.has_stats && !gameStats.value[g.game_number]) loadStats(g.game_number)
   }
 }, { immediate: true })
 
@@ -891,45 +892,38 @@ function goBack() {
         </div>
       </div>
 
-      <!-- Games list with stats -->
-      <div class="card overflow-hidden">
-        <div v-for="game in allGames" :key="game.game_number" class="border-b border-border/50 last:border-0">
-          <button
-            class="flex items-center gap-2 w-full px-5 py-3.5 cursor-pointer hover:bg-accent/30 transition-colors"
-            @click="game.has_stats || game.winner_captain_id ? toggleStats(game.game_number) : null"
-          >
-            <Gamepad2 class="w-4 h-4 text-primary" />
-            <span class="text-sm font-semibold text-foreground">{{ t('game') }} {{ game.game_number }}</span>
-            <CheckCircle v-if="game.has_stats && game.parsed" class="w-3.5 h-3.5 text-green-500" :title="t('statsParsed')" />
-            <AlertCircle v-else-if="game.has_stats && !game.parsed" class="w-3.5 h-3.5 text-amber-500" :title="t('statsPartial')" />
-            <span class="w-2 h-2 rounded-full"
-              :class="game.winner_captain_id ? 'bg-color-success' : 'bg-text-tertiary'" />
-            <span v-if="winnerName(game)" class="text-xs text-muted-foreground ml-1">{{ winnerName(game) }}</span>
-            <span v-else class="text-xs text-text-tertiary ml-1">—</span>
-            <div class="ml-auto flex items-center gap-1">
-              <button
-                v-if="store.isAdmin.value && game.dotabuff_id && game.has_stats && !game.parsed"
-                class="p-1 rounded-md text-amber-500 hover:text-amber-400 hover:bg-accent transition-colors"
-                :disabled="refetchingGame[game.game_number]"
-                :title="t('refetchStats')"
-                @click.stop="refetchStats(game.game_number)"
-              >
-                <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': refetchingGame[game.game_number] }" />
-              </button>
-              <span v-if="game.dotabuff_id" class="text-[10px] font-mono text-text-tertiary">#{{ game.dotabuff_id }}</span>
-              <component v-if="game.has_stats || game.winner_captain_id" :is="expandedGame === game.game_number ? ChevronUp : ChevronDown" class="w-4 h-4 text-text-tertiary" />
-            </div>
-          </button>
+      <!-- Games with inline stats -->
+      <div v-for="game in allGames" :key="game.game_number" class="card overflow-hidden mb-4">
+        <!-- Game header -->
+        <div class="flex items-center gap-2 px-5 py-3 border-b border-border/50 bg-accent/20">
+          <Gamepad2 class="w-4 h-4 text-primary" />
+          <span class="text-sm font-semibold text-foreground">{{ t('game') }} {{ game.game_number }}</span>
+          <CheckCircle v-if="game.has_stats && game.parsed" class="w-3.5 h-3.5 text-green-500" :title="t('statsParsed')" />
+          <AlertCircle v-else-if="game.has_stats && !game.parsed" class="w-3.5 h-3.5 text-amber-500" :title="t('statsPartial')" />
+          <span class="w-2 h-2 rounded-full"
+            :class="game.winner_captain_id ? 'bg-color-success' : 'bg-text-tertiary'" />
+          <span v-if="winnerName(game)" class="text-xs text-muted-foreground ml-1">{{ winnerName(game) }}</span>
+          <span v-else class="text-xs text-text-tertiary ml-1">—</span>
+          <div class="ml-auto flex items-center gap-1">
+            <button
+              v-if="store.isAdmin.value && game.dotabuff_id && game.has_stats && !game.parsed"
+              class="p-1 rounded-md text-amber-500 hover:text-amber-400 hover:bg-accent transition-colors"
+              :disabled="refetchingGame[game.game_number]"
+              :title="t('refetchStats')"
+              @click.stop="refetchStats(game.game_number)"
+            >
+              <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': refetchingGame[game.game_number] }" />
+            </button>
+            <span v-if="game.dotabuff_id" class="text-[10px] font-mono text-text-tertiary">#{{ game.dotabuff_id }}</span>
+          </div>
+        </div>
 
-          <!-- Stats panel -->
-          <div v-if="expandedGame === game.game_number" class="border-t border-border/50 px-5 py-4">
-            <div v-if="loadingStats[game.game_number]" class="text-sm text-muted-foreground text-center py-6">
-              {{ t('loading') }}...
-            </div>
-            <div v-else-if="!gameStats[game.game_number]?.length" class="text-sm text-muted-foreground text-center py-6">
-              {{ t('noStatsYet') }}
-            </div>
-            <div v-else class="flex flex-col gap-4">
+        <!-- Stats (always visible when available) -->
+        <div v-if="loadingStats[game.game_number]" class="px-5 py-6 text-sm text-muted-foreground text-center">
+          {{ t('loading') }}...
+        </div>
+        <div v-else-if="gameStats[game.game_number]?.length" class="px-5 py-4">
+            <div class="flex flex-col gap-4">
               <!-- Game info bar: duration + external links -->
               <div class="flex items-center justify-between flex-wrap gap-2">
                 <div v-if="getGameDuration(game.game_number)" class="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -960,12 +954,12 @@ function goBack() {
                 {{ t('partialStats') }}
               </div>
 
-              <!-- Stats table -->
+              <!-- Stats table with sticky player column -->
               <div class="overflow-x-auto">
-                <table class="w-full text-xs">
+                <table class="w-full text-xs" style="border-collapse: separate; border-spacing: 0;">
                   <thead>
                     <tr class="text-muted-foreground border-b border-border/30">
-                      <th class="text-left py-1.5 px-1.5 min-w-[180px]">{{ t('playerCol') }}</th>
+                      <th class="text-left py-1.5 px-1.5 min-w-[180px] sticky left-0 bg-card z-10">{{ t('playerCol') }}</th>
                       <th class="text-center px-1">K</th>
                       <th class="text-center px-1">D</th>
                       <th class="text-center px-1">A</th>
@@ -995,7 +989,7 @@ function goBack() {
                         class="hover:bg-accent/40 group"
                         :class="p.win ? 'text-foreground' : 'text-muted-foreground'"
                       >
-                        <td class="py-1.5 px-1.5">
+                        <td class="py-1.5 px-1.5 sticky left-0 bg-card z-10">
                           <div class="flex items-center gap-1.5">
                             <img v-if="dota.heroImg(p.hero_id)" :src="dota.heroImg(p.hero_id)" :alt="dota.heroName(p.hero_id)" :title="dota.heroName(p.hero_id)"
                               class="w-8 h-[22px] rounded-sm object-cover flex-shrink-0 border border-border/30" />
