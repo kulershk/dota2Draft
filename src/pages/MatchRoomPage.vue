@@ -480,9 +480,11 @@ const playerPositions = computed(() => {
   return positions
 })
 
-function posLabel(gameNumber: number, accountId: number): string {
-  const pos = playerPositions.value[gameNumber]?.[accountId]
-  return pos ? `Pos ${pos}` : ''
+function sortedTeamStats(gameNumber: number, isRadiant: boolean) {
+  const stats = gameStats.value[gameNumber]?.filter((s: any) => s.is_radiant === isRadiant) || []
+  const positions = playerPositions.value[gameNumber]
+  if (!positions) return stats
+  return [...stats].sort((a: any, b: any) => (positions[a.account_id] || 9) - (positions[b.account_id] || 9))
 }
 
 // Group draft into ban/pick phases
@@ -1012,6 +1014,7 @@ function goBack() {
                   <thead>
                     <tr class="text-muted-foreground border-b border-border/30">
                       <th class="text-left py-1.5 px-1.5 min-w-[180px] sticky left-0 bg-card z-10">{{ t('playerCol') }}</th>
+                      <th class="text-center px-1"></th>
                       <th class="text-center px-1">LVL</th>
                       <th class="text-center px-1">K</th>
                       <th class="text-center px-1">D</th>
@@ -1043,15 +1046,15 @@ function goBack() {
                   </thead>
                   <tbody>
                     <template v-for="(side, sideIdx) in [true, false]" :key="sideIdx">
-                      <tr v-if="sideIdx > 0" class="h-1"><td :colspan="28" class="border-t border-border/30"></td></tr>
+                      <tr v-if="sideIdx > 0" class="h-1"><td :colspan="29" class="border-t border-border/30"></td></tr>
                       <tr class="text-[10px] text-muted-foreground">
-                        <td :colspan="28" class="py-1 px-1.5 font-semibold" :class="side ? 'text-green-500/80' : 'text-red-500/80'">
+                        <td :colspan="29" class="py-1 px-1.5 font-semibold" :class="side ? 'text-green-500/80' : 'text-red-500/80'">
                           {{ side ? 'Radiant' : 'Dire' }}
                           <span v-if="gameStats[game.game_number]?.find((s: any) => s.is_radiant === side)?.win" class="ml-1 text-green-500">({{ t('matchWinner', { team: '' }).replace('!', '').trim() }})</span>
                         </td>
                       </tr>
                       <tr
-                        v-for="p in gameStats[game.game_number]?.filter((s: any) => s.is_radiant === side)"
+                        v-for="p in sortedTeamStats(game.game_number, side)"
                         :key="p.account_id"
                         class="hover:bg-accent/40 group"
                         :class="p.win ? 'text-foreground' : 'text-muted-foreground'"
@@ -1060,7 +1063,6 @@ function goBack() {
                           <div class="flex items-center gap-1.5">
                             <img v-if="dota.heroImg(p.hero_id)" :src="dota.heroImg(p.hero_id)" :alt="dota.heroName(p.hero_id)" :title="dota.heroName(p.hero_id)"
                               class="w-8 h-[22px] rounded-sm object-cover flex-shrink-0 border border-border/30" />
-                            <PositionIcon v-if="playerPositions[game.game_number]?.[p.account_id]" :position="playerPositions[game.game_number][p.account_id]" class="shrink-0" />
                             <div class="flex flex-col min-w-0">
                               <router-link v-if="p.profile_id" :to="{ name: 'player-profile', params: { id: p.profile_id } }"
                                 class="font-medium truncate text-xs leading-tight hover:text-primary transition-colors">
@@ -1070,6 +1072,9 @@ function goBack() {
                               <span class="text-[10px] text-muted-foreground leading-tight">{{ dota.heroName(p.hero_id) }}</span>
                             </div>
                           </div>
+                        </td>
+                        <td class="text-center px-1">
+                          <PositionIcon v-if="playerPositions[game.game_number]?.[p.account_id]" :position="playerPositions[game.game_number][p.account_id]" />
                         </td>
                         <td class="text-center px-1">{{ p.level }}</td>
                         <td class="text-center px-1 font-medium text-green-500">{{ p.kills }}</td>
