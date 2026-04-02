@@ -483,7 +483,7 @@ function goBack() {
 </script>
 
 <template>
-  <div class="p-4 md:p-8 flex flex-col gap-0 max-w-[900px] mx-auto w-full">
+  <div class="p-4 md:p-8 md:px-10 flex flex-col gap-0 max-w-[1200px] mx-auto w-full">
     <!-- Back button -->
     <button class="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4 self-start" @click="goBack">
       <ArrowLeft class="w-4 h-4" />
