@@ -960,19 +960,19 @@ function goBack() {
                   <thead>
                     <tr class="text-muted-foreground border-b border-border/30">
                       <th class="text-left py-1.5 px-1.5 min-w-[180px] sticky left-0 bg-card z-10">{{ t('playerCol') }}</th>
+                      <th class="text-center px-1">LVL</th>
                       <th class="text-center px-1">K</th>
                       <th class="text-center px-1">D</th>
                       <th class="text-center px-1">A</th>
                       <th class="text-center px-1">LH</th>
                       <th class="text-center px-1">DN</th>
+                      <th class="text-center px-1" :title="t('netWorth')">NET</th>
                       <th class="text-center px-1">GPM</th>
                       <th class="text-center px-1">XPM</th>
-                      <th class="text-center px-1" :title="t('netWorth')">NW</th>
                       <th class="text-center px-1" :title="t('heroDamage')">HD</th>
                       <th class="text-center px-1" :title="t('towerDamage')">TD</th>
                       <th class="text-center px-1" :title="t('heroHealing')">HH</th>
                       <th class="text-left px-1.5 min-w-[150px]">{{ t('items') }}</th>
-                      <th class="text-center px-1">LVL</th>
                       <th class="text-center px-1" :title="t('obsPlaced')">OW</th>
                       <th class="text-center px-1" :title="t('senPlaced')">SW</th>
                       <th class="text-center px-1" :title="t('obsKilled')">OK</th>
@@ -1018,14 +1018,15 @@ function goBack() {
                             </div>
                           </div>
                         </td>
+                        <td class="text-center px-1">{{ p.level }}</td>
                         <td class="text-center px-1 font-medium text-green-500">{{ p.kills }}</td>
                         <td class="text-center px-1 font-medium text-red-500">{{ p.deaths }}</td>
                         <td class="text-center px-1">{{ p.assists }}</td>
                         <td class="text-center px-1">{{ p.last_hits }}</td>
                         <td class="text-center px-1">{{ p.denies }}</td>
+                        <td class="text-center px-1 font-medium text-amber-500">{{ (p.net_worth / 1000).toFixed(1) }}k</td>
                         <td class="text-center px-1">{{ p.gpm }}</td>
                         <td class="text-center px-1">{{ p.xpm }}</td>
-                        <td class="text-center px-1 font-medium text-amber-500">{{ (p.net_worth / 1000).toFixed(1) }}k</td>
                         <td class="text-center px-1">{{ (p.hero_damage / 1000).toFixed(1) }}k</td>
                         <td class="text-center px-1">{{ (p.tower_damage / 1000).toFixed(1) }}k</td>
                         <td class="text-center px-1">{{ (p.hero_healing / 1000).toFixed(1) }}k</td>
@@ -1046,7 +1047,6 @@ function goBack() {
                             </template>
                           </div>
                         </td>
-                        <td class="text-center px-1">{{ p.level }}</td>
                         <td class="text-center px-1">{{ p.obs_placed }}</td>
                         <td class="text-center px-1">{{ p.sen_placed }}</td>
                         <td class="text-center px-1">{{ p.observer_kills }}</td>
