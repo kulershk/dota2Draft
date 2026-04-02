@@ -1081,8 +1081,8 @@ function goBack() {
                           <div class="flex items-center gap-2">
                             <div class="relative shrink-0">
                               <img v-if="dota.heroImg(p.hero_id)" :src="dota.heroImg(p.hero_id)"
-                                class="w-10 h-[28px] rounded object-cover border" :class="side ? 'border-green-500/30' : 'border-red-500/30'" />
-                              <span class="absolute -bottom-1 -right-1 text-[8px] font-bold bg-surface text-foreground rounded-full w-4 h-4 flex items-center justify-center border border-border/50">{{ p.level }}</span>
+                                class="w-[60px] h-[42px] rounded object-cover border" :class="side ? 'border-green-500/30' : 'border-red-500/30'" />
+                              <span class="absolute -bottom-1 -right-1 text-[9px] font-bold bg-surface text-foreground rounded-full w-5 h-5 flex items-center justify-center border border-border/50">{{ p.level }}</span>
                             </div>
                             <div class="flex flex-col min-w-0">
                               <router-link v-if="p.profile_id" :to="{ name: 'player-profile', params: { id: p.profile_id } }"
