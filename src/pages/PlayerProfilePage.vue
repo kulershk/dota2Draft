@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { User, Trophy, Swords, Tv, Calendar, Medal, MessageCircle, Shield, Star, ChevronLeft, ChevronRight, Crown } from 'lucide-vue-next'
+import { User, Trophy, Swords, Tv, Calendar, Medal, MessageCircle, Shield, Star, ChevronLeft, ChevronRight } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -85,14 +85,11 @@ function placementBg(n: number) {
 
     <template v-else-if="profile">
       <!-- Player header -->
-      <div class="card p-6" :class="profile.is_admin ? 'pt-8' : ''">
+      <div class="card p-6">
         <div class="flex items-start gap-4">
-          <div class="relative shrink-0">
-            <Crown v-if="profile.is_admin" class="w-6 h-6 text-amber-500 absolute -top-4 left-1/2 -translate-x-1/2 drop-shadow" />
-            <img v-if="profile.avatar_url" :src="profile.avatar_url" class="w-16 h-16 rounded-full" />
-            <div v-else class="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-              <User class="w-8 h-8 text-primary" />
-            </div>
+          <img v-if="profile.avatar_url" :src="profile.avatar_url" class="w-16 h-16 rounded-full" />
+          <div v-else class="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+            <User class="w-8 h-8 text-primary" />
           </div>
           <div class="flex-1 min-w-0">
             <div class="flex items-start justify-between gap-3">

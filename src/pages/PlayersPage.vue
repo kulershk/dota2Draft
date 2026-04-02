@@ -264,7 +264,7 @@ watch(searchQuery, () => { playersPage.value = 1 })
         <span class="w-10 text-sm font-mono text-text-tertiary">{{ String(i + 1).padStart(2, '0') }}</span>
         <!-- Player name -->
         <div class="w-[180px] flex items-center gap-1.5 min-w-0 shrink-0">
-          <UserName :id="player.id" :name="player.name" :avatar-url="player.avatar_url" />
+          <UserName :id="player.id" :name="player.name" :avatar-url="player.avatar_url" :is-admin="player.is_admin" />
           <Shield v-if="player.is_captain" class="w-3.5 h-3.5 text-amber-500 flex-shrink-0" :title="t('captainCol')" />
         </div>
         <!-- Roles -->
@@ -294,7 +294,7 @@ watch(searchQuery, () => { playersPage.value = 1 })
         <div class="flex-1 min-w-0">
           <div class="flex items-center justify-between gap-2">
             <div class="flex items-center gap-1.5 min-w-0">
-              <UserName :id="player.id" :name="player.name" :avatar-url="player.avatar_url" />
+              <UserName :id="player.id" :name="player.name" :avatar-url="player.avatar_url" :is-admin="player.is_admin" />
               <Shield v-if="player.is_captain" class="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
             </div>
             <MmrDisplay :mmr="player.mmr" size="sm" />
