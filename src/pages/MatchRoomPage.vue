@@ -680,15 +680,15 @@ function goBack() {
       <div v-if="teamRosters.team1.length || teamRosters.team2.length" class="grid grid-cols-2 gap-4 mb-6">
         <template v-for="(teamKey, idx) in ['team1', 'team2'] as const" :key="teamKey">
           <div class="card px-4 py-3 flex flex-col gap-2">
-            <!-- Team name -->
-            <TeamName v-if="teamKey === 'team1' && match.team1_captain_id" :id="match.team1_captain_id" :name="match.team1_name || t('tbd')" :banner-url="match.team1_banner" :avatar-url="match.team1_avatar" class="mb-1" />
-            <TeamName v-else-if="teamKey === 'team2' && match.team2_captain_id" :id="match.team2_captain_id" :name="match.team2_name || t('tbd')" :banner-url="match.team2_banner" :avatar-url="match.team2_avatar" class="mb-1" />
-            <span v-else class="text-sm font-semibold text-muted-foreground truncate mb-1">{{ t('tbd') }}</span>
-            <!-- Penalty -->
-            <div v-if="showAdminPanel" class="flex items-center gap-1.5 mb-1">
-              <span class="text-[10px] text-muted-foreground">Penalty:</span>
+            <!-- Team name + penalty -->
+            <div class="flex items-center gap-2 mb-1">
+              <TeamName v-if="teamKey === 'team1' && match.team1_captain_id" :id="match.team1_captain_id" :name="match.team1_name || t('tbd')" :banner-url="match.team1_banner" :avatar-url="match.team1_avatar" />
+              <TeamName v-else-if="teamKey === 'team2' && match.team2_captain_id" :id="match.team2_captain_id" :name="match.team2_name || t('tbd')" :banner-url="match.team2_banner" :avatar-url="match.team2_avatar" />
+              <span v-else class="text-sm font-semibold text-muted-foreground truncate">{{ t('tbd') }}</span>
+              <!-- Penalty: dropdown in edit mode, red text otherwise -->
               <select
-                class="input-field text-[10px] py-0.5 px-1.5 w-auto"
+                v-if="showAdminPanel"
+                class="input-field text-[10px] py-0.5 px-1.5 w-auto ml-auto"
                 :value="(teamKey === 'team1' ? match.penalty_radiant : match.penalty_dire) ?? 0"
                 @change="api.updateMatchPenalties(compId!, matchId, {
                   penalty_radiant: teamKey === 'team1' ? (Number(($event.target as HTMLSelectElement).value) || null) : (match.penalty_radiant ?? null),
@@ -700,9 +700,9 @@ function goBack() {
                 <option :value="2">{{ t('penaltyLevel', { n: 2 }) }}</option>
                 <option :value="3">{{ t('penaltyLevel', { n: 3 }) }}</option>
               </select>
-            </div>
-            <div v-else-if="(teamKey === 'team1' ? match.penalty_radiant : match.penalty_dire)" class="mb-1">
-              <span class="text-[10px] font-medium text-amber-500">{{ t('penaltyLevel', { n: teamKey === 'team1' ? match.penalty_radiant : match.penalty_dire }) }}</span>
+              <span v-else-if="(teamKey === 'team1' ? match.penalty_radiant : match.penalty_dire)" class="text-[10px] font-semibold text-destructive">
+                Penalty {{ t('penaltyLevel', { n: teamKey === 'team1' ? match.penalty_radiant : match.penalty_dire }) }}
+              </span>
             </div>
             <!-- Players -->
             <div v-for="p in teamRosters[teamKey]" :key="p.id" class="flex items-center gap-2 py-0.5">
