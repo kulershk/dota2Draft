@@ -1060,16 +1060,14 @@ function goBack() {
                           <div class="flex items-center gap-1.5">
                             <img v-if="dota.heroImg(p.hero_id)" :src="dota.heroImg(p.hero_id)" :alt="dota.heroName(p.hero_id)" :title="dota.heroName(p.hero_id)"
                               class="w-8 h-[22px] rounded-sm object-cover flex-shrink-0 border border-border/30" />
+                            <PositionIcon v-if="playerPositions[game.game_number]?.[p.account_id]" :position="playerPositions[game.game_number][p.account_id]" class="shrink-0" />
                             <div class="flex flex-col min-w-0">
                               <router-link v-if="p.profile_id" :to="{ name: 'player-profile', params: { id: p.profile_id } }"
                                 class="font-medium truncate text-xs leading-tight hover:text-primary transition-colors">
                                 {{ playerDisplayName(p) }}
                               </router-link>
                               <span v-else class="font-medium truncate text-xs leading-tight">{{ playerDisplayName(p) }}</span>
-                              <span class="text-[10px] text-muted-foreground leading-tight flex items-center gap-1">
-                                {{ dota.heroName(p.hero_id) }}
-                                <PositionIcon v-if="playerPositions[game.game_number]?.[p.account_id]" :position="playerPositions[game.game_number][p.account_id]" />
-                              </span>
+                              <span class="text-[10px] text-muted-foreground leading-tight">{{ dota.heroName(p.hero_id) }}</span>
                             </div>
                           </div>
                         </td>
