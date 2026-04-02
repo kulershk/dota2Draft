@@ -433,9 +433,55 @@ async function refetchStats(gameNumber: number) {
   }
 }
 
-function laneLabel(laneRole: number): string {
-  const labels: Record<number, string> = { 1: 'Safe', 2: 'Mid', 3: 'Off', 4: 'Jungle' }
-  return labels[laneRole] || ''
+// Estimate position (1-5) from lane_role + net_worth within team
+const playerPositions = computed(() => {
+  const positions: Record<string, Record<number, number>> = {} // gameNumber -> accountId -> position
+  for (const [gn, stats] of Object.entries(gameStats.value)) {
+    if (!stats?.length) continue
+    const gamePositions: Record<number, number> = {}
+    for (const side of [true, false]) {
+      const team = stats.filter((p: any) => p.is_radiant === side).sort((a: any, b: any) => b.net_worth - a.net_worth)
+      if (team.length < 5) {
+        // Fallback: just rank by NW
+        team.forEach((p: any, i: number) => { gamePositions[p.account_id] = i + 1 })
+        continue
+      }
+      const cores = team.slice(0, 3)
+      const supports = team.slice(3)
+      // Assign cores by lane: mid=2, safe=1, off=3
+      const assigned = new Set<number>()
+      const corePositions: Record<number, number> = {}
+      // Mid first (most reliable)
+      const midPlayer = cores.find((p: any) => p.lane_role === 2)
+      if (midPlayer) { corePositions[midPlayer.account_id] = 2; assigned.add(midPlayer.account_id) }
+      // Safe lane core = pos 1
+      const safePlayer = cores.find((p: any) => p.lane_role === 1 && !assigned.has(p.account_id))
+      if (safePlayer) { corePositions[safePlayer.account_id] = 1; assigned.add(safePlayer.account_id) }
+      // Off lane core = pos 3
+      const offPlayer = cores.find((p: any) => p.lane_role === 3 && !assigned.has(p.account_id))
+      if (offPlayer) { corePositions[offPlayer.account_id] = 3; assigned.add(offPlayer.account_id) }
+      // Fill remaining cores by NW rank
+      const unassigned = [1, 2, 3].filter(pos => !Object.values(corePositions).includes(pos))
+      let ui = 0
+      for (const p of cores) {
+        if (!assigned.has(p.account_id)) {
+          corePositions[p.account_id] = unassigned[ui++]
+          assigned.add(p.account_id)
+        }
+      }
+      for (const [accId, pos] of Object.entries(corePositions)) gamePositions[Number(accId)] = pos
+      // Supports: higher NW = pos 4, lower NW = pos 5
+      gamePositions[supports[0].account_id] = 4
+      gamePositions[supports[1].account_id] = 5
+    }
+    positions[gn] = gamePositions
+  }
+  return positions
+})
+
+function posLabel(gameNumber: number, accountId: number): string {
+  const pos = playerPositions.value[gameNumber]?.[accountId]
+  return pos ? `Pos ${pos}` : ''
 }
 
 // Group draft into ban/pick phases
@@ -1021,7 +1067,7 @@ function goBack() {
                               <span v-else class="font-medium truncate text-xs leading-tight">{{ playerDisplayName(p) }}</span>
                               <span class="text-[10px] text-muted-foreground leading-tight">
                                 {{ dota.heroName(p.hero_id) }}
-                                <span v-if="p.lane_role" class="text-[9px] text-primary/70 ml-0.5">{{ laneLabel(p.lane_role) }}</span>
+                                <span v-if="posLabel(game.game_number, p.account_id)" class="text-[9px] text-primary/70 ml-0.5">{{ posLabel(game.game_number, p.account_id) }}</span>
                               </span>
                             </div>
                           </div>
