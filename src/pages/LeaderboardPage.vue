@@ -53,7 +53,7 @@ async function loadMore() {
 </script>
 
 <template>
-  <div class="p-4 md:p-8 md:px-10 max-w-[900px] mx-auto w-full flex flex-col gap-5 relative z-10">
+  <div class="p-4 md:p-8 md:px-10 max-w-[1200px] mx-auto w-full flex flex-col gap-5 relative z-10">
     <div>
       <h1 class="text-2xl md:text-3xl font-bold text-foreground flex items-center gap-2">
         <Trophy class="w-7 h-7 text-primary" />
