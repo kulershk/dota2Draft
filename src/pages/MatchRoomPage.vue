@@ -496,6 +496,23 @@ function teamTotalNW(gameNumber: number, isRadiant: boolean): string {
   return (total / 1000).toFixed(1) + 'k'
 }
 
+function sideTeamName(gameNumber: number, isRadiant: boolean): string {
+  const stats = gameStats.value[gameNumber]
+  if (!stats?.length || !match.value) return isRadiant ? 'Radiant' : 'Dire'
+  // Match players from team rosters to stats by profile_id
+  const sidePlayers = stats.filter((s: any) => s.is_radiant === isRadiant)
+  const t1Players = new Set((teamRosters.value.team1 || []).map((p: any) => p.id))
+  const t2Players = new Set((teamRosters.value.team2 || []).map((p: any) => p.id))
+  let t1Count = 0, t2Count = 0
+  for (const p of sidePlayers) {
+    if (p.profile_id && t1Players.has(p.profile_id)) t1Count++
+    if (p.profile_id && t2Players.has(p.profile_id)) t2Count++
+  }
+  if (t1Count > t2Count) return match.value.team1_name || 'Radiant'
+  if (t2Count > t1Count) return match.value.team2_name || 'Dire'
+  return isRadiant ? 'Radiant' : 'Dire'
+}
+
 function teamWon(gameNumber: number, isRadiant: boolean): boolean {
   return !!(gameStats.value[gameNumber] || []).find((s: any) => s.is_radiant === isRadiant && s.win)
 }
@@ -1058,7 +1075,7 @@ function goBack() {
                       <tr :class="side ? 'bg-green-500/10' : 'bg-red-500/10'">
                         <td class="py-2 px-3 sticky left-0 z-10" :class="side ? 'bg-green-500/10 border-l-4 border-green-500' : 'bg-red-500/10 border-l-4 border-red-500'" :colspan="1">
                           <div class="flex items-center gap-2">
-                            <span class="text-sm font-bold" :class="side ? 'text-green-500' : 'text-red-400'">{{ side ? 'Radiant' : 'Dire' }}</span>
+                            <span class="text-sm font-bold" :class="side ? 'text-green-500' : 'text-red-400'">{{ sideTeamName(game.game_number, side) }}</span>
                             <span v-if="teamWon(game.game_number, side)" class="text-[10px] font-semibold text-green-500 bg-green-500/15 px-1.5 py-0.5 rounded">WIN</span>
                           </div>
                         </td>
