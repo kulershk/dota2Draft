@@ -1049,11 +1049,10 @@ function goBack() {
                       <th class="text-center px-1">LH/DN</th>
                       <th class="text-center px-1">NET</th>
                       <th class="text-center px-1">GPM/XPM</th>
+                      <th class="text-left px-1.5">{{ t('items') }}</th>
                       <th class="text-center px-1">HD</th>
                       <th class="text-center px-1">TD</th>
                       <th class="text-center px-1">HH</th>
-                      <th class="text-left px-1.5">{{ t('items') }}</th>
-                      <th class="text-center px-1" :title="t('campsStacked')">CS</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1104,9 +1103,6 @@ function goBack() {
                         <td class="text-center px-1 font-mono whitespace-nowrap">{{ p.last_hits }}<span class="text-muted-foreground">/</span>{{ p.denies }}</td>
                         <td class="text-center px-1 font-mono font-medium text-amber-500">{{ (p.net_worth / 1000).toFixed(1) }}k</td>
                         <td class="text-center px-1 font-mono whitespace-nowrap">{{ p.gpm }}<span class="text-muted-foreground">/</span>{{ p.xpm }}</td>
-                        <td class="text-center px-1 font-mono">{{ (p.hero_damage / 1000).toFixed(1) }}k</td>
-                        <td class="text-center px-1 font-mono">{{ (p.tower_damage / 1000).toFixed(1) }}k</td>
-                        <td class="text-center px-1 font-mono">{{ (p.hero_healing / 1000).toFixed(1) }}k</td>
                         <td class="py-1 px-1.5 whitespace-nowrap">
                           <div class="inline-flex flex-col gap-px">
                             <div class="flex gap-px">
@@ -1128,7 +1124,9 @@ function goBack() {
                             </div>
                           </div>
                         </td>
-                        <td class="text-center px-1 font-mono">{{ p.camps_stacked }}</td>
+                        <td class="text-center px-1 font-mono">{{ (p.hero_damage / 1000).toFixed(1) }}k</td>
+                        <td class="text-center px-1 font-mono">{{ (p.tower_damage / 1000).toFixed(1) }}k</td>
+                        <td class="text-center px-1 font-mono">{{ (p.hero_healing / 1000).toFixed(1) }}k</td>
                       </tr>
                     </template>
                   </tbody>
