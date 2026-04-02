@@ -433,6 +433,11 @@ async function refetchStats(gameNumber: number) {
   }
 }
 
+function laneLabel(laneRole: number): string {
+  const labels: Record<number, string> = { 1: 'Safe', 2: 'Mid', 3: 'Off', 4: 'Jungle' }
+  return labels[laneRole] || ''
+}
+
 // Group draft into ban/pick phases
 function getDraftPhases(gameNumber: number) {
   const pbs = (gamePicksBans.value[gameNumber] || []).slice().sort((a: any, b: any) => a.order - b.order)
@@ -1014,7 +1019,10 @@ function goBack() {
                                 {{ playerDisplayName(p) }}
                               </router-link>
                               <span v-else class="font-medium truncate text-xs leading-tight">{{ playerDisplayName(p) }}</span>
-                              <span class="text-[10px] text-muted-foreground leading-tight">{{ dota.heroName(p.hero_id) }}</span>
+                              <span class="text-[10px] text-muted-foreground leading-tight">
+                                {{ dota.heroName(p.hero_id) }}
+                                <span v-if="p.lane_role" class="text-[9px] text-primary/70 ml-0.5">{{ laneLabel(p.lane_role) }}</span>
+                              </span>
                             </div>
                           </div>
                         </td>
