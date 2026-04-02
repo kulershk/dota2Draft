@@ -85,8 +85,9 @@ export async function saveMatchGameStats(matchGameId, matchData) {
   // Update match_game duration, parsed flag, and picks/bans
   const durationMinutes = Math.round(duration / 60)
   const picksBans = matchData.picks_bans || []
-  await execute('UPDATE match_games SET duration_minutes = COALESCE($1, duration_minutes), parsed = $2, picks_bans = $3 WHERE id = $4',
-    [durationMinutes > 0 ? durationMinutes : null, parsed, JSON.stringify(picksBans), matchGameId])
+  const startTime = matchData.start_time || null
+  await execute('UPDATE match_games SET duration_minutes = COALESCE($1, duration_minutes), parsed = $2, picks_bans = $3, start_time = COALESCE($5, start_time) WHERE id = $4',
+    [durationMinutes > 0 ? durationMinutes : null, parsed, JSON.stringify(picksBans), matchGameId, startTime])
 
   // Recalculate favorite position for all players in this game
   try {

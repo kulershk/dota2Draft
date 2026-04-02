@@ -47,7 +47,7 @@ const allGames = computed(() => {
   const list = []
   for (let i = 1; i <= bestOf.value; i++) {
     const g = existing.find((e: any) => e.game_number === i)
-    list.push({ game_number: i, winner_captain_id: g?.winner_captain_id || null, dotabuff_id: g?.dotabuff_id || '', has_stats: g?.has_stats || false, parsed: g?.parsed || false, created_at: g?.created_at || null })
+    list.push({ game_number: i, winner_captain_id: g?.winner_captain_id || null, dotabuff_id: g?.dotabuff_id || '', has_stats: g?.has_stats || false, parsed: g?.parsed || false, start_time: g?.start_time || null, duration_seconds: g?.duration_seconds || null })
   }
   return list
 })
@@ -1089,9 +1089,9 @@ function goBack() {
               <!-- Game info bar: date + duration + external links -->
               <div class="flex items-center justify-between flex-wrap gap-2">
                 <div class="flex items-center gap-3 text-sm text-muted-foreground">
-                  <div v-if="game.created_at" class="flex items-center gap-1.5">
+                  <div v-if="game.start_time" class="flex items-center gap-1.5">
                     <Calendar class="w-3.5 h-3.5" />
-                    <span class="text-xs font-mono">{{ fmtDateTime(new Date(game.created_at)) }}</span>
+                    <span class="text-xs font-mono">{{ fmtDateTime(new Date(game.start_time * 1000)) }}</span>
                   </div>
                   <div v-if="getGameDuration(game.game_number)" class="flex items-center gap-1.5">
                     <Clock class="w-3.5 h-3.5" />
