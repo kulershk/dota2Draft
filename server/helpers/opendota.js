@@ -88,6 +88,14 @@ export async function saveMatchGameStats(matchGameId, matchData) {
   await execute('UPDATE match_games SET duration_minutes = COALESCE($1, duration_minutes), parsed = $2, picks_bans = $3 WHERE id = $4',
     [durationMinutes > 0 ? durationMinutes : null, parsed, JSON.stringify(picksBans), matchGameId])
 
+  // Recalculate favorite position for all players in this game
+  try {
+    const { recalcFavoritePosition } = await import('./position.js')
+    for (const p of matchData.players) {
+      if (p.account_id) recalcFavoritePosition(p.account_id).catch(() => {})
+    }
+  } catch {}
+
   return { saved: matchData.players.length, parsed }
 }
 

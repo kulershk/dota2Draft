@@ -321,6 +321,9 @@ export async function initDb() {
     }
   }
 
+  // Favorite position (cached, recalculated after each game)
+  try { await execute("ALTER TABLE players ADD COLUMN favorite_position JSONB DEFAULT NULL") } catch {}
+
   // Per-match penalty overrides
   try { await execute('ALTER TABLE matches ADD COLUMN penalty_radiant INTEGER DEFAULT NULL') } catch {}
   try { await execute('ALTER TABLE matches ADD COLUMN penalty_dire INTEGER DEFAULT NULL') } catch {}
