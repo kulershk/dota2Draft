@@ -971,14 +971,20 @@ function goBack() {
                       <th class="text-center px-1" :title="t('heroDamage')">HD</th>
                       <th class="text-center px-1" :title="t('towerDamage')">TD</th>
                       <th class="text-center px-1" :title="t('heroHealing')">HH</th>
+                      <th class="text-center px-1" :title="t('obsPlaced')">OW</th>
+                      <th class="text-center px-1" :title="t('senPlaced')">SW</th>
+                      <th class="text-center px-1" :title="t('campsStacked')">CS</th>
+                      <th class="text-center px-1" :title="t('tripleKills')">3K</th>
+                      <th class="text-center px-1" :title="t('ultraKills')">4K</th>
+                      <th class="text-center px-1" :title="t('rampages')">R</th>
                       <th class="text-left px-1.5 min-w-[150px]">{{ t('items') }}</th>
                     </tr>
                   </thead>
                   <tbody>
                     <template v-for="(side, sideIdx) in [true, false]" :key="sideIdx">
-                      <tr v-if="sideIdx > 0" class="h-1"><td :colspan="13" class="border-t border-border/30"></td></tr>
+                      <tr v-if="sideIdx > 0" class="h-1"><td :colspan="19" class="border-t border-border/30"></td></tr>
                       <tr class="text-[10px] text-muted-foreground">
-                        <td :colspan="13" class="py-1 px-1.5 font-semibold" :class="side ? 'text-green-500/80' : 'text-red-500/80'">
+                        <td :colspan="19" class="py-1 px-1.5 font-semibold" :class="side ? 'text-green-500/80' : 'text-red-500/80'">
                           {{ side ? 'Radiant' : 'Dire' }}
                           <span v-if="gameStats[game.game_number]?.find((s: any) => s.is_radiant === side)?.win" class="ml-1 text-green-500">({{ t('matchWinner', { team: '' }).replace('!', '').trim() }})</span>
                         </td>
@@ -1014,6 +1020,12 @@ function goBack() {
                         <td class="text-center px-1">{{ (p.hero_damage / 1000).toFixed(1) }}k</td>
                         <td class="text-center px-1">{{ (p.tower_damage / 1000).toFixed(1) }}k</td>
                         <td class="text-center px-1">{{ (p.hero_healing / 1000).toFixed(1) }}k</td>
+                        <td class="text-center px-1">{{ p.obs_placed }}</td>
+                        <td class="text-center px-1">{{ p.sen_placed }}</td>
+                        <td class="text-center px-1">{{ p.camps_stacked }}</td>
+                        <td class="text-center px-1">{{ getMultiKillCount(p.multi_kills, '3') || '-' }}</td>
+                        <td class="text-center px-1">{{ getMultiKillCount(p.multi_kills, '4') || '-' }}</td>
+                        <td class="text-center px-1">{{ getMultiKillCount(p.multi_kills, '5') || '-' }}</td>
                         <td class="py-1 px-1.5">
                           <div class="flex items-center gap-0.5">
                             <template v-for="itemId in [p.item_0, p.item_1, p.item_2, p.item_3, p.item_4, p.item_5]" :key="'item-' + itemId + '-' + Math.random()">
@@ -1037,60 +1049,6 @@ function goBack() {
                 </table>
               </div>
 
-              <!-- Detailed stats (wards, stacks, multi-kills) in a collapsible row below the main table -->
-              <details class="group">
-                <summary class="text-[11px] text-muted-foreground cursor-pointer hover:text-foreground transition-colors select-none flex items-center gap-1">
-                  <ChevronDown class="w-3 h-3 group-open:rotate-180 transition-transform" />
-                  {{ t('matchDetails') }}
-                </summary>
-                <div class="overflow-x-auto mt-2">
-                  <table class="w-full text-xs">
-                    <thead>
-                      <tr class="text-muted-foreground border-b border-border/30">
-                        <th class="text-left py-1.5 px-1.5 min-w-[130px]">{{ t('playerCol') }}</th>
-                        <th class="text-center px-1" :title="t('obsPlaced')">OW</th>
-                        <th class="text-center px-1" :title="t('senPlaced')">SW</th>
-                        <th class="text-center px-1" :title="t('obsKilled')">OK</th>
-                        <th class="text-center px-1" :title="t('senKilled')">SK</th>
-                        <th class="text-center px-1" :title="t('campsStacked')">CS</th>
-                        <th class="text-center px-1" :title="t('tripleKills')">3K</th>
-                        <th class="text-center px-1" :title="t('ultraKills')">4K</th>
-                        <th class="text-center px-1" :title="t('rampages')">R</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <template v-for="(side, sideIdx) in [true, false]" :key="'d-' + sideIdx">
-                        <tr v-if="sideIdx > 0" class="h-1"><td :colspan="9" class="border-t border-border/30"></td></tr>
-                        <tr
-                          v-for="p in gameStats[game.game_number]?.filter((s: any) => s.is_radiant === side)"
-                          :key="'d-' + p.account_id"
-                          class="hover:bg-accent/40"
-                          :class="p.win ? 'text-foreground' : 'text-muted-foreground'"
-                        >
-                          <td class="py-1 px-1.5">
-                            <div class="flex items-center gap-1.5">
-                              <img v-if="dota.heroImg(p.hero_id)" :src="dota.heroImg(p.hero_id)" class="w-6 h-[17px] rounded-sm object-cover flex-shrink-0" />
-                              <router-link v-if="p.profile_id" :to="{ name: 'player-profile', params: { id: p.profile_id } }"
-                                class="font-medium truncate hover:text-primary transition-colors">
-                                {{ playerDisplayName(p) }}
-                              </router-link>
-                              <span v-else class="font-medium truncate">{{ playerDisplayName(p) }}</span>
-                            </div>
-                          </td>
-                          <td class="text-center px-1">{{ p.obs_placed }}</td>
-                          <td class="text-center px-1">{{ p.sen_placed }}</td>
-                          <td class="text-center px-1">{{ p.observer_kills }}</td>
-                          <td class="text-center px-1">{{ p.sentry_kills }}</td>
-                          <td class="text-center px-1">{{ p.camps_stacked }}</td>
-                          <td class="text-center px-1">{{ getMultiKillCount(p.multi_kills, '3') || '-' }}</td>
-                          <td class="text-center px-1">{{ getMultiKillCount(p.multi_kills, '4') || '-' }}</td>
-                          <td class="text-center px-1">{{ getMultiKillCount(p.multi_kills, '5') || '-' }}</td>
-                        </tr>
-                      </template>
-                    </tbody>
-                  </table>
-                </div>
-              </details>
 
               <!-- Draft: Stratz-style phases -->
               <div v-if="gamePicksBans[game.game_number]?.length" class="mt-3">
