@@ -9,6 +9,7 @@ import RoleBadge from '@/components/common/RoleBadge.vue'
 import MmrDisplay from '@/components/common/MmrDisplay.vue'
 import LevelBadge from '@/components/common/LevelBadge.vue'
 import XpProgressBar from '@/components/common/XpProgressBar.vue'
+import PositionIcon from '@/components/common/PositionIcon.vue'
 import { sortedRoles } from '@/utils/roles'
 import { fmtDateOnly, fmtDateTime } from '@/utils/format'
 
@@ -102,6 +103,9 @@ function placementBg(n: number) {
                     <RoleBadge v-for="role in sortedRoles(profile.roles)" :key="role" :role="role" />
                   </div>
                   <MmrDisplay v-if="profile.mmr" :mmr="profile.mmr" />
+                  <div v-if="profile.favorite_position" class="flex items-center gap-1" :title="`${profile.favorite_position.games}/${profile.favorite_position.total} games`">
+                    <PositionIcon :position="profile.favorite_position.position" />
+                  </div>
                 </div>
                 <div class="mt-1.5 max-w-[240px]">
                   <XpProgressBar :current="profile.level_progress || 0" />

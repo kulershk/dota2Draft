@@ -161,6 +161,7 @@ router.get('/api/players/:id/profile', async (req, res) => {
 
   // Top 3 most played heroes (from match stats, using Steam32/Steam64 conversion)
   let topHeroes = []
+  let favoritePosition = null
   if (player.steam_id) {
     const steam32 = BigInt(player.steam_id) - 76561197960265728n
     topHeroes = await query(`
@@ -171,6 +172,60 @@ router.get('/api/players/:id/profile', async (req, res) => {
       ORDER BY games DESC, wins DESC
       LIMIT 3
     `, [steam32.toString()])
+
+    // Calculate favorite position from match history
+    // Get all games this player participated in, with all teammates' NW + lane_role
+    const playerGames = await query(`
+      SELECT s.match_game_id, s.account_id, s.net_worth, s.lane_role, s.is_radiant
+      FROM match_game_player_stats s
+      WHERE s.match_game_id IN (
+        SELECT match_game_id FROM match_game_player_stats WHERE account_id = $1
+      )
+    `, [steam32.toString()])
+
+    // Group by game
+    const gameMap = {}
+    for (const row of playerGames) {
+      if (!gameMap[row.match_game_id]) gameMap[row.match_game_id] = []
+      gameMap[row.match_game_id].push(row)
+    }
+
+    const positionCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
+    const accountId = steam32.toString()
+
+    for (const players of Object.values(gameMap)) {
+      const me = players.find(p => String(p.account_id) === accountId)
+      if (!me) continue
+      const team = players.filter(p => p.is_radiant === me.is_radiant).sort((a, b) => b.net_worth - a.net_worth)
+      if (team.length < 5) continue
+
+      const cores = team.slice(0, 3)
+      const supports = team.slice(3)
+      const isCore = cores.some(p => String(p.account_id) === accountId)
+
+      if (isCore) {
+        // Assign by lane
+        if (me.lane_role === 2) positionCounts[2]++
+        else if (me.lane_role === 1) positionCounts[1]++
+        else if (me.lane_role === 3) positionCounts[3]++
+        else positionCounts[1]++ // fallback
+      } else {
+        // Support: higher NW = pos 4, lower = pos 5
+        const myIdx = supports.findIndex(p => String(p.account_id) === accountId)
+        positionCounts[myIdx === 0 ? 4 : 5]++
+      }
+    }
+
+    const totalGames = Object.values(positionCounts).reduce((a, b) => a + b, 0)
+    if (totalGames > 0) {
+      const sorted = Object.entries(positionCounts).sort((a, b) => b[1] - a[1])
+      favoritePosition = {
+        position: Number(sorted[0][0]),
+        games: sorted[0][1],
+        total: totalGames,
+        distribution: positionCounts,
+      }
+    }
   }
 
   res.json({
@@ -205,6 +260,7 @@ router.get('/api/players/:id/profile', async (req, res) => {
       drafted_by_name: p.drafted_by_name || null,
     })),
     tournament_results: tournamentResults,
+    favorite_position: favoritePosition,
     top_heroes: topHeroes.map(h => ({
       hero_id: h.hero_id,
       games: Number(h.games),
