@@ -1107,15 +1107,13 @@ function goBack() {
                     <!-- Row 1: Dire (team 1) -->
                     <div class="flex items-center gap-0.5 mb-1">
                       <template v-for="pb in phase.items.filter((p: any) => p.team === 1)" :key="pb.order">
-                        <div class="relative" :title="dota.heroName(pb.hero_id)">
+                        <div class="relative overflow-hidden rounded-sm" :title="dota.heroName(pb.hero_id)" style="width: 44px; height: 24px;">
                           <img v-if="dota.heroImg(pb.hero_id)" :src="dota.heroImg(pb.hero_id)"
-                            class="w-8 h-8 rounded object-cover"
+                            class="w-full h-full object-cover"
                             :class="!pb.is_pick ? 'opacity-40' : ''" />
-                          <div v-if="!pb.is_pick" class="absolute inset-0 pointer-events-none">
-                            <div class="absolute inset-0 rounded overflow-hidden">
-                              <div class="absolute top-0 left-0 w-[141%] h-[2px] bg-red-500 origin-top-left rotate-45 translate-y-[15px]"></div>
-                            </div>
-                          </div>
+                          <svg v-if="!pb.is_pick" class="absolute inset-0 w-full h-full" viewBox="0 0 44 24" preserveAspectRatio="none">
+                            <line x1="0" y1="0" x2="44" y2="24" stroke="rgb(239 68 68)" stroke-width="2.5" />
+                          </svg>
                         </div>
                         <span class="text-[10px] font-mono font-bold text-muted-foreground mr-1.5">{{ pb.order + 1 }}</span>
                       </template>
@@ -1123,15 +1121,13 @@ function goBack() {
                     <!-- Row 2: Radiant (team 0) -->
                     <div class="flex items-center gap-0.5">
                       <template v-for="pb in phase.items.filter((p: any) => p.team === 0)" :key="pb.order">
-                        <div class="relative" :title="dota.heroName(pb.hero_id)">
+                        <div class="relative overflow-hidden rounded-sm" :title="dota.heroName(pb.hero_id)" style="width: 44px; height: 24px;">
                           <img v-if="dota.heroImg(pb.hero_id)" :src="dota.heroImg(pb.hero_id)"
-                            class="w-8 h-8 rounded object-cover"
+                            class="w-full h-full object-cover"
                             :class="!pb.is_pick ? 'opacity-40' : ''" />
-                          <div v-if="!pb.is_pick" class="absolute inset-0 pointer-events-none">
-                            <div class="absolute inset-0 rounded overflow-hidden">
-                              <div class="absolute top-0 left-0 w-[141%] h-[2px] bg-red-500 origin-top-left rotate-45 translate-y-[15px]"></div>
-                            </div>
-                          </div>
+                          <svg v-if="!pb.is_pick" class="absolute inset-0 w-full h-full" viewBox="0 0 44 24" preserveAspectRatio="none">
+                            <line x1="0" y1="0" x2="44" y2="24" stroke="rgb(239 68 68)" stroke-width="2.5" />
+                          </svg>
                         </div>
                         <span class="text-[10px] font-mono font-bold text-muted-foreground mr-1.5">{{ pb.order + 1 }}</span>
                       </template>
