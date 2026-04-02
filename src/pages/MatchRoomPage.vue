@@ -2,7 +2,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ChevronDown, ChevronUp, Check, Gamepad2, X, ArrowLeft, Trophy, ExternalLink, Clock, CheckCircle, AlertCircle, RefreshCw } from 'lucide-vue-next'
+import { ChevronDown, ChevronUp, Check, Gamepad2, X, ArrowLeft, Trophy, ExternalLink, Clock, CheckCircle, AlertCircle, RefreshCw, Pencil } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { getSocket, getServerNow } from '@/composables/useSocket'
@@ -557,6 +557,9 @@ function setGamePenalty(gameNumber: number, side: 'radiant' | 'dire', value: num
   }
 }
 
+// Admin panel toggle
+const showAdminPanel = ref(false)
+
 // Standins
 const standins = ref<any[]>([])
 const standinSearch = ref('')
@@ -636,6 +639,9 @@ function goBack() {
         <div class="flex items-center gap-2 mb-1">
           <Gamepad2 class="w-5 h-5 text-primary" />
           <span class="text-lg font-semibold text-foreground">{{ t('matchRoom') }}</span>
+          <button v-if="store.isAdmin.value && match.status !== 'completed'" class="ml-auto p-1.5 rounded-md hover:bg-accent transition-colors" :class="showAdminPanel ? 'bg-accent text-primary' : 'text-muted-foreground'" @click="showAdminPanel = !showAdminPanel" :title="'Edit match settings'">
+            <Pencil class="w-4 h-4" />
+          </button>
         </div>
         <div class="flex items-center gap-4">
           <div class="flex-1 flex items-center justify-end min-w-0">
@@ -697,55 +703,89 @@ function goBack() {
         </div>
       </div>
 
-      <!-- Admin: Standins -->
-      <div v-if="store.isAdmin.value && match.status !== 'completed'" class="card px-4 py-3 mb-6">
-        <div class="flex items-center justify-between mb-2">
-          <span class="text-xs font-semibold text-foreground">Standins</span>
-        </div>
-        <!-- Current standins -->
-        <div v-if="standins.length" class="flex flex-col gap-1.5 mb-3">
-          <div v-for="s in standins" :key="s.id" class="flex items-center gap-2 text-xs bg-accent/30 rounded px-2.5 py-1.5">
-            <span class="text-muted-foreground">{{ s.captain_team }}:</span>
-            <span class="line-through text-muted-foreground">{{ s.original_display_name }}</span>
-            <span class="text-muted-foreground">→</span>
-            <span class="font-medium text-foreground">{{ s.standin_display_name }}</span>
-            <button class="ml-auto text-destructive hover:text-destructive/80 transition-colors" @click="removeStandin(s.id)">
-              <X class="w-3.5 h-3.5" />
-            </button>
+      <!-- Admin Panel (toggled by edit button) -->
+      <div v-if="showAdminPanel && store.isAdmin.value && match.status !== 'completed'" class="card px-5 py-4 mb-6 flex flex-col gap-4">
+        <!-- Penalties -->
+        <div>
+          <span class="text-xs font-semibold text-foreground mb-2 block">{{ t('lobbyPenaltyRadiant').split('(')[0].trim() }}</span>
+          <div class="flex items-center gap-4">
+            <div class="flex items-center gap-1.5">
+              <span class="text-[11px] text-muted-foreground">{{ match.team1_name || 'T1' }}</span>
+              <select
+                class="input-field text-[11px] py-0.5 px-1.5 w-auto"
+                :value="match.penalty_radiant ?? 0"
+                @change="api.updateMatchPenalties(compId!, matchId, { penalty_radiant: Number(($event.target as HTMLSelectElement).value) || null, penalty_dire: match.penalty_dire ?? null })"
+              >
+                <option :value="0">{{ t('penaltyNone') }}</option>
+                <option :value="1">{{ t('penaltyLevel', { n: 1 }) }}</option>
+                <option :value="2">{{ t('penaltyLevel', { n: 2 }) }}</option>
+                <option :value="3">{{ t('penaltyLevel', { n: 3 }) }}</option>
+              </select>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="text-[11px] text-muted-foreground">{{ match.team2_name || 'T2' }}</span>
+              <select
+                class="input-field text-[11px] py-0.5 px-1.5 w-auto"
+                :value="match.penalty_dire ?? 0"
+                @change="api.updateMatchPenalties(compId!, matchId, { penalty_radiant: match.penalty_radiant ?? null, penalty_dire: Number(($event.target as HTMLSelectElement).value) || null })"
+              >
+                <option :value="0">{{ t('penaltyNone') }}</option>
+                <option :value="1">{{ t('penaltyLevel', { n: 1 }) }}</option>
+                <option :value="2">{{ t('penaltyLevel', { n: 2 }) }}</option>
+                <option :value="3">{{ t('penaltyLevel', { n: 3 }) }}</option>
+              </select>
+            </div>
           </div>
         </div>
-        <!-- Add standin -->
-        <div v-if="!addingStandin" class="grid grid-cols-2 gap-3">
-          <div v-for="(team, teamKey) in { team1: teamRosters.team1, team2: teamRosters.team2 }" :key="teamKey">
-            <select class="input-field text-xs py-1 w-full" @change="($event.target as HTMLSelectElement).value && (addingStandin = { team: teamKey as 'team1' | 'team2', originalPlayerId: Number(($event.target as HTMLSelectElement).value), captainId: teamKey === 'team1' ? match.team1_captain_id : match.team2_captain_id }); ($event.target as HTMLSelectElement).value = ''">
-              <option value="">{{ (teamKey === 'team1' ? match.team1_name : match.team2_name) || teamKey }} — {{ t('selectPlayer') || 'Select player to replace' }}</option>
-              <option v-for="p in team.filter((pl: any) => !standins.some((s: any) => s.original_player_id === pl.id))" :key="p.id" :value="p.id">{{ p.name }}</option>
-            </select>
+
+        <!-- Standins -->
+        <div>
+          <span class="text-xs font-semibold text-foreground mb-2 block">Standins</span>
+          <!-- Current standins -->
+          <div v-if="standins.length" class="flex flex-col gap-1.5 mb-3">
+            <div v-for="s in standins" :key="s.id" class="flex items-center gap-2 text-xs bg-accent/30 rounded px-2.5 py-1.5">
+              <span class="text-muted-foreground">{{ s.captain_team }}:</span>
+              <span class="line-through text-muted-foreground">{{ s.original_display_name }}</span>
+              <span class="text-muted-foreground">→</span>
+              <span class="font-medium text-foreground">{{ s.standin_display_name }}</span>
+              <button class="ml-auto text-destructive hover:text-destructive/80 transition-colors" @click="removeStandin(s.id)">
+                <X class="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
-        </div>
-        <!-- Search standin player -->
-        <div v-else class="flex flex-col gap-2">
-          <div class="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>Replacing: <strong class="text-foreground">{{ [...teamRosters.team1, ...teamRosters.team2].find((p: any) => p.id === addingStandin!.originalPlayerId)?.name }}</strong></span>
-            <button class="text-destructive text-[10px] hover:underline" @click="addingStandin = null; standinSearch = ''; standinResults = []">{{ t('cancel') }}</button>
+          <!-- Add standin -->
+          <div v-if="!addingStandin" class="grid grid-cols-2 gap-3">
+            <div v-for="(team, teamKey) in { team1: teamRosters.team1, team2: teamRosters.team2 }" :key="teamKey">
+              <select class="input-field text-xs py-1 w-full" @change="($event.target as HTMLSelectElement).value && (addingStandin = { team: teamKey as 'team1' | 'team2', originalPlayerId: Number(($event.target as HTMLSelectElement).value), captainId: teamKey === 'team1' ? match.team1_captain_id : match.team2_captain_id }); ($event.target as HTMLSelectElement).value = ''">
+                <option value="">{{ (teamKey === 'team1' ? match.team1_name : match.team2_name) || teamKey }} — Select player</option>
+                <option v-for="p in team.filter((pl: any) => !standins.some((s: any) => s.original_player_id === pl.id))" :key="p.id" :value="p.id">{{ p.name }}</option>
+              </select>
+            </div>
           </div>
-          <input
-            type="text"
-            class="input-field text-xs py-1.5"
-            placeholder="Search player by name..."
-            v-model="standinSearch"
-            @input="searchStandinPlayer(standinSearch)"
-          />
-          <div v-if="standinResults.length" class="flex flex-col gap-0.5 max-h-40 overflow-y-auto">
-            <button
-              v-for="p in standinResults"
-              :key="p.id"
-              class="flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-accent transition-colors text-left"
-              @click="addStandin(p.id)"
-            >
-              <img v-if="p.avatar_url" :src="p.avatar_url" class="w-5 h-5 rounded-full" />
-              <span class="font-medium text-foreground">{{ p.display_name || p.name }}</span>
-            </button>
+          <!-- Search standin player -->
+          <div v-else class="flex flex-col gap-2">
+            <div class="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>Replacing: <strong class="text-foreground">{{ [...teamRosters.team1, ...teamRosters.team2].find((p: any) => p.id === addingStandin!.originalPlayerId)?.name }}</strong></span>
+              <button class="text-destructive text-[10px] hover:underline" @click="addingStandin = null; standinSearch = ''; standinResults = []">{{ t('cancel') }}</button>
+            </div>
+            <input
+              type="text"
+              class="input-field text-xs py-1.5"
+              placeholder="Search player by name..."
+              v-model="standinSearch"
+              @input="searchStandinPlayer(standinSearch)"
+            />
+            <div v-if="standinResults.length" class="flex flex-col gap-0.5 max-h-40 overflow-y-auto">
+              <button
+                v-for="p in standinResults"
+                :key="p.id"
+                class="flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-accent transition-colors text-left"
+                @click="addStandin(p.id)"
+              >
+                <img v-if="p.avatar_url" :src="p.avatar_url" class="w-5 h-5 rounded-full" />
+                <span class="font-medium text-foreground">{{ p.display_name || p.name }}</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -976,36 +1016,6 @@ function goBack() {
                   </div>
                 </div>
                 <p class="text-sm text-muted-foreground">{{ t('matchReadyDesc') }}</p>
-
-                <!-- Admin: Per-game penalty settings -->
-                <div v-if="store.isAdmin.value && !lobbyStatuses[g.game_number]?.status" class="w-full flex items-center justify-center gap-4 py-2 border-t border-border/20 mt-1">
-                  <div class="flex items-center gap-1.5">
-                    <span class="text-[11px] text-muted-foreground">{{ match.team1_name || 'T1' }}</span>
-                    <select
-                      class="input-field text-[11px] py-0.5 px-1.5 w-auto"
-                      :value="getGamePenalty(g.game_number, 'radiant')"
-                      @change="setGamePenalty(g.game_number, 'radiant', Number(($event.target as HTMLSelectElement).value))"
-                    >
-                      <option :value="0">{{ t('penaltyNone') }}</option>
-                      <option :value="1">{{ t('penaltyLevel', { n: 1 }) }}</option>
-                      <option :value="2">{{ t('penaltyLevel', { n: 2 }) }}</option>
-                      <option :value="3">{{ t('penaltyLevel', { n: 3 }) }}</option>
-                    </select>
-                  </div>
-                  <div class="flex items-center gap-1.5">
-                    <span class="text-[11px] text-muted-foreground">{{ match.team2_name || 'T2' }}</span>
-                    <select
-                      class="input-field text-[11px] py-0.5 px-1.5 w-auto"
-                      :value="getGamePenalty(g.game_number, 'dire')"
-                      @change="setGamePenalty(g.game_number, 'dire', Number(($event.target as HTMLSelectElement).value))"
-                    >
-                      <option :value="0">{{ t('penaltyNone') }}</option>
-                      <option :value="1">{{ t('penaltyLevel', { n: 1 }) }}</option>
-                      <option :value="2">{{ t('penaltyLevel', { n: 2 }) }}</option>
-                      <option :value="3">{{ t('penaltyLevel', { n: 3 }) }}</option>
-                    </select>
-                  </div>
-                </div>
 
                 <span v-if="noBotAvailable[g.game_number] && bothCaptainsReady(g.game_number)" class="text-sm text-amber-500">{{ t('noBotAvailable') }}</span>
                 <span v-if="lobbyCreateError[g.game_number]" class="text-sm text-red-500">{{ lobbyCreateError[g.game_number] }}</span>
