@@ -304,7 +304,7 @@ watch(match, (m, oldM) => {
   if (games.length > 0 && expandedGame.value === null) toggleStats(games[0].game_number)
 
   // Fetch team rosters once
-  if (!oldM && m) fetchTeamRosters()
+  if (!oldM && m) { fetchTeamRosters(); fetchStandins() }
 
   // Detect status transition to completed
   const oldStatus = oldM?.status || prevMatchStatus.value
@@ -557,6 +557,52 @@ function setGamePenalty(gameNumber: number, side: 'radiant' | 'dire', value: num
   }
 }
 
+// Standins
+const standins = ref<any[]>([])
+const standinSearch = ref('')
+const standinResults = ref<any[]>([])
+const addingStandin = ref<{ team: 'team1' | 'team2'; originalPlayerId: number; captainId: number } | null>(null)
+
+async function fetchStandins() {
+  const cId = compId.value
+  if (!cId || !matchId.value) return
+  try { standins.value = await api.getMatchStandins(cId, matchId.value) } catch { standins.value = [] }
+}
+
+async function searchStandinPlayer(q: string) {
+  if (!q || q.length < 2) { standinResults.value = []; return }
+  try {
+    const all = await api.getUsers()
+    standinResults.value = all.filter((p: any) =>
+      p.steam_id && (
+        (p.name || '').toLowerCase().includes(q.toLowerCase()) ||
+        (p.display_name || '').toLowerCase().includes(q.toLowerCase())
+      )
+    ).slice(0, 10)
+  } catch { standinResults.value = [] }
+}
+
+async function addStandin(standinPlayerId: number) {
+  const cId = compId.value
+  if (!cId || !addingStandin.value) return
+  await api.addMatchStandin(cId, matchId.value, {
+    original_player_id: addingStandin.value.originalPlayerId,
+    standin_player_id: standinPlayerId,
+    captain_id: addingStandin.value.captainId,
+  })
+  addingStandin.value = null
+  standinSearch.value = ''
+  standinResults.value = []
+  await fetchStandins()
+}
+
+async function removeStandin(id: number) {
+  const cId = compId.value
+  if (!cId) return
+  await api.removeMatchStandin(cId, matchId.value, id)
+  await fetchStandins()
+}
+
 function goBack() {
   const cId = compId.value
   if (cId) {
@@ -647,6 +693,59 @@ function goBack() {
             <UserName :id="p.id" :name="p.name" :avatar-url="p.avatar_url" size="sm" />
             <span v-if="p.is_captain" class="text-[10px] font-medium text-primary bg-primary/10 px-1.5 py-0.5 rounded">C</span>
             <span v-if="p.mmr" class="text-[10px] text-muted-foreground ml-auto">{{ p.mmr }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Admin: Standins -->
+      <div v-if="store.isAdmin.value && match.status !== 'completed'" class="card px-4 py-3 mb-6">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold text-foreground">Standins</span>
+        </div>
+        <!-- Current standins -->
+        <div v-if="standins.length" class="flex flex-col gap-1.5 mb-3">
+          <div v-for="s in standins" :key="s.id" class="flex items-center gap-2 text-xs bg-accent/30 rounded px-2.5 py-1.5">
+            <span class="text-muted-foreground">{{ s.captain_team }}:</span>
+            <span class="line-through text-muted-foreground">{{ s.original_display_name }}</span>
+            <span class="text-muted-foreground">→</span>
+            <span class="font-medium text-foreground">{{ s.standin_display_name }}</span>
+            <button class="ml-auto text-destructive hover:text-destructive/80 transition-colors" @click="removeStandin(s.id)">
+              <X class="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+        <!-- Add standin -->
+        <div v-if="!addingStandin" class="grid grid-cols-2 gap-3">
+          <div v-for="(team, teamKey) in { team1: teamRosters.team1, team2: teamRosters.team2 }" :key="teamKey">
+            <select class="input-field text-xs py-1 w-full" @change="($event.target as HTMLSelectElement).value && (addingStandin = { team: teamKey as 'team1' | 'team2', originalPlayerId: Number(($event.target as HTMLSelectElement).value), captainId: teamKey === 'team1' ? match.team1_captain_id : match.team2_captain_id }); ($event.target as HTMLSelectElement).value = ''">
+              <option value="">{{ (teamKey === 'team1' ? match.team1_name : match.team2_name) || teamKey }} — {{ t('selectPlayer') || 'Select player to replace' }}</option>
+              <option v-for="p in team.filter((pl: any) => !standins.some((s: any) => s.original_player_id === pl.id))" :key="p.id" :value="p.id">{{ p.name }}</option>
+            </select>
+          </div>
+        </div>
+        <!-- Search standin player -->
+        <div v-else class="flex flex-col gap-2">
+          <div class="flex items-center gap-2 text-xs text-muted-foreground">
+            <span>Replacing: <strong class="text-foreground">{{ [...teamRosters.team1, ...teamRosters.team2].find((p: any) => p.id === addingStandin!.originalPlayerId)?.name }}</strong></span>
+            <button class="text-destructive text-[10px] hover:underline" @click="addingStandin = null; standinSearch = ''; standinResults = []">{{ t('cancel') }}</button>
+          </div>
+          <input
+            type="text"
+            class="input-field text-xs py-1.5"
+            placeholder="Search player by name..."
+            v-model="standinSearch"
+            @input="searchStandinPlayer(standinSearch)"
+          />
+          <div v-if="standinResults.length" class="flex flex-col gap-0.5 max-h-40 overflow-y-auto">
+            <button
+              v-for="p in standinResults"
+              :key="p.id"
+              class="flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-accent transition-colors text-left"
+              @click="addStandin(p.id)"
+            >
+              <img v-if="p.avatar_url" :src="p.avatar_url" class="w-5 h-5 rounded-full" />
+              <span class="font-medium text-foreground">{{ p.display_name || p.name }}</span>
+            </button>
           </div>
         </div>
       </div>

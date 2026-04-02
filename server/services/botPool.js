@@ -754,6 +754,25 @@ class BotPool {
       }
     }
 
+    // Apply standins: swap original players with standins
+    const standins = await query(`
+      SELECT ms.original_player_id, p.steam_id, COALESCE(p.display_name, p.name) AS name
+      FROM match_standins ms
+      JOIN players p ON p.id = ms.standin_player_id
+      WHERE ms.match_id = $1
+    `, [matchId])
+    for (const s of standins) {
+      if (!s.steam_id) continue
+      // Find the original player's steam_id
+      const origPlayer = await queryOne('SELECT steam_id FROM players WHERE id = $1', [s.original_player_id])
+      if (origPlayer?.steam_id) {
+        const idx = playersExpected.findIndex(pe => pe.steam_id === origPlayer.steam_id)
+        if (idx >= 0) {
+          playersExpected[idx] = { steam_id: s.steam_id, name: s.name, team: playersExpected[idx].team }
+        }
+      }
+    }
+
     // Get competition settings for lobby config
     const comp = await queryOne('SELECT settings FROM competitions WHERE id = $1', [compId])
     const compSettings = comp?.settings || {}

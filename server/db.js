@@ -321,6 +321,19 @@ export async function initDb() {
     }
   }
 
+  // Match standins
+  await execute(`
+    CREATE TABLE IF NOT EXISTS match_standins (
+      id SERIAL PRIMARY KEY,
+      match_id INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+      original_player_id INTEGER NOT NULL REFERENCES players(id),
+      standin_player_id INTEGER NOT NULL REFERENCES players(id),
+      captain_id INTEGER NOT NULL REFERENCES captains(id),
+      created_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(match_id, original_player_id)
+    )
+  `)
+
   // Favorite position (cached, recalculated after each game)
   try { await execute("ALTER TABLE players ADD COLUMN favorite_position JSONB DEFAULT NULL") } catch {}
 

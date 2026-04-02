@@ -395,6 +395,60 @@ export default function createTournamentRouter(io) {
     res.json({ ok: true })
   })
 
+  // ── Match Standins ──
+
+  router.get('/api/competitions/:compId/tournament/matches/:matchId/standins', async (req, res) => {
+    const compId = Number(req.params.compId)
+    const matchId = Number(req.params.matchId)
+    const standins = await query(`
+      SELECT ms.*,
+        op.name AS original_name, COALESCE(op.display_name, op.name) AS original_display_name, op.avatar_url AS original_avatar, op.steam_id AS original_steam_id,
+        sp.name AS standin_name, COALESCE(sp.display_name, sp.name) AS standin_display_name, sp.avatar_url AS standin_avatar, sp.steam_id AS standin_steam_id,
+        c.team AS captain_team
+      FROM match_standins ms
+      JOIN players op ON op.id = ms.original_player_id
+      JOIN players sp ON sp.id = ms.standin_player_id
+      JOIN captains c ON c.id = ms.captain_id
+      WHERE ms.match_id = $1
+    `, [matchId])
+    res.json(standins)
+  })
+
+  router.post('/api/competitions/:compId/tournament/matches/:matchId/standins', async (req, res) => {
+    const compId = Number(req.params.compId)
+    const matchId = Number(req.params.matchId)
+    const admin = await requireCompPermission(req, res, compId)
+    if (!admin) return
+
+    const { original_player_id, standin_player_id, captain_id } = req.body
+    if (!original_player_id || !standin_player_id || !captain_id) {
+      return res.status(400).json({ error: 'original_player_id, standin_player_id, and captain_id required' })
+    }
+
+    try {
+      const standin = await queryOne(`
+        INSERT INTO match_standins (match_id, original_player_id, standin_player_id, captain_id)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (match_id, original_player_id) DO UPDATE SET standin_player_id = $3, captain_id = $4
+        RETURNING *
+      `, [matchId, original_player_id, standin_player_id, captain_id])
+      if (io) io.to(`comp:${compId}`).emit('tournament:updated')
+      res.status(201).json(standin)
+    } catch (e) {
+      res.status(400).json({ error: e.message })
+    }
+  })
+
+  router.delete('/api/competitions/:compId/tournament/matches/:matchId/standins/:id', async (req, res) => {
+    const compId = Number(req.params.compId)
+    const admin = await requireCompPermission(req, res, compId)
+    if (!admin) return
+
+    await execute('DELETE FROM match_standins WHERE id = $1 AND match_id = $2', [req.params.id, req.params.matchId])
+    if (io) io.to(`comp:${compId}`).emit('tournament:updated')
+    res.json({ ok: true })
+  })
+
   router.put('/api/competitions/:compId/tournament/matches/:matchId/penalties', async (req, res) => {
     const compId = Number(req.params.compId)
     const matchId = Number(req.params.matchId)

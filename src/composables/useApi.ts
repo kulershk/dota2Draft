@@ -121,6 +121,13 @@ export function useApi() {
       request(`/api/competitions/${compId}/tournament/stages/${stageId}`, { method: 'PUT', body: JSON.stringify(data) }),
     deleteTournamentStage: (compId: number, stageId: number) =>
       request(`/api/competitions/${compId}/tournament/stages/${stageId}`, { method: 'DELETE' }),
+    // Match Standins
+    getMatchStandins: (compId: number, matchId: number) =>
+      request(`/api/competitions/${compId}/tournament/matches/${matchId}/standins`),
+    addMatchStandin: (compId: number, matchId: number, data: { original_player_id: number; standin_player_id: number; captain_id: number }) =>
+      request(`/api/competitions/${compId}/tournament/matches/${matchId}/standins`, { method: 'POST', body: JSON.stringify(data) }),
+    removeMatchStandin: (compId: number, matchId: number, id: number) =>
+      request(`/api/competitions/${compId}/tournament/matches/${matchId}/standins/${id}`, { method: 'DELETE' }),
     updateMatchScore: (compId: number, matchId: number, data: { score1?: number; score2?: number; status?: string; games?: any[] }) =>
       request(`/api/competitions/${compId}/tournament/matches/${matchId}/score`, { method: 'PUT', body: JSON.stringify(data) }),
     updateMatchPenalties: (compId: number, matchId: number, data: { penalty_radiant: number | null; penalty_dire: number | null }) =>
