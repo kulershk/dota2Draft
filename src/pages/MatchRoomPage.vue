@@ -678,43 +678,22 @@ function goBack() {
 
       <!-- Team Rosters -->
       <div v-if="teamRosters.team1.length || teamRosters.team2.length" class="grid grid-cols-2 gap-4 mb-6">
-        <!-- Team 1 -->
-        <div class="card px-4 py-3 flex flex-col gap-2">
-          <TeamName v-if="match.team1_captain_id" :id="match.team1_captain_id" :name="match.team1_name || t('tbd')" :banner-url="match.team1_banner" :avatar-url="match.team1_avatar" class="mb-1" />
-          <span v-else class="text-sm font-semibold text-muted-foreground truncate mb-1">{{ t('tbd') }}</span>
-          <div v-for="p in teamRosters.team1" :key="p.id" class="flex items-center gap-2 py-0.5">
-            <UserName :id="p.id" :name="p.name" :avatar-url="p.avatar_url" size="sm" />
-            <span v-if="p.is_captain" class="text-[10px] font-medium text-primary bg-primary/10 px-1.5 py-0.5 rounded">C</span>
-            <span v-if="p.mmr" class="text-[10px] text-muted-foreground ml-auto">{{ p.mmr }}</span>
-          </div>
-        </div>
-        <!-- Team 2 -->
-        <div class="card px-4 py-3 flex flex-col gap-2">
-          <TeamName v-if="match.team2_captain_id" :id="match.team2_captain_id" :name="match.team2_name || t('tbd')" :banner-url="match.team2_banner" :avatar-url="match.team2_avatar" class="mb-1" />
-          <div v-else class="flex items-center gap-2 mb-1">
-            <div class="w-6 h-6 rounded bg-accent overflow-hidden shrink-0"></div>
-            <span class="text-sm font-semibold text-muted-foreground truncate">{{ t('tbd') }}</span>
-          </div>
-          <div v-for="p in teamRosters.team2" :key="p.id" class="flex items-center gap-2 py-0.5">
-            <UserName :id="p.id" :name="p.name" :avatar-url="p.avatar_url" size="sm" />
-            <span v-if="p.is_captain" class="text-[10px] font-medium text-primary bg-primary/10 px-1.5 py-0.5 rounded">C</span>
-            <span v-if="p.mmr" class="text-[10px] text-muted-foreground ml-auto">{{ p.mmr }}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Admin Panel (toggled by edit button) -->
-      <div v-if="showAdminPanel && store.isAdmin.value && match.status !== 'completed'" class="card px-5 py-4 mb-6 flex flex-col gap-4">
-        <!-- Penalties -->
-        <div>
-          <span class="text-xs font-semibold text-foreground mb-2 block">{{ t('lobbyPenaltyRadiant').split('(')[0].trim() }}</span>
-          <div class="flex items-center gap-4">
-            <div class="flex items-center gap-1.5">
-              <span class="text-[11px] text-muted-foreground">{{ match.team1_name || 'T1' }}</span>
+        <template v-for="(teamKey, idx) in ['team1', 'team2'] as const" :key="teamKey">
+          <div class="card px-4 py-3 flex flex-col gap-2">
+            <!-- Team name -->
+            <TeamName v-if="teamKey === 'team1' && match.team1_captain_id" :id="match.team1_captain_id" :name="match.team1_name || t('tbd')" :banner-url="match.team1_banner" :avatar-url="match.team1_avatar" class="mb-1" />
+            <TeamName v-else-if="teamKey === 'team2' && match.team2_captain_id" :id="match.team2_captain_id" :name="match.team2_name || t('tbd')" :banner-url="match.team2_banner" :avatar-url="match.team2_avatar" class="mb-1" />
+            <span v-else class="text-sm font-semibold text-muted-foreground truncate mb-1">{{ t('tbd') }}</span>
+            <!-- Penalty dropdown (edit mode) -->
+            <div v-if="showAdminPanel" class="flex items-center gap-1.5 mb-1">
+              <span class="text-[10px] text-muted-foreground">Penalty:</span>
               <select
-                class="input-field text-[11px] py-0.5 px-1.5 w-auto"
-                :value="match.penalty_radiant ?? 0"
-                @change="api.updateMatchPenalties(compId!, matchId, { penalty_radiant: Number(($event.target as HTMLSelectElement).value) || null, penalty_dire: match.penalty_dire ?? null })"
+                class="input-field text-[10px] py-0.5 px-1.5 w-auto"
+                :value="(teamKey === 'team1' ? match.penalty_radiant : match.penalty_dire) ?? 0"
+                @change="api.updateMatchPenalties(compId!, matchId, {
+                  penalty_radiant: teamKey === 'team1' ? (Number(($event.target as HTMLSelectElement).value) || null) : (match.penalty_radiant ?? null),
+                  penalty_dire: teamKey === 'team2' ? (Number(($event.target as HTMLSelectElement).value) || null) : (match.penalty_dire ?? null),
+                })"
               >
                 <option :value="0">{{ t('penaltyNone') }}</option>
                 <option :value="1">{{ t('penaltyLevel', { n: 1 }) }}</option>
@@ -722,72 +701,56 @@ function goBack() {
                 <option :value="3">{{ t('penaltyLevel', { n: 3 }) }}</option>
               </select>
             </div>
-            <div class="flex items-center gap-1.5">
-              <span class="text-[11px] text-muted-foreground">{{ match.team2_name || 'T2' }}</span>
-              <select
-                class="input-field text-[11px] py-0.5 px-1.5 w-auto"
-                :value="match.penalty_dire ?? 0"
-                @change="api.updateMatchPenalties(compId!, matchId, { penalty_radiant: match.penalty_radiant ?? null, penalty_dire: Number(($event.target as HTMLSelectElement).value) || null })"
-              >
-                <option :value="0">{{ t('penaltyNone') }}</option>
-                <option :value="1">{{ t('penaltyLevel', { n: 1 }) }}</option>
-                <option :value="2">{{ t('penaltyLevel', { n: 2 }) }}</option>
-                <option :value="3">{{ t('penaltyLevel', { n: 3 }) }}</option>
-              </select>
+            <!-- Players -->
+            <div v-for="p in teamRosters[teamKey]" :key="p.id" class="flex items-center gap-2 py-0.5">
+              <!-- Check if this player has a standin -->
+              <template v-if="standins.find((s: any) => s.original_player_id === p.id)">
+                <span class="text-xs line-through text-muted-foreground/50 truncate">{{ p.name }}</span>
+                <span class="text-[10px] text-muted-foreground">→</span>
+                <span class="text-xs font-medium text-foreground">{{ standins.find((s: any) => s.original_player_id === p.id)?.standin_display_name }}</span>
+                <button v-if="showAdminPanel" class="ml-auto text-destructive hover:text-destructive/80" @click="removeStandin(standins.find((s: any) => s.original_player_id === p.id)!.id)">
+                  <X class="w-3 h-3" />
+                </button>
+              </template>
+              <template v-else>
+                <UserName :id="p.id" :name="p.name" :avatar-url="p.avatar_url" size="sm" />
+                <span v-if="p.is_captain" class="text-[10px] font-medium text-primary bg-primary/10 px-1.5 py-0.5 rounded">C</span>
+                <span v-if="p.mmr && !showAdminPanel" class="text-[10px] text-muted-foreground ml-auto">{{ p.mmr }}</span>
+                <!-- Standin button (edit mode) -->
+                <button
+                  v-if="showAdminPanel"
+                  class="ml-auto text-[10px] text-muted-foreground hover:text-primary transition-colors px-1.5 py-0.5 rounded hover:bg-accent"
+                  @click="addingStandin = { team: teamKey, originalPlayerId: p.id, captainId: teamKey === 'team1' ? match.team1_captain_id : match.team2_captain_id }"
+                >standin</button>
+              </template>
+            </div>
+            <!-- Standin search (inline when selecting for this team) -->
+            <div v-if="showAdminPanel && addingStandin?.team === teamKey" class="flex flex-col gap-1.5 mt-1 pt-2 border-t border-border/30">
+              <div class="flex items-center gap-2 text-[10px] text-muted-foreground">
+                <span>Replacing <strong class="text-foreground">{{ teamRosters[teamKey].find((p: any) => p.id === addingStandin!.originalPlayerId)?.name }}</strong></span>
+                <button class="text-destructive hover:underline" @click="addingStandin = null; standinSearch = ''; standinResults = []">{{ t('cancel') }}</button>
+              </div>
+              <input
+                type="text"
+                class="input-field text-xs py-1"
+                placeholder="Search player..."
+                v-model="standinSearch"
+                @input="searchStandinPlayer(standinSearch)"
+              />
+              <div v-if="standinResults.length" class="flex flex-col gap-0.5 max-h-32 overflow-y-auto">
+                <button
+                  v-for="sp in standinResults"
+                  :key="sp.id"
+                  class="flex items-center gap-2 px-2 py-1 rounded text-xs hover:bg-accent transition-colors text-left"
+                  @click="addStandin(sp.id)"
+                >
+                  <img v-if="sp.avatar_url" :src="sp.avatar_url" class="w-4 h-4 rounded-full" />
+                  <span class="font-medium text-foreground">{{ sp.display_name || sp.name }}</span>
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-
-        <!-- Standins -->
-        <div>
-          <span class="text-xs font-semibold text-foreground mb-2 block">Standins</span>
-          <!-- Current standins -->
-          <div v-if="standins.length" class="flex flex-col gap-1.5 mb-3">
-            <div v-for="s in standins" :key="s.id" class="flex items-center gap-2 text-xs bg-accent/30 rounded px-2.5 py-1.5">
-              <span class="text-muted-foreground">{{ s.captain_team }}:</span>
-              <span class="line-through text-muted-foreground">{{ s.original_display_name }}</span>
-              <span class="text-muted-foreground">→</span>
-              <span class="font-medium text-foreground">{{ s.standin_display_name }}</span>
-              <button class="ml-auto text-destructive hover:text-destructive/80 transition-colors" @click="removeStandin(s.id)">
-                <X class="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-          <!-- Add standin -->
-          <div v-if="!addingStandin" class="grid grid-cols-2 gap-3">
-            <div v-for="(team, teamKey) in { team1: teamRosters.team1, team2: teamRosters.team2 }" :key="teamKey">
-              <select class="input-field text-xs py-1 w-full" @change="($event.target as HTMLSelectElement).value && (addingStandin = { team: teamKey as 'team1' | 'team2', originalPlayerId: Number(($event.target as HTMLSelectElement).value), captainId: teamKey === 'team1' ? match.team1_captain_id : match.team2_captain_id }); ($event.target as HTMLSelectElement).value = ''">
-                <option value="">{{ (teamKey === 'team1' ? match.team1_name : match.team2_name) || teamKey }} — Select player</option>
-                <option v-for="p in team.filter((pl: any) => !standins.some((s: any) => s.original_player_id === pl.id))" :key="p.id" :value="p.id">{{ p.name }}</option>
-              </select>
-            </div>
-          </div>
-          <!-- Search standin player -->
-          <div v-else class="flex flex-col gap-2">
-            <div class="flex items-center gap-2 text-xs text-muted-foreground">
-              <span>Replacing: <strong class="text-foreground">{{ [...teamRosters.team1, ...teamRosters.team2].find((p: any) => p.id === addingStandin!.originalPlayerId)?.name }}</strong></span>
-              <button class="text-destructive text-[10px] hover:underline" @click="addingStandin = null; standinSearch = ''; standinResults = []">{{ t('cancel') }}</button>
-            </div>
-            <input
-              type="text"
-              class="input-field text-xs py-1.5"
-              placeholder="Search player by name..."
-              v-model="standinSearch"
-              @input="searchStandinPlayer(standinSearch)"
-            />
-            <div v-if="standinResults.length" class="flex flex-col gap-0.5 max-h-40 overflow-y-auto">
-              <button
-                v-for="p in standinResults"
-                :key="p.id"
-                class="flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-accent transition-colors text-left"
-                @click="addStandin(p.id)"
-              >
-                <img v-if="p.avatar_url" :src="p.avatar_url" class="w-5 h-5 rounded-full" />
-                <span class="font-medium text-foreground">{{ p.display_name || p.name }}</span>
-              </button>
-            </div>
-          </div>
-        </div>
+        </template>
       </div>
 
       <!-- Match Completed Banner -->
