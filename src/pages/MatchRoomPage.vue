@@ -1107,19 +1107,19 @@ function goBack() {
                           <div class="inline-flex flex-col gap-px">
                             <div class="flex gap-px">
                               <template v-for="(itemId, idx) in [p.item_0, p.item_1, p.item_2]" :key="'t-' + idx">
-                                <img v-if="itemId && dota.itemImg(itemId)" :src="dota.itemImg(itemId)" :title="dota.itemName(itemId)" class="w-[24px] h-[18px] rounded-[2px] object-cover border border-border/20" />
-                                <div v-else class="w-[24px] h-[18px] rounded-[2px] bg-surface/60 border border-border/10"></div>
+                                <img v-if="itemId && dota.itemImg(itemId)" :src="dota.itemImg(itemId)" :title="dota.itemName(itemId)" class="w-[36px] h-[27px] rounded-[2px] object-cover border border-border/20" />
+                                <div v-else class="w-[36px] h-[27px] rounded-[2px] bg-surface/60 border border-border/10"></div>
                               </template>
                               <img v-if="p.item_neutral && dota.itemImg(p.item_neutral)" :src="dota.itemImg(p.item_neutral)" :title="dota.itemName(p.item_neutral)"
-                                class="w-[18px] h-[18px] rounded-full object-cover border border-amber-500/30 ml-1" />
+                                class="w-[27px] h-[27px] rounded-full object-cover border border-amber-500/30 ml-1" />
                             </div>
                             <div class="flex gap-px">
                               <template v-for="(itemId, idx) in [p.item_3, p.item_4, p.item_5]" :key="'b-' + idx">
-                                <img v-if="itemId && dota.itemImg(itemId)" :src="dota.itemImg(itemId)" :title="dota.itemName(itemId)" class="w-[24px] h-[18px] rounded-[2px] object-cover border border-border/20" />
-                                <div v-else class="w-[24px] h-[18px] rounded-[2px] bg-surface/60 border border-border/10"></div>
+                                <img v-if="itemId && dota.itemImg(itemId)" :src="dota.itemImg(itemId)" :title="dota.itemName(itemId)" class="w-[36px] h-[27px] rounded-[2px] object-cover border border-border/20" />
+                                <div v-else class="w-[36px] h-[27px] rounded-[2px] bg-surface/60 border border-border/10"></div>
                               </template>
                               <template v-for="(itemId, idx) in [p.backpack_0, p.backpack_1, p.backpack_2]" :key="'bp-' + idx">
-                                <img v-if="itemId && dota.itemImg(itemId)" :src="dota.itemImg(itemId)" :title="dota.itemName(itemId)" class="w-[18px] h-[14px] rounded-[1px] object-cover border border-border/10 opacity-40 ml-px" />
+                                <img v-if="itemId && dota.itemImg(itemId)" :src="dota.itemImg(itemId)" :title="dota.itemName(itemId)" class="w-[27px] h-[21px] rounded-[1px] object-cover border border-border/10 opacity-40 ml-px" />
                               </template>
                             </div>
                           </div>
