@@ -1076,7 +1076,7 @@ function goBack() {
                         <td class="py-2 px-3 sticky left-0 z-10" :class="side ? 'bg-green-500/10 border-l-4 border-green-500' : 'bg-red-500/10 border-l-4 border-red-500'" :colspan="1">
                           <div class="flex items-center gap-2">
                             <span class="text-sm font-bold" :class="side ? 'text-green-500' : 'text-red-400'">{{ sideTeamName(game.game_number, side) }}</span>
-                            <span v-if="teamWon(game.game_number, side)" class="text-[10px] font-semibold text-green-500 bg-green-500/15 px-1.5 py-0.5 rounded">WIN</span>
+                            <Trophy v-if="teamWon(game.game_number, side)" class="w-4 h-4 text-amber-500" />
                           </div>
                         </td>
                         <td :colspan="23" class="py-2 px-3 text-right" :class="side ? 'bg-green-500/10' : 'bg-red-500/10'">
