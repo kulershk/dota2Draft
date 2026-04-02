@@ -432,9 +432,23 @@ async function refetchStats(gameNumber: number) {
   }
 }
 
-// Sort draft picks/bans by order
-function getSortedDraft(gameNumber: number) {
-  return (gamePicksBans.value[gameNumber] || []).slice().sort((a: any, b: any) => a.order - b.order)
+// Group draft into ban/pick phases
+function getDraftPhases(gameNumber: number) {
+  const pbs = (gamePicksBans.value[gameNumber] || []).slice().sort((a: any, b: any) => a.order - b.order)
+  if (!pbs.length) return []
+  const phases: { type: string; label: string; items: any[] }[] = []
+  let currentType: string | null = null
+  let count = { ban: 0, pick: 0 }
+  for (const pb of pbs) {
+    const type = pb.is_pick ? 'pick' : 'ban'
+    if (type !== currentType) {
+      currentType = type
+      count[type]++
+      phases.push({ type, label: `${type === 'ban' ? 'Ban' : 'Pick'} ${count[type]}`, items: [] })
+    }
+    phases[phases.length - 1].items.push(pb)
+  }
+  return phases
 }
 
 // Per-game penalty settings (local state, sent when lobby is created)
@@ -1084,28 +1098,33 @@ function goBack() {
                 </div>
               </details>
 
-              <!-- Draft: Picks & Bans (single row, numbered, in draft order) -->
+              <!-- Draft: Picks & Bans grouped by phase, numbered -->
               <div v-if="gamePicksBans[game.game_number]?.length" class="mt-3">
                 <p class="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">{{ t('draft') || 'Draft' }}</p>
-                <div class="flex flex-wrap gap-1.5">
-                  <div
-                    v-for="pb in getSortedDraft(game.game_number)"
-                    :key="pb.order"
-                    class="flex flex-col items-center"
-                    :title="(pb.is_pick ? 'Pick' : 'Ban') + ' #' + (pb.order + 1) + ': ' + dota.heroName(pb.hero_id) + (pb.team === 0 ? ' (Radiant)' : ' (Dire)')"
-                  >
-                    <span class="text-[9px] font-mono font-bold mb-0.5" :class="pb.is_pick ? (pb.team === 0 ? 'text-green-500' : 'text-red-400') : 'text-muted-foreground'">{{ pb.order + 1 }}</span>
-                    <div class="relative">
-                      <img v-if="dota.heroImg(pb.hero_id)" :src="dota.heroImg(pb.hero_id)"
-                        class="w-11 h-[30px] rounded-sm object-cover border-2"
-                        :class="pb.is_pick
-                          ? (pb.team === 0 ? 'border-green-500/60' : 'border-red-500/60')
-                          : 'border-border/40 grayscale opacity-50'" />
-                      <div v-if="!pb.is_pick" class="absolute inset-0 flex items-center justify-center">
-                        <X class="w-4 h-4 text-red-500/80" />
+                <div class="flex flex-wrap items-end gap-3">
+                  <div v-for="phase in getDraftPhases(game.game_number)" :key="phase.label" class="flex flex-col gap-1">
+                    <span class="text-[9px] font-semibold uppercase tracking-wider" :class="phase.type === 'ban' ? 'text-red-500/60' : 'text-green-500/60'">{{ phase.label }}</span>
+                    <div class="flex items-start gap-1">
+                      <div
+                        v-for="pb in phase.items"
+                        :key="pb.order"
+                        class="flex flex-col items-center"
+                        :title="'#' + (pb.order + 1) + ' ' + dota.heroName(pb.hero_id) + (pb.team === 0 ? ' (Radiant)' : ' (Dire)')"
+                      >
+                        <span class="text-[9px] font-mono font-bold mb-0.5" :class="pb.is_pick ? (pb.team === 0 ? 'text-green-500' : 'text-red-400') : 'text-muted-foreground'">{{ pb.order + 1 }}</span>
+                        <div class="relative">
+                          <img v-if="dota.heroImg(pb.hero_id)" :src="dota.heroImg(pb.hero_id)"
+                            class="w-11 h-[30px] rounded-sm object-cover border-2"
+                            :class="pb.is_pick
+                              ? (pb.team === 0 ? 'border-green-500/60' : 'border-red-500/60')
+                              : 'border-border/40 grayscale opacity-50'" />
+                          <div v-if="!pb.is_pick" class="absolute inset-0 flex items-center justify-center">
+                            <X class="w-4 h-4 text-red-500/80" />
+                          </div>
+                        </div>
+                        <span class="text-[8px] text-muted-foreground truncate text-center mt-0.5 w-11">{{ dota.heroName(pb.hero_id) }}</span>
                       </div>
                     </div>
-                    <span class="text-[8px] text-muted-foreground truncate text-center mt-0.5 w-11">{{ dota.heroName(pb.hero_id) }}</span>
                   </div>
                 </div>
               </div>
