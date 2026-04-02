@@ -971,20 +971,29 @@ function goBack() {
                       <th class="text-center px-1" :title="t('heroDamage')">HD</th>
                       <th class="text-center px-1" :title="t('towerDamage')">TD</th>
                       <th class="text-center px-1" :title="t('heroHealing')">HH</th>
+                      <th class="text-left px-1.5 min-w-[150px]">{{ t('items') }}</th>
+                      <th class="text-center px-1">LVL</th>
                       <th class="text-center px-1" :title="t('obsPlaced')">OW</th>
                       <th class="text-center px-1" :title="t('senPlaced')">SW</th>
+                      <th class="text-center px-1" :title="t('obsKilled')">OK</th>
+                      <th class="text-center px-1" :title="t('senKilled')">SK</th>
                       <th class="text-center px-1" :title="t('campsStacked')">CS</th>
+                      <th class="text-center px-1" title="Stuns">ST</th>
+                      <th class="text-center px-1" title="Teamfight %">TF</th>
+                      <th class="text-center px-1" title="Towers Killed">TK</th>
+                      <th class="text-center px-1" title="Roshans">RS</th>
+                      <th class="text-center px-1" title="Runes">RU</th>
+                      <th class="text-center px-1" title="Courier Kills">CK</th>
                       <th class="text-center px-1" :title="t('tripleKills')">3K</th>
                       <th class="text-center px-1" :title="t('ultraKills')">4K</th>
                       <th class="text-center px-1" :title="t('rampages')">R</th>
-                      <th class="text-left px-1.5 min-w-[150px]">{{ t('items') }}</th>
                     </tr>
                   </thead>
                   <tbody>
                     <template v-for="(side, sideIdx) in [true, false]" :key="sideIdx">
-                      <tr v-if="sideIdx > 0" class="h-1"><td :colspan="19" class="border-t border-border/30"></td></tr>
+                      <tr v-if="sideIdx > 0" class="h-1"><td :colspan="28" class="border-t border-border/30"></td></tr>
                       <tr class="text-[10px] text-muted-foreground">
-                        <td :colspan="19" class="py-1 px-1.5 font-semibold" :class="side ? 'text-green-500/80' : 'text-red-500/80'">
+                        <td :colspan="28" class="py-1 px-1.5 font-semibold" :class="side ? 'text-green-500/80' : 'text-red-500/80'">
                           {{ side ? 'Radiant' : 'Dire' }}
                           <span v-if="gameStats[game.game_number]?.find((s: any) => s.is_radiant === side)?.win" class="ml-1 text-green-500">({{ t('matchWinner', { team: '' }).replace('!', '').trim() }})</span>
                         </td>
@@ -1020,12 +1029,6 @@ function goBack() {
                         <td class="text-center px-1">{{ (p.hero_damage / 1000).toFixed(1) }}k</td>
                         <td class="text-center px-1">{{ (p.tower_damage / 1000).toFixed(1) }}k</td>
                         <td class="text-center px-1">{{ (p.hero_healing / 1000).toFixed(1) }}k</td>
-                        <td class="text-center px-1">{{ p.obs_placed }}</td>
-                        <td class="text-center px-1">{{ p.sen_placed }}</td>
-                        <td class="text-center px-1">{{ p.camps_stacked }}</td>
-                        <td class="text-center px-1">{{ getMultiKillCount(p.multi_kills, '3') || '-' }}</td>
-                        <td class="text-center px-1">{{ getMultiKillCount(p.multi_kills, '4') || '-' }}</td>
-                        <td class="text-center px-1">{{ getMultiKillCount(p.multi_kills, '5') || '-' }}</td>
                         <td class="py-1 px-1.5">
                           <div class="flex items-center gap-0.5">
                             <template v-for="itemId in [p.item_0, p.item_1, p.item_2, p.item_3, p.item_4, p.item_5]" :key="'item-' + itemId + '-' + Math.random()">
@@ -1043,6 +1046,21 @@ function goBack() {
                             </template>
                           </div>
                         </td>
+                        <td class="text-center px-1">{{ p.level }}</td>
+                        <td class="text-center px-1">{{ p.obs_placed }}</td>
+                        <td class="text-center px-1">{{ p.sen_placed }}</td>
+                        <td class="text-center px-1">{{ p.observer_kills }}</td>
+                        <td class="text-center px-1">{{ p.sentry_kills }}</td>
+                        <td class="text-center px-1">{{ p.camps_stacked }}</td>
+                        <td class="text-center px-1">{{ p.stuns ? p.stuns.toFixed(0) : 0 }}</td>
+                        <td class="text-center px-1">{{ p.teamfight_participation ? (p.teamfight_participation * 100).toFixed(0) + '%' : '-' }}</td>
+                        <td class="text-center px-1">{{ p.towers_killed || '-' }}</td>
+                        <td class="text-center px-1">{{ p.roshans_killed || '-' }}</td>
+                        <td class="text-center px-1">{{ p.rune_pickups || '-' }}</td>
+                        <td class="text-center px-1">{{ p.courier_kills || '-' }}</td>
+                        <td class="text-center px-1">{{ getMultiKillCount(p.multi_kills, '3') || '-' }}</td>
+                        <td class="text-center px-1">{{ getMultiKillCount(p.multi_kills, '4') || '-' }}</td>
+                        <td class="text-center px-1">{{ getMultiKillCount(p.multi_kills, '5') || '-' }}</td>
                       </tr>
                     </template>
                   </tbody>
