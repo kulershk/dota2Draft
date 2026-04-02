@@ -708,8 +708,11 @@ function goBack() {
             <div v-for="p in teamRosters[teamKey]" :key="p.id" class="flex items-center gap-2 py-0.5">
               <!-- Check if this player has a standin -->
               <template v-if="standins.find((s: any) => s.original_player_id === p.id)">
+                <div class="flex items-center gap-1.5 min-w-0 line-through opacity-50">
+                  <UserName :id="p.id" :name="p.name" :avatar-url="p.avatar_url" size="sm" no-link />
+                </div>
+                <span class="text-muted-foreground text-xs">→</span>
                 <UserName :id="standins.find((s: any) => s.original_player_id === p.id)!.standin_player_id" :name="standins.find((s: any) => s.original_player_id === p.id)!.standin_display_name" :avatar-url="standins.find((s: any) => s.original_player_id === p.id)!.standin_avatar" size="sm" />
-                <span class="text-[9px] text-muted-foreground/60 italic">(for {{ p.name }})</span>
                 <button v-if="showAdminPanel" class="ml-auto text-destructive hover:text-destructive/80" @click="removeStandin(standins.find((s: any) => s.original_player_id === p.id)!.id)">
                   <X class="w-3 h-3" />
                 </button>
