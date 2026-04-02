@@ -9,6 +9,7 @@ import { getSocket, getServerNow } from '@/composables/useSocket'
 import { useDotaConstants } from '@/composables/useDotaConstants'
 import UserName from '@/components/common/UserName.vue'
 import TeamName from '@/components/common/TeamName.vue'
+import PositionIcon from '@/components/common/PositionIcon.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -1065,9 +1066,9 @@ function goBack() {
                                 {{ playerDisplayName(p) }}
                               </router-link>
                               <span v-else class="font-medium truncate text-xs leading-tight">{{ playerDisplayName(p) }}</span>
-                              <span class="text-[10px] text-muted-foreground leading-tight">
+                              <span class="text-[10px] text-muted-foreground leading-tight flex items-center gap-1">
                                 {{ dota.heroName(p.hero_id) }}
-                                <span v-if="posLabel(game.game_number, p.account_id)" class="text-[9px] text-primary/70 ml-0.5">{{ posLabel(game.game_number, p.account_id) }}</span>
+                                <PositionIcon v-if="playerPositions[game.game_number]?.[p.account_id]" :position="playerPositions[game.game_number][p.account_id]" />
                               </span>
                             </div>
                           </div>
