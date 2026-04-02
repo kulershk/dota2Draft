@@ -2,7 +2,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ChevronDown, ChevronUp, Check, Gamepad2, X, ArrowLeft, Trophy, ExternalLink, Clock, CheckCircle, AlertCircle, RefreshCw, Pencil } from 'lucide-vue-next'
+import { ChevronDown, ChevronUp, Check, Gamepad2, X, ArrowLeft, Trophy, ExternalLink, Clock, Calendar, CheckCircle, AlertCircle, RefreshCw, Pencil } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { getSocket, getServerNow } from '@/composables/useSocket'
@@ -1089,7 +1089,10 @@ function goBack() {
               <!-- Game info bar: date + duration + external links -->
               <div class="flex items-center justify-between flex-wrap gap-2">
                 <div class="flex items-center gap-3 text-sm text-muted-foreground">
-                  <span v-if="game.created_at" class="text-xs font-mono">{{ fmtDateTime(new Date(game.created_at)) }}</span>
+                  <div v-if="game.created_at" class="flex items-center gap-1.5">
+                    <Calendar class="w-3.5 h-3.5" />
+                    <span class="text-xs font-mono">{{ fmtDateTime(new Date(game.created_at)) }}</span>
+                  </div>
                   <div v-if="getGameDuration(game.game_number)" class="flex items-center gap-1.5">
                     <Clock class="w-3.5 h-3.5" />
                     <span>{{ getGameDuration(game.game_number) }}</span>
