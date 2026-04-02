@@ -10,6 +10,7 @@ import { useDotaConstants } from '@/composables/useDotaConstants'
 import UserName from '@/components/common/UserName.vue'
 import TeamName from '@/components/common/TeamName.vue'
 import PositionIcon from '@/components/common/PositionIcon.vue'
+import { fmtDateTime } from '@/utils/format'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -46,7 +47,7 @@ const allGames = computed(() => {
   const list = []
   for (let i = 1; i <= bestOf.value; i++) {
     const g = existing.find((e: any) => e.game_number === i)
-    list.push({ game_number: i, winner_captain_id: g?.winner_captain_id || null, dotabuff_id: g?.dotabuff_id || '', has_stats: g?.has_stats || false, parsed: g?.parsed || false })
+    list.push({ game_number: i, winner_captain_id: g?.winner_captain_id || null, dotabuff_id: g?.dotabuff_id || '', has_stats: g?.has_stats || false, parsed: g?.parsed || false, created_at: g?.created_at || null })
   }
   return list
 })
@@ -1085,11 +1086,14 @@ function goBack() {
         </div>
         <div v-else-if="gameStats[game.game_number]?.length" class="px-5 py-4">
             <div class="flex flex-col gap-4">
-              <!-- Game info bar: duration + external links -->
+              <!-- Game info bar: date + duration + external links -->
               <div class="flex items-center justify-between flex-wrap gap-2">
-                <div v-if="getGameDuration(game.game_number)" class="flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <Clock class="w-3.5 h-3.5" />
-                  <span>{{ getGameDuration(game.game_number) }}</span>
+                <div class="flex items-center gap-3 text-sm text-muted-foreground">
+                  <span v-if="game.created_at" class="text-xs font-mono">{{ fmtDateTime(new Date(game.created_at)) }}</span>
+                  <div v-if="getGameDuration(game.game_number)" class="flex items-center gap-1.5">
+                    <Clock class="w-3.5 h-3.5" />
+                    <span>{{ getGameDuration(game.game_number) }}</span>
+                  </div>
                 </div>
                 <div v-if="game.dotabuff_id" class="flex items-center gap-2">
                   <a :href="`https://www.dotabuff.com/matches/${game.dotabuff_id}`" target="_blank" rel="noopener noreferrer"
