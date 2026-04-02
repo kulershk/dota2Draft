@@ -1053,20 +1053,7 @@ function goBack() {
                       <th class="text-center px-1">TD</th>
                       <th class="text-center px-1">HH</th>
                       <th class="text-left px-1.5">{{ t('items') }}</th>
-                      <th class="text-center px-1" :title="t('obsPlaced')">OW</th>
-                      <th class="text-center px-1" :title="t('senPlaced')">SW</th>
-                      <th class="text-center px-1" :title="t('obsKilled')">OK</th>
-                      <th class="text-center px-1" :title="t('senKilled')">SK</th>
                       <th class="text-center px-1" :title="t('campsStacked')">CS</th>
-                      <th class="text-center px-1" title="Stuns">ST</th>
-                      <th class="text-center px-1" title="Teamfight">TF</th>
-                      <th class="text-center px-1" title="Towers">TK</th>
-                      <th class="text-center px-1" title="Roshans">RS</th>
-                      <th class="text-center px-1" title="Runes">RU</th>
-                      <th class="text-center px-1" title="Courier">CK</th>
-                      <th class="text-center px-1">3K</th>
-                      <th class="text-center px-1">4K</th>
-                      <th class="text-center px-1">R</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1079,7 +1066,7 @@ function goBack() {
                             <Trophy v-if="teamWon(game.game_number, side)" class="w-4 h-4 text-amber-500" />
                           </div>
                         </td>
-                        <td :colspan="23" class="py-2 px-3 text-right" :class="side ? 'bg-green-500/10' : 'bg-red-500/10'">
+                        <td :colspan="10" class="py-2 px-3 text-right" :class="side ? 'bg-green-500/10' : 'bg-red-500/10'">
                           <span class="text-xs font-mono text-muted-foreground">{{ teamTotalKills(game.game_number, side) }} kills</span>
                           <span class="text-xs font-mono text-amber-500 ml-3">{{ teamTotalNW(game.game_number, side) }}</span>
                         </td>
@@ -1141,20 +1128,7 @@ function goBack() {
                             </div>
                           </div>
                         </td>
-                        <td class="text-center px-1 font-mono">{{ p.obs_placed }}</td>
-                        <td class="text-center px-1 font-mono">{{ p.sen_placed }}</td>
-                        <td class="text-center px-1 font-mono">{{ p.observer_kills }}</td>
-                        <td class="text-center px-1 font-mono">{{ p.sentry_kills }}</td>
                         <td class="text-center px-1 font-mono">{{ p.camps_stacked }}</td>
-                        <td class="text-center px-1 font-mono">{{ p.stuns ? p.stuns.toFixed(0) : 0 }}</td>
-                        <td class="text-center px-1 font-mono">{{ p.teamfight_participation ? (p.teamfight_participation * 100).toFixed(0) + '%' : '-' }}</td>
-                        <td class="text-center px-1 font-mono">{{ p.towers_killed || '-' }}</td>
-                        <td class="text-center px-1 font-mono">{{ p.roshans_killed || '-' }}</td>
-                        <td class="text-center px-1 font-mono">{{ p.rune_pickups || '-' }}</td>
-                        <td class="text-center px-1 font-mono">{{ p.courier_kills || '-' }}</td>
-                        <td class="text-center px-1 font-mono">{{ getMultiKillCount(p.multi_kills, '3') || '-' }}</td>
-                        <td class="text-center px-1 font-mono">{{ getMultiKillCount(p.multi_kills, '4') || '-' }}</td>
-                        <td class="text-center px-1 font-mono">{{ getMultiKillCount(p.multi_kills, '5') || '-' }}</td>
                       </tr>
                     </template>
                   </tbody>
