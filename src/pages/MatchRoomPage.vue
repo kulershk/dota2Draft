@@ -1089,7 +1089,6 @@ function goBack() {
               </div>
             </div>
           </div>
-        </div>
       </div>
     </template>
   </div>
