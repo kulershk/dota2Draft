@@ -431,7 +431,7 @@ async function handleClaimAdmin() {
           </div>
           <div class="flex flex-col sm:flex-row items-center justify-between gap-2 pt-3 border-t border-border/50">
             <p class="text-xs text-muted-foreground">&copy; {{ new Date().getFullYear() }} {{ customSiteName || t('appTitle') }}. {{ t('allRightsReserved') }}</p>
-            <p class="text-xs text-muted-foreground">{{ t('createdBy') }} <router-link :to="{ name: 'player-profile', params: { id: 1 } }" class="text-primary hover:text-primary/80 transition-colors font-medium">kulers</router-link></p>
+            <p class="text-xs text-muted-foreground">{{ t('createdBy') }} <router-link :to="{ name: 'player-profile', params: { id: 33 } }" class="text-primary hover:text-primary/80 transition-colors font-medium">kulers</router-link></p>
           </div>
         </div>
       </footer>
