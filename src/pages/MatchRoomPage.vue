@@ -1028,7 +1028,6 @@ function goBack() {
                     <tr class="text-[10px] text-muted-foreground">
                       <th class="text-left py-1 px-1.5 min-w-[200px] sticky left-0 bg-card z-10"></th>
                       <th class="text-center px-1 w-5"></th>
-                      <th class="text-center px-1">LVL</th>
                       <th class="text-center px-1.5">K/D/A</th>
                       <th class="text-center px-1">LH/DN</th>
                       <th class="text-center px-1">NET</th>
@@ -1063,7 +1062,7 @@ function goBack() {
                             <span v-if="teamWon(game.game_number, side)" class="text-[10px] font-semibold text-green-500 bg-green-500/15 px-1.5 py-0.5 rounded">WIN</span>
                           </div>
                         </td>
-                        <td :colspan="24" class="py-2 px-3 text-right" :class="side ? 'bg-green-500/10' : 'bg-red-500/10'">
+                        <td :colspan="23" class="py-2 px-3 text-right" :class="side ? 'bg-green-500/10' : 'bg-red-500/10'">
                           <span class="text-xs font-mono text-muted-foreground">{{ teamTotalKills(game.game_number, side) }} kills</span>
                           <span class="text-xs font-mono text-amber-500 ml-3">{{ teamTotalNW(game.game_number, side) }}</span>
                         </td>
@@ -1095,7 +1094,6 @@ function goBack() {
                         <td class="text-center px-0.5">
                           <PositionIcon v-if="playerPositions[game.game_number]?.[p.account_id]" :position="playerPositions[game.game_number][p.account_id]" />
                         </td>
-                        <td class="text-center px-1 text-muted-foreground">{{ p.level }}</td>
                         <td class="text-center px-1.5 font-mono font-medium whitespace-nowrap">
                           <span class="text-green-500">{{ p.kills }}</span><span class="text-muted-foreground">/</span><span class="text-red-400">{{ p.deaths }}</span><span class="text-muted-foreground">/</span><span>{{ p.assists }}</span>
                         </td>
