@@ -544,6 +544,7 @@ export default {
 
   // Footer
   allRightsReserved: 'Visas tiesības aizsargātas.',
+  createdBy: 'Izveidoja',
   deployInProgress: 'Notiek atjaunināšana — vietne var uz brīdi restartēties.',
 
   // Language

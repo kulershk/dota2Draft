@@ -544,6 +544,7 @@ export default {
 
   // Footer
   allRightsReserved: 'Visos teisės saugomos.',
+  createdBy: 'Sukūrė',
   deployInProgress: 'Vyksta atnaujinimas — svetainė gali trumpam persikrauti.',
 
   // Language

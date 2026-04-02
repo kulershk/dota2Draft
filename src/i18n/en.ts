@@ -545,6 +545,7 @@ export default {
 
   // Footer
   allRightsReserved: 'All rights reserved.',
+  createdBy: 'Created by',
   deployInProgress: 'Deployment in progress — the site may restart momentarily.',
 
   // Language

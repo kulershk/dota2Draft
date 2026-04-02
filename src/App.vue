@@ -225,16 +225,6 @@ async function handleClaimAdmin() {
               <Trophy class="w-[15px] h-[15px]" />
               {{ t('leaderboard') }}
             </router-link>
-            <router-link
-              to="/how-it-works"
-              class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] tracking-wide transition-colors"
-              :class="route.path === '/how-it-works'
-                ? 'bg-primary/15 text-primary font-semibold border border-primary/30'
-                : 'text-muted-foreground hover:text-foreground'"
-            >
-              <Info class="w-[15px] h-[15px]" />
-              {{ t('howItWorksTitle') }}
-            </router-link>
           </nav>
         </div>
 
@@ -395,10 +385,6 @@ async function handleClaimAdmin() {
           <Trophy class="w-[18px] h-[18px]" />
           {{ t('leaderboard') }}
         </router-link>
-        <router-link to="/how-it-works" class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-muted-foreground hover:bg-accent hover:text-foreground" @click="mobileMenuOpen = false">
-          <Info class="w-[18px] h-[18px]" />
-          {{ t('howItWorksTitle') }}
-        </router-link>
         <router-link v-if="isLoggedIn" to="/settings" class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-muted-foreground hover:bg-accent hover:text-foreground" @click="mobileMenuOpen = false">
           <Settings class="w-[18px] h-[18px]" />
           {{ t('settingsTitle') }}
@@ -430,15 +416,23 @@ async function handleClaimAdmin() {
       <router-view class="relative z-[1]" />
       <!-- Footer (only on public pages) -->
       <footer v-if="!route.path.startsWith('/admin') && !route.path.startsWith('/c/')" class="mt-auto border-t border-border bg-sidebar relative z-[1]">
-        <div class="max-w-[1200px] mx-auto px-4 md:px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div class="flex items-center gap-2">
-            <img v-if="customLogoUrl" :src="customLogoUrl" class="w-6 h-6 rounded object-contain" />
-            <div v-else class="w-6 h-6 rounded bg-primary flex items-center justify-center">
-              <Gamepad2 class="w-3 h-3 text-primary-foreground" />
+        <div class="max-w-[1200px] mx-auto px-4 md:px-6 py-6 flex flex-col gap-4">
+          <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div class="flex items-center gap-2">
+              <img v-if="customLogoUrl" :src="customLogoUrl" class="w-6 h-6 rounded object-contain" />
+              <div v-else class="w-6 h-6 rounded bg-primary flex items-center justify-center">
+                <Gamepad2 class="w-3 h-3 text-primary-foreground" />
+              </div>
+              <span class="text-xs font-semibold text-foreground">{{ customSiteName || t('appTitle') }}</span>
             </div>
-            <span class="text-xs font-semibold text-foreground">{{ customSiteName || t('appTitle') }}</span>
+            <div class="flex items-center gap-4">
+              <router-link to="/how-it-works" class="text-xs text-muted-foreground hover:text-foreground transition-colors">{{ t('howItWorksTitle') }}</router-link>
+            </div>
           </div>
-          <p class="text-xs text-muted-foreground">&copy; {{ new Date().getFullYear() }} {{ customSiteName || t('appTitle') }}. {{ t('allRightsReserved') }}</p>
+          <div class="flex flex-col sm:flex-row items-center justify-between gap-2 pt-3 border-t border-border/50">
+            <p class="text-xs text-muted-foreground">&copy; {{ new Date().getFullYear() }} {{ customSiteName || t('appTitle') }}. {{ t('allRightsReserved') }}</p>
+            <p class="text-xs text-muted-foreground">{{ t('createdBy') }} <router-link :to="{ name: 'player-profile', params: { id: 1 } }" class="text-primary hover:text-primary/80 transition-colors font-medium">kulers</router-link></p>
+          </div>
         </div>
       </footer>
     </main>
