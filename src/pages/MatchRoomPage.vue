@@ -684,7 +684,7 @@ function goBack() {
             <TeamName v-if="teamKey === 'team1' && match.team1_captain_id" :id="match.team1_captain_id" :name="match.team1_name || t('tbd')" :banner-url="match.team1_banner" :avatar-url="match.team1_avatar" class="mb-1" />
             <TeamName v-else-if="teamKey === 'team2' && match.team2_captain_id" :id="match.team2_captain_id" :name="match.team2_name || t('tbd')" :banner-url="match.team2_banner" :avatar-url="match.team2_avatar" class="mb-1" />
             <span v-else class="text-sm font-semibold text-muted-foreground truncate mb-1">{{ t('tbd') }}</span>
-            <!-- Penalty dropdown (edit mode) -->
+            <!-- Penalty -->
             <div v-if="showAdminPanel" class="flex items-center gap-1.5 mb-1">
               <span class="text-[10px] text-muted-foreground">Penalty:</span>
               <select
@@ -701,13 +701,15 @@ function goBack() {
                 <option :value="3">{{ t('penaltyLevel', { n: 3 }) }}</option>
               </select>
             </div>
+            <div v-else-if="(teamKey === 'team1' ? match.penalty_radiant : match.penalty_dire)" class="mb-1">
+              <span class="text-[10px] font-medium text-amber-500">{{ t('penaltyLevel', { n: teamKey === 'team1' ? match.penalty_radiant : match.penalty_dire }) }}</span>
+            </div>
             <!-- Players -->
             <div v-for="p in teamRosters[teamKey]" :key="p.id" class="flex items-center gap-2 py-0.5">
               <!-- Check if this player has a standin -->
               <template v-if="standins.find((s: any) => s.original_player_id === p.id)">
-                <span class="text-xs line-through text-muted-foreground/50 truncate">{{ p.name }}</span>
-                <span class="text-[10px] text-muted-foreground">→</span>
-                <span class="text-xs font-medium text-foreground">{{ standins.find((s: any) => s.original_player_id === p.id)?.standin_display_name }}</span>
+                <UserName :id="standins.find((s: any) => s.original_player_id === p.id)!.standin_player_id" :name="standins.find((s: any) => s.original_player_id === p.id)!.standin_display_name" :avatar-url="standins.find((s: any) => s.original_player_id === p.id)!.standin_avatar" size="sm" />
+                <span class="text-[9px] text-muted-foreground/60 italic">(for {{ p.name }})</span>
                 <button v-if="showAdminPanel" class="ml-auto text-destructive hover:text-destructive/80" @click="removeStandin(standins.find((s: any) => s.original_player_id === p.id)!.id)">
                   <X class="w-3 h-3" />
                 </button>
