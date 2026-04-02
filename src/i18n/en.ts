@@ -628,6 +628,7 @@ export default {
   statsParsed: 'Fully parsed',
   statsPartial: 'Partial stats — waiting for OpenDota parse',
   picksBans: 'Picks & Bans',
+  draft: 'Draft',
   heroDamage: 'Hero Damage',
   towerDamage: 'Tower Damage',
   heroHealing: 'Hero Healing',
