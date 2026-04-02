@@ -1088,7 +1088,7 @@ function goBack() {
                         <td class="text-center px-1">{{ (p.hero_damage / 1000).toFixed(1) }}k</td>
                         <td class="text-center px-1">{{ (p.tower_damage / 1000).toFixed(1) }}k</td>
                         <td class="text-center px-1">{{ (p.hero_healing / 1000).toFixed(1) }}k</td>
-                        <td class="py-1 px-1.5">
+                        <td class="py-1 px-1.5 whitespace-nowrap">
                           <div class="flex items-center gap-0.5">
                             <template v-for="itemId in [p.item_0, p.item_1, p.item_2, p.item_3, p.item_4, p.item_5]" :key="'item-' + itemId + '-' + Math.random()">
                               <img v-if="itemId && dota.itemImg(itemId)" :src="dota.itemImg(itemId)" :alt="dota.itemName(itemId)" :title="dota.itemName(itemId)"
