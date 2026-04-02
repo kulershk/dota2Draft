@@ -1098,32 +1098,43 @@ function goBack() {
                 </div>
               </details>
 
-              <!-- Draft: Picks & Bans grouped by phase, numbered -->
+              <!-- Draft: Stratz-style phases -->
               <div v-if="gamePicksBans[game.game_number]?.length" class="mt-3">
-                <p class="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">{{ t('draft') || 'Draft' }}</p>
-                <div class="flex flex-wrap items-end gap-3">
-                  <div v-for="phase in getDraftPhases(game.game_number)" :key="phase.label" class="flex flex-col gap-1">
-                    <span class="text-[9px] font-semibold uppercase tracking-wider" :class="phase.type === 'ban' ? 'text-red-500/60' : 'text-green-500/60'">{{ phase.label }}</span>
-                    <div class="flex items-start gap-1">
-                      <div
-                        v-for="pb in phase.items"
-                        :key="pb.order"
-                        class="flex flex-col items-center"
-                        :title="'#' + (pb.order + 1) + ' ' + dota.heroName(pb.hero_id) + (pb.team === 0 ? ' (Radiant)' : ' (Dire)')"
-                      >
-                        <span class="text-[9px] font-mono font-bold mb-0.5" :class="pb.is_pick ? (pb.team === 0 ? 'text-green-500' : 'text-red-400') : 'text-muted-foreground'">{{ pb.order + 1 }}</span>
-                        <div class="relative">
+                <p class="text-sm font-bold text-foreground mb-2">{{ t('draft') || 'Draft' }}</p>
+                <div class="flex flex-wrap gap-2">
+                  <div v-for="phase in getDraftPhases(game.game_number)" :key="phase.label" class="rounded-lg bg-surface/80 px-3 py-2">
+                    <span class="text-[10px] font-medium text-muted-foreground mb-1.5 block">{{ phase.label }}</span>
+                    <!-- Row 1: Dire (team 1) -->
+                    <div class="flex items-center gap-0.5 mb-1">
+                      <template v-for="pb in phase.items.filter((p: any) => p.team === 1)" :key="pb.order">
+                        <div class="relative" :title="dota.heroName(pb.hero_id)">
                           <img v-if="dota.heroImg(pb.hero_id)" :src="dota.heroImg(pb.hero_id)"
-                            class="w-11 h-[30px] rounded-sm object-cover border-2"
-                            :class="pb.is_pick
-                              ? (pb.team === 0 ? 'border-green-500/60' : 'border-red-500/60')
-                              : 'border-border/40 grayscale opacity-50'" />
-                          <div v-if="!pb.is_pick" class="absolute inset-0 flex items-center justify-center">
-                            <X class="w-4 h-4 text-red-500/80" />
+                            class="w-8 h-8 rounded object-cover"
+                            :class="!pb.is_pick ? 'opacity-40' : ''" />
+                          <div v-if="!pb.is_pick" class="absolute inset-0 pointer-events-none">
+                            <div class="absolute inset-0 rounded overflow-hidden">
+                              <div class="absolute top-0 left-0 w-[141%] h-[2px] bg-red-500 origin-top-left rotate-45 translate-y-[15px]"></div>
+                            </div>
                           </div>
                         </div>
-                        <span class="text-[8px] text-muted-foreground truncate text-center mt-0.5 w-11">{{ dota.heroName(pb.hero_id) }}</span>
-                      </div>
+                        <span class="text-[10px] font-mono font-bold text-muted-foreground mr-1.5">{{ pb.order + 1 }}</span>
+                      </template>
+                    </div>
+                    <!-- Row 2: Radiant (team 0) -->
+                    <div class="flex items-center gap-0.5">
+                      <template v-for="pb in phase.items.filter((p: any) => p.team === 0)" :key="pb.order">
+                        <div class="relative" :title="dota.heroName(pb.hero_id)">
+                          <img v-if="dota.heroImg(pb.hero_id)" :src="dota.heroImg(pb.hero_id)"
+                            class="w-8 h-8 rounded object-cover"
+                            :class="!pb.is_pick ? 'opacity-40' : ''" />
+                          <div v-if="!pb.is_pick" class="absolute inset-0 pointer-events-none">
+                            <div class="absolute inset-0 rounded overflow-hidden">
+                              <div class="absolute top-0 left-0 w-[141%] h-[2px] bg-red-500 origin-top-left rotate-45 translate-y-[15px]"></div>
+                            </div>
+                          </div>
+                        </div>
+                        <span class="text-[10px] font-mono font-bold text-muted-foreground mr-1.5">{{ pb.order + 1 }}</span>
+                      </template>
                     </div>
                   </div>
                 </div>
