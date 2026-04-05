@@ -45,6 +45,7 @@ export function parseCompSettings(comp) {
     lobbyPenaltyRadiant: Number(s.lobbyPenaltyRadiant) || 0,
     lobbyPenaltyDire: Number(s.lobbyPenaltyDire) || 0,
     lobbySeriesType: Number(s.lobbySeriesType) || 0,
+    lobbyTimeoutMinutes: Number(s.lobbyTimeoutMinutes) || 10,
     // XP / Leveling
     xpGameWin: Number(s.xpGameWin ?? 10),
     xpGameLoss: Number(s.xpGameLoss ?? 5),

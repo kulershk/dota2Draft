@@ -825,6 +825,7 @@ export default {
   penaltyNone: 'Nėra baudos',
   penaltyLevel: '{n} lygis',
   lobbySeriesType: 'Serija',
+  lobbyTimeout: 'Lobby galiojimo laikas (minutės)',
   seriesNone: 'Nėra serijos',
   seriesBo2: 'Best of 2',
   seriesBo3: 'Best of 3',

@@ -66,8 +66,10 @@ const lobbyStatuses = ref<Record<number, any>>({})
 const noBotAvailable = ref<Record<number, boolean>>({})
 const lobbyCreateError = ref<Record<number, string | null>>({})
 
-// Lobby countdown timer (5 min from lobby creation)
-const LOBBY_TIMEOUT_MS = 5 * 60 * 1000
+// Lobby countdown timer
+const lobbyTimeoutMs = computed(() => {
+  return ((store.settings as any)?.lobbyTimeoutMinutes || 10) * 60 * 1000
+})
 const now = ref(getServerNow())
 let tickInterval: ReturnType<typeof setInterval> | null = null
 
@@ -78,7 +80,7 @@ function getLobbyTimeLeft(gameNumber: number): number | null {
   // Ensure UTC parsing: pg TIMESTAMP may lack 'Z' suffix
   const createdStr = String(lobby.created_at)
   const created = new Date(createdStr.endsWith('Z') ? createdStr : createdStr + 'Z').getTime()
-  const remaining = (created + LOBBY_TIMEOUT_MS) - Date.now()
+  const remaining = (created + lobbyTimeoutMs) - Date.now()
   return Math.max(0, remaining)
 }
 

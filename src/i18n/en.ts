@@ -831,6 +831,7 @@ export default {
   penaltyNone: 'No penalty',
   penaltyLevel: 'Level {n}',
   lobbySeriesType: 'Series',
+  lobbyTimeout: 'Lobby Timeout (minutes)',
   seriesNone: 'No Series',
   seriesBo2: 'Best of 2',
   seriesBo3: 'Best of 3',

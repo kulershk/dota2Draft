@@ -800,6 +800,7 @@ export default {
   penaltyNone: 'Без штрафа',
   penaltyLevel: 'Уровень {n}',
   lobbySeriesType: 'Серия',
+  lobbyTimeout: 'Таймаут лобби (минуты)',
   seriesNone: 'Без серии',
   seriesBo2: 'Best of 2',
   seriesBo3: 'Best of 3',

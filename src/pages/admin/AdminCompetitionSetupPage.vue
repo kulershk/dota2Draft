@@ -78,6 +78,7 @@ const localSettings = reactive({
   lobbyPenaltyRadiant: 0,
   lobbyPenaltyDire: 0,
   lobbySeriesType: 0,
+  lobbyTimeoutMinutes: 10,
   // XP settings
   xpGameWin: 30,
   xpGameLoss: 10,
@@ -691,6 +692,7 @@ async function saveAsTemplate() {
             <option :value="3">{{ t('seriesBo5') }}</option>
           </select>
         </div>
+        <InputGroup :label="t('lobbyTimeout')" :model-value="String(localSettings.lobbyTimeoutMinutes)" placeholder="10" @update:model-value="localSettings.lobbyTimeoutMinutes = Number($event)" />
       </div>
     </div>
 

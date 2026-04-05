@@ -825,6 +825,7 @@ export default {
   penaltyNone: 'Nav soda',
   penaltyLevel: '{n}. līmenis',
   lobbySeriesType: 'Sērija',
+  lobbyTimeout: 'Lobby noildze (minūtes)',
   seriesNone: 'Nav sērijas',
   seriesBo2: 'Best of 2',
   seriesBo3: 'Best of 3',
