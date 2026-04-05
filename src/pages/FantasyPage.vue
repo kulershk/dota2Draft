@@ -54,10 +54,10 @@ const isAdmin = computed(() =>
 )
 const isLoggedIn = computed(() => !!store.currentUser.value)
 
-// All tournament matches that have at least one game with a dotabuff_id
+// All tournament matches that are visible and not pending
 const allMatches = computed(() => {
   const matches = store.tournamentData.value?.matches || []
-  return matches.filter((m: any) => m.games?.some((g: any) => g.dotabuff_id))
+  return matches.filter((m: any) => !m.hidden && m.status !== 'pending')
 })
 
 // Matches already assigned to fantasy stages (excluding current editing stage)
