@@ -730,13 +730,10 @@ function goBack() {
                   <option value="completed">Completed</option>
                 </select>
               </div>
-              <DatePicker
-                mode="single"
-                show-time
-                :label="t('scheduledTime') || 'Scheduled'"
-                :model-value="match.scheduled_at || ''"
-                @update:model-value="updateMatchField({ scheduled_at: $event || null })"
-              />
+              <div class="flex items-center gap-1.5">
+                <span class="text-[10px] text-muted-foreground">{{ t('scheduledTime') || 'Scheduled' }}:</span>
+                <input type="datetime-local" class="input-field text-[10px] py-0.5 px-1.5" :value="match.scheduled_at ? match.scheduled_at.slice(0, 16) : ''" @change="updateMatchField({ scheduled_at: ($event.target as HTMLInputElement).value || null })" />
+              </div>
               <label class="flex items-center gap-1.5 cursor-pointer">
                 <input type="checkbox" class="rounded" :checked="match.hidden" @change="updateMatchField({ hidden: ($event.target as HTMLInputElement).checked })" />
                 <span class="text-[10px] text-muted-foreground">{{ t('hidden') || 'Hidden' }}</span>
