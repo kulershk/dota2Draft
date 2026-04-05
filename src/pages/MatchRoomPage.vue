@@ -87,6 +87,8 @@ function formatCountdown(ms: number): string {
   return `${min}:${sec.toString().padStart(2, '0')}`
 }
 
+const canManageMatch = computed(() => canManageMatch || store.hasPerm('manage_competitions') || store.hasPerm('manage_own_competitions'))
+
 const myCaptainId = computed(() => store.currentCaptain.value?.id || null)
 const isCaptainInMatch = computed(() => {
   if (!myCaptainId.value || !match.value) return false
@@ -640,7 +642,7 @@ function goBack() {
         <div class="flex items-center gap-2 mb-1">
           <Gamepad2 class="w-5 h-5 text-primary" />
           <span class="text-lg font-semibold text-foreground">{{ t('matchRoom') }}</span>
-          <button v-if="store.isAdmin.value && match.status !== 'completed'" class="ml-auto p-1.5 rounded-md hover:bg-accent transition-colors" :class="showAdminPanel ? 'bg-accent text-primary' : 'text-muted-foreground'" @click="showAdminPanel = !showAdminPanel" :title="'Edit match settings'">
+          <button v-if="canManageMatch && match.status !== 'completed'" class="ml-auto p-1.5 rounded-md hover:bg-accent transition-colors" :class="showAdminPanel ? 'bg-accent text-primary' : 'text-muted-foreground'" @click="showAdminPanel = !showAdminPanel" :title="'Edit match settings'">
             <Pencil class="w-4 h-4" />
           </button>
         </div>
@@ -948,7 +950,7 @@ function goBack() {
       </div>
 
       <!-- Spectator view: show lobby status for non-captains (admins + team members) -->
-      <div v-else-if="(store.isAdmin.value || isTeamMember) && bothTeamsAssigned && match.status !== 'completed'" class="flex flex-col gap-4 mb-6">
+      <div v-else-if="(canManageMatch || isTeamMember) && bothTeamsAssigned && match.status !== 'completed'" class="flex flex-col gap-4 mb-6">
         <div v-for="g in allGames" :key="'spec-' + g.game_number">
           <template v-if="!g.dotabuff_id && g.game_number === nextGameNumber">
             <div class="card overflow-hidden">
@@ -1068,7 +1070,7 @@ function goBack() {
           <span v-else class="text-xs text-text-tertiary ml-1">—</span>
           <div class="ml-auto flex items-center gap-1">
             <button
-              v-if="store.isAdmin.value && game.dotabuff_id && game.has_stats && !game.parsed"
+              v-if="canManageMatch && game.dotabuff_id && game.has_stats && !game.parsed"
               class="p-1 rounded-md text-amber-500 hover:text-amber-400 hover:bg-accent transition-colors"
               :disabled="refetchingGame[game.game_number]"
               :title="t('refetchStats')"
