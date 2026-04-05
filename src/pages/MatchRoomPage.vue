@@ -75,8 +75,10 @@ function getLobbyTimeLeft(gameNumber: number): number | null {
   const lobby = lobbyStatuses.value[gameNumber]
   if (!lobby || !lobby.created_at) return null
   if (!['waiting', 'creating'].includes(lobby.status)) return null
-  const created = new Date(lobby.created_at).getTime()
-  const remaining = (created + LOBBY_TIMEOUT_MS) - now.value
+  // Ensure UTC parsing: pg TIMESTAMP may lack 'Z' suffix
+  const createdStr = String(lobby.created_at)
+  const created = new Date(createdStr.endsWith('Z') ? createdStr : createdStr + 'Z').getTime()
+  const remaining = (created + LOBBY_TIMEOUT_MS) - Date.now()
   return Math.max(0, remaining)
 }
 
