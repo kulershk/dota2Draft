@@ -564,6 +564,15 @@ function setGamePenalty(gameNumber: number, side: 'radiant' | 'dire', value: num
   }
 }
 
+async function updateGameMatchId(gameNumber: number, dotabuffId: string) {
+  const cId = compId.value
+  if (!cId || !match.value) return
+  await api.updateMatchScore(cId, matchId.value, {
+    games: [{ game_number: gameNumber, dotabuff_id: dotabuffId || null }],
+  })
+  await store.fetchTournament()
+}
+
 // Admin panel toggle
 const showAdminPanel = ref(false)
 
@@ -1082,7 +1091,16 @@ function goBack() {
             >
               <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': refetchingGame[game.game_number] }" />
             </button>
-            <span v-if="game.dotabuff_id" class="text-[10px] font-mono text-text-tertiary">#{{ game.dotabuff_id }}</span>
+            <template v-if="showAdminPanel">
+              <input
+                type="text"
+                class="input-field text-[10px] font-mono py-0.5 px-1.5 w-28"
+                :value="game.dotabuff_id"
+                placeholder="Match ID"
+                @change="updateGameMatchId(game.game_number, ($event.target as HTMLInputElement).value)"
+              />
+            </template>
+            <span v-else-if="game.dotabuff_id" class="text-[10px] font-mono text-text-tertiary">#{{ game.dotabuff_id }}</span>
           </div>
         </div>
 
