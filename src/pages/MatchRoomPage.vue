@@ -10,6 +10,7 @@ import { useDotaConstants } from '@/composables/useDotaConstants'
 import UserName from '@/components/common/UserName.vue'
 import TeamName from '@/components/common/TeamName.vue'
 import PositionIcon from '@/components/common/PositionIcon.vue'
+import DatePicker from '@/components/common/DatePicker.vue'
 import { fmtDateTime } from '@/utils/format'
 
 const { t } = useI18n()
@@ -729,10 +730,13 @@ function goBack() {
                   <option value="completed">Completed</option>
                 </select>
               </div>
-              <div class="flex items-center gap-1.5">
-                <span class="text-[10px] text-muted-foreground">{{ t('scheduledTime') || 'Scheduled' }}:</span>
-                <input type="datetime-local" class="input-field text-[10px] py-0.5 px-1.5 w-auto" :value="match.scheduled_at ? match.scheduled_at.slice(0, 16) : ''" @change="updateMatchField({ scheduled_at: ($event.target as HTMLInputElement).value || null })" />
-              </div>
+              <DatePicker
+                mode="single"
+                show-time
+                :label="t('scheduledTime') || 'Scheduled'"
+                :model-value="match.scheduled_at || ''"
+                @update:model-value="updateMatchField({ scheduled_at: $event || null })"
+              />
               <label class="flex items-center gap-1.5 cursor-pointer">
                 <input type="checkbox" class="rounded" :checked="match.hidden" @change="updateMatchField({ hidden: ($event.target as HTMLInputElement).checked })" />
                 <span class="text-[10px] text-muted-foreground">{{ t('hidden') || 'Hidden' }}</span>
