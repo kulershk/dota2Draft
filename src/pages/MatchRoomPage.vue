@@ -1081,6 +1081,20 @@ function goBack() {
                         </div>
                       </div>
                     </div>
+                    <!-- Launch ready state -->
+                    <div class="flex items-center justify-center gap-4 mt-3 pt-3 border-t border-border/20">
+                      <span class="text-[11px] text-muted-foreground">{{ t('matchLaunchReady') || 'Launch Ready' }}:</span>
+                      <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium"
+                        :class="(launchReadyState[g.game_number] || []).includes(match.team1_captain_id) ? 'bg-green-500/15 text-green-500' : 'bg-accent text-muted-foreground'">
+                        <Check v-if="(launchReadyState[g.game_number] || []).includes(match.team1_captain_id)" class="w-3 h-3" />
+                        {{ match.team1_name || 'T1' }}
+                      </div>
+                      <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium"
+                        :class="(launchReadyState[g.game_number] || []).includes(match.team2_captain_id) ? 'bg-green-500/15 text-green-500' : 'bg-accent text-muted-foreground'">
+                        <Check v-if="(launchReadyState[g.game_number] || []).includes(match.team2_captain_id)" class="w-3 h-3" />
+                        {{ match.team2_name || 'T2' }}
+                      </div>
+                    </div>
                   </div>
                 </template>
 
