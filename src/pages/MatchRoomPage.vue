@@ -2,7 +2,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ChevronDown, ChevronUp, Check, Gamepad2, X, ArrowLeft, Trophy, ExternalLink, Clock, Calendar, CheckCircle, AlertCircle, RefreshCw, Pencil } from 'lucide-vue-next'
+import { ChevronDown, ChevronUp, Check, Gamepad2, X, ArrowLeft, Trophy, ExternalLink, Clock, Calendar, CheckCircle, AlertCircle, RefreshCw, Pencil, Play, Square, RotateCcw } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { getSocket, getServerNow } from '@/composables/useSocket'
@@ -564,6 +564,34 @@ function setGamePenalty(gameNumber: number, side: 'radiant' | 'dire', value: num
   }
 }
 
+async function adminCreateLobby(gameNumber: number) {
+  const cId = compId.value
+  if (!cId) return
+  try {
+    await api.createLobby(cId, matchId.value, gameNumber)
+  } catch (e: any) {
+    console.error('Create lobby failed:', e.message)
+  }
+}
+
+async function adminForceLaunch(gameNumber: number) {
+  const cId = compId.value
+  if (!cId) return
+  await api.forceLaunchLobby(cId, matchId.value, gameNumber)
+}
+
+async function adminCancelLobby(gameNumber: number) {
+  const cId = compId.value
+  if (!cId) return
+  await api.cancelLobby(cId, matchId.value, gameNumber)
+}
+
+async function adminResetLobby(gameNumber: number) {
+  const cId = compId.value
+  if (!cId) return
+  await api.resetLobby(cId, matchId.value, gameNumber)
+}
+
 async function updateGameMatchId(gameNumber: number, dotabuffId: string) {
   const cId = compId.value
   if (!cId || !match.value) return
@@ -1092,6 +1120,31 @@ function goBack() {
               <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': refetchingGame[game.game_number] }" />
             </button>
             <template v-if="showAdminPanel">
+              <!-- Lobby controls -->
+              <button
+                v-if="!lobbyStatuses[game.game_number] || ['cancelled', 'error'].includes(lobbyStatuses[game.game_number]?.status)"
+                class="p-1 rounded-md text-green-500 hover:text-green-400 hover:bg-accent transition-colors"
+                title="Create Lobby"
+                @click.stop="adminCreateLobby(game.game_number)"
+              ><Play class="w-3.5 h-3.5" /></button>
+              <button
+                v-if="lobbyStatuses[game.game_number]?.status === 'waiting'"
+                class="p-1 rounded-md text-amber-500 hover:text-amber-400 hover:bg-accent transition-colors"
+                title="Force Launch"
+                @click.stop="adminForceLaunch(game.game_number)"
+              ><Play class="w-3.5 h-3.5" /></button>
+              <button
+                v-if="lobbyStatuses[game.game_number] && !['completed', 'cancelled', 'error'].includes(lobbyStatuses[game.game_number]?.status)"
+                class="p-1 rounded-md text-destructive hover:text-destructive/80 hover:bg-accent transition-colors"
+                title="Cancel Lobby"
+                @click.stop="adminCancelLobby(game.game_number)"
+              ><Square class="w-3.5 h-3.5" /></button>
+              <button
+                v-if="lobbyStatuses[game.game_number]"
+                class="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                title="Reset Lobby"
+                @click.stop="adminResetLobby(game.game_number)"
+              ><RotateCcw class="w-3.5 h-3.5" /></button>
               <input
                 type="text"
                 class="input-field text-[10px] font-mono py-0.5 px-1.5 w-28"
