@@ -54,10 +54,10 @@ const isAdmin = computed(() =>
 )
 const isLoggedIn = computed(() => !!store.currentUser.value)
 
-// All tournament matches that are visible and not pending
+// All tournament matches that are not hidden
 const allMatches = computed(() => {
   const matches = store.tournamentData.value?.matches || []
-  return matches.filter((m: any) => !m.hidden && m.status !== 'pending')
+  return matches.filter((m: any) => !m.hidden)
 })
 
 // Matches already assigned to fantasy stages (excluding current editing stage)
