@@ -592,6 +592,13 @@ async function adminResetLobby(gameNumber: number) {
   await api.resetLobby(cId, matchId.value, gameNumber)
 }
 
+async function updateMatchField(data: Record<string, any>) {
+  const cId = compId.value
+  if (!cId) return
+  await api.updateMatchScore(cId, matchId.value, data)
+  await store.fetchTournament()
+}
+
 async function updateGameMatchId(gameNumber: number, dotabuffId: string) {
   const cId = compId.value
   if (!cId || !match.value) return
@@ -712,10 +719,32 @@ function goBack() {
         </div>
         <div class="flex items-center gap-4">
           <div class="flex-1"></div>
-          <div class="flex items-center gap-2 shrink-0">
-            <span class="badge-info">{{ match.status === 'completed' ? t('matchCompleted') : match.status === 'live' ? t('matchLive') : t('matchPending') }}</span>
-            <span class="text-xs text-text-tertiary">Best of {{ bestOf }}</span>
-          </div>
+          <template v-if="showAdminPanel">
+            <div class="flex items-center gap-3 shrink-0 flex-wrap justify-center">
+              <div class="flex items-center gap-1.5">
+                <span class="text-[10px] text-muted-foreground">Status:</span>
+                <select class="input-field text-[10px] py-0.5 px-1.5 w-auto" :value="match.status" @change="updateMatchField({ status: ($event.target as HTMLSelectElement).value })">
+                  <option value="pending">Pending</option>
+                  <option value="live">Live</option>
+                  <option value="completed">Completed</option>
+                </select>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span class="text-[10px] text-muted-foreground">{{ t('scheduledTime') || 'Scheduled' }}:</span>
+                <input type="datetime-local" class="input-field text-[10px] py-0.5 px-1.5 w-auto" :value="match.scheduled_at ? match.scheduled_at.slice(0, 16) : ''" @change="updateMatchField({ scheduled_at: ($event.target as HTMLInputElement).value || null })" />
+              </div>
+              <label class="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" class="rounded" :checked="match.hidden" @change="updateMatchField({ hidden: ($event.target as HTMLInputElement).checked })" />
+                <span class="text-[10px] text-muted-foreground">{{ t('hidden') || 'Hidden' }}</span>
+              </label>
+            </div>
+          </template>
+          <template v-else>
+            <div class="flex items-center gap-2 shrink-0">
+              <span class="badge-info">{{ match.status === 'completed' ? t('matchCompleted') : match.status === 'live' ? t('matchLive') : t('matchPending') }}</span>
+              <span class="text-xs text-text-tertiary">Best of {{ bestOf }}</span>
+            </div>
+          </template>
           <div class="flex-1"></div>
         </div>
       </div>
