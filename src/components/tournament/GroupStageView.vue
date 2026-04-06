@@ -187,63 +187,6 @@ const matchesByGroup = computed(() => {
       </div>
     </div>
 
-    <!-- Recent Match Results -->
-    <div v-if="recentMatches.length > 0" class="flex flex-col gap-4">
-      <div class="flex items-center gap-2">
-        <Swords class="w-[18px] h-[18px] text-primary" />
-        <span class="text-lg font-semibold text-foreground">{{ t('recentMatchResults') || 'Recent Match Results' }}</span>
-      </div>
-
-      <div class="flex flex-col gap-3">
-        <div
-          v-for="match in recentMatches"
-          :key="match.id"
-          class="flex items-center justify-between rounded-md bg-card px-5 py-3.5 cursor-pointer hover:bg-card/80 transition-colors"
-          :class="match.hidden ? 'opacity-40' : ''"
-          @click="emit('edit-match', match)"
-        >
-          <!-- Team 1 -->
-          <div class="flex-1 flex items-center justify-end gap-2.5 min-w-0">
-            <router-link v-if="match.team1_captain_id" :to="{ name: 'team-profile', params: { id: match.team1_captain_id } }" class="text-sm font-medium text-foreground truncate hover:text-primary transition-colors" :class="match.winner_captain_id === match.team1_captain_id ? 'font-bold' : ''" @click.stop>
-              {{ match.team1_name || t('tbd') }}
-            </router-link>
-            <span v-else class="text-sm font-medium text-muted-foreground truncate">{{ t('tbd') }}</span>
-            <div class="w-7 h-7 rounded bg-surface overflow-hidden shrink-0">
-              <img v-if="match.team1_banner || match.team1_avatar" :src="match.team1_banner || match.team1_avatar" class="w-full h-full object-cover" />
-            </div>
-          </div>
-
-          <!-- Score -->
-          <div class="flex items-center gap-2 px-6">
-            <span class="text-lg font-bold font-mono"
-              :class="match.winner_captain_id === match.team1_captain_id ? 'text-color-success' : 'text-destructive'">
-              {{ match.score1 != null ? match.score1 : '-' }}
-            </span>
-            <span class="text-text-tertiary font-mono">:</span>
-            <span class="text-lg font-bold font-mono"
-              :class="match.winner_captain_id === match.team2_captain_id ? 'text-color-success' : 'text-destructive'">
-              {{ match.score2 != null ? match.score2 : '-' }}
-            </span>
-            <!-- Status badge for non-normal results -->
-            <span v-if="match.status === 'cancelled'" class="badge-danger ml-1">Cancelled</span>
-          </div>
-
-          <!-- Team 2 -->
-          <div class="flex-1 flex items-center gap-2.5 min-w-0">
-            <div class="w-7 h-7 rounded bg-surface overflow-hidden shrink-0">
-              <img v-if="match.team2_banner || match.team2_avatar" :src="match.team2_banner || match.team2_avatar" class="w-full h-full object-cover" />
-            </div>
-            <router-link v-if="match.team2_captain_id" :to="{ name: 'team-profile', params: { id: match.team2_captain_id } }" class="text-sm font-medium text-foreground truncate hover:text-primary transition-colors" :class="match.winner_captain_id === match.team2_captain_id ? 'font-bold' : ''" @click.stop>
-              {{ match.team2_name || t('tbd') }}
-            </router-link>
-            <span v-else class="text-sm font-medium text-muted-foreground truncate">{{ t('tbd') }}</span>
-          </div>
-
-          <EyeOff v-if="match.hidden && isAdmin" class="w-3.5 h-3.5 text-muted-foreground shrink-0 ml-2" :title="t('hiddenMatch')" />
-        </div>
-      </div>
-    </div>
-
     <!-- All matches by group (expandable) -->
     <div v-for="group in groupsList" :key="'matches-' + group.name" class="flex flex-col gap-3">
       <button
