@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { Swords, ChevronDown, ChevronUp, EyeOff } from 'lucide-vue-next'
+import { Swords, ChevronDown, ChevronUp, EyeOff, BarChart3 } from 'lucide-vue-next'
 import { computed, ref } from 'vue'
 import { MATCH_STATUS } from '@/utils/constants'
 import UserName from '@/components/common/UserName.vue'
@@ -21,6 +21,7 @@ const emit = defineEmits<{
 }>()
 
 const collapsedGroups = ref<Set<string>>(new Set())
+const showSos = ref(false)
 
 function toggleMatches(groupName: string) {
   const s = new Set(collapsedGroups.value)
@@ -82,6 +83,26 @@ const standings = computed(() => {
       }
     }
 
+    // Calculate SOS (Strength of Schedule) for each team
+    // SOS = average win% of all opponents played
+    for (const entry of entries) {
+      if (entry.isTbd) { entry.sos = 0; continue }
+      const opponentIds: number[] = []
+      for (const m of groupMatches) {
+        if (m.status !== MATCH_STATUS.COMPLETED) continue
+        if (m.team1_captain_id === entry.id && statsById[m.team2_captain_id]) opponentIds.push(m.team2_captain_id)
+        else if (m.team2_captain_id === entry.id && statsById[m.team1_captain_id]) opponentIds.push(m.team1_captain_id)
+      }
+      if (opponentIds.length === 0) { entry.sos = 0; continue }
+      let totalWinPct = 0
+      for (const oppId of opponentIds) {
+        const opp = statsById[oppId]
+        const oppGames = opp.w + opp.d + opp.l
+        totalWinPct += oppGames > 0 ? opp.w / oppGames : 0
+      }
+      entry.sos = totalWinPct / opponentIds.length
+    }
+
     result[group.name] = entries.sort((a, b) => {
       if (a.isTbd !== b.isTbd) return a.isTbd ? 1 : -1
       if (b.pts !== a.pts) return b.pts - a.pts
@@ -114,8 +135,11 @@ const matchesByGroup = computed(() => {
     <!-- Group standings tables -->
     <div v-for="group in groupsList" :key="group.name" class="card overflow-hidden flex flex-col gap-0">
       <!-- Group title bar -->
-      <div class="flex items-center bg-card px-4 py-3">
+      <div class="flex items-center justify-between bg-card px-4 py-3">
         <span class="text-sm font-bold text-foreground uppercase tracking-wider">{{ group.name }}</span>
+        <button class="p-1 rounded hover:bg-accent transition-colors" :class="showSos ? 'text-primary' : 'text-muted-foreground'" @click="showSos = !showSos" title="Strength of Schedule">
+          <BarChart3 class="w-4 h-4" />
+        </button>
       </div>
 
       <!-- Table header -->
@@ -125,6 +149,7 @@ const matchesByGroup = computed(() => {
         <span class="w-[50px] text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-center">W</span>
         <span class="w-[50px] text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-center">L</span>
         <span class="w-[60px] text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-right">PTS</span>
+        <span v-if="showSos" class="w-[50px] text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-right" title="Strength of Schedule">SOS</span>
       </div>
 
       <!-- Team rows -->
@@ -154,6 +179,7 @@ const matchesByGroup = computed(() => {
         <span class="w-[50px] text-sm font-mono font-semibold text-center text-color-success">{{ team.mw }}</span>
         <span class="w-[50px] text-sm font-mono text-center text-destructive">{{ team.ml }}</span>
         <span class="w-[60px] text-sm font-mono font-bold text-right text-foreground">{{ team.pts }}</span>
+        <span v-if="showSos" class="w-[50px] text-sm font-mono text-right text-muted-foreground">{{ team.isTbd ? '-' : (team.sos * 100).toFixed(0) + '%' }}</span>
       </div>
     </div>
 
