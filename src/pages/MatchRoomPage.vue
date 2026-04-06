@@ -81,7 +81,9 @@ function getLobbyTimeLeft(gameNumber: number): number | null {
   // Ensure UTC parsing: pg TIMESTAMP may lack 'Z' suffix
   const createdStr = String(lobby.created_at)
   const created = new Date(createdStr.endsWith('Z') ? createdStr : createdStr + 'Z').getTime()
-  const remaining = (created + lobbyTimeoutMs) - Date.now()
+  if (isNaN(created)) return null
+  const timeout = lobbyTimeoutMs.value || 600000
+  const remaining = (created + timeout) - Date.now()
   return Math.max(0, remaining)
 }
 
@@ -1072,14 +1074,14 @@ function goBack() {
                     </span>
                   </div>
                   <div class="w-full border-t border-border/30 pt-3 mt-1">
-                    <div v-if="isTeamMember && lobbyStatuses[g.game_number].game_name" class="flex items-center gap-2 text-sm mb-2">
+                    <div v-if="(isTeamMember || canManageMatch) && lobbyStatuses[g.game_number].game_name" class="flex items-center gap-2 text-sm mb-2">
                       <span class="text-muted-foreground">{{ t('lobbyName') }}:</span>
                       <span class="font-medium text-foreground">{{ lobbyStatuses[g.game_number].game_name }}</span>
                     </div>
                     <div class="flex items-center justify-between mb-2">
                       <div class="flex items-center gap-2 text-sm">
                         <span class="text-muted-foreground">{{ t('lobbyPassword') }}:</span>
-                        <code v-if="isTeamMember" class="font-mono font-bold bg-accent px-2.5 py-1 rounded text-foreground text-base">{{ lobbyStatuses[g.game_number].password }}</code>
+                        <code v-if="isTeamMember || canManageMatch" class="font-mono font-bold bg-accent px-2.5 py-1 rounded text-foreground text-base">{{ lobbyStatuses[g.game_number].password }}</code>
                       </div>
                       <span class="text-sm font-medium" :class="allPlayersJoined(g.game_number) ? 'text-green-500' : 'text-muted-foreground'">
                         {{ (lobbyStatuses[g.game_number].players_joined || []).length }}/{{ (lobbyStatuses[g.game_number].players_expected || []).length }} {{ t('players') }}
