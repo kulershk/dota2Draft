@@ -134,9 +134,13 @@ const matchesByGroup = computed(() => {
         const sa = statusOrder[a.status] ?? 1
         const sb = statusOrder[b.status] ?? 1
         if (sa !== sb) return sa - sb
-        // Within same status: by scheduled_at (closest first), then match_order
         const ta = a.scheduled_at ? new Date(a.scheduled_at).getTime() : Infinity
         const tb = b.scheduled_at ? new Date(b.scheduled_at).getTime() : Infinity
+        // Completed: most recent first. Live/pending: closest first.
+        if (a.status === 'completed') {
+          if (ta !== tb) return tb - ta
+          return b.match_order - a.match_order
+        }
         if (ta !== tb) return ta - tb
         return a.match_order - b.match_order
       })
