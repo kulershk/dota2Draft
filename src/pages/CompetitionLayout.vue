@@ -64,8 +64,15 @@ watch(compId, (newId) => {
     <div class="flex-1 overflow-y-auto flex flex-col">
       <router-view class="flex-1" />
       <footer class="border-t border-border bg-sidebar">
-        <div class="max-w-[1200px] mx-auto px-4 md:px-6 py-6 flex items-center justify-center">
-          <p class="text-xs text-muted-foreground">&copy; {{ new Date().getFullYear() }} {{ t('appTitle') }}</p>
+        <div class="max-w-[1200px] mx-auto px-4 md:px-6 py-6 flex flex-col gap-4">
+          <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
+            <span class="text-xs font-semibold text-foreground">{{ t('appTitle') }}</span>
+            <router-link to="/how-it-works" class="text-xs text-muted-foreground hover:text-foreground transition-colors">{{ t('howItWorksTitle') }}</router-link>
+          </div>
+          <div class="flex flex-col sm:flex-row items-center justify-between gap-2 pt-3 border-t border-border/50">
+            <p class="text-xs text-muted-foreground">&copy; {{ new Date().getFullYear() }} {{ t('appTitle') }}. {{ t('allRightsReserved') }}</p>
+            <p class="text-xs text-muted-foreground">{{ t('createdBy') }} <router-link :to="{ name: 'player-profile', params: { id: 33 } }" class="text-primary hover:text-primary/80 transition-colors font-medium">kulers</router-link></p>
+          </div>
         </div>
       </footer>
     </div>
