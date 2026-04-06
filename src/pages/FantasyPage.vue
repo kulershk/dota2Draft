@@ -95,6 +95,7 @@ const teamGroupedPlayers = computed(() => {
       }
     }
     if (teamPlayers.length > 0) {
+      teamPlayers.sort((a, b) => (a.favorite_position?.position || 9) - (b.favorite_position?.position || 9))
       groups.push({ captain: cap, players: teamPlayers })
     }
   }
