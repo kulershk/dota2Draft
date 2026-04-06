@@ -1,13 +1,22 @@
 <script setup lang="ts">
 import { Gamepad2 } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
+import { ref, onMounted } from 'vue'
+import { useApi } from '@/composables/useApi'
 
 const { t } = useI18n()
+const api = useApi()
 
-defineProps<{
-  siteName?: string
-  logoUrl?: string
-}>()
+const siteName = ref('')
+const logoUrl = ref('')
+
+onMounted(async () => {
+  try {
+    const data = await api.getSiteSettings()
+    siteName.value = data.site_name || ''
+    logoUrl.value = data.site_logo_url || ''
+  } catch {}
+})
 </script>
 
 <template>

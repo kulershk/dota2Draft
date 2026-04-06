@@ -416,7 +416,7 @@ async function handleClaimAdmin() {
       <div v-else-if="!route.path.startsWith('/admin')" class="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-muted to-background pointer-events-none z-0" />
       <router-view class="relative z-[1]" />
       <!-- Footer (only on public pages) -->
-      <AppFooter v-if="!route.path.startsWith('/admin') && !route.path.startsWith('/c/')" :site-name="customSiteName" :logo-url="customLogoUrl" class="mt-auto relative z-[1]" />
+      <AppFooter v-if="!route.path.startsWith('/admin') && !route.path.startsWith('/c/')" class="mt-auto relative z-[1]" />
     </main>
 
     <!-- Claim Admin Modal -->
