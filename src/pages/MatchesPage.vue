@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Swords, Search, Calendar } from 'lucide-vue-next'
+import { Swords, Search, Calendar, ChevronLeft, ChevronRight } from 'lucide-vue-next'
 import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
@@ -15,6 +15,8 @@ const matches = ref<any[]>([])
 const searchQuery = ref('')
 const statusFilter = ref('all')
 const loading = ref(true)
+const page = ref(1)
+const PAGE_SIZE = 20
 
 async function fetchMatches() {
   loading.value = true
@@ -64,6 +66,11 @@ const filteredMatches = computed(() => {
     return 0
   })
 })
+
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredMatches.value.length / PAGE_SIZE)))
+const paginatedMatches = computed(() => filteredMatches.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE))
+
+watch([searchQuery, statusFilter], () => { page.value = 1 })
 </script>
 
 <template>
@@ -97,7 +104,7 @@ const filteredMatches = computed(() => {
       </div>
       <div v-else class="divide-y divide-border">
         <router-link
-          v-for="match in filteredMatches"
+          v-for="match in paginatedMatches"
           :key="match.id"
           :to="`/c/${match.competition_id}/match/${match.id}`"
           class="relative flex items-center px-4 py-4 md:px-6 md:py-4 hover:bg-accent/30 transition-colors gap-3"
@@ -142,6 +149,16 @@ const filteredMatches = computed(() => {
             </div>
           </div>
         </router-link>
+      </div>
+      <!-- Pagination -->
+      <div v-if="totalPages > 1" class="flex items-center justify-between px-4 py-3 border-t border-border">
+        <button class="p-1.5 rounded hover:bg-accent disabled:opacity-30" :disabled="page <= 1" @click="page--">
+          <ChevronLeft class="w-4 h-4 text-muted-foreground" />
+        </button>
+        <span class="text-xs text-muted-foreground font-mono">{{ page }} / {{ totalPages }}</span>
+        <button class="p-1.5 rounded hover:bg-accent disabled:opacity-30" :disabled="page >= totalPages" @click="page++">
+          <ChevronRight class="w-4 h-4 text-muted-foreground" />
+        </button>
       </div>
     </div>
   </div>
