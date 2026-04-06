@@ -123,12 +123,23 @@ const recentMatches = computed(() => {
     .slice(0, 10)
 })
 
+const statusOrder: Record<string, number> = { live: 0, pending: 1, completed: 2 }
+
 const matchesByGroup = computed(() => {
   const result: Record<string, any[]> = {}
   for (const group of groupsList.value) {
     result[group.name] = props.matches
       .filter(m => m.group_name === group.name && (props.isAdmin || !m.hidden))
-      .sort((a, b) => a.match_order - b.match_order)
+      .sort((a, b) => {
+        const sa = statusOrder[a.status] ?? 1
+        const sb = statusOrder[b.status] ?? 1
+        if (sa !== sb) return sa - sb
+        // Within same status: by scheduled_at (closest first), then match_order
+        const ta = a.scheduled_at ? new Date(a.scheduled_at).getTime() : Infinity
+        const tb = b.scheduled_at ? new Date(b.scheduled_at).getTime() : Infinity
+        if (ta !== tb) return ta - tb
+        return a.match_order - b.match_order
+      })
   }
   return result
 })
