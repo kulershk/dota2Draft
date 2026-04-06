@@ -97,9 +97,9 @@ const standings = computed(() => {
         const opp = statsById[oppId]
         if (!opp) continue
         if (m.winner_captain_id === entry.id) {
-          sb += opp.pts // win: full opponent points
+          sb += opp.pts * 2 // win: double opponent points
         } else if (!m.winner_captain_id && (m.score1 || 0) === (m.score2 || 0) && (m.score1 || 0) > 0) {
-          sb += opp.pts * 0.5 // draw: half opponent points
+          sb += opp.pts // draw: opponent points (half of doubled)
         }
         // loss: nothing
       }
