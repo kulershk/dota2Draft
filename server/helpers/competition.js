@@ -93,7 +93,7 @@ export async function getCompPlayers(compId) {
   )).map(r => r.player_id)
 
   const rows = await query(`
-    SELECT cp.*, COALESCE(p.display_name, p.name) as name, p.steam_id, p.avatar_url, p.is_admin
+    SELECT cp.*, COALESCE(p.display_name, p.name) as name, p.steam_id, p.avatar_url, p.is_admin, p.favorite_position
     FROM competition_players cp
     JOIN players p ON cp.player_id = p.id
     WHERE cp.competition_id = $1
@@ -116,6 +116,7 @@ export async function getCompPlayers(compId) {
     is_captain: captainPlayerIds.includes(p.player_id),
     in_pool: !!p.in_pool,
     playing_role: p.playing_role ?? null,
+    favorite_position: p.favorite_position || null,
     joined_at: p.created_at || null,
   }))
 }

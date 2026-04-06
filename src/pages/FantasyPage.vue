@@ -3,8 +3,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Star, Plus, Pencil, Trash2, Trophy, Lock, Play, Square, ChevronDown, ChevronUp } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
-import RoleBadge from '@/components/common/RoleBadge.vue'
-import { sortedRoles } from '@/utils/roles'
+import PositionIcon from '@/components/common/PositionIcon.vue'
 import { useDraftStore } from '@/composables/useDraftStore'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 
@@ -1130,8 +1129,8 @@ function matchLabel(match: any) {
                     <span v-if="player._isCaptain" class="text-[9px] font-bold text-primary px-1 py-0.5 rounded bg-primary/10">C</span>
                   </div>
                   <div class="flex items-center gap-1.5">
+                    <PositionIcon v-if="player.favorite_position?.position" :position="player.favorite_position.position" />
                     <span class="text-[10px] text-muted-foreground">MMR: {{ player.mmr || '?' }}</span>
-                    <RoleBadge v-for="role in sortedRoles(player.roles || [])" :key="role" :role="role" size="xs" />
                   </div>
                 </div>
               </button>
