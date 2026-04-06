@@ -6,6 +6,7 @@ import { useI18n } from 'vue-i18n'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { useApi } from '@/composables/useApi'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
+import AppFooter from '@/components/common/AppFooter.vue'
 import InputGroup from '@/components/common/InputGroup.vue'
 import { setLocale } from '@/i18n'
 import { getSocket } from '@/composables/useSocket'
@@ -415,26 +416,7 @@ async function handleClaimAdmin() {
       <div v-else-if="!route.path.startsWith('/admin')" class="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-muted to-background pointer-events-none z-0" />
       <router-view class="relative z-[1]" />
       <!-- Footer (only on public pages) -->
-      <footer v-if="!route.path.startsWith('/admin') && !route.path.startsWith('/c/')" class="mt-auto border-t border-border bg-sidebar relative z-[1]">
-        <div class="max-w-[1200px] mx-auto px-4 md:px-6 py-6 flex flex-col gap-4">
-          <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div class="flex items-center gap-2">
-              <img v-if="customLogoUrl" :src="customLogoUrl" class="w-6 h-6 rounded object-contain" />
-              <div v-else class="w-6 h-6 rounded bg-primary flex items-center justify-center">
-                <Gamepad2 class="w-3 h-3 text-primary-foreground" />
-              </div>
-              <span class="text-xs font-semibold text-foreground">{{ customSiteName || t('appTitle') }}</span>
-            </div>
-            <div class="flex items-center gap-4">
-              <router-link to="/how-it-works" class="text-xs text-muted-foreground hover:text-foreground transition-colors">{{ t('howItWorksTitle') }}</router-link>
-            </div>
-          </div>
-          <div class="flex flex-col sm:flex-row items-center justify-between gap-2 pt-3 border-t border-border/50">
-            <p class="text-xs text-muted-foreground">&copy; {{ new Date().getFullYear() }} {{ customSiteName || t('appTitle') }}. {{ t('allRightsReserved') }}</p>
-            <p class="text-xs text-muted-foreground">{{ t('createdBy') }} <router-link :to="{ name: 'player-profile', params: { id: 33 } }" class="text-primary hover:text-primary/80 transition-colors font-medium">kulers</router-link></p>
-          </div>
-        </div>
-      </footer>
+      <AppFooter v-if="!route.path.startsWith('/admin') && !route.path.startsWith('/c/')" :site-name="customSiteName" :logo-url="customLogoUrl" class="mt-auto relative z-[1]" />
     </main>
 
     <!-- Claim Admin Modal -->
