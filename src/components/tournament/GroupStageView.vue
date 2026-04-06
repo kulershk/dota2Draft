@@ -83,17 +83,27 @@ const standings = computed(() => {
       }
     }
 
-    // Calculate SOS (Strength of Schedule) for each team
-    // SOS = sum of points of all opponents played
+    // Calculate Sonneborn-Berger score for each team
+    // Win → add opponent's full points, Draw → add half, Loss → nothing
     for (const entry of entries) {
-      if (entry.isTbd) { entry.sos = 0; continue }
-      let totalOppPts = 0
+      if (entry.isTbd) { entry.sb = 0; continue }
+      let sb = 0
       for (const m of groupMatches) {
         if (m.status !== MATCH_STATUS.COMPLETED) continue
-        if (m.team1_captain_id === entry.id && statsById[m.team2_captain_id]) totalOppPts += statsById[m.team2_captain_id].pts
-        else if (m.team2_captain_id === entry.id && statsById[m.team1_captain_id]) totalOppPts += statsById[m.team1_captain_id].pts
+        const isT1 = m.team1_captain_id === entry.id
+        const isT2 = m.team2_captain_id === entry.id
+        if (!isT1 && !isT2) continue
+        const oppId = isT1 ? m.team2_captain_id : m.team1_captain_id
+        const opp = statsById[oppId]
+        if (!opp) continue
+        if (m.winner_captain_id === entry.id) {
+          sb += opp.pts // win: full opponent points
+        } else if (!m.winner_captain_id && (m.score1 || 0) === (m.score2 || 0) && (m.score1 || 0) > 0) {
+          sb += opp.pts * 0.5 // draw: half opponent points
+        }
+        // loss: nothing
       }
-      entry.sos = totalOppPts
+      entry.sb = sb
     }
 
     result[group.name] = entries.sort((a, b) => {
@@ -142,7 +152,7 @@ const matchesByGroup = computed(() => {
         <span class="w-[50px] text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-center">W</span>
         <span class="w-[50px] text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-center">L</span>
         <span class="w-[60px] text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-right">PTS</span>
-        <span v-if="showSos" class="w-[50px] text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-right" title="Strength of Schedule">SOS</span>
+        <span v-if="showSos" class="w-[50px] text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary text-right" title="Sonneborn-Berger">SB</span>
       </div>
 
       <!-- Team rows -->
@@ -172,7 +182,7 @@ const matchesByGroup = computed(() => {
         <span class="w-[50px] text-sm font-mono font-semibold text-center text-color-success">{{ team.mw }}</span>
         <span class="w-[50px] text-sm font-mono text-center text-destructive">{{ team.ml }}</span>
         <span class="w-[60px] text-sm font-mono font-bold text-right text-foreground">{{ team.pts }}</span>
-        <span v-if="showSos" class="w-[50px] text-sm font-mono text-right text-muted-foreground">{{ team.isTbd ? '-' : team.sos }}</span>
+        <span v-if="showSos" class="w-[50px] text-sm font-mono text-right text-muted-foreground">{{ team.isTbd ? '-' : team.sb }}</span>
       </div>
     </div>
 
