@@ -84,23 +84,16 @@ const standings = computed(() => {
     }
 
     // Calculate SOS (Strength of Schedule) for each team
-    // SOS = average win% of all opponents played
+    // SOS = sum of points of all opponents played
     for (const entry of entries) {
       if (entry.isTbd) { entry.sos = 0; continue }
-      const opponentIds: number[] = []
+      let totalOppPts = 0
       for (const m of groupMatches) {
         if (m.status !== MATCH_STATUS.COMPLETED) continue
-        if (m.team1_captain_id === entry.id && statsById[m.team2_captain_id]) opponentIds.push(m.team2_captain_id)
-        else if (m.team2_captain_id === entry.id && statsById[m.team1_captain_id]) opponentIds.push(m.team1_captain_id)
+        if (m.team1_captain_id === entry.id && statsById[m.team2_captain_id]) totalOppPts += statsById[m.team2_captain_id].pts
+        else if (m.team2_captain_id === entry.id && statsById[m.team1_captain_id]) totalOppPts += statsById[m.team1_captain_id].pts
       }
-      if (opponentIds.length === 0) { entry.sos = 0; continue }
-      let totalWinPct = 0
-      for (const oppId of opponentIds) {
-        const opp = statsById[oppId]
-        const oppGames = opp.w + opp.d + opp.l
-        totalWinPct += oppGames > 0 ? opp.w / oppGames : 0
-      }
-      entry.sos = totalWinPct / opponentIds.length
+      entry.sos = totalOppPts
     }
 
     result[group.name] = entries.sort((a, b) => {
@@ -179,7 +172,7 @@ const matchesByGroup = computed(() => {
         <span class="w-[50px] text-sm font-mono font-semibold text-center text-color-success">{{ team.mw }}</span>
         <span class="w-[50px] text-sm font-mono text-center text-destructive">{{ team.ml }}</span>
         <span class="w-[60px] text-sm font-mono font-bold text-right text-foreground">{{ team.pts }}</span>
-        <span v-if="showSos" class="w-[50px] text-sm font-mono text-right text-muted-foreground">{{ team.isTbd ? '-' : (team.sos * 100).toFixed(0) + '%' }}</span>
+        <span v-if="showSos" class="w-[50px] text-sm font-mono text-right text-muted-foreground">{{ team.isTbd ? '-' : team.sos }}</span>
       </div>
     </div>
 
