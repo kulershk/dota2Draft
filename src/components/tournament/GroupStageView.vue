@@ -109,6 +109,7 @@ const standings = computed(() => {
     result[group.name] = entries.sort((a, b) => {
       if (a.isTbd !== b.isTbd) return a.isTbd ? 1 : -1
       if (b.pts !== a.pts) return b.pts - a.pts
+      if (b.sb !== a.sb) return b.sb - a.sb
       return (b.mw - b.ml) - (a.mw - a.ml)
     })
   }
