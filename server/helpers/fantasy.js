@@ -147,11 +147,27 @@ async function getStageStandinMap(stageId) {
   return map
 }
 
+// Build reverse map: { accountId -> Set<matchGameId> } for games where a player was a standin
+// These games should be excluded from the standin's own point calculation
+function buildStandinExclusions(standinMap) {
+  const exclusions = {} // { accountId -> Set<matchGameId> }
+  for (const playerId in standinMap) {
+    for (const [matchGameId, standinSteamId] of Object.entries(standinMap[playerId])) {
+      const standinAccountId = steamIdToAccountId(standinSteamId)
+      if (!standinAccountId) continue
+      if (!exclusions[standinAccountId]) exclusions[standinAccountId] = new Set()
+      exclusions[standinAccountId].add(Number(matchGameId))
+    }
+  }
+  return exclusions
+}
+
 // Resolve account_id per game for a player, considering standins
 // Returns array of stat rows from the correct account per game
-function resolvePlayerStats(playerId, steamId, standinMap, statsByGameAndAccount, gameInfos) {
+function resolvePlayerStats(playerId, steamId, standinMap, standinExclusions, statsByGameAndAccount, gameInfos) {
   const accountId = steamIdToAccountId(steamId)
   const playerStandins = standinMap[playerId] // { matchGameId -> standinSteamId }
+  const excluded = accountId ? standinExclusions[accountId] : null // games where this player was a standin
   const result = []
 
   for (const g of gameInfos) {
@@ -160,6 +176,9 @@ function resolvePlayerStats(playerId, steamId, standinMap, statsByGameAndAccount
       ? steamIdToAccountId(standinSteamId)
       : accountId
     if (!lookupAccountId) continue
+
+    // Skip games where this player was acting as a standin for someone else
+    if (!standinSteamId && excluded?.has(g.matchGameId)) continue
 
     const stat = statsByGameAndAccount[g.matchGameId]?.[lookupAccountId]
     if (stat) result.push(stat)
@@ -194,8 +213,9 @@ export async function getStagePoints(stageId, fantasyScoring, repeatPenalty = 0)
     statsByGameAndAccount[s.match_game_id][s.account_id] = s
   }
 
-  // Get standin map for this stage
+  // Get standin map and exclusions for this stage
   const standinMap = await getStageStandinMap(stageId)
+  const standinExclusions = buildStandinExclusions(standinMap)
 
   // Get previous stage picks for repeat penalty
   let prevPicksByUser = {} // { playerId: Set<pickPlayerId> }
@@ -236,7 +256,7 @@ export async function getStagePoints(stageId, fantasyScoring, repeatPenalty = 0)
     if (!roleMultipliers) continue
 
     const playerGameStats = resolvePlayerStats(
-      pick.pick_player_id, pick.steam_id, standinMap, statsByGameAndAccount, gameInfos
+      pick.pick_player_id, pick.steam_id, standinMap, standinExclusions, statsByGameAndAccount, gameInfos
     )
     let pickPoints = 0
     for (const stat of playerGameStats) {
@@ -299,8 +319,9 @@ export async function getStageTopPicks(stageId, compId, fantasyScoring) {
     statsByGameAndAccount[s.match_game_id][s.account_id] = s
   }
 
-  // Get standin map for this stage
+  // Get standin map and exclusions for this stage
   const standinMap = await getStageStandinMap(stageId)
+  const standinExclusions = buildStandinExclusions(standinMap)
 
   // Get all competition players with steam_ids
   const compPlayers = await query(`
@@ -334,7 +355,7 @@ export async function getStageTopPicks(stageId, compId, fantasyScoring) {
     const ranked = []
     for (const player of compPlayers) {
       const playerGameStats = resolvePlayerStats(
-        player.player_id, player.steam_id, standinMap, statsByGameAndAccount, gameInfos
+        player.player_id, player.steam_id, standinMap, standinExclusions, statsByGameAndAccount, gameInfos
       )
       if (playerGameStats.length === 0) continue
 
@@ -371,9 +392,11 @@ export async function getPlayerCheckData(stageId, playerId, role, fantasyScoring
   const accountId = steamIdToAccountId(player[0].steam_id)
   if (!accountId) return { games: [], total: 0 }
 
-  // Get standin map for this stage
+  // Get standin map and exclusions for this stage
   const standinMap = await getStageStandinMap(stageId)
+  const standinExclusions = buildStandinExclusions(standinMap)
   const playerStandins = standinMap[playerId] // { matchGameId -> standinSteamId }
+  const excluded = accountId ? standinExclusions[accountId] : null
 
   // Get all match_games for this stage with match info
   const gameRows = await query(`
@@ -412,6 +435,10 @@ export async function getPlayerCheckData(stageId, playerId, role, fantasyScoring
   for (const g of gameRows) {
     // Check if there's a standin for this game
     const standinSteamId = playerStandins?.[g.match_game_id]
+
+    // Skip games where this player was acting as a standin for someone else
+    if (!standinSteamId && excluded?.has(g.match_game_id)) continue
+
     const lookupAccountId = standinSteamId
       ? steamIdToAccountId(standinSteamId)
       : accountId
