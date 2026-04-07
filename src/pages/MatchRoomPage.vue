@@ -39,6 +39,9 @@ watch(() => compId.value, async (id) => {
   loading.value = true
   await store.fetchTournament()
   loading.value = false
+  // Fetch rosters and standins after tournament data is ready
+  fetchTeamRosters()
+  fetchStandins()
 }, { immediate: true })
 
 const bestOf = computed(() => match.value?.best_of || 3)
@@ -288,7 +291,8 @@ const matchJustCompleted = ref(false)
 
 function onTournamentUpdated() {
   // Tournament data is re-fetched by the store globally.
-  // Re-fetch lobby statuses for all games since game states may have changed.
+  // Re-fetch lobby statuses and standins since game states may have changed.
+  fetchStandins()
   for (const g of allGames.value) {
     fetchLobbyStatus(g.game_number)
     store.getMatchReadyState(matchId.value, g.game_number)
@@ -313,8 +317,8 @@ watch(match, (m, oldM) => {
   const games = (m.games || []).filter((g: any) => g.has_stats)
   if (games.length > 0 && expandedGame.value === null) toggleStats(games[0].game_number)
 
-  // Fetch team rosters once
-  if (!oldM && m) { fetchTeamRosters(); fetchStandins() }
+  // Fetch team rosters and standins once
+  if (!oldM || (m.id !== oldM.id)) { fetchTeamRosters(); fetchStandins() }
 
   // Detect status transition to completed
   const oldStatus = oldM?.status || prevMatchStatus.value
