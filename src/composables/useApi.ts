@@ -124,7 +124,7 @@ export function useApi() {
     // Match Standins
     getMatchStandins: (compId: number, matchId: number) =>
       request(`/api/competitions/${compId}/tournament/matches/${matchId}/standins`),
-    addMatchStandin: (compId: number, matchId: number, data: { original_player_id: number; standin_player_id: number; captain_id: number }) =>
+    addMatchStandin: (compId: number, matchId: number, data: { original_player_id: number; standin_player_id: number; captain_id: number; match_game_id?: number }) =>
       request(`/api/competitions/${compId}/tournament/matches/${matchId}/standins`, { method: 'POST', body: JSON.stringify(data) }),
     removeMatchStandin: (compId: number, matchId: number, id: number) =>
       request(`/api/competitions/${compId}/tournament/matches/${matchId}/standins/${id}`, { method: 'DELETE' }),

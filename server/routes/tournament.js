@@ -420,18 +420,20 @@ export default function createTournamentRouter(io) {
     const admin = await requireCompPermission(req, res, compId)
     if (!admin) return
 
-    const { original_player_id, standin_player_id, captain_id } = req.body
+    const { original_player_id, standin_player_id, captain_id, match_game_id } = req.body
     if (!original_player_id || !standin_player_id || !captain_id) {
       return res.status(400).json({ error: 'original_player_id, standin_player_id, and captain_id required' })
     }
 
     try {
+      const gameId = match_game_id || null
       const standin = await queryOne(`
-        INSERT INTO match_standins (match_id, original_player_id, standin_player_id, captain_id)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT (match_id, original_player_id) DO UPDATE SET standin_player_id = $3, captain_id = $4
+        INSERT INTO match_standins (match_id, original_player_id, standin_player_id, captain_id, match_game_id)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (match_id, original_player_id, COALESCE(match_game_id, 0))
+        DO UPDATE SET standin_player_id = $3, captain_id = $4
         RETURNING *
-      `, [matchId, original_player_id, standin_player_id, captain_id])
+      `, [matchId, original_player_id, standin_player_id, captain_id, gameId])
       if (io) io.to(`comp:${compId}`).emit('tournament:updated')
       res.status(201).json(standin)
     } catch (e) {

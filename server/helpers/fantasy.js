@@ -95,20 +95,54 @@ export function calculatePlayerPoints(playerStats, roleMultipliers) {
 }
 
 // Build a map of standin replacements for a stage's matches
-// Returns { originalPlayerId -> { matchId -> standinSteamId } }
+// Returns { originalPlayerId -> { matchGameId -> standinSteamId } }
+// Game-level standins (match_game_id set) take priority over match-level (match_game_id NULL)
 async function getStageStandinMap(stageId) {
   const rows = await query(`
-    SELECT ms.match_id, ms.original_player_id, p.steam_id AS standin_steam_id
+    SELECT ms.match_id, ms.match_game_id, ms.original_player_id, p.steam_id AS standin_steam_id
     FROM match_standins ms
     JOIN fantasy_stage_matches fsm ON fsm.match_id = ms.match_id
     JOIN players p ON p.id = ms.standin_player_id
     WHERE fsm.fantasy_stage_id = $1
   `, [stageId])
 
-  const map = {} // { originalPlayerId -> { matchId -> standinSteamId } }
+  // Get match_game_id -> match_id mapping for all games in this stage
+  const gameRows = await query(`
+    SELECT mg.id AS match_game_id, mg.match_id
+    FROM fantasy_stage_matches fsm
+    JOIN match_games mg ON mg.match_id = fsm.match_id
+    WHERE fsm.fantasy_stage_id = $1
+  `, [stageId])
+
+  // Separate match-level and game-level standins
+  const matchLevel = {} // { originalPlayerId -> { matchId -> standinSteamId } }
+  const gameLevel = {}  // { originalPlayerId -> { matchGameId -> standinSteamId } }
+
   for (const r of rows) {
-    if (!map[r.original_player_id]) map[r.original_player_id] = {}
-    map[r.original_player_id][r.match_id] = r.standin_steam_id
+    if (r.match_game_id) {
+      // Game-specific standin
+      if (!gameLevel[r.original_player_id]) gameLevel[r.original_player_id] = {}
+      gameLevel[r.original_player_id][r.match_game_id] = r.standin_steam_id
+    } else {
+      // Match-level standin (applies to all games in match)
+      if (!matchLevel[r.original_player_id]) matchLevel[r.original_player_id] = {}
+      matchLevel[r.original_player_id][r.match_id] = r.standin_steam_id
+    }
+  }
+
+  // Build final map: { originalPlayerId -> { matchGameId -> standinSteamId } }
+  // Game-level overrides match-level
+  const map = {}
+  for (const g of gameRows) {
+    for (const playerId of new Set([...Object.keys(matchLevel), ...Object.keys(gameLevel)])) {
+      const gameSteamId = gameLevel[playerId]?.[g.match_game_id]
+      const matchSteamId = matchLevel[playerId]?.[g.match_id]
+      const standinSteamId = gameSteamId || matchSteamId
+      if (standinSteamId) {
+        if (!map[playerId]) map[playerId] = {}
+        map[playerId][g.match_game_id] = standinSteamId
+      }
+    }
   }
   return map
 }
@@ -117,11 +151,11 @@ async function getStageStandinMap(stageId) {
 // Returns array of stat rows from the correct account per game
 function resolvePlayerStats(playerId, steamId, standinMap, statsByGameAndAccount, gameInfos) {
   const accountId = steamIdToAccountId(steamId)
-  const playerStandins = standinMap[playerId] // { matchId -> standinSteamId }
+  const playerStandins = standinMap[playerId] // { matchGameId -> standinSteamId }
   const result = []
 
   for (const g of gameInfos) {
-    const standinSteamId = playerStandins?.[g.matchId]
+    const standinSteamId = playerStandins?.[g.matchGameId]
     const lookupAccountId = standinSteamId
       ? steamIdToAccountId(standinSteamId)
       : accountId
@@ -339,7 +373,7 @@ export async function getPlayerCheckData(stageId, playerId, role, fantasyScoring
 
   // Get standin map for this stage
   const standinMap = await getStageStandinMap(stageId)
-  const playerStandins = standinMap[playerId] // { matchId -> standinSteamId }
+  const playerStandins = standinMap[playerId] // { matchGameId -> standinSteamId }
 
   // Get all match_games for this stage with match info
   const gameRows = await query(`
@@ -376,8 +410,8 @@ export async function getPlayerCheckData(stageId, playerId, role, fantasyScoring
   const games = []
 
   for (const g of gameRows) {
-    // Check if there's a standin for this match
-    const standinSteamId = playerStandins?.[g.match_id]
+    // Check if there's a standin for this game
+    const standinSteamId = playerStandins?.[g.match_game_id]
     const lookupAccountId = standinSteamId
       ? steamIdToAccountId(standinSteamId)
       : accountId

@@ -755,12 +755,16 @@ class BotPool {
     }
 
     // Apply standins: swap original players with standins
+    // Game-specific standins override match-level ones
+    const matchGameRow = await queryOne('SELECT id FROM match_games WHERE match_id = $1 AND game_number = $2', [matchId, gameNumber])
     const standins = await query(`
-      SELECT ms.original_player_id, p.steam_id, COALESCE(p.display_name, p.name) AS name
+      SELECT DISTINCT ON (ms.original_player_id)
+        ms.original_player_id, p.steam_id, COALESCE(p.display_name, p.name) AS name
       FROM match_standins ms
       JOIN players p ON p.id = ms.standin_player_id
-      WHERE ms.match_id = $1
-    `, [matchId])
+      WHERE ms.match_id = $1 AND (ms.match_game_id IS NULL OR ms.match_game_id = $2)
+      ORDER BY ms.original_player_id, ms.match_game_id NULLS LAST
+    `, [matchId, matchGameRow?.id || 0])
     for (const s of standins) {
       if (!s.steam_id) continue
       // Find the original player's steam_id

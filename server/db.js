@@ -331,10 +331,25 @@ export async function initDb() {
       original_player_id INTEGER NOT NULL REFERENCES players(id),
       standin_player_id INTEGER NOT NULL REFERENCES players(id),
       captain_id INTEGER NOT NULL REFERENCES captains(id),
-      created_at TIMESTAMP DEFAULT NOW(),
-      UNIQUE(match_id, original_player_id)
+      match_game_id INTEGER REFERENCES match_games(id) ON DELETE CASCADE,
+      created_at TIMESTAMP DEFAULT NOW()
     )
   `)
+
+  // Add match_game_id column and migrate unique constraint for per-game standins
+  {
+    const has = await queryOne(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'match_standins' AND column_name = 'match_game_id'`
+    )
+    if (!has) {
+      await execute('ALTER TABLE match_standins ADD COLUMN match_game_id INTEGER REFERENCES match_games(id) ON DELETE CASCADE')
+    }
+    try { await execute('ALTER TABLE match_standins DROP CONSTRAINT IF EXISTS match_standins_match_id_original_player_id_key') } catch {}
+    await execute(`
+      CREATE UNIQUE INDEX IF NOT EXISTS match_standins_unique_per_game
+      ON match_standins (match_id, original_player_id, COALESCE(match_game_id, 0))
+    `)
+  }
 
   // Favorite position (cached, recalculated after each game)
   try { await execute("ALTER TABLE players ADD COLUMN favorite_position JSONB DEFAULT NULL") } catch {}
