@@ -157,8 +157,10 @@ function buildStandinExclusions(standinMap) {
       if (!standinAccountId) continue
       if (!exclusions[standinAccountId]) exclusions[standinAccountId] = new Set()
       exclusions[standinAccountId].add(Number(matchGameId))
+      console.log(`[fantasy-debug] Excluding gameId=${matchGameId} for standin accountId=${standinAccountId} (steamId=${standinSteamId}, replacing playerId=${playerId})`)
     }
   }
+  if (Object.keys(exclusions).length) console.log('[fantasy-debug] exclusions:', JSON.stringify(Object.fromEntries(Object.entries(exclusions).map(([k, v]) => [k, [...v]]))))
   return exclusions
 }
 
