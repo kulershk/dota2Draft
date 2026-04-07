@@ -695,7 +695,7 @@ function goBack() {
         <div class="flex items-center gap-2 mb-1">
           <Gamepad2 class="w-5 h-5 text-primary" />
           <span class="text-lg font-semibold text-foreground">{{ t('matchRoom') }}</span>
-          <button v-if="canManageMatch && match.status !== 'completed'" class="ml-auto p-1.5 rounded-md hover:bg-accent transition-colors" :class="showAdminPanel ? 'bg-accent text-primary' : 'text-muted-foreground'" @click="showAdminPanel = !showAdminPanel" :title="'Edit match settings'">
+          <button v-if="canManageMatch" class="ml-auto p-1.5 rounded-md hover:bg-accent transition-colors" :class="showAdminPanel ? 'bg-accent text-primary' : 'text-muted-foreground'" @click="showAdminPanel = !showAdminPanel" :title="'Edit match settings'">
             <Pencil class="w-4 h-4" />
           </button>
         </div>
