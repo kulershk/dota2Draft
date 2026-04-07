@@ -94,10 +94,49 @@ export function calculatePlayerPoints(playerStats, roleMultipliers) {
   return Math.round(points * 100) / 100
 }
 
+// Build a map of standin replacements for a stage's matches
+// Returns { originalPlayerId -> { matchId -> standinSteamId } }
+async function getStageStandinMap(stageId) {
+  const rows = await query(`
+    SELECT ms.match_id, ms.original_player_id, p.steam_id AS standin_steam_id
+    FROM match_standins ms
+    JOIN fantasy_stage_matches fsm ON fsm.match_id = ms.match_id
+    JOIN players p ON p.id = ms.standin_player_id
+    WHERE fsm.fantasy_stage_id = $1
+  `, [stageId])
+
+  const map = {} // { originalPlayerId -> { matchId -> standinSteamId } }
+  for (const r of rows) {
+    if (!map[r.original_player_id]) map[r.original_player_id] = {}
+    map[r.original_player_id][r.match_id] = r.standin_steam_id
+  }
+  return map
+}
+
+// Resolve account_id per game for a player, considering standins
+// Returns array of stat rows from the correct account per game
+function resolvePlayerStats(playerId, steamId, standinMap, statsByGameAndAccount, gameInfos) {
+  const accountId = steamIdToAccountId(steamId)
+  const playerStandins = standinMap[playerId] // { matchId -> standinSteamId }
+  const result = []
+
+  for (const g of gameInfos) {
+    const standinSteamId = playerStandins?.[g.matchId]
+    const lookupAccountId = standinSteamId
+      ? steamIdToAccountId(standinSteamId)
+      : accountId
+    if (!lookupAccountId) continue
+
+    const stat = statsByGameAndAccount[g.matchGameId]?.[lookupAccountId]
+    if (stat) result.push(stat)
+  }
+  return result
+}
+
 export async function getStagePoints(stageId, fantasyScoring, repeatPenalty = 0) {
-  // Get all match_game_ids for this stage
+  // Get all match_game_ids for this stage (with match_id for standin resolution)
   const gameRows = await query(`
-    SELECT mg.id AS match_game_id
+    SELECT mg.id AS match_game_id, mg.match_id
     FROM fantasy_stage_matches fsm
     JOIN match_games mg ON mg.match_id = fsm.match_id
     WHERE fsm.fantasy_stage_id = $1
@@ -106,6 +145,7 @@ export async function getStagePoints(stageId, fantasyScoring, repeatPenalty = 0)
   if (gameRows.length === 0) return {}
 
   const gameIds = gameRows.map(r => r.match_game_id)
+  const gameInfos = gameRows.map(r => ({ matchGameId: r.match_game_id, matchId: r.match_id }))
 
   // Get all player stats for these games
   const allStats = await query(
@@ -113,12 +153,15 @@ export async function getStagePoints(stageId, fantasyScoring, repeatPenalty = 0)
     [gameIds]
   )
 
-  // Index stats by account_id -> array of stat rows
-  const statsByAccount = {}
+  // Index stats by match_game_id -> account_id -> stat row
+  const statsByGameAndAccount = {}
   for (const s of allStats) {
-    if (!statsByAccount[s.account_id]) statsByAccount[s.account_id] = []
-    statsByAccount[s.account_id].push(s)
+    if (!statsByGameAndAccount[s.match_game_id]) statsByGameAndAccount[s.match_game_id] = {}
+    statsByGameAndAccount[s.match_game_id][s.account_id] = s
   }
+
+  // Get standin map for this stage
+  const standinMap = await getStageStandinMap(stageId)
 
   // Get previous stage picks for repeat penalty
   let prevPicksByUser = {} // { playerId: Set<pickPlayerId> }
@@ -155,11 +198,12 @@ export async function getStagePoints(stageId, fantasyScoring, repeatPenalty = 0)
   const userPoints = {} // { playerId: { total, picks: { role: { pickPlayerId, name, avatar, points, repeated } } } }
 
   for (const pick of picks) {
-    const accountId = steamIdToAccountId(pick.steam_id)
     const roleMultipliers = fantasyScoring[pick.role]
     if (!roleMultipliers) continue
 
-    const playerGameStats = accountId ? (statsByAccount[accountId] || []) : []
+    const playerGameStats = resolvePlayerStats(
+      pick.pick_player_id, pick.steam_id, standinMap, statsByGameAndAccount, gameInfos
+    )
     let pickPoints = 0
     for (const stat of playerGameStats) {
       pickPoints += calculatePlayerPoints(stat, roleMultipliers)
@@ -195,9 +239,9 @@ export async function getStagePoints(stageId, fantasyScoring, repeatPenalty = 0)
 }
 
 export async function getStageTopPicks(stageId, compId, fantasyScoring) {
-  // Get all match_game_ids for this stage
+  // Get all match_game_ids for this stage (with match_id for standin resolution)
   const gameRows = await query(`
-    SELECT mg.id AS match_game_id
+    SELECT mg.id AS match_game_id, mg.match_id
     FROM fantasy_stage_matches fsm
     JOIN match_games mg ON mg.match_id = fsm.match_id
     WHERE fsm.fantasy_stage_id = $1
@@ -206,6 +250,7 @@ export async function getStageTopPicks(stageId, compId, fantasyScoring) {
   if (gameRows.length === 0) return {}
 
   const gameIds = gameRows.map(r => r.match_game_id)
+  const gameInfos = gameRows.map(r => ({ matchGameId: r.match_game_id, matchId: r.match_id }))
 
   // Get all player stats for these games
   const allStats = await query(
@@ -213,12 +258,15 @@ export async function getStageTopPicks(stageId, compId, fantasyScoring) {
     [gameIds]
   )
 
-  // Index stats by account_id
-  const statsByAccount = {}
+  // Index stats by match_game_id -> account_id -> stat row
+  const statsByGameAndAccount = {}
   for (const s of allStats) {
-    if (!statsByAccount[s.account_id]) statsByAccount[s.account_id] = []
-    statsByAccount[s.account_id].push(s)
+    if (!statsByGameAndAccount[s.match_game_id]) statsByGameAndAccount[s.match_game_id] = {}
+    statsByGameAndAccount[s.match_game_id][s.account_id] = s
   }
+
+  // Get standin map for this stage
+  const standinMap = await getStageStandinMap(stageId)
 
   // Get all competition players with steam_ids
   const compPlayers = await query(`
@@ -251,8 +299,9 @@ export async function getStageTopPicks(stageId, compId, fantasyScoring) {
 
     const ranked = []
     for (const player of compPlayers) {
-      const accountId = steamIdToAccountId(player.steam_id)
-      const playerGameStats = accountId ? (statsByAccount[accountId] || []) : []
+      const playerGameStats = resolvePlayerStats(
+        player.player_id, player.steam_id, standinMap, statsByGameAndAccount, gameInfos
+      )
       if (playerGameStats.length === 0) continue
 
       let points = 0
@@ -288,6 +337,10 @@ export async function getPlayerCheckData(stageId, playerId, role, fantasyScoring
   const accountId = steamIdToAccountId(player[0].steam_id)
   if (!accountId) return { games: [], total: 0 }
 
+  // Get standin map for this stage
+  const standinMap = await getStageStandinMap(stageId)
+  const playerStandins = standinMap[playerId] // { matchId -> standinSteamId }
+
   // Get all match_games for this stage with match info
   const gameRows = await query(`
     SELECT mg.id AS match_game_id, mg.game_number, mg.match_id, mg.dotabuff_id,
@@ -306,22 +359,32 @@ export async function getPlayerCheckData(stageId, playerId, role, fantasyScoring
 
   const gameIds = gameRows.map(r => r.match_game_id)
 
-  // Get this player's stats for all games
-  const stats = await query(
-    'SELECT * FROM match_game_player_stats WHERE match_game_id = ANY($1) AND account_id = $2',
-    [gameIds, accountId]
+  // Get all stats for these games (need all accounts since standins may vary per match)
+  const allStats = await query(
+    'SELECT * FROM match_game_player_stats WHERE match_game_id = ANY($1)',
+    [gameIds]
   )
 
-  const statsByGame = {}
-  for (const s of stats) {
-    statsByGame[s.match_game_id] = s
+  // Index by match_game_id -> account_id -> stat
+  const statsByGameAndAccount = {}
+  for (const s of allStats) {
+    if (!statsByGameAndAccount[s.match_game_id]) statsByGameAndAccount[s.match_game_id] = {}
+    statsByGameAndAccount[s.match_game_id][s.account_id] = s
   }
 
   let grandTotal = 0
   const games = []
 
   for (const g of gameRows) {
-    const playerStats = statsByGame[g.match_game_id]
+    // Check if there's a standin for this match
+    const standinSteamId = playerStandins?.[g.match_id]
+    const lookupAccountId = standinSteamId
+      ? steamIdToAccountId(standinSteamId)
+      : accountId
+
+    const playerStats = lookupAccountId
+      ? statsByGameAndAccount[g.match_game_id]?.[lookupAccountId]
+      : null
     if (!playerStats) continue
 
     const { breakdown, total } = calculatePlayerPointsDetailed(playerStats, roleMultipliers)
