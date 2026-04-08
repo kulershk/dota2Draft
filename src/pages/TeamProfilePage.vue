@@ -138,15 +138,27 @@ const posLabel: Record<number, string> = { 1: 'Carry', 2: 'Mid', 3: 'Offlane', 4
             ></div>
             <!-- Teams -->
             <div class="flex-1 min-w-0 flex items-center gap-3">
-              <div class="flex items-center flex-1 min-w-0" :class="match.is_team1 ? 'font-semibold' : ''">
-                <TeamName :id="match.team1_captain_id || 0" :name="match.team1_name || t('tbd')" :banner-url="match.team1_banner" :avatar-url="match.team1_avatar" no-link reverse />
+              <div class="flex items-center flex-1 min-w-0 font-semibold">
+                <TeamName
+                  :id="(match.is_team1 ? match.team1_captain_id : match.team2_captain_id) || 0"
+                  :name="(match.is_team1 ? match.team1_name : match.team2_name) || t('tbd')"
+                  :banner-url="match.is_team1 ? match.team1_banner : match.team2_banner"
+                  :avatar-url="match.is_team1 ? match.team1_avatar : match.team2_avatar"
+                  no-link reverse
+                />
               </div>
               <div class="flex flex-col items-center shrink-0">
-                <span class="text-sm font-bold font-mono text-foreground">{{ match.score1 ?? 0 }} : {{ match.score2 ?? 0 }}</span>
+                <span class="text-sm font-bold font-mono text-foreground">{{ (match.is_team1 ? match.score1 : match.score2) ?? 0 }} : {{ (match.is_team1 ? match.score2 : match.score1) ?? 0 }}</span>
                 <span class="text-[9px] text-muted-foreground whitespace-nowrap">BO{{ match.best_of }}<template v-if="match.scheduled_at"> · {{ formatMatchDate(match.scheduled_at, t) }}</template></span>
               </div>
-              <div class="flex items-center flex-1 min-w-0 justify-end" :class="!match.is_team1 ? 'font-semibold' : ''">
-                <TeamName :id="match.team2_captain_id || 0" :name="match.team2_name || t('tbd')" :banner-url="match.team2_banner" :avatar-url="match.team2_avatar" no-link />
+              <div class="flex items-center flex-1 min-w-0 justify-end">
+                <TeamName
+                  :id="(match.is_team1 ? match.team2_captain_id : match.team1_captain_id) || 0"
+                  :name="(match.is_team1 ? match.team2_name : match.team1_name) || t('tbd')"
+                  :banner-url="match.is_team1 ? match.team2_banner : match.team1_banner"
+                  :avatar-url="match.is_team1 ? match.team2_avatar : match.team1_avatar"
+                  no-link
+                />
               </div>
             </div>
             <!-- Status / Date -->
