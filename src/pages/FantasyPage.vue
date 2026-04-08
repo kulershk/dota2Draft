@@ -1022,7 +1022,7 @@ function matchLabel(match: any) {
           <label class="label-text">{{ t('statusCol') }}</label>
           <select class="input-field" v-model="stageStatus">
             <option value="upcoming">{{ t('fantasyUpcomingLabel') || 'Upcoming' }}</option>
-            <option value="pending">{{ t('matchPending') }}</option>
+            <option value="pending">{{ t('openStage') }}</option>
             <option value="active">{{ t('matchLive') }}</option>
             <option value="completed">{{ t('matchCompleted') }}</option>
           </select>
