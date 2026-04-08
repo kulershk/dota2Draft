@@ -729,6 +729,8 @@ export default {
   openStage: 'Atvērt',
   closeStage: 'Aizvērt',
   reopenStage: 'Atvērt atkārtoti',
+  awardXp: 'Piešķirt XP',
+  revokeXp: 'Atsaukt XP',
   create: 'Izveidot',
   adminGames: 'Spēles',
   adminFantasy: 'Fantāzijas izvēles',

@@ -148,6 +148,10 @@ export function useApi() {
       request(`/api/competitions/${compId}/fantasy/stages/${stageId}`, { method: 'PUT', body: JSON.stringify(data) }),
     deleteFantasyStage: (compId: number, stageId: number) =>
       request(`/api/competitions/${compId}/fantasy/stages/${stageId}`, { method: 'DELETE' }),
+    awardFantasyXp: (compId: number, stageId: number) =>
+      request(`/api/competitions/${compId}/fantasy/stages/${stageId}/award-xp`, { method: 'POST' }),
+    revokeFantasyXp: (compId: number, stageId: number) =>
+      request(`/api/competitions/${compId}/fantasy/stages/${stageId}/revoke-xp`, { method: 'POST' }),
     saveFantasyPicks: (compId: number, stageId: number, picks: Record<string, number>) =>
       request(`/api/competitions/${compId}/fantasy/stages/${stageId}/picks`, { method: 'PUT', body: JSON.stringify(picks) }),
     saveFantasyPick: (compId: number, stageId: number, role: string, playerId: number) =>

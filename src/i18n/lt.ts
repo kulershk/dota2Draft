@@ -729,6 +729,8 @@ export default {
   openStage: 'Atidaryti',
   closeStage: 'Uždaryti',
   reopenStage: 'Atidaryti iš naujo',
+  awardXp: 'Suteikti XP',
+  revokeXp: 'Atšaukti XP',
   create: 'Sukurti',
   adminGames: 'Žaidimai',
   adminFantasy: 'Fantazijos pasirinkimai',

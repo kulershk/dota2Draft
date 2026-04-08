@@ -731,6 +731,8 @@ export default {
   openStage: 'Open',
   closeStage: 'Close',
   reopenStage: 'Reopen',
+  awardXp: 'Award XP',
+  revokeXp: 'Revoke XP',
   create: 'Create',
 
   // Admin Games

@@ -242,6 +242,25 @@ async function setStageStatus(stageId: number, status: string) {
   await store.fetchFantasy()
 }
 
+async function awardStageXp(stageId: number) {
+  const cId = compId.value
+  if (!cId) return
+  const result = await api.awardFantasyXp(cId, stageId)
+  if (result.awarded?.length) {
+    alert(`Awarded XP to ${result.awarded.length} player(s)`)
+  } else {
+    alert('No new XP awarded (already given or no eligible players)')
+  }
+}
+
+async function revokeStageXp(stageId: number) {
+  const cId = compId.value
+  if (!cId) return
+  if (!confirm('Revoke all fantasy XP for this stage?')) return
+  await api.revokeFantasyXp(cId, stageId)
+  alert('Fantasy XP revoked')
+}
+
 function toggleMatchId(matchId: number) {
   const idx = stageMatchIds.value.indexOf(matchId)
   if (idx >= 0) stageMatchIds.value.splice(idx, 1)
@@ -543,13 +562,26 @@ function matchLabel(match: any) {
                   <Square class="w-3.5 h-3.5" />
                   {{ t('closeStage') }}
                 </button>
-                <button
-                  v-else-if="stage.status === 'completed'"
-                  class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-accent text-muted-foreground hover:bg-accent/80 transition-colors"
-                  @click="setStageStatus(stage.id, 'upcoming')"
-                >
-                  {{ t('reopenStage') }}
-                </button>
+                <template v-else-if="stage.status === 'completed'">
+                  <button
+                    class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-accent text-muted-foreground hover:bg-accent/80 transition-colors"
+                    @click="setStageStatus(stage.id, 'upcoming')"
+                  >
+                    {{ t('reopenStage') }}
+                  </button>
+                  <button
+                    class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-color-success/20 text-color-success hover:bg-color-success/30 transition-colors"
+                    @click="awardStageXp(stage.id)"
+                  >
+                    {{ t('awardXp') }}
+                  </button>
+                  <button
+                    class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-destructive/20 text-destructive hover:bg-destructive/30 transition-colors"
+                    @click="revokeStageXp(stage.id)"
+                  >
+                    {{ t('revokeXp') }}
+                  </button>
+                </template>
                 <button class="text-text-tertiary hover:text-foreground transition-colors" @click="openEditStage(stage)">
                   <Pencil class="w-4 h-4" />
                 </button>
@@ -584,11 +616,20 @@ function matchLabel(match: any) {
                 class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-color-success/20 text-color-success hover:bg-color-success/30 transition-colors"
                 @click="setStageStatus(stage.id, 'completed')"
               ><Square class="w-3.5 h-3.5" /> {{ t('closeStage') }}</button>
-              <button
-                v-else-if="stage.status === 'completed'"
-                class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-accent text-muted-foreground hover:bg-accent/80 transition-colors"
-                @click="setStageStatus(stage.id, 'upcoming')"
-              >{{ t('reopenStage') }}</button>
+              <template v-else-if="stage.status === 'completed'">
+                <button
+                  class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-accent text-muted-foreground hover:bg-accent/80 transition-colors"
+                  @click="setStageStatus(stage.id, 'upcoming')"
+                >{{ t('reopenStage') }}</button>
+                <button
+                  class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-color-success/20 text-color-success hover:bg-color-success/30 transition-colors"
+                  @click="awardStageXp(stage.id)"
+                >{{ t('awardXp') }}</button>
+                <button
+                  class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-destructive/20 text-destructive hover:bg-destructive/30 transition-colors"
+                  @click="revokeStageXp(stage.id)"
+                >{{ t('revokeXp') }}</button>
+              </template>
               <button class="text-text-tertiary hover:text-foreground transition-colors p-1.5" @click="openEditStage(stage)">
                 <Pencil class="w-4 h-4" />
               </button>

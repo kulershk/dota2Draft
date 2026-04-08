@@ -270,71 +270,6 @@ export default function createFantasyRouter(io) {
 
       if (status !== undefined && ['upcoming', 'pending', 'active', 'completed'].includes(status)) {
         await execute('UPDATE fantasy_stages SET status = $1 WHERE id = $2', [status, stageId])
-
-        // ── XP: fantasy stage completed ──
-        if (status === 'completed') {
-          const comp = await getCompetition(compId)
-          const settings = parseCompSettings(comp)
-
-          // Participation XP — users who submitted all 5 picks
-          const FANTASY_ROLES = ['carry', 'mid', 'offlane', 'pos4', 'pos5']
-          const picks = await query('SELECT player_id, role FROM fantasy_picks WHERE fantasy_stage_id = $1', [stageId])
-          const picksByUser = {}
-          for (const p of picks) {
-            if (!picksByUser[p.player_id]) picksByUser[p.player_id] = new Set()
-            picksByUser[p.player_id].add(p.role)
-          }
-          for (const [userId, roles] of Object.entries(picksByUser)) {
-            if (FANTASY_ROLES.every(r => roles.has(r))) {
-              awardXp(Number(userId), settings.xpFantasyParticipation, 'fantasy_participation', 'fantasy_stage', `${stageId}:${userId}`, {
-                competitionId: compId, competitionName: comp.name,
-                detail: `Participated in ${stage.name || 'Fantasy Stage'}`,
-              })
-            }
-          }
-
-          // Stage winner XP — highest score
-          const stagePoints = await getStagePoints(stageId, settings.fantasyScoring, settings.fantasyRepeatPenalty)
-          let bestUserId = null, bestTotal = -1
-          for (const [userId, data] of Object.entries(stagePoints)) {
-            if (data.total > bestTotal) { bestTotal = data.total; bestUserId = Number(userId) }
-          }
-          if (bestUserId) {
-            awardXp(bestUserId, settings.xpFantasyStageWinner, 'fantasy_stage_winner', 'fantasy_stage', `${stageId}`, {
-              competitionId: compId, competitionName: comp.name,
-              detail: `Won ${stage.name || 'Fantasy Stage'} (${Math.round(bestTotal * 100) / 100} pts)`,
-            })
-          }
-
-          // Overall fantasy XP — if ALL stages are completed
-          const allStages = await query(
-            'SELECT id, status FROM fantasy_stages WHERE competition_id = $1',
-            [compId]
-          )
-          const allCompleted = allStages.length > 0 && allStages.every(s => s.status === 'completed')
-          if (allCompleted) {
-            // Compute overall leaderboard
-            const overallPoints = {}
-            for (const s of allStages) {
-              const sp = await getStagePoints(s.id, settings.fantasyScoring, settings.fantasyRepeatPenalty)
-              for (const [uid, data] of Object.entries(sp)) {
-                overallPoints[uid] = (overallPoints[uid] || 0) + data.total
-              }
-            }
-            const sorted = Object.entries(overallPoints).sort((a, b) => b[1] - a[1])
-            const overallXp = [settings.xpFantasyOverall1st, settings.xpFantasyOverall2nd, settings.xpFantasyOverall3rd]
-            const labels = ['1st', '2nd', '3rd']
-            for (let i = 0; i < Math.min(3, sorted.length); i++) {
-              const [uid, pts] = sorted[i]
-              if (overallXp[i]) {
-                awardXp(Number(uid), overallXp[i], `fantasy_overall_${labels[i]}`, 'fantasy_overall', `${compId}:${uid}`, {
-                  competitionId: compId, competitionName: comp.name,
-                  detail: `${labels[i]} place in Fantasy (${Math.round(pts * 100) / 100} pts)`,
-                })
-              }
-            }
-          }
-        }
       }
 
       if (allowedCaptainIds !== undefined) {
@@ -369,6 +304,138 @@ export default function createFantasyRouter(io) {
       res.json({ ok: true })
     } catch (e) {
       console.error('Fantasy update stage error:', e.message)
+      res.status(500).json({ error: 'Internal error' })
+    }
+  })
+
+  // ── Fantasy Stage XP: Award ──
+  router.post('/api/competitions/:compId/fantasy/stages/:stageId/award-xp', async (req, res) => {
+    try {
+      const compId = Number(req.params.compId)
+      const stageId = Number(req.params.stageId)
+      if (!compId || !stageId) return res.status(400).json({ error: 'Invalid IDs' })
+      const admin = await requireCompPermission(req, res, compId)
+      if (!admin) return
+
+      const stage = await queryOne(
+        'SELECT * FROM fantasy_stages WHERE id = $1 AND competition_id = $2',
+        [stageId, compId]
+      )
+      if (!stage) return res.status(404).json({ error: 'Stage not found' })
+
+      const comp = await getCompetition(compId)
+      const settings = parseCompSettings(comp)
+
+      const awarded = []
+
+      // Participation XP — users who submitted all 5 picks
+      const FANTASY_ROLES = ['carry', 'mid', 'offlane', 'pos4', 'pos5']
+      const picks = await query('SELECT player_id, role FROM fantasy_picks WHERE fantasy_stage_id = $1', [stageId])
+      const picksByUser = {}
+      for (const p of picks) {
+        if (!picksByUser[p.player_id]) picksByUser[p.player_id] = new Set()
+        picksByUser[p.player_id].add(p.role)
+      }
+      for (const [userId, roles] of Object.entries(picksByUser)) {
+        if (FANTASY_ROLES.every(r => roles.has(r))) {
+          const result = await awardXp(Number(userId), settings.xpFantasyParticipation, 'fantasy_participation', 'fantasy_stage', `${stageId}:${userId}`, {
+            competitionId: compId, competitionName: comp.name,
+            detail: `Participated in ${stage.name || 'Fantasy Stage'}`,
+          })
+          if (result.awarded) awarded.push({ userId: Number(userId), type: 'participation', amount: settings.xpFantasyParticipation })
+        }
+      }
+
+      // Stage winner XP — highest score
+      const stagePoints = await getStagePoints(stageId, settings.fantasyScoring, settings.fantasyRepeatPenalty)
+      let bestUserId = null, bestTotal = -1
+      for (const [userId, data] of Object.entries(stagePoints)) {
+        if (data.total > bestTotal) { bestTotal = data.total; bestUserId = Number(userId) }
+      }
+      if (bestUserId) {
+        const result = await awardXp(bestUserId, settings.xpFantasyStageWinner, 'fantasy_stage_winner', 'fantasy_stage', `${stageId}`, {
+          competitionId: compId, competitionName: comp.name,
+          detail: `Won ${stage.name || 'Fantasy Stage'} (${Math.round(bestTotal * 100) / 100} pts)`,
+        })
+        if (result.awarded) awarded.push({ userId: bestUserId, type: 'stage_winner', amount: settings.xpFantasyStageWinner })
+      }
+
+      // Overall fantasy XP — if ALL stages are completed
+      const allStages = await query(
+        'SELECT id, status FROM fantasy_stages WHERE competition_id = $1',
+        [compId]
+      )
+      const allCompleted = allStages.length > 0 && allStages.every(s => s.status === 'completed')
+      if (allCompleted) {
+        const overallPoints = {}
+        for (const s of allStages) {
+          const sp = await getStagePoints(s.id, settings.fantasyScoring, settings.fantasyRepeatPenalty)
+          for (const [uid, data] of Object.entries(sp)) {
+            overallPoints[uid] = (overallPoints[uid] || 0) + data.total
+          }
+        }
+        const sorted = Object.entries(overallPoints).sort((a, b) => b[1] - a[1])
+        const overallXp = [settings.xpFantasyOverall1st, settings.xpFantasyOverall2nd, settings.xpFantasyOverall3rd]
+        const labels = ['1st', '2nd', '3rd']
+        for (let i = 0; i < Math.min(3, sorted.length); i++) {
+          const [uid, pts] = sorted[i]
+          if (overallXp[i]) {
+            const result = await awardXp(Number(uid), overallXp[i], `fantasy_overall_${labels[i]}`, 'fantasy_overall', `${compId}:${uid}`, {
+              competitionId: compId, competitionName: comp.name,
+              detail: `${labels[i]} place in Fantasy (${Math.round(pts * 100) / 100} pts)`,
+            })
+            if (result.awarded) awarded.push({ userId: Number(uid), type: `overall_${labels[i]}`, amount: overallXp[i] })
+          }
+        }
+      }
+
+      io.to(`comp:${compId}`).emit('fantasy:updated')
+      res.json({ ok: true, awarded })
+    } catch (e) {
+      console.error('Fantasy award XP error:', e.message)
+      res.status(500).json({ error: 'Internal error' })
+    }
+  })
+
+  // ── Fantasy Stage XP: Revoke ──
+  router.post('/api/competitions/:compId/fantasy/stages/:stageId/revoke-xp', async (req, res) => {
+    try {
+      const compId = Number(req.params.compId)
+      const stageId = Number(req.params.stageId)
+      if (!compId || !stageId) return res.status(400).json({ error: 'Invalid IDs' })
+      const admin = await requireCompPermission(req, res, compId)
+      if (!admin) return
+
+      const stage = await queryOne(
+        'SELECT * FROM fantasy_stages WHERE id = $1 AND competition_id = $2',
+        [stageId, compId]
+      )
+      if (!stage) return res.status(404).json({ error: 'Stage not found' })
+
+      // Delete stage-specific XP (participation + stage winner)
+      const deleted = await execute(
+        `DELETE FROM xp_log WHERE ref_type = 'fantasy_stage' AND (ref_id LIKE $1 OR ref_id = $2)`,
+        [`${stageId}:%`, String(stageId)]
+      )
+
+      // Delete overall XP for this competition (will be re-awarded when admin awards again)
+      await execute(
+        `DELETE FROM xp_log WHERE ref_type = 'fantasy_overall' AND ref_id LIKE $1`,
+        [`${compId}:%`]
+      )
+
+      // Recalculate total_xp for all affected players
+      await execute(`
+        UPDATE players SET total_xp = COALESCE((SELECT SUM(amount) FROM xp_log WHERE player_id = players.id), 0)
+        WHERE id IN (
+          SELECT DISTINCT player_id FROM fantasy_picks WHERE fantasy_stage_id = $1
+        )
+      `, [stageId])
+
+      io.to(`comp:${compId}`).emit('fantasy:updated')
+      res.json({ ok: true, deletedCount: deleted.rowCount })
+    } catch (e) {
+      console.error('Fantasy revoke XP error:', e.message)
       res.status(500).json({ error: 'Internal error' })
     }
   })
