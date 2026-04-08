@@ -500,15 +500,15 @@ export default function createTournamentRouter(io) {
       for (const game of games) {
         const newDotabuffId = game.dotabuff_id || null
 
-        // If dotabuff_id is being cleared, delete associated stats
-        if (!newDotabuffId) {
-          const existing = await queryOne(
-            'SELECT id, dotabuff_id FROM match_games WHERE match_id = $1 AND game_number = $2',
-            [matchId, game.game_number]
-          )
-          if (existing && existing.dotabuff_id) {
-            await execute('DELETE FROM match_game_player_stats WHERE match_game_id = $1', [existing.id])
-          }
+        // If dotabuff_id is being cleared OR changed to a different id, delete associated stats
+        // (otherwise stale player rows from the previous match linger via ON CONFLICT updates)
+        const existing = await queryOne(
+          'SELECT id, dotabuff_id FROM match_games WHERE match_id = $1 AND game_number = $2',
+          [matchId, game.game_number]
+        )
+        if (existing && existing.dotabuff_id && existing.dotabuff_id !== newDotabuffId) {
+          await execute('DELETE FROM match_game_player_stats WHERE match_game_id = $1', [existing.id])
+          await execute("UPDATE match_games SET parsed = false, picks_bans = '[]'::jsonb, start_time = NULL WHERE id = $1", [existing.id])
         }
 
         await execute(`
@@ -687,6 +687,11 @@ export default function createTournamentRouter(io) {
     if (!mg.dotabuff_id) return res.status(400).json({ error: 'No match ID set for this game' })
 
     try {
+      // Wipe existing stats first so a refetch fully replaces stale data
+      // (e.g. when a wrong match id was previously parsed)
+      await execute('DELETE FROM match_game_player_stats WHERE match_game_id = $1', [mg.id])
+      await execute("UPDATE match_games SET parsed = false, picks_bans = '[]'::jsonb, start_time = NULL WHERE id = $1", [mg.id])
+
       const result = await fetchAndSaveGameStats(mg.id, mg.dotabuff_id)
       if (result.error) return res.status(404).json({ error: result.error })
       io.to(`comp:${compId}`).emit('tournament:updated')
