@@ -1181,7 +1181,7 @@ function goBack() {
           <span v-else class="text-xs text-text-tertiary ml-1">—</span>
           <div class="ml-auto flex items-center gap-1">
             <button
-              v-if="canManageMatch && game.dotabuff_id"
+              v-if="showAdminPanel && canManageMatch && game.dotabuff_id"
               class="p-1 rounded-md text-text-tertiary hover:text-foreground hover:bg-accent transition-colors"
               :class="{ 'text-amber-500 hover:text-amber-400': game.has_stats && !game.parsed }"
               :disabled="refetchingGame[game.game_number]"
