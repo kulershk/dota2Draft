@@ -11,7 +11,6 @@ class BotPool {
     this.goWs = null
     this.botLogs = new Map() // botId -> [{ time, message }]
     this.lobbyTeamIds = new Map() // lobbyId -> { radiant, dire }
-    this.pendingAvatarRequests = new Map() // requestId -> { resolve, timeout }
   }
 
   async init(io, wss) {
@@ -95,10 +94,6 @@ class BotPool {
 
         case 'lobby_error':
           await this._onLobbyError(data)
-          break
-
-        case 'set_avatar_result':
-          this._onSetAvatarResult(data)
           break
 
         default:
@@ -705,16 +700,6 @@ class BotPool {
 
   async submitSteamGuard(botId, code) {
     this._sendToGo('steam_guard', { botId: String(botId), code })
-  }
-
-  _onSetAvatarResult(data) {
-    const reqId = data.requestId
-    if (!reqId) return
-    const pending = this.pendingAvatarRequests.get(reqId)
-    if (!pending) return
-    clearTimeout(pending.timeout)
-    this.pendingAvatarRequests.delete(reqId)
-    pending.resolve({ ok: !!data.ok, error: data.error || null })
   }
 
   async setAvatarForAllBots(imageBuffer, mimeType = 'image/jpeg', _filename = 'avatar.jpg') {
