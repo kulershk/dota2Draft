@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"log"
 	"lobbybot/bot"
@@ -70,6 +71,27 @@ func main() {
 			var cmd protocol.SteamGuardCmd
 			json.Unmarshal(data, &cmd)
 			botMgr.SubmitSteamGuard(cmd.BotID, cmd.Code)
+
+		case "set_avatar":
+			var cmd protocol.SetAvatarCmd
+			if err := json.Unmarshal(data, &cmd); err != nil {
+				log.Printf("set_avatar unmarshal error: %v", err)
+				break
+			}
+			go func(c protocol.SetAvatarCmd) {
+				result := protocol.SetAvatarResultEvent{BotID: c.BotID, RequestID: c.RequestID, OK: true}
+				imgBytes, err := base64.StdEncoding.DecodeString(c.ImageBase64)
+				if err != nil {
+					result.OK = false
+					result.Error = "invalid base64: " + err.Error()
+				} else if err := botMgr.SetAvatar(c.BotID, imgBytes, c.MimeType, c.Filename); err != nil {
+					result.OK = false
+					result.Error = err.Error()
+				}
+				if sendErr := sendFn("set_avatar_result", result); sendErr != nil {
+					log.Printf("send set_avatar_result error: %v", sendErr)
+				}
+			}(cmd)
 
 		case "create_lobby":
 			var cmd protocol.CreateLobbyCmd

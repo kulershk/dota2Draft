@@ -1,11 +1,19 @@
 package bot
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io"
 	"lobbybot/protocol"
 	"log"
+	"mime/multipart"
+	nethttp "net/http"
+	"net/http/cookiejar"
+	"net/textproto"
+	"net/url"
 	"sync"
 	"time"
 
@@ -60,6 +68,11 @@ type Bot struct {
 	detectedRadiantTeamId int
 	detectedDireTeamId    int
 	launchSent            bool // prevent repeated LaunchLobby calls
+
+	// Steam Community web session cookies (set after WebLoggedOnEvent)
+	webSessionId        string
+	webSteamLogin       string
+	webSteamLoginSecure string
 }
 
 func NewBot(id, username, password, refreshToken string, send SendFunc) *Bot {
@@ -228,6 +241,25 @@ func (b *Bot) handleSteamEvents() {
 				LoginKey: e.LoginKey,
 			})
 
+		case *steam.WebSessionIdEvent:
+			b.log("Web session id received — requesting web logon...")
+			if b.steamClient != nil && b.steamClient.Web != nil {
+				b.steamClient.Web.LogOn()
+			}
+
+		case *steam.WebLoggedOnEvent:
+			if b.steamClient != nil && b.steamClient.Web != nil {
+				b.mu.Lock()
+				b.webSessionId = b.steamClient.Web.SessionId
+				b.webSteamLogin = b.steamClient.Web.SteamLogin
+				b.webSteamLoginSecure = b.steamClient.Web.SteamLoginSecure
+				b.mu.Unlock()
+				b.log("Web session ready (community cookies stored)")
+			}
+
+		case steam.WebLogOnErrorEvent:
+			b.log(fmt.Sprintf("Web logon error: %v", e))
+
 		case *devents.ClientWelcomed:
 			b.log("Dota 2 GC welcomed! Bot is ready.")
 			b.setStatus(StatusAvailable)
@@ -354,6 +386,98 @@ func (b *Bot) SetLoginKey(key string) {
 
 func (b *Bot) SetActiveLobbyID(id string) {
 	b.activeLobbyID = id
+}
+
+// SetAvatar uploads a new profile picture to Steam Community for this bot.
+// Requires that the bot has an active web session (cookies set after WebLoggedOnEvent).
+func (b *Bot) SetAvatar(imageBytes []byte, mimeType, filename string) error {
+	b.mu.Lock()
+	sessionId := b.webSessionId
+	steamLogin := b.webSteamLogin
+	steamLoginSecure := b.webSteamLoginSecure
+	steamID := b.SteamID
+	b.mu.Unlock()
+
+	if sessionId == "" || steamLoginSecure == "" {
+		return fmt.Errorf("bot %s has no active web session", b.ID)
+	}
+	if steamID == "" {
+		return fmt.Errorf("bot %s has no SteamID yet", b.ID)
+	}
+	if mimeType == "" {
+		mimeType = "image/jpeg"
+	}
+	if filename == "" {
+		filename = "avatar.jpg"
+	}
+
+	jar, _ := cookiejar.New(nil)
+	base, _ := url.Parse("https://steamcommunity.com/")
+	jar.SetCookies(base, []*nethttp.Cookie{
+		{Name: "sessionid", Value: sessionId},
+		{Name: "steamLogin", Value: steamLogin},
+		{Name: "steamLoginSecure", Value: steamLoginSecure},
+	})
+	client := &nethttp.Client{Jar: jar, Timeout: 60 * time.Second}
+
+	body := &bytes.Buffer{}
+	mp := multipart.NewWriter(body)
+	_ = mp.WriteField("MAX_FILE_SIZE", "1048576")
+	_ = mp.WriteField("type", "player_avatar_image")
+	_ = mp.WriteField("sId", steamID)
+	_ = mp.WriteField("sessionid", sessionId)
+	_ = mp.WriteField("doSub", "1")
+	_ = mp.WriteField("json", "1")
+	hdr := make(textproto.MIMEHeader)
+	hdr.Set("Content-Disposition", fmt.Sprintf(`form-data; name="avatar"; filename=%q`, filename))
+	hdr.Set("Content-Type", mimeType)
+	part, err := mp.CreatePart(hdr)
+	if err != nil {
+		return fmt.Errorf("create multipart part: %w", err)
+	}
+	if _, err := part.Write(imageBytes); err != nil {
+		return fmt.Errorf("write avatar bytes: %w", err)
+	}
+	if err := mp.Close(); err != nil {
+		return fmt.Errorf("close multipart: %w", err)
+	}
+
+	req, err := nethttp.NewRequest("POST", "https://steamcommunity.com/actions/FileUploader", body)
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("Content-Type", mp.FormDataContentType())
+	req.Header.Set("Referer", "https://steamcommunity.com/profiles/"+steamID+"/edit/avatar")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (lobbybot)")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("upload request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("steam responded %d: %s", resp.StatusCode, string(respBody))
+	}
+	// Steam returns JSON like {"success":true,"images":{...}} or {"success":false,"message":"..."}
+	var parsed struct {
+		Success bool   `json:"success"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(respBody, &parsed); err != nil {
+		// If the body isn't JSON, treat the whole body as the error message
+		return fmt.Errorf("steam returned non-json response: %s", string(respBody))
+	}
+	if !parsed.Success {
+		msg := parsed.Message
+		if msg == "" {
+			msg = "unknown steam error"
+		}
+		return fmt.Errorf("steam rejected avatar: %s", msg)
+	}
+	b.log("Avatar updated successfully")
+	return nil
 }
 
 func (b *Bot) watchLobbyCacheEvents() {

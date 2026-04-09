@@ -189,6 +189,19 @@ export function useApi() {
       request(`/api/admin/bots/${id}/free`, { method: 'POST' }),
     setBotAutoConnect: (id: number, autoConnect: boolean) =>
       request(`/api/admin/bots/${id}/auto-connect`, { method: 'PUT', body: JSON.stringify({ autoConnect }) }),
+    uploadBotAvatar: async (form: FormData) => {
+      const token = localStorage.getItem('draft_auth_token')
+      const res = await fetch('/api/admin/bots/avatar', {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }))
+        throw new Error(err.error || 'Upload failed')
+      }
+      return res.json()
+    },
 
     // Lobby Management
     createLobby: (compId: number, matchId: number, gameNumber: number, data?: Record<string, any>) =>

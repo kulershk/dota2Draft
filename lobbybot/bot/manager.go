@@ -88,6 +88,16 @@ func (m *Manager) FindAvailable() *Bot {
 	return nil
 }
 
+func (m *Manager) SetAvatar(botID string, imageBytes []byte, mimeType, filename string) error {
+	m.mu.RLock()
+	b, ok := m.bots[botID]
+	m.mu.RUnlock()
+	if !ok {
+		return fmt.Errorf("bot %s not found", botID)
+	}
+	return b.SetAvatar(imageBytes, mimeType, filename)
+}
+
 func (m *Manager) RemoveBot(botID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

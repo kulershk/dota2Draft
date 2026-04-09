@@ -34,6 +34,21 @@ type SteamGuardCmd struct {
 	Code  string `json:"code"`
 }
 
+type SetAvatarCmd struct {
+	BotID       string `json:"botId"`
+	RequestID   string `json:"requestId"`
+	ImageBase64 string `json:"imageBase64"`
+	MimeType    string `json:"mimeType,omitempty"`
+	Filename    string `json:"filename,omitempty"`
+}
+
+type SetAvatarResultEvent struct {
+	BotID     string `json:"botId"`
+	RequestID string `json:"requestId"`
+	OK        bool   `json:"ok"`
+	Error     string `json:"error,omitempty"`
+}
+
 type LobbyPlayer struct {
 	SteamID string `json:"steamId"`
 	Name    string `json:"name"`

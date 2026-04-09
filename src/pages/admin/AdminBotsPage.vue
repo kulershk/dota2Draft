@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Bot, Plus, Trash2, Plug, Unplug, ShieldQuestion, ChevronDown, ChevronUp, X, Circle, ExternalLink } from 'lucide-vue-next'
+import { Bot, Plus, Trash2, Plug, Unplug, ShieldQuestion, ChevronDown, ChevronUp, X, Circle, ExternalLink, Image as ImageIcon, Upload } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { getSocket } from '@/composables/useSocket'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
@@ -98,6 +98,47 @@ function scrollLogsToBottom() {
   }
 }
 
+// ── Bulk avatar upload ──
+const avatarFile = ref<File | null>(null)
+const avatarPreview = ref<string>('')
+const avatarUploading = ref(false)
+const avatarResults = ref<any[]>([])
+const avatarFileInput = ref<HTMLInputElement | null>(null)
+
+function onAvatarFileChange(e: Event) {
+  const target = e.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+  avatarFile.value = file
+  avatarResults.value = []
+  if (avatarPreview.value) URL.revokeObjectURL(avatarPreview.value)
+  avatarPreview.value = URL.createObjectURL(file)
+}
+
+function clearAvatarSelection() {
+  avatarFile.value = null
+  if (avatarPreview.value) URL.revokeObjectURL(avatarPreview.value)
+  avatarPreview.value = ''
+  avatarResults.value = []
+  if (avatarFileInput.value) avatarFileInput.value.value = ''
+}
+
+async function uploadAvatarToAllBots() {
+  if (!avatarFile.value) return
+  avatarUploading.value = true
+  avatarResults.value = []
+  try {
+    const fd = new FormData()
+    fd.append('avatar', avatarFile.value)
+    const res = await api.uploadBotAvatar(fd)
+    avatarResults.value = res.results || []
+  } catch (e: any) {
+    avatarResults.value = [{ ok: false, error: e?.message || 'Upload failed' }]
+  } finally {
+    avatarUploading.value = false
+  }
+}
+
 function statusColor(status: string) {
   if (status === 'available') return 'text-green-500'
   if (status === 'busy') return 'text-amber-500'
@@ -171,6 +212,61 @@ onUnmounted(() => {
     </div>
 
     <p class="text-sm text-muted-foreground">{{ t('botManagementDesc') }}</p>
+
+    <!-- Bulk avatar upload -->
+    <div class="card p-5">
+      <div class="flex items-center gap-2 mb-3">
+        <ImageIcon class="w-4 h-4 text-foreground" />
+        <h2 class="text-sm font-semibold text-foreground">{{ t('updateAllBotAvatars') }}</h2>
+      </div>
+      <p class="text-xs text-muted-foreground mb-4">{{ t('updateAllBotAvatarsDesc') }}</p>
+      <div class="flex items-start gap-4">
+        <div class="shrink-0">
+          <div class="w-24 h-24 rounded-md border border-border bg-accent/30 overflow-hidden flex items-center justify-center">
+            <img v-if="avatarPreview" :src="avatarPreview" class="w-full h-full object-cover" />
+            <ImageIcon v-else class="w-8 h-8 text-muted-foreground" />
+          </div>
+        </div>
+        <div class="flex-1 flex flex-col gap-2">
+          <input
+            ref="avatarFileInput"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            class="text-xs"
+            @change="onAvatarFileChange"
+          />
+          <div class="flex items-center gap-2">
+            <button
+              class="btn-primary text-xs px-3 py-1.5"
+              :disabled="!avatarFile || avatarUploading"
+              @click="uploadAvatarToAllBots"
+            >
+              <Upload class="w-3.5 h-3.5" />
+              {{ avatarUploading ? t('uploading') : t('applyToAllBots') }}
+            </button>
+            <button
+              v-if="avatarFile"
+              class="btn-secondary text-xs px-3 py-1.5"
+              :disabled="avatarUploading"
+              @click="clearAvatarSelection"
+            >{{ t('clear') }}</button>
+          </div>
+          <div v-if="avatarResults.length" class="mt-2 flex flex-col gap-1">
+            <div
+              v-for="(r, i) in avatarResults"
+              :key="i"
+              class="text-[11px] flex items-center gap-2"
+              :class="r.ok ? 'text-green-500' : 'text-red-500'"
+            >
+              <Circle class="w-2 h-2 fill-current" />
+              <span class="font-mono">{{ r.username || `bot ${r.botId}` }}</span>
+              <span v-if="r.ok">— {{ t('botAvatarUpdated') }}</span>
+              <span v-else>— {{ r.error }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Empty state -->
     <div v-if="bots.length === 0" class="card p-8 text-center">

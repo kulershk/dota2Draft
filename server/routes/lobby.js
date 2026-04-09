@@ -1,7 +1,18 @@
 import { Router } from 'express'
+import multer from 'multer'
+import sharp from 'sharp'
 import { query, queryOne, execute } from '../db.js'
 import { requirePermission, requireCompPermission } from '../middleware/permissions.js'
 import { botPool } from '../services/botPool.js'
+
+const avatarUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (/^image\/(jpeg|png|webp)$/.test(file.mimetype)) cb(null, true)
+    else cb(new Error('Only JPEG, PNG, or WebP images are allowed'))
+  },
+})
 
 export default function createLobbyRouter(io) {
   const router = Router()
@@ -106,6 +117,25 @@ export default function createLobbyRouter(io) {
       if (!code) return res.status(400).json({ error: 'Code required' })
       await botPool.submitSteamGuard(Number(req.params.botId), code)
       res.json({ ok: true })
+    } catch (e) {
+      res.status(400).json({ error: e.message })
+    }
+  })
+
+  router.post('/api/admin/bots/avatar', avatarUpload.single('avatar'), async (req, res) => {
+    try {
+      const admin = await requirePermission(req, res, 'manage_bots')
+      if (!admin) return
+      if (!req.file) return res.status(400).json({ error: 'No image file provided' })
+
+      // Normalize: square 512x512 JPEG so Steam never rejects it
+      const jpegBuffer = await sharp(req.file.buffer)
+        .resize(512, 512, { fit: 'cover', position: 'center' })
+        .jpeg({ quality: 90 })
+        .toBuffer()
+
+      const results = await botPool.setAvatarForAllBots(jpegBuffer, 'image/jpeg', 'avatar.jpg')
+      res.json({ results })
     } catch (e) {
       res.status(400).json({ error: e.message })
     }

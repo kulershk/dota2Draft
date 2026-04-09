@@ -9,6 +9,7 @@ class BotPool {
     this.goWs = null
     this.botLogs = new Map() // botId -> [{ time, message }]
     this.lobbyTeamIds = new Map() // lobbyId -> { radiant, dire }
+    this.pendingAvatarRequests = new Map() // requestId -> { resolve, timeout }
   }
 
   async init(io, wss) {
@@ -92,6 +93,10 @@ class BotPool {
 
         case 'lobby_error':
           await this._onLobbyError(data)
+          break
+
+        case 'set_avatar_result':
+          this._onSetAvatarResult(data)
           break
 
         default:
@@ -698,6 +703,64 @@ class BotPool {
 
   async submitSteamGuard(botId, code) {
     this._sendToGo('steam_guard', { botId: String(botId), code })
+  }
+
+  _onSetAvatarResult(data) {
+    const reqId = data.requestId
+    if (!reqId) return
+    const pending = this.pendingAvatarRequests.get(reqId)
+    if (!pending) return
+    clearTimeout(pending.timeout)
+    this.pendingAvatarRequests.delete(reqId)
+    pending.resolve({ ok: !!data.ok, error: data.error || null })
+  }
+
+  async setAvatarForAllBots(imageBuffer, mimeType = 'image/jpeg', filename = 'avatar.jpg') {
+    const bots = await query("SELECT id, username, status FROM lobby_bots ORDER BY id")
+    const imageBase64 = imageBuffer.toString('base64')
+    const results = []
+
+    for (const bot of bots) {
+      // Skip bots that aren't fully connected — no web session yet
+      if (bot.status !== 'available' && bot.status !== 'busy') {
+        results.push({ botId: bot.id, username: bot.username, ok: false, error: `bot is ${bot.status}` })
+        continue
+      }
+
+      const requestId = `avatar_${bot.id}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+      const pendingPromise = new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+          this.pendingAvatarRequests.delete(requestId)
+          resolve({ ok: false, error: 'timeout waiting for bot service response' })
+        }, 60000)
+        this.pendingAvatarRequests.set(requestId, { resolve, timeout })
+      })
+
+      try {
+        this._sendToGo('set_avatar', {
+          botId: String(bot.id),
+          requestId,
+          imageBase64,
+          mimeType,
+          filename,
+        })
+      } catch (e) {
+        const pending = this.pendingAvatarRequests.get(requestId)
+        if (pending) {
+          clearTimeout(pending.timeout)
+          this.pendingAvatarRequests.delete(requestId)
+        }
+        results.push({ botId: bot.id, username: bot.username, ok: false, error: e.message })
+        continue
+      }
+
+      const result = await pendingPromise
+      results.push({ botId: bot.id, username: bot.username, ...result })
+      // Small delay so we don't trip Steam rate limits between accounts
+      await new Promise((r) => setTimeout(r, 1500))
+    }
+
+    return results
   }
 
   async createLobby(compId, matchId, gameNumber, options = {}) {

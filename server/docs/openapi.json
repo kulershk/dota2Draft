@@ -174,6 +174,56 @@
     }
   },
   "paths": {
+    "/api/admin/bots/avatar": {
+      "post": {
+        "tags": ["Admin"],
+        "summary": "Upload one image and apply it as the Steam profile avatar to every connected bot account",
+        "description": "Requires the `manage_bots` permission. The image is normalized to a 512×512 JPEG before being relayed to each bot via the lobby bot service. Bots that are not currently online are skipped with an error in the result list.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["avatar"],
+                "properties": {
+                  "avatar": { "type": "string", "format": "binary", "description": "JPEG, PNG, or WebP image, max 5 MB" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Per-bot results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "botId": { "type": "integer" },
+                          "username": { "type": "string" },
+                          "ok": { "type": "boolean" },
+                          "error": { "type": "string", "nullable": true }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid input or upload failed" },
+          "403": { "description": "Missing manage_bots permission" }
+        }
+      }
+    },
     "/api/auth/steam": {
       "get": {
         "tags": ["Auth"],
