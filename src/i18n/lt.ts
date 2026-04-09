@@ -24,7 +24,7 @@ export default {
   created: 'Sukurta',
 
   // Nav / App
-  appTitle: 'DOTA2 DRAFT',
+  appTitle: 'DOTA2.LV',
   home: 'Pradžia',
   admin: 'Administravimas',
   adminPanel: 'Administravimo skydelis',
