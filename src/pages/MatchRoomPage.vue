@@ -99,6 +99,24 @@ function formatCountdown(ms: number): string {
 
 const canManageMatch = computed(() => store.hasPerm('manage_competitions') || store.hasPerm('manage_own_competitions'))
 
+// scheduled_at is a UTC ISO string from the server. The DatePicker works in
+// local wall-clock format (YYYY-MM-DDTHH:mm). Convert in both directions so
+// what the admin types is what every viewer sees in their own time zone.
+function utcIsoToLocalInput(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+function localInputToUtcIso(local: string | null | undefined): string | null {
+  if (!local) return null
+  // The Date constructor parses "YYYY-MM-DDTHH:mm" as local wall clock (no offset).
+  const d = new Date(local)
+  if (isNaN(d.getTime())) return null
+  return d.toISOString()
+}
+
 const myCaptainId = computed(() => store.currentCaptain.value?.id || null)
 const isCaptainInMatch = computed(() => {
   if (!myCaptainId.value || !match.value) return false
@@ -743,8 +761,8 @@ function goBack() {
                 <DatePicker
                   mode="single"
                   show-time
-                  :model-value="match.scheduled_at ? match.scheduled_at.slice(0, 16) : ''"
-                  @update:model-value="updateMatchField({ scheduled_at: $event || null })"
+                  :model-value="utcIsoToLocalInput(match.scheduled_at)"
+                  @update:model-value="updateMatchField({ scheduled_at: localInputToUtcIso($event) })"
                 />
               </div>
               <label class="flex items-center gap-1.5 cursor-pointer">
