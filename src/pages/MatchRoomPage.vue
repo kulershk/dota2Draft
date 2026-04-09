@@ -97,7 +97,7 @@ function formatCountdown(ms: number): string {
   return `${min}:${sec.toString().padStart(2, '0')}`
 }
 
-const canManageMatch = computed(() => canManageMatch || store.hasPerm('manage_competitions') || store.hasPerm('manage_own_competitions'))
+const canManageMatch = computed(() => store.hasPerm('manage_competitions') || store.hasPerm('manage_own_competitions'))
 
 const myCaptainId = computed(() => store.currentCaptain.value?.id || null)
 const isCaptainInMatch = computed(() => {
