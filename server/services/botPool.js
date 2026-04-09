@@ -2,6 +2,8 @@ import { query, queryOne, execute } from '../db.js'
 import { fetchAndSaveGameStats, fetchOpenDotaMatch, saveMatchGameStats, requestOpenDotaParse } from '../helpers/opendota.js'
 import { awardXp, getTeamPlayerIds } from '../helpers/xp.js'
 import { getCompetition, parseCompSettings } from '../helpers/competition.js'
+import SteamCommunity from 'steamcommunity'
+import { LoginSession, EAuthTokenPlatformType } from 'steam-session'
 
 class BotPool {
   constructor() {
@@ -715,52 +717,93 @@ class BotPool {
     pending.resolve({ ok: !!data.ok, error: data.error || null })
   }
 
-  async setAvatarForAllBots(imageBuffer, mimeType = 'image/jpeg', filename = 'avatar.jpg') {
-    const bots = await query("SELECT id, username, status FROM lobby_bots ORDER BY id")
-    const imageBase64 = imageBuffer.toString('base64')
+  async setAvatarForAllBots(imageBuffer, mimeType = 'image/jpeg', _filename = 'avatar.jpg') {
+    const bots = await query("SELECT id, username, password FROM lobby_bots ORDER BY id")
     const results = []
+    const format = mimeType === 'image/png' ? 'png' : (mimeType === 'image/gif' ? 'gif' : 'jpg')
 
     for (const bot of bots) {
-      // Skip bots that aren't fully connected — no web session yet
-      if (bot.status !== 'available' && bot.status !== 'busy') {
-        results.push({ botId: bot.id, username: bot.username, ok: false, error: `bot is ${bot.status}` })
-        continue
-      }
-
-      const requestId = `avatar_${bot.id}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-      const pendingPromise = new Promise((resolve) => {
-        const timeout = setTimeout(() => {
-          this.pendingAvatarRequests.delete(requestId)
-          resolve({ ok: false, error: 'timeout waiting for bot service response' })
-        }, 60000)
-        this.pendingAvatarRequests.set(requestId, { resolve, timeout })
-      })
-
       try {
-        this._sendToGo('set_avatar', {
-          botId: String(bot.id),
-          requestId,
-          imageBase64,
-          mimeType,
-          filename,
-        })
+        const url = await this._uploadAvatarForBot(bot.username, bot.password, imageBuffer, format)
+        results.push({ botId: bot.id, username: bot.username, ok: true, url })
       } catch (e) {
-        const pending = this.pendingAvatarRequests.get(requestId)
-        if (pending) {
-          clearTimeout(pending.timeout)
-          this.pendingAvatarRequests.delete(requestId)
-        }
         results.push({ botId: bot.id, username: bot.username, ok: false, error: e.message })
-        continue
       }
-
-      const result = await pendingPromise
-      results.push({ botId: bot.id, username: bot.username, ...result })
-      // Small delay so we don't trip Steam rate limits between accounts
+      // Small delay between bots to avoid Steam rate limits
       await new Promise((r) => setTimeout(r, 1500))
     }
 
     return results
+  }
+
+  async _uploadAvatarForBot(accountName, password, imageBuffer, format) {
+    if (!password) throw new Error('no password stored for this bot')
+
+    // Step 1: web-browser login session via steam-session (independent of any
+    // running Steam game client; will not kick the bot's Dota session)
+    const session = new LoginSession(EAuthTokenPlatformType.WebBrowser)
+    const cookies = await new Promise((resolve, reject) => {
+      const cleanup = () => {
+        try { session.removeAllListeners() } catch {}
+        try { session.cancelLoginAttempt() } catch {}
+      }
+      const timer = setTimeout(() => {
+        cleanup()
+        reject(new Error('login timed out'))
+      }, 60000)
+
+      session.on('authenticated', async () => {
+        try {
+          const c = await session.getWebCookies()
+          clearTimeout(timer)
+          cleanup()
+          resolve(c)
+        } catch (err) {
+          clearTimeout(timer)
+          cleanup()
+          reject(err)
+        }
+      })
+      session.on('error', (err) => {
+        clearTimeout(timer)
+        cleanup()
+        reject(err)
+      })
+      session.on('timeout', () => {
+        clearTimeout(timer)
+        cleanup()
+        reject(new Error('login session timed out'))
+      })
+
+      session.startWithCredentials({ accountName, password })
+        .then((startResult) => {
+          if (startResult && startResult.actionRequired) {
+            // Steam Guard required — we don't have a code at upload time
+            clearTimeout(timer)
+            cleanup()
+            const types = (startResult.validActions || []).map(a => a.type).join(',')
+            reject(new Error(`steam guard required (${types || 'unknown'})`))
+          }
+        })
+        .catch((err) => {
+          clearTimeout(timer)
+          cleanup()
+          reject(err)
+        })
+    })
+
+    // Step 2: hand cookies to steamcommunity and upload
+    const community = new SteamCommunity()
+    community.setCookies(cookies)
+
+    const url = await new Promise((resolve, reject) => {
+      community.uploadAvatar(imageBuffer, format, (err, avatarUrl) => {
+        if (err) reject(err)
+        else resolve(avatarUrl)
+      })
+    })
+
+    return url
   }
 
   async createLobby(compId, matchId, gameNumber, options = {}) {
