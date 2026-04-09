@@ -76,4 +76,29 @@ router.beforeEach(async (to) => {
   }
 })
 
+// Auto-recover from stale chunks after a deploy: when a route's lazy-loaded
+// component file no longer exists (filename hash changed in the new build),
+// the dynamic import throws. Reload the page once so the browser fetches the
+// fresh index.html and current chunk filenames. The sessionStorage flag stops
+// us from looping forever if the failure isn't actually about a stale build.
+function isChunkLoadError(err: unknown): boolean {
+  if (!err) return false
+  const msg = err instanceof Error ? err.message : String(err)
+  return /Failed to fetch dynamically imported module|Importing a module script failed|ChunkLoadError|Loading chunk .* failed/i.test(msg)
+}
+
+function reloadOnce() {
+  const KEY = 'draft_chunk_reload_at'
+  const last = Number(sessionStorage.getItem(KEY) || 0)
+  if (Date.now() - last < 10_000) return // already reloaded recently — give up
+  sessionStorage.setItem(KEY, String(Date.now()))
+  window.location.reload()
+}
+
+router.onError((err) => {
+  if (isChunkLoadError(err)) reloadOnce()
+})
+
+window.addEventListener('vite:preloadError', () => reloadOnce())
+
 export default router

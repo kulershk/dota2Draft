@@ -47,8 +47,22 @@ app.use(cors())
 app.use(express.json())
 
 // Static files
+// Hashed assets under /assets/* are immutable, so we can cache them aggressively.
+// index.html (and the dir root) must always re-validate so users pick up the new
+// build immediately after a deploy — otherwise they'd keep loading an old
+// index.html that points at chunk filenames that no longer exist.
 const staticPath = join(__dirname, '..', 'dist')
-app.use(express.static(staticPath))
+app.use(express.static(staticPath, {
+  etag: true,
+  lastModified: true,
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('index.html')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+    } else if (filePath.includes(`${join('dist', 'assets')}`) || /[\\/]assets[\\/]/.test(filePath)) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+    }
+  },
+}))
 app.use('/uploads', express.static(uploadsDir))
 
 // API Docs
@@ -87,6 +101,7 @@ initSocket(io)
 
 // SPA fallback
 app.get('*', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
   res.sendFile(join(staticPath, 'index.html'))
 })
 
