@@ -240,7 +240,7 @@ export async function initDb() {
       next_match_id INTEGER REFERENCES matches(id) ON DELETE SET NULL,
       next_match_slot INTEGER DEFAULT NULL,
       status TEXT NOT NULL DEFAULT 'pending',
-      scheduled_at TIMESTAMPTZ DEFAULT NULL,
+      scheduled_at TIMESTAMP DEFAULT NULL,
       created_at TIMESTAMP DEFAULT NOW()
     );
 
@@ -619,19 +619,6 @@ export async function initDb() {
     }
   }
 
-  // Migrate matches.scheduled_at from TIMESTAMP (wall clock, no tz) to TIMESTAMPTZ.
-  // Existing values were stored using the server-process wall clock (UTC in Docker),
-  // so we reinterpret them as UTC during the conversion.
-  {
-    const col = await queryOne(
-      `SELECT data_type FROM information_schema.columns WHERE table_name = 'matches' AND column_name = 'scheduled_at'`
-    )
-    if (col && col.data_type === 'timestamp without time zone') {
-      await execute(
-        `ALTER TABLE matches ALTER COLUMN scheduled_at TYPE TIMESTAMPTZ USING scheduled_at AT TIME ZONE 'UTC'`
-      )
-    }
-  }
 }
 
 async function createFreshCompetitionTables() {

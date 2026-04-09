@@ -21,6 +21,28 @@ When adding, modifying, or removing:
 - **AsyncAPI (Socket.io)**: `server/docs/asyncapi.json` — served at `/api/docs/socket`
 - Raw specs: `/api/docs/openapi.json` and `/api/docs/asyncapi.json`
 
+## Date / Time Rules
+
+The DB stores timestamps as `TIMESTAMP` (no time zone). The Node `pg` driver and the Postgres session both run in UTC, so values round-trip as UTC instants — the server returns ISO strings like `"2026-04-15T15:30:00.000Z"` to the client.
+
+The frontend uses the generic `<DatePicker>` component which works in **local wall-clock format** (`YYYY-MM-DDTHH:mm`), not ISO. So every page that binds a DB timestamp to a `DatePicker` MUST convert in both directions using the shared helpers in `src/utils/format.ts`:
+
+- **Server ISO → DatePicker**: `toLocalDatetime(iso)` — converts the UTC instant to the viewer's local wall clock.
+- **DatePicker → server**: `localDatetimeToISO(local)` — converts the viewer's local wall clock back to a UTC ISO string.
+
+```ts
+import { toLocalDatetime, localDatetimeToISO } from '@/utils/format'
+
+<DatePicker
+  :model-value="toLocalDatetime(match.scheduled_at)"
+  @update:model-value="save({ scheduled_at: localDatetimeToISO($event) })"
+/>
+```
+
+**Never** do `iso.slice(0, 16)` to feed a DatePicker — it strips the `Z` and shows the UTC wall clock as if it were local, which is wrong for any viewer not in UTC.
+
+For displaying timestamps, use `formatMatchDate(iso, t)` / `fmtDateTime(new Date(iso))` from `src/utils/format.ts`. These already interpret the ISO string as UTC and render in the viewer's local time.
+
 ## i18n Rules
 
 When adding UI text, always add translations to all three locale files:
