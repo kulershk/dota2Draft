@@ -8,15 +8,23 @@ export default function createQueueRouter(io) {
 
   // ── Public: list enabled pools ──
   router.get('/api/queue/pools', async (req, res) => {
-    const pools = await query('SELECT * FROM queue_pools WHERE enabled = true ORDER BY id')
-    res.json(pools)
+    try {
+      const pools = await query('SELECT * FROM queue_pools WHERE enabled = true ORDER BY id')
+      res.json(pools)
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
   })
 
   // ── Public: pool details ──
   router.get('/api/queue/pools/:poolId', async (req, res) => {
-    const pool = await queryOne('SELECT * FROM queue_pools WHERE id = $1', [req.params.poolId])
-    if (!pool) return res.status(404).json({ error: 'Pool not found' })
-    res.json(pool)
+    try {
+      const pool = await queryOne('SELECT * FROM queue_pools WHERE id = $1', [req.params.poolId])
+      if (!pool) return res.status(404).json({ error: 'Pool not found' })
+      res.json(pool)
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
   })
 
   // ── Public: queue match history ──
@@ -76,8 +84,12 @@ export default function createQueueRouter(io) {
   router.get('/api/admin/queue/pools', async (req, res) => {
     const admin = await requirePermission(req, res, 'manage_competitions')
     if (!admin) return
-    const pools = await query('SELECT * FROM queue_pools ORDER BY id')
-    res.json(pools)
+    try {
+      const pools = await query('SELECT * FROM queue_pools ORDER BY id')
+      res.json(pools)
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
   })
 
   // ── Admin: create pool ──

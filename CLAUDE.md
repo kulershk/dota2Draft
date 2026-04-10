@@ -58,6 +58,7 @@ When adding UI text, always add translations to all three locale files:
 - **Real-time**: Socket.io with per-competition rooms (`comp:${compId}`)
 - **Dev**: Docker Compose (draft-dev-app + draft-dev-db)
 - **Prod**: Docker Compose with Traefik reverse proxy
+- **Deploy**: Auto-deploy on push to `main` via GitHub Actions (`.github/workflows/deploy.yml`). SSHs into prod, pulls, rebuilds all containers. No manual deploy steps needed.
 
 ## Key Patterns
 
