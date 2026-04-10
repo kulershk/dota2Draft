@@ -1024,6 +1024,9 @@ export default {
 
   // Queue
   queue: 'Queue',
+  queueDesc: 'Join a queue, get matched, draft your team, and play.',
+  queueAllSkillLevels: 'All skill levels',
+  queueAvailablePlayers: 'Available Players',
   queueNoPools: 'No queue pools available.',
   queueNoPoolsYet: 'No queue pools created yet.',
   queueJoin: 'Join Queue',

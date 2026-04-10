@@ -1016,6 +1016,9 @@ export default {
 
   // Queue
   queue: 'Eilė',
+  queueDesc: 'Prisijunk prie eilės, rask žaidimą, sudaryk komandą ir žaisk.',
+  queueAllSkillLevels: 'Visi lygiai',
+  queueAvailablePlayers: 'Galimi žaidėjai',
   queueNoPools: 'Nėra galimų eilių.',
   queueNoPoolsYet: 'Dar nesukurta jokia eilė.',
   queueJoin: 'Prisijungti prie eilės',

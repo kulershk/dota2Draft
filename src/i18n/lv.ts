@@ -1016,6 +1016,9 @@ export default {
 
   // Queue
   queue: 'Rinda',
+  queueDesc: 'Pievienojies rindai, atrodi spēli, izveido komandu un spēlē.',
+  queueAllSkillLevels: 'Visi līmeņi',
+  queueAvailablePlayers: 'Pieejamie spēlētāji',
   queueNoPools: 'Nav pieejamu rindu.',
   queueNoPoolsYet: 'Vēl nav izveidota neviena rinda.',
   queueJoin: 'Pievienoties rindai',
