@@ -219,6 +219,27 @@ class BotPool {
         playersJoined: data.playersJoined,
       })
     }
+
+    // Auto force-launch for queue matches when all players joined + both teams set
+    if (lobby && !lobby.competition_id && data.status === 'waiting') {
+      const expected = (lobby.players_expected || []).length
+      const joined = (data.playersJoined || []).length
+      const teamIds = this.lobbyTeamIds.get(lobbyId) || (lobby.team_ids ? JSON.parse(lobby.team_ids) : null)
+      if (expected > 0 && joined >= expected && teamIds?.radiant && teamIds?.dire) {
+        console.log(`[Queue] All ${joined} players joined + both teams set — auto force-launching lobby ${lobbyId}`)
+        try {
+          await this.forceLaunch(lobbyId, { skipValidation: false })
+        } catch (e) {
+          console.error(`[Queue] Auto force-launch failed for lobby ${lobbyId}:`, e.message)
+          // Retry with skip validation if team validation fails
+          try {
+            await this.forceLaunch(lobbyId, { skipValidation: true })
+          } catch (e2) {
+            console.error(`[Queue] Auto force-launch retry failed:`, e2.message)
+          }
+        }
+      }
+    }
   }
 
   async _onPlayerUpdate(data, type) {
@@ -335,6 +356,21 @@ class BotPool {
         radiantTeamName,
         direTeamName,
       })
+    }
+
+    // Auto force-launch for queue matches: team IDs just arrived, check if all players are already in
+    if (!lobby.competition_id && lobby.status === 'waiting' && radiantTeamId && direTeamId) {
+      const expected = (lobby.players_expected || []).length
+      const joined = (lobby.players_joined || []).length
+      if (expected > 0 && joined >= expected) {
+        console.log(`[Queue] Both teams set + all ${joined} players already in — auto force-launching lobby ${lobbyId}`)
+        try {
+          await this.forceLaunch(lobbyId, { skipValidation: false })
+        } catch (e) {
+          console.error(`[Queue] Auto force-launch failed:`, e.message)
+          try { await this.forceLaunch(lobbyId, { skipValidation: true }) } catch {}
+        }
+      }
     }
   }
 
