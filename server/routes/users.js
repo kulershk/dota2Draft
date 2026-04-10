@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { query, queryOne, execute } from '../db.js'
-import { createSession } from '../middleware/auth.js'
+import { createSession, getAuthPlayer } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/permissions.js'
 import { fetchSteamProfile, fetchSteamProfiles, parseSteamIds } from '../helpers/steam.js'
 import { socketPlayers, getOnlinePlayerIds, getPlayerActivities } from '../socket/state.js'
@@ -45,6 +45,21 @@ router.get('/api/users', async (req, res) => {
     online: onlineIds.has(p.id),
     activity: activities[p.id] || null,
   })))
+})
+
+// Player search (authenticated, for standin selection etc.)
+router.get('/api/players/search', async (req, res) => {
+  const player = await getAuthPlayer(req)
+  if (!player) return res.status(401).json({ error: 'Not authenticated' })
+  const q = (req.query.q || '').toString().trim().toLowerCase()
+  if (q.length < 2) return res.json([])
+  const results = await query(
+    `SELECT id, name, display_name, steam_id, avatar_url FROM players
+     WHERE steam_id IS NOT NULL AND (LOWER(name) LIKE $1 OR LOWER(display_name) LIKE $1)
+     LIMIT 10`,
+    [`%${q}%`]
+  )
+  res.json(results)
 })
 
 // Public player profile

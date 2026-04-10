@@ -295,6 +295,7 @@ export function useApi() {
     },
     getTeamProfile: (captainId: number) => request(`/api/teams/${captainId}/profile`),
     getUsers: () => request('/api/users'),
+    searchPlayers: (q: string) => request(`/api/players/search?q=${encodeURIComponent(q)}`),
     updatePlayer: (id: number, data: Record<string, any>) =>
       request(`/api/players/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     impersonateUser: (id: number) =>

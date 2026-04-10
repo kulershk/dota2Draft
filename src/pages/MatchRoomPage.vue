@@ -651,13 +651,7 @@ async function fetchStandins() {
 async function searchStandinPlayer(q: string) {
   if (!q || q.length < 2) { standinResults.value = []; return }
   try {
-    const all = await api.getUsers()
-    standinResults.value = all.filter((p: any) =>
-      p.steam_id && (
-        (p.name || '').toLowerCase().includes(q.toLowerCase()) ||
-        (p.display_name || '').toLowerCase().includes(q.toLowerCase())
-      )
-    ).slice(0, 10)
+    standinResults.value = await api.searchPlayers(q)
   } catch { standinResults.value = [] }
 }
 
