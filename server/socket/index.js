@@ -7,6 +7,7 @@ import {
 } from './state.js'
 import { registerAuctionHandlers } from './auction.js'
 import { registerMatchReadyHandlers } from './matchReady.js'
+import { registerQueueHandlers } from './queue.js'
 
 export function initSocket(io) {
   io.on('connection', (socket) => {
@@ -103,6 +104,7 @@ export function initSocket(io) {
     // Register auction handlers
     registerAuctionHandlers(socket, io)
     registerMatchReadyHandlers(socket, io)
+    registerQueueHandlers(socket, io)
 
     // Disconnect
     socket.on('disconnect', () => {

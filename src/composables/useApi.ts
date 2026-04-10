@@ -358,5 +358,26 @@ export function useApi() {
       request(`/api/news/${newsId}/comments/${commentId}`, { method: 'DELETE' }),
     voteComment: (newsId: number, commentId: number, vote: number) =>
       request(`/api/news/${newsId}/comments/${commentId}/vote`, { method: 'POST', body: JSON.stringify({ vote }) }),
+
+    // Queue
+    getQueuePools: () => request('/api/queue/pools'),
+    getQueuePool: (poolId: number) => request(`/api/queue/pools/${poolId}`),
+    getQueueHistory: (params?: { poolId?: number; limit?: number; offset?: number }) => {
+      const qs = new URLSearchParams()
+      if (params?.poolId) qs.set('poolId', String(params.poolId))
+      if (params?.limit) qs.set('limit', String(params.limit))
+      if (params?.offset) qs.set('offset', String(params.offset))
+      return request(`/api/queue/history?${qs}`)
+    },
+    getQueueMatch: (id: number) => request(`/api/queue/match/${id}`),
+
+    // Admin Queue
+    getAdminQueuePools: () => request('/api/admin/queue/pools'),
+    createQueuePool: (data: Record<string, any>) =>
+      request('/api/admin/queue/pools', { method: 'POST', body: JSON.stringify(data) }),
+    updateQueuePool: (id: number, data: Record<string, any>) =>
+      request(`/api/admin/queue/pools/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteQueuePool: (id: number) =>
+      request(`/api/admin/queue/pools/${id}`, { method: 'DELETE' }),
   }
 }

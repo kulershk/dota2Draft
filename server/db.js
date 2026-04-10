@@ -750,6 +750,61 @@ async function migrateToCompetitions() {
     )
   `)
 
+  // ─── Queue matchmaking tables ─────────────────────────────
+  await execute(`
+    CREATE TABLE IF NOT EXISTS queue_pools (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      enabled BOOLEAN DEFAULT TRUE,
+      min_mmr INTEGER DEFAULT 0,
+      max_mmr INTEGER DEFAULT 0,
+      pick_timer INTEGER DEFAULT 30,
+      best_of INTEGER DEFAULT 1,
+      lobby_server_region INTEGER DEFAULT 3,
+      lobby_game_mode INTEGER DEFAULT 2,
+      lobby_league_id INTEGER DEFAULT 0,
+      lobby_dotv_delay INTEGER DEFAULT 1,
+      lobby_cheats BOOLEAN DEFAULT FALSE,
+      lobby_allow_spectating BOOLEAN DEFAULT TRUE,
+      lobby_pause_setting INTEGER DEFAULT 0,
+      lobby_selection_priority INTEGER DEFAULT 0,
+      lobby_cm_pick INTEGER DEFAULT 0,
+      lobby_series_type INTEGER DEFAULT 0,
+      lobby_timeout_minutes INTEGER DEFAULT 10,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `)
+
+  // Make matches.competition_id nullable for queue matches
+  try {
+    await execute(`ALTER TABLE matches ALTER COLUMN competition_id DROP NOT NULL`)
+  } catch {}
+  // Make match_lobbies.competition_id nullable for queue matches
+  try {
+    await execute(`ALTER TABLE match_lobbies ALTER COLUMN competition_id DROP NOT NULL`)
+  } catch {}
+
+  await execute(`
+    CREATE TABLE IF NOT EXISTS queue_matches (
+      id SERIAL PRIMARY KEY,
+      pool_id INTEGER NOT NULL REFERENCES queue_pools(id) ON DELETE CASCADE,
+      match_id INTEGER REFERENCES matches(id) ON DELETE SET NULL,
+      captain1_player_id INTEGER REFERENCES players(id),
+      captain2_player_id INTEGER REFERENCES players(id),
+      team1_players JSONB DEFAULT '[]',
+      team2_players JSONB DEFAULT '[]',
+      all_player_ids JSONB DEFAULT '[]',
+      status TEXT NOT NULL DEFAULT 'picking',
+      created_at TIMESTAMP DEFAULT NOW(),
+      completed_at TIMESTAMP DEFAULT NULL
+    )
+  `)
+
+  // Cancel any queue matches that were in picking state when server restarted
+  try {
+    await execute(`UPDATE queue_matches SET status = 'cancelled' WHERE status = 'picking'`)
+  } catch {}
+
   // Migrate pool players and drafted players
   try {
     const poolPlayers = await query('SELECT * FROM players WHERE in_pool = true OR drafted = 1')

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Newspaper, Users, Trophy, ChevronRight, Settings, ShieldCheck, Bot, Gamepad2, Star, Zap } from 'lucide-vue-next'
+import { Newspaper, Users, Trophy, ChevronRight, Settings, ShieldCheck, Bot, Gamepad2, Star, Zap, Swords } from 'lucide-vue-next'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -19,6 +19,7 @@ const allNav = [
   { labelKey: 'adminGames', icon: Gamepad2, path: '/admin/games', permissions: ['manage_competitions'] },
   { labelKey: 'adminFantasy', icon: Star, path: '/admin/fantasy', permissions: ['manage_competitions', 'manage_own_competitions'] },
   { labelKey: 'adminXpLog', icon: Zap, path: '/admin/xp-log', permissions: ['manage_users'] },
+  { labelKey: 'adminQueuePools', icon: Swords, path: '/admin/queue', permissions: ['manage_competitions'] },
 ]
 
 const adminNav = computed(() =>

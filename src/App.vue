@@ -226,6 +226,16 @@ async function handleClaimAdmin() {
               <Trophy class="w-[15px] h-[15px]" />
               {{ t('leaderboard') }}
             </router-link>
+            <router-link
+              to="/queue"
+              class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] tracking-wide transition-colors"
+              :class="route.path === '/queue'
+                ? 'bg-primary/15 text-primary font-semibold border border-primary/30'
+                : 'text-muted-foreground hover:text-foreground'"
+            >
+              <Swords class="w-[15px] h-[15px]" />
+              {{ t('queue') }}
+            </router-link>
           </nav>
         </div>
 
@@ -385,6 +395,10 @@ async function handleClaimAdmin() {
         <router-link to="/leaderboard" class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-muted-foreground hover:bg-accent hover:text-foreground" @click="mobileMenuOpen = false">
           <Trophy class="w-[18px] h-[18px]" />
           {{ t('leaderboard') }}
+        </router-link>
+        <router-link to="/queue" class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-muted-foreground hover:bg-accent hover:text-foreground" @click="mobileMenuOpen = false">
+          <Swords class="w-[18px] h-[18px]" />
+          {{ t('queue') }}
         </router-link>
         <router-link v-if="isLoggedIn" to="/settings" class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-muted-foreground hover:bg-accent hover:text-foreground" @click="mobileMenuOpen = false">
           <Settings class="w-[18px] h-[18px]" />
