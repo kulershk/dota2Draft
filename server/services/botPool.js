@@ -530,14 +530,14 @@ class BotPool {
       console.log(`[Auto] Game ${gameNumber} of match ${matchId} won by captain ${winnerCaptainId} (${radiantWin ? 'radiant' : 'dire'})`)
 
       // ── XP: game win/loss ──
-      // Check if this is a queue match
-      const queueMatch = await queryOne('SELECT qm.*, qp.xp_win, qp.xp_participate, qp.name AS pool_name FROM queue_matches qm JOIN queue_pools qp ON qp.id = qm.pool_id WHERE qm.match_id = $1', [matchId])
-      if (queueMatch) {
+      // Check if this is a queue match (reuse variable from winner detection, but fetch XP settings)
+      const queueMatchXp = await queryOne('SELECT qm.*, qp.xp_win, qp.xp_participate, qp.name AS pool_name FROM queue_matches qm JOIN queue_pools qp ON qp.id = qm.pool_id WHERE qm.match_id = $1', [matchId])
+      if (queueMatchXp) {
         // Queue match XP
-        const team1Ids = (queueMatch.team1_players || []).map(p => p.playerId)
-        const team2Ids = (queueMatch.team2_players || []).map(p => p.playerId)
+        const team1Ids = (queueMatchXp.team1_players || []).map(p => p.playerId)
+        const team2Ids = (queueMatchXp.team2_players || []).map(p => p.playerId)
         // Determine which team won by matching player steam IDs to radiant/dire
-        const team1SteamIds = new Set((queueMatch.team1_players || []).map(p => p.steamId ? String(BigInt(p.steamId) - 76561197960265728n) : null).filter(Boolean))
+        const team1SteamIds = new Set((queueMatchXp.team1_players || []).map(p => p.steamId ? String(BigInt(p.steamId) - 76561197960265728n) : null).filter(Boolean))
         let team1IsRadiant = true
         if (matchData?.players?.length) {
           let t1Rad = 0, t1Dire = 0
@@ -552,17 +552,17 @@ class BotPool {
         const winIds = team1Won ? team1Ids : team2Ids
         const loseIds = team1Won ? team2Ids : team1Ids
         for (const pid of winIds) {
-          awardXp(pid, queueMatch.xp_win || 15, 'queue_win', 'match_game', `${matchId}:${gameNumber}:${pid}`, {
-            detail: `Queue win (${queueMatch.pool_name})`,
+          awardXp(pid, queueMatchXp.xp_win || 15, 'queue_win', 'match_game', `${matchId}:${gameNumber}:${pid}`, {
+            detail: `Queue win (${queueMatchXp.pool_name})`,
           })
         }
         for (const pid of loseIds) {
-          awardXp(pid, queueMatch.xp_participate || 5, 'queue_loss', 'match_game', `${matchId}:${gameNumber}:${pid}`, {
-            detail: `Queue loss (${queueMatch.pool_name})`,
+          awardXp(pid, queueMatchXp.xp_participate || 5, 'queue_loss', 'match_game', `${matchId}:${gameNumber}:${pid}`, {
+            detail: `Queue loss (${queueMatchXp.pool_name})`,
           })
         }
         // Update queue match status
-        await execute("UPDATE queue_matches SET status = 'completed', completed_at = NOW() WHERE id = $1", [queueMatch.id])
+        await execute("UPDATE queue_matches SET status = 'completed', completed_at = NOW() WHERE id = $1", [queueMatchXp.id])
       } else if (match.competition_id) {
         // Competition match XP
         const comp = await getCompetition(match.competition_id)
