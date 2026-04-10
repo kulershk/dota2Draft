@@ -1047,6 +1047,8 @@ export default {
   queueNoLimit: 'be limito',
   queuePickTimer: 'Pasirinkimo laikmatis',
   queueBestOf: 'Best Of',
+  queueXpWin: 'XP laimėjusiai komandai',
+  queueXpParticipate: 'XP pralaimėjusiai komandai',
   queueLobbySettings: 'Lobio nustatymai',
   adminQueuePools: 'Eilių grupės',
   serverRegion: 'Serverio regionas',

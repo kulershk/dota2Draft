@@ -1055,6 +1055,8 @@ export default {
   queueNoLimit: 'no limit',
   queuePickTimer: 'Pick Timer',
   queueBestOf: 'Best Of',
+  queueXpWin: 'XP for winning team',
+  queueXpParticipate: 'XP for losing team',
   queueLobbySettings: 'Lobby Settings',
   adminQueuePools: 'Queue Pools',
   serverRegion: 'Server Region',

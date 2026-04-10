@@ -28,6 +28,8 @@ const form = ref<Record<string, any>>({
   lobby_cm_pick: 0,
   lobby_series_type: 0,
   lobby_timeout_minutes: 10,
+  xp_win: 15,
+  xp_participate: 5,
 })
 
 function resetForm() {
@@ -36,6 +38,7 @@ function resetForm() {
     lobby_server_region: 3, lobby_game_mode: 2, lobby_league_id: 0, lobby_dotv_delay: 1,
     lobby_cheats: false, lobby_allow_spectating: true, lobby_pause_setting: 0,
     lobby_selection_priority: 0, lobby_cm_pick: 0, lobby_series_type: 0, lobby_timeout_minutes: 10,
+    xp_win: 15, xp_participate: 5,
   }
 }
 
@@ -173,6 +176,16 @@ onMounted(fetchPools)
             <option :value="3">Bo3</option>
             <option :value="5">Bo5</option>
           </select>
+        </div>
+
+        <!-- XP -->
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-muted-foreground">{{ t('queueXpWin') }}</label>
+          <input class="input-field" type="number" v-model.number="form.xp_win" />
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-muted-foreground">{{ t('queueXpParticipate') }}</label>
+          <input class="input-field" type="number" v-model.number="form.xp_participate" />
         </div>
 
         <!-- Lobby Settings -->

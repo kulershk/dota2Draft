@@ -1047,6 +1047,8 @@ export default {
   queueNoLimit: 'bez limita',
   queuePickTimer: 'Izvēles taimeris',
   queueBestOf: 'Best Of',
+  queueXpWin: 'XP uzvarētāju komandai',
+  queueXpParticipate: 'XP zaudētāju komandai',
   queueLobbySettings: 'Lobija iestatījumi',
   adminQueuePools: 'Rindu pūli',
   serverRegion: 'Servera reģions',

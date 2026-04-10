@@ -455,11 +455,30 @@ class BotPool {
       const match = await queryOne('SELECT * FROM matches WHERE id = $1', [matchId])
       if (!match) return
 
-      // Determine which captain's team was radiant by matching player account_ids
+      // Check if this is a queue match (no competition_id)
+      const queueMatch = !match.competition_id ? await queryOne('SELECT * FROM queue_matches WHERE match_id = $1', [matchId]) : null
+
       let winnerCaptainId = null
 
-      if (matchData?.players?.length) {
-        // Get players for each team
+      if (queueMatch) {
+        // Queue match: determine winner from team player steam IDs
+        const team1SteamIds = new Set((queueMatch.team1_players || []).map(p => p.steamId ? String(BigInt(p.steamId) - 76561197960265728n) : null).filter(Boolean))
+        let team1IsRadiant = true // default: team1 = radiant
+        if (matchData?.players?.length) {
+          let t1Rad = 0, t1Dire = 0
+          for (const p of matchData.players) {
+            if (team1SteamIds.has(String(p.account_id || 0))) {
+              if (p.isRadiant) t1Rad++; else t1Dire++
+            }
+          }
+          if (t1Rad > 0 || t1Dire > 0) team1IsRadiant = t1Rad > t1Dire
+        }
+        const team1Won = team1IsRadiant ? radiantWin : !radiantWin
+        // Use captain player IDs as pseudo winner IDs for match_games
+        winnerCaptainId = team1Won ? queueMatch.captain1_player_id : queueMatch.captain2_player_id
+        console.log(`[Auto] Queue match: team1 is ${team1IsRadiant ? 'Radiant' : 'Dire'}, winner=${winnerCaptainId}`)
+      } else if (matchData?.players?.length && match.team1_captain_id) {
+        // Competition match: determine winner from captain team players
         const team1Players = await query(
           `SELECT p.steam_id FROM competition_players cp
            JOIN players p ON p.id = cp.player_id
@@ -470,7 +489,6 @@ class BotPool {
         )
         const team1Steam32 = new Set(team1Players.map(p => p.steam_id ? String(BigInt(p.steam_id) - 76561197960265728n) : null).filter(Boolean))
 
-        // Check which side team1 is on by matching account_ids from OpenDota
         let team1Radiant = 0
         let team1Dire = 0
         for (const p of matchData.players) {
@@ -483,7 +501,6 @@ class BotPool {
 
         const team1IsRadiant = team1Radiant > team1Dire
         if (team1Radiant > 0 || team1Dire > 0) {
-          // We have matches — determine winner based on actual sides
           if (radiantWin) {
             winnerCaptainId = team1IsRadiant ? match.team1_captain_id : match.team2_captain_id
           } else {
@@ -495,7 +512,11 @@ class BotPool {
 
       // Fallback: assume team1=radiant, team2=dire (lobby default)
       if (!winnerCaptainId) {
-        winnerCaptainId = radiantWin ? match.team1_captain_id : match.team2_captain_id
+        if (queueMatch) {
+          winnerCaptainId = radiantWin ? queueMatch.captain1_player_id : queueMatch.captain2_player_id
+        } else {
+          winnerCaptainId = radiantWin ? match.team1_captain_id : match.team2_captain_id
+        }
         console.log(`[Auto] Fallback: assuming team1=radiant`)
       }
 
@@ -509,24 +530,60 @@ class BotPool {
       console.log(`[Auto] Game ${gameNumber} of match ${matchId} won by captain ${winnerCaptainId} (${radiantWin ? 'radiant' : 'dire'})`)
 
       // ── XP: game win/loss ──
-      const comp = await getCompetition(match.competition_id)
-      const settings = parseCompSettings(comp)
-      const loserCaptainId = winnerCaptainId === match.team1_captain_id ? match.team2_captain_id : match.team1_captain_id
-      const winPlayers = await getTeamPlayerIds(winnerCaptainId, match.competition_id)
-      const losePlayers = loserCaptainId ? await getTeamPlayerIds(loserCaptainId, match.competition_id) : []
-      const winCap = await queryOne('SELECT team FROM captains WHERE id = $1', [winnerCaptainId])
-      const loseCap = loserCaptainId ? await queryOne('SELECT team FROM captains WHERE id = $1', [loserCaptainId]) : null
-      for (const pid of winPlayers) {
-        awardXp(pid, settings.xpGameWin, 'game_win', 'match_game', `${matchId}:${gameNumber}:${pid}`, {
-          competitionId: match.competition_id, competitionName: comp.name,
-          detail: `Game ${gameNumber} win vs ${loseCap?.team || 'TBD'}`,
-        })
-      }
-      for (const pid of losePlayers) {
-        awardXp(pid, settings.xpGameLoss, 'game_loss', 'match_game', `${matchId}:${gameNumber}:${pid}`, {
-          competitionId: match.competition_id, competitionName: comp.name,
-          detail: `Game ${gameNumber} loss vs ${winCap?.team || 'TBD'}`,
-        })
+      // Check if this is a queue match
+      const queueMatch = await queryOne('SELECT qm.*, qp.xp_win, qp.xp_participate, qp.name AS pool_name FROM queue_matches qm JOIN queue_pools qp ON qp.id = qm.pool_id WHERE qm.match_id = $1', [matchId])
+      if (queueMatch) {
+        // Queue match XP
+        const team1Ids = (queueMatch.team1_players || []).map(p => p.playerId)
+        const team2Ids = (queueMatch.team2_players || []).map(p => p.playerId)
+        // Determine which team won by matching player steam IDs to radiant/dire
+        const team1SteamIds = new Set((queueMatch.team1_players || []).map(p => p.steamId ? String(BigInt(p.steamId) - 76561197960265728n) : null).filter(Boolean))
+        let team1IsRadiant = true
+        if (matchData?.players?.length) {
+          let t1Rad = 0, t1Dire = 0
+          for (const p of matchData.players) {
+            if (team1SteamIds.has(String(p.account_id || 0))) {
+              if (p.isRadiant) t1Rad++; else t1Dire++
+            }
+          }
+          if (t1Rad > 0 || t1Dire > 0) team1IsRadiant = t1Rad > t1Dire
+        }
+        const team1Won = team1IsRadiant ? radiantWin : !radiantWin
+        const winIds = team1Won ? team1Ids : team2Ids
+        const loseIds = team1Won ? team2Ids : team1Ids
+        for (const pid of winIds) {
+          awardXp(pid, queueMatch.xp_win || 15, 'queue_win', 'match_game', `${matchId}:${gameNumber}:${pid}`, {
+            detail: `Queue win (${queueMatch.pool_name})`,
+          })
+        }
+        for (const pid of loseIds) {
+          awardXp(pid, queueMatch.xp_participate || 5, 'queue_loss', 'match_game', `${matchId}:${gameNumber}:${pid}`, {
+            detail: `Queue loss (${queueMatch.pool_name})`,
+          })
+        }
+        // Update queue match status
+        await execute("UPDATE queue_matches SET status = 'completed', completed_at = NOW() WHERE id = $1", [queueMatch.id])
+      } else if (match.competition_id) {
+        // Competition match XP
+        const comp = await getCompetition(match.competition_id)
+        const settings = parseCompSettings(comp)
+        const loserCaptainId = winnerCaptainId === match.team1_captain_id ? match.team2_captain_id : match.team1_captain_id
+        const winPlayers = await getTeamPlayerIds(winnerCaptainId, match.competition_id)
+        const losePlayers = loserCaptainId ? await getTeamPlayerIds(loserCaptainId, match.competition_id) : []
+        const winCap = await queryOne('SELECT team FROM captains WHERE id = $1', [winnerCaptainId])
+        const loseCap = loserCaptainId ? await queryOne('SELECT team FROM captains WHERE id = $1', [loserCaptainId]) : null
+        for (const pid of winPlayers) {
+          awardXp(pid, settings.xpGameWin, 'game_win', 'match_game', `${matchId}:${gameNumber}:${pid}`, {
+            competitionId: match.competition_id, competitionName: comp.name,
+            detail: `Game ${gameNumber} win vs ${loseCap?.team || 'TBD'}`,
+          })
+        }
+        for (const pid of losePlayers) {
+          awardXp(pid, settings.xpGameLoss, 'game_loss', 'match_game', `${matchId}:${gameNumber}:${pid}`, {
+            competitionId: match.competition_id, competitionName: comp.name,
+            detail: `Game ${gameNumber} loss vs ${winCap?.team || 'TBD'}`,
+          })
+        }
       }
 
       // Recalculate match score from all games
