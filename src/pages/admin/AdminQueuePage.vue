@@ -100,7 +100,7 @@ onMounted(fetchPools)
 </script>
 
 <template>
-  <div>
+  <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[1200px] w-full">
     <div class="flex items-center justify-between mb-6">
       <h2 class="text-xl font-bold">{{ t('adminQueuePools') }}</h2>
       <button class="btn-primary flex items-center gap-1.5 text-sm" @click="startCreate">
