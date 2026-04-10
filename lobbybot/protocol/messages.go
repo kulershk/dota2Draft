@@ -62,14 +62,16 @@ type CreateLobbyCmd struct {
 	ExpectedRadiantTeamId int         `json:"expectedRadiantTeamId"`
 	ExpectedDireTeamId    int         `json:"expectedDireTeamId"`
 	Players             []LobbyPlayer `json:"players"`
+	TimeoutMinutes      int           `json:"timeoutMinutes,omitempty"`
 }
 
 type RejoinLobbyCmd struct {
-	LobbyID  string        `json:"lobbyId"`
-	BotID    string        `json:"botId"`
-	GameName string        `json:"gameName"`
-	Password string        `json:"password"`
-	Players  []LobbyPlayer `json:"players"`
+	LobbyID        string        `json:"lobbyId"`
+	BotID          string        `json:"botId"`
+	GameName       string        `json:"gameName"`
+	Password       string        `json:"password"`
+	Players        []LobbyPlayer `json:"players"`
+	TimeoutMinutes int           `json:"timeoutMinutes,omitempty"`
 }
 
 type CancelLobbyCmd struct {

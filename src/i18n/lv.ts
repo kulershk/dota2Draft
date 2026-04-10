@@ -628,6 +628,7 @@ export default {
   statsPartial: 'Daļēja statistika — gaida OpenDota parsēšanu',
   allGames: 'visas spēles',
   gameStandins: 'Spēles aizvietotāji',
+  gameAlreadyStarted: 'Spēle jau sākusies',
   addStandin: 'aizvietotājs',
   picksBans: 'Piki un bani',
   heroDamage: 'Varoņa bojājumi',

@@ -107,7 +107,10 @@ class BotPool {
   async _sendSync() {
     const bots = await query('SELECT * FROM lobby_bots')
     const activeLobbies = await query(
-      "SELECT * FROM match_lobbies WHERE status IN ('creating', 'waiting', 'launching')"
+      `SELECT ml.*, c.settings AS comp_settings
+       FROM match_lobbies ml
+       LEFT JOIN competitions c ON c.id = ml.competition_id
+       WHERE ml.status IN ('creating', 'waiting', 'launching')`
     )
     this._sendToGo('sync', {
       bots: bots.map(b => ({
@@ -124,6 +127,7 @@ class BotPool {
         password: l.password,
         serverRegion: l.server_region,
         players: l.players_expected || [],
+        timeoutMinutes: Number(l.comp_settings?.lobbyTimeoutMinutes) || 10,
       })),
     })
 
@@ -169,12 +173,15 @@ class BotPool {
         if (activeLobbies.length > 0) {
           console.log(`[Bot ${botId}] Back online with ${activeLobbies.length} active lobby(s), re-syncing`)
           for (const lobby of activeLobbies) {
+            const comp = await queryOne('SELECT settings FROM competitions WHERE id = $1', [lobby.competition_id])
+            const timeoutMinutes = Number(comp?.settings?.lobbyTimeoutMinutes) || 10
             this._sendToGo('rejoin_lobby', {
               lobbyId: String(lobby.id),
               botId: String(botId),
               gameName: lobby.game_name,
               password: lobby.password,
               players: lobby.players_expected || [],
+              timeoutMinutes,
             })
           }
         }
@@ -884,6 +891,7 @@ class BotPool {
     const penaltyRadiant = match.penalty_radiant ?? compSettings.lobbyPenaltyRadiant ?? 0
     const penaltyDire = match.penalty_dire ?? compSettings.lobbyPenaltyDire ?? 0
     const seriesType = compSettings.lobbySeriesType || 0
+    const timeoutMinutes = Number(compSettings.lobbyTimeoutMinutes) || 10
 
     const gameName = options.game_name || `${match.team1_name || 'Team 1'} vs ${match.team2_name || 'Team 2'} - Game ${gameNumber}`
     const password = options.password || Math.random().toString(36).slice(2, 8)
@@ -923,6 +931,7 @@ class BotPool {
       expectedRadiantTeamId: match.team1_dota_id || 0,
       expectedDireTeamId: match.team2_dota_id || 0,
       players: playersExpected.map(p => ({ steamId: p.steam_id, name: p.name, team: p.team })),
+      timeoutMinutes,
     })
 
     return { ...lobby, players_expected: playersExpected }

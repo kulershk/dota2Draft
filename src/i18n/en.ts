@@ -629,6 +629,7 @@ export default {
   statsPartial: 'Partial stats — waiting for OpenDota parse',
   allGames: 'all games',
   gameStandins: 'Game standins',
+  gameAlreadyStarted: 'Game already started',
   addStandin: 'standin',
   picksBans: 'Picks & Bans',
   draft: 'Draft',

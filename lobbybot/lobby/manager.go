@@ -38,6 +38,7 @@ type Lobby struct {
 	Bot             *bot.Bot
 	Status          string
 	MatchID         string
+	TimeoutMinutes  int
 	cancel          context.CancelFunc
 }
 
@@ -46,6 +47,13 @@ type Manager struct {
 	mu         sync.RWMutex
 	botManager *bot.Manager
 	send       SendFunc
+}
+
+func (l *Lobby) timeoutDuration() time.Duration {
+	if l.TimeoutMinutes > 0 {
+		return time.Duration(l.TimeoutMinutes) * time.Minute
+	}
+	return 10 * time.Minute // default
 }
 
 func NewManager(botMgr *bot.Manager, send SendFunc) *Manager {
@@ -104,6 +112,7 @@ func (m *Manager) CreateLobby(cmd protocol.CreateLobbyCmd) error {
 		ExpectedPlayers:       cmd.Players,
 		Bot:             b,
 		Status:          "creating",
+		TimeoutMinutes:  cmd.TimeoutMinutes,
 		cancel:          cancel,
 	}
 	m.lobbies[cmd.LobbyID] = lobby
@@ -177,7 +186,8 @@ func (m *Manager) runLobby(ctx context.Context, lobby *Lobby) {
 	botLog("Lobby ready. Waiting for players to join...")
 	botLog("(Lobby state updates are tracked via GC events)")
 
-	// Wait for game start, cancel, or timeout (5 min max)
+	// Wait for game start, cancel, or timeout
+	timeout := lobby.timeoutDuration()
 	gameStarted := false
 	select {
 	case <-lobby.Bot.GameStartedCh():
@@ -185,9 +195,9 @@ func (m *Manager) runLobby(ctx context.Context, lobby *Lobby) {
 		gameStarted = true
 	case <-ctx.Done():
 		botLog("Lobby cancelled")
-	case <-time.After(5 * time.Minute):
-		botLog("Lobby timed out after 5 minutes — destroying lobby")
-		m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobby.ID, Error: "Lobby timed out (5 min)"})
+	case <-time.After(timeout):
+		botLog(fmt.Sprintf("Lobby timed out after %d minutes — destroying lobby", int(timeout.Minutes())))
+		m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobby.ID, Error: fmt.Sprintf("Lobby timed out (%d min)", int(timeout.Minutes()))})
 	}
 
 	if gameStarted {
@@ -231,6 +241,7 @@ func (m *Manager) RejoinLobby(cmd protocol.RejoinLobbyCmd) error {
 		ExpectedPlayers: cmd.Players,
 		Bot:             b,
 		Status:          "waiting",
+		TimeoutMinutes:  cmd.TimeoutMinutes,
 		cancel:          cancel,
 	}
 	m.lobbies[cmd.LobbyID] = lobby
@@ -270,6 +281,7 @@ func (m *Manager) RejoinLobby(cmd protocol.RejoinLobbyCmd) error {
 
 	// Run the lobby watcher (waits for game start or cancel)
 	go func() {
+		timeout := lobby.timeoutDuration()
 		select {
 		case <-b.GameStartedCh():
 			log.Printf("[Lobby %s] Game started after rejoin", cmd.LobbyID)
@@ -284,9 +296,9 @@ func (m *Manager) RejoinLobby(cmd protocol.RejoinLobbyCmd) error {
 			b.DestroyLobby(destroyCtx)
 			destroyCancel()
 			b.LeaveLobby()
-		case <-time.After(5 * time.Minute):
-			log.Printf("[Lobby %s] Lobby timed out after rejoin (5 min)", cmd.LobbyID)
-			m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: cmd.LobbyID, Error: "Lobby timed out (5 min)"})
+		case <-time.After(timeout):
+			log.Printf("[Lobby %s] Lobby timed out after rejoin (%d min)", cmd.LobbyID, int(timeout.Minutes()))
+			m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: cmd.LobbyID, Error: fmt.Sprintf("Lobby timed out (%d min)", int(timeout.Minutes()))})
 			destroyCtx, destroyCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			b.DestroyLobby(destroyCtx)
 			destroyCancel()

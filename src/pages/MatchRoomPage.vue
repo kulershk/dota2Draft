@@ -104,6 +104,12 @@ const isCaptainInMatch = computed(() => {
   if (!myCaptainId.value || !match.value) return false
   return match.value.team1_captain_id === myCaptainId.value || match.value.team2_captain_id === myCaptainId.value
 })
+const myCaptainTeamKey = computed<'team1' | 'team2' | null>(() => {
+  if (!myCaptainId.value || !match.value) return null
+  if (match.value.team1_captain_id === myCaptainId.value) return 'team1'
+  if (match.value.team2_captain_id === myCaptainId.value) return 'team2'
+  return null
+})
 const isTeamMember = computed(() => {
   if (isCaptainInMatch.value) return true
   if (!match.value || !store.currentUser.value) return false
@@ -114,6 +120,18 @@ const isTeamMember = computed(() => {
   return me.drafted_by === match.value.team1_captain_id || me.drafted_by === match.value.team2_captain_id
 })
 const bothTeamsAssigned = computed(() => !!match.value?.team1_captain_id && !!match.value?.team2_captain_id)
+
+function gameStarted(gameNumber: number): boolean {
+  const g = allGames.value.find((g: any) => g.game_number === gameNumber)
+  if (g?.dotabuff_id) return true
+  const lobby = lobbyStatuses.value[gameNumber]
+  return !!(lobby?.dota_match_id)
+}
+
+function gameStartedById(gameId: number): boolean {
+  const g = allGames.value.find((g: any) => g.id === gameId)
+  return g ? gameStarted(g.game_number) : false
+}
 
 const nextGameNumber = computed(() => {
   for (const g of allGames.value) {
@@ -802,17 +820,17 @@ function goBack() {
                   <span class="text-muted-foreground text-xs">→</span>
                   <UserName :id="standins.find((s: any) => s.original_player_id === p.id && !s.match_game_id)!.standin_player_id" :name="standins.find((s: any) => s.original_player_id === p.id && !s.match_game_id)!.standin_display_name" :avatar-url="standins.find((s: any) => s.original_player_id === p.id && !s.match_game_id)!.standin_avatar" size="sm" />
                   <span class="text-[9px] text-muted-foreground">({{ t('allGames') }})</span>
-                  <button v-if="showAdminPanel" class="ml-auto text-destructive hover:text-destructive/80" @click="removeStandin(standins.find((s: any) => s.original_player_id === p.id && !s.match_game_id)!.id)">
+                  <button v-if="showAdminPanel || myCaptainTeamKey === teamKey" class="ml-auto text-destructive hover:text-destructive/80" @click="removeStandin(standins.find((s: any) => s.original_player_id === p.id && !s.match_game_id)!.id)">
                     <X class="w-3 h-3" />
                   </button>
                 </template>
                 <template v-else>
                   <UserName :id="p.id" :name="p.name" :avatar-url="p.avatar_url" size="sm" />
                   <span v-if="p.is_captain" class="text-[10px] font-medium text-primary bg-primary/10 px-1.5 py-0.5 rounded">C</span>
-                  <span v-if="p.mmr && !showAdminPanel" class="text-[10px] text-muted-foreground ml-auto">{{ p.mmr }}</span>
-                  <!-- Standin button (edit mode) -->
+                  <span v-if="p.mmr && !showAdminPanel && myCaptainTeamKey !== teamKey" class="text-[10px] text-muted-foreground ml-auto">{{ p.mmr }}</span>
+                  <!-- Standin button (admin or own team captain) -->
                   <button
-                    v-if="showAdminPanel"
+                    v-if="showAdminPanel || myCaptainTeamKey === teamKey"
                     class="ml-auto text-[10px] text-muted-foreground hover:text-primary transition-colors px-1.5 py-0.5 rounded hover:bg-accent"
                     @click="addingStandin = { team: teamKey, originalPlayerId: p.id, captainId: teamKey === 'team1' ? match.team1_captain_id : match.team2_captain_id }"
                   >standin</button>
@@ -824,13 +842,13 @@ function goBack() {
                 <span class="line-through opacity-50">{{ p.name }}</span>
                 <span class="text-muted-foreground">→</span>
                 <span>{{ gs.standin_display_name }}</span>
-                <button v-if="showAdminPanel" class="text-destructive hover:text-destructive/80" @click="removeStandin(gs.id)">
+                <button v-if="(showAdminPanel || myCaptainTeamKey === teamKey) && !gameStartedById(gs.match_game_id)" class="text-destructive hover:text-destructive/80" @click="removeStandin(gs.id)">
                   <X class="w-3 h-3" />
                 </button>
               </div>
             </div>
             <!-- Standin search (inline when selecting for this team) -->
-            <div v-if="showAdminPanel && addingStandin?.team === teamKey" class="flex flex-col gap-1.5 mt-1 pt-2 border-t border-border/30">
+            <div v-if="(showAdminPanel || myCaptainTeamKey === teamKey) && addingStandin?.team === teamKey" class="flex flex-col gap-1.5 mt-1 pt-2 border-t border-border/30">
               <div class="flex items-center gap-2 text-[10px] text-muted-foreground">
                 <span>Replacing <strong class="text-foreground">{{ teamRosters[teamKey].find((p: any) => p.id === addingStandin!.originalPlayerId)?.name }}</strong></span>
                 <button class="text-destructive hover:underline" @click="addingStandin = null; standinSearch = ''; standinResults = []">{{ t('cancel') }}</button>
@@ -1228,8 +1246,8 @@ function goBack() {
           </div>
         </div>
 
-        <!-- Per-game standins (admin mode) -->
-        <div v-if="showAdminPanel && game.id" class="px-5 py-2 border-b border-border/30 bg-accent/10">
+        <!-- Per-game standins (admin or captain) -->
+        <div v-if="(showAdminPanel || isCaptainInMatch) && game.id" class="px-5 py-2 border-b border-border/30 bg-accent/10">
           <div class="flex items-center gap-2 flex-wrap">
             <span class="text-[10px] font-medium text-muted-foreground">{{ t('gameStandins') }}:</span>
             <template v-for="gs in standins.filter((s: any) => s.match_game_id === game.id)" :key="gs.id">
@@ -1237,24 +1255,29 @@ function goBack() {
                 <span class="line-through opacity-50">{{ gs.original_display_name }}</span>
                 <span class="text-muted-foreground">→</span>
                 <span>{{ gs.standin_display_name }}</span>
-                <button class="text-destructive hover:text-destructive/80" @click="removeStandin(gs.id)">
+                <button v-if="(showAdminPanel || gs.captain_id === myCaptainId) && !gameStartedById(gs.match_game_id)" class="text-destructive hover:text-destructive/80" @click="removeStandin(gs.id)">
                   <X class="w-3 h-3" />
                 </button>
               </span>
             </template>
-            <div class="flex items-center gap-1">
-              <select
-                class="input-field text-[10px] py-0.5 px-1"
-                @change="($event.target as HTMLSelectElement).value && (addingStandin = { team: 'team1', originalPlayerId: Number(($event.target as HTMLSelectElement).value.split(':')[0]), captainId: Number(($event.target as HTMLSelectElement).value.split(':')[1]), matchGameId: game.id }); ($event.target as HTMLSelectElement).value = ''"
-              >
-                <option value="">+ {{ t('addStandin') }}</option>
-                <template v-for="teamKey in (['team1', 'team2'] as const)" :key="teamKey">
-                  <option v-for="p in teamRosters[teamKey].filter((p: any) => !standins.find((s: any) => s.original_player_id === p.id && s.match_game_id === game.id))" :key="p.id"
-                    :value="`${p.id}:${teamKey === 'team1' ? match.team1_captain_id : match.team2_captain_id}`"
-                  >{{ p.name }}</option>
-                </template>
-              </select>
-            </div>
+            <template v-if="!gameStarted(game.game_number)">
+              <div class="flex items-center gap-1">
+                <select
+                  class="input-field text-[10px] py-0.5 px-1"
+                  @change="($event.target as HTMLSelectElement).value && (addingStandin = { team: 'team1', originalPlayerId: Number(($event.target as HTMLSelectElement).value.split(':')[0]), captainId: Number(($event.target as HTMLSelectElement).value.split(':')[1]), matchGameId: game.id }); ($event.target as HTMLSelectElement).value = ''"
+                >
+                  <option value="">+ {{ t('addStandin') }}</option>
+                  <template v-for="teamKey in (['team1', 'team2'] as const)" :key="teamKey">
+                    <template v-if="showAdminPanel || myCaptainTeamKey === teamKey">
+                      <option v-for="p in teamRosters[teamKey].filter((p: any) => !standins.find((s: any) => s.original_player_id === p.id && s.match_game_id === game.id))" :key="p.id"
+                        :value="`${p.id}:${teamKey === 'team1' ? match.team1_captain_id : match.team2_captain_id}`"
+                      >{{ p.name }}</option>
+                    </template>
+                  </template>
+                </select>
+              </div>
+            </template>
+            <span v-else class="text-[10px] text-muted-foreground italic">{{ t('gameAlreadyStarted') }}</span>
           </div>
           <!-- Inline search for game-specific standin -->
           <div v-if="addingStandin?.matchGameId === game.id" class="flex flex-col gap-1.5 mt-2 pt-2 border-t border-border/30">

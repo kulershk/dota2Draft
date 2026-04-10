@@ -628,6 +628,7 @@ export default {
   statsPartial: 'Dalinė statistika — laukiama OpenDota analizės',
   allGames: 'visi žaidimai',
   gameStandins: 'Žaidimo pakaitiniai',
+  gameAlreadyStarted: 'Žaidimas jau prasidėjo',
   addStandin: 'pakaitinis',
   picksBans: 'Pikai ir banai',
   heroDamage: 'Herojaus žala',

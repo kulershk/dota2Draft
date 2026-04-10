@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { query, queryOne, execute } from '../db.js'
 import { requireCompPermission, requirePermission } from '../middleware/permissions.js'
-import { getSessionPlayerId, getTokenFromReq } from '../middleware/auth.js'
+import { getSessionPlayerId, getTokenFromReq, getAuthPlayer } from '../middleware/auth.js'
 import { getCompetition, getCaptains, parseCompSettings } from '../helpers/competition.js'
 import { awardXp, getTeamPlayerIds } from '../helpers/xp.js'
 import { advanceWinner, generateEliminationBracket, generateGroupMatches, generateDoubleEliminationBracket } from '../helpers/tournament.js'
@@ -417,16 +417,46 @@ export default function createTournamentRouter(io) {
   router.post('/api/competitions/:compId/tournament/matches/:matchId/standins', async (req, res) => {
     const compId = Number(req.params.compId)
     const matchId = Number(req.params.matchId)
-    const admin = await requireCompPermission(req, res, compId)
-    if (!admin) return
+
+    // Allow admins OR the captain of the team being modified
+    const player = await getAuthPlayer(req)
+    if (!player) return res.status(401).json({ error: 'Not authenticated' })
 
     const { original_player_id, standin_player_id, captain_id, match_game_id } = req.body
     if (!original_player_id || !standin_player_id || !captain_id) {
       return res.status(400).json({ error: 'original_player_id, standin_player_id, and captain_id required' })
     }
 
+    const isAdmin = await requireCompPermission(req, { status: () => ({ json: () => {} }) }, compId)
+    if (!isAdmin) {
+      // Check if user is the captain for the team they're modifying
+      const captain = await queryOne(
+        'SELECT * FROM captains WHERE id = $1 AND competition_id = $2',
+        [captain_id, compId]
+      )
+      if (!captain || captain.player_id !== player.id) {
+        return res.status(403).json({ error: 'Permission denied' })
+      }
+      // Verify captain is in this match
+      const match = await queryOne(
+        'SELECT * FROM matches WHERE id = $1 AND (team1_captain_id = $2 OR team2_captain_id = $2)',
+        [matchId, captain_id]
+      )
+      if (!match) return res.status(403).json({ error: 'Permission denied' })
+    }
+
     try {
       const gameId = match_game_id || null
+
+      // Block if the game already started (has dota_match_id)
+      if (gameId) {
+        const lobby = await queryOne(
+          "SELECT dota_match_id FROM match_lobbies WHERE match_id = $1 AND game_number = (SELECT game_number FROM match_games WHERE id = $2) AND dota_match_id IS NOT NULL",
+          [matchId, gameId]
+        )
+        if (lobby) return res.status(400).json({ error: 'Cannot change standins for a game that has already started' })
+      }
+
       const standin = await queryOne(`
         INSERT INTO match_standins (match_id, original_player_id, standin_player_id, captain_id, match_game_id)
         VALUES ($1, $2, $3, $4, $5)
@@ -443,10 +473,37 @@ export default function createTournamentRouter(io) {
 
   router.delete('/api/competitions/:compId/tournament/matches/:matchId/standins/:id', async (req, res) => {
     const compId = Number(req.params.compId)
-    const admin = await requireCompPermission(req, res, compId)
-    if (!admin) return
+    const matchId = Number(req.params.matchId)
+    const standinId = Number(req.params.id)
 
-    await execute('DELETE FROM match_standins WHERE id = $1 AND match_id = $2', [req.params.id, req.params.matchId])
+    const player = await getAuthPlayer(req)
+    if (!player) return res.status(401).json({ error: 'Not authenticated' })
+
+    const standinRow = await queryOne('SELECT * FROM match_standins WHERE id = $1 AND match_id = $2', [standinId, matchId])
+    if (!standinRow) return res.status(404).json({ error: 'Standin not found' })
+
+    const isAdmin = await requireCompPermission(req, { status: () => ({ json: () => {} }) }, compId)
+    if (!isAdmin) {
+      // Check if user is the captain who owns this standin
+      const captain = await queryOne(
+        'SELECT * FROM captains WHERE id = $1 AND competition_id = $2',
+        [standinRow.captain_id, compId]
+      )
+      if (!captain || captain.player_id !== player.id) {
+        return res.status(403).json({ error: 'Permission denied' })
+      }
+    }
+
+    // Block if the game already started (has dota_match_id)
+    if (standinRow.match_game_id) {
+      const lobby = await queryOne(
+        "SELECT dota_match_id FROM match_lobbies WHERE match_id = $1 AND game_number = (SELECT game_number FROM match_games WHERE id = $2) AND dota_match_id IS NOT NULL",
+        [matchId, standinRow.match_game_id]
+      )
+      if (lobby) return res.status(400).json({ error: 'Cannot change standins for a game that has already started' })
+    }
+
+    await execute('DELETE FROM match_standins WHERE id = $1 AND match_id = $2', [standinId, matchId])
     if (io) io.to(`comp:${compId}`).emit('tournament:updated')
     res.json({ ok: true })
   })
