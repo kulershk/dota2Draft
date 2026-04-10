@@ -107,24 +107,28 @@ export default function createQueueRouter(io) {
 
     if (!name) return res.status(400).json({ error: 'Name is required' })
 
-    const pool = await queryOne(`
-      INSERT INTO queue_pools (
-        name, enabled, min_mmr, max_mmr, pick_timer, best_of,
-        lobby_server_region, lobby_game_mode, lobby_league_id,
-        lobby_dotv_delay, lobby_cheats, lobby_allow_spectating,
-        lobby_pause_setting, lobby_selection_priority, lobby_cm_pick,
-        lobby_series_type, lobby_timeout_minutes
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
-      RETURNING *
-    `, [
-      name, enabled !== false, min_mmr || 0, max_mmr || 0,
-      pick_timer || 30, best_of || 1,
-      lobby_server_region || 3, lobby_game_mode || 2, lobby_league_id || 0,
-      lobby_dotv_delay ?? 1, !!lobby_cheats, lobby_allow_spectating !== false,
-      lobby_pause_setting || 0, lobby_selection_priority || 0, lobby_cm_pick || 0,
-      lobby_series_type || 0, lobby_timeout_minutes || 10,
-    ])
-    res.status(201).json(pool)
+    try {
+      const pool = await queryOne(`
+        INSERT INTO queue_pools (
+          name, enabled, min_mmr, max_mmr, pick_timer, best_of,
+          lobby_server_region, lobby_game_mode, lobby_league_id,
+          lobby_dotv_delay, lobby_cheats, lobby_allow_spectating,
+          lobby_pause_setting, lobby_selection_priority, lobby_cm_pick,
+          lobby_series_type, lobby_timeout_minutes
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+        RETURNING *
+      `, [
+        name, enabled !== false, min_mmr || 0, max_mmr || 0,
+        pick_timer || 30, best_of || 1,
+        lobby_server_region || 3, lobby_game_mode || 2, lobby_league_id || 0,
+        lobby_dotv_delay ?? 1, !!lobby_cheats, lobby_allow_spectating !== false,
+        lobby_pause_setting || 0, lobby_selection_priority || 0, lobby_cm_pick || 0,
+        lobby_series_type || 0, lobby_timeout_minutes || 10,
+      ])
+      res.status(201).json(pool)
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
   })
 
   // ── Admin: update pool ──
@@ -132,41 +136,49 @@ export default function createQueueRouter(io) {
     const admin = await requirePermission(req, res, 'manage_competitions')
     if (!admin) return
 
-    const poolId = Number(req.params.id)
-    const existing = await queryOne('SELECT * FROM queue_pools WHERE id = $1', [poolId])
-    if (!existing) return res.status(404).json({ error: 'Pool not found' })
+    try {
+      const poolId = Number(req.params.id)
+      const existing = await queryOne('SELECT * FROM queue_pools WHERE id = $1', [poolId])
+      if (!existing) return res.status(404).json({ error: 'Pool not found' })
 
-    const fields = [
-      'name', 'enabled', 'min_mmr', 'max_mmr', 'pick_timer', 'best_of',
-      'lobby_server_region', 'lobby_game_mode', 'lobby_league_id',
-      'lobby_dotv_delay', 'lobby_cheats', 'lobby_allow_spectating',
-      'lobby_pause_setting', 'lobby_selection_priority', 'lobby_cm_pick',
-      'lobby_series_type', 'lobby_timeout_minutes',
-    ]
-    const setClauses = []
-    const values = []
-    for (const f of fields) {
-      if (req.body[f] !== undefined) {
-        values.push(req.body[f])
-        setClauses.push(`${f} = $${values.length}`)
+      const fields = [
+        'name', 'enabled', 'min_mmr', 'max_mmr', 'pick_timer', 'best_of',
+        'lobby_server_region', 'lobby_game_mode', 'lobby_league_id',
+        'lobby_dotv_delay', 'lobby_cheats', 'lobby_allow_spectating',
+        'lobby_pause_setting', 'lobby_selection_priority', 'lobby_cm_pick',
+        'lobby_series_type', 'lobby_timeout_minutes',
+      ]
+      const setClauses = []
+      const values = []
+      for (const f of fields) {
+        if (req.body[f] !== undefined) {
+          values.push(req.body[f])
+          setClauses.push(`${f} = $${values.length}`)
+        }
       }
-    }
-    if (setClauses.length === 0) return res.json(existing)
+      if (setClauses.length === 0) return res.json(existing)
 
-    values.push(poolId)
-    const updated = await queryOne(
-      `UPDATE queue_pools SET ${setClauses.join(', ')} WHERE id = $${values.length} RETURNING *`,
-      values
-    )
-    res.json(updated)
+      values.push(poolId)
+      const updated = await queryOne(
+        `UPDATE queue_pools SET ${setClauses.join(', ')} WHERE id = $${values.length} RETURNING *`,
+        values
+      )
+      res.json(updated)
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
   })
 
   // ── Admin: delete pool ──
   router.delete('/api/admin/queue/pools/:id', async (req, res) => {
     const admin = await requirePermission(req, res, 'manage_competitions')
     if (!admin) return
-    await execute('DELETE FROM queue_pools WHERE id = $1', [req.params.id])
-    res.json({ ok: true })
+    try {
+      await execute('DELETE FROM queue_pools WHERE id = $1', [req.params.id])
+      res.json({ ok: true })
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
   })
 
   return router
