@@ -58,6 +58,17 @@ class BotPool {
     this.goWs.send(JSON.stringify({ type: type_, data }))
   }
 
+  // Resolve the correct socket rooms for a lobby (competition or queue match)
+  async _lobbyRooms(lobby) {
+    if (lobby.competition_id) {
+      return this.io.to(`comp:${lobby.competition_id}`).to(`match:${lobby.match_id}`)
+    }
+    // Queue match — find queue match room
+    const qm = await queryOne('SELECT id FROM queue_matches WHERE match_id = $1', [lobby.match_id])
+    if (qm) return this.io.to(`queue-match:${qm.id}`)
+    return this.io.to(`match:${lobby.match_id}`)
+  }
+
   async _handleGoMessage(msg) {
     const { type, data } = msg
     try {
@@ -212,7 +223,7 @@ class BotPool {
     )
     const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyId])
     if (lobby && this.io) {
-      this.io.to(`comp:${lobby.competition_id}`).to(`match:${lobby.match_id}`).emit('lobby:statusUpdate', {
+      (await this._lobbyRooms(lobby)).emit('lobby:statusUpdate', {
         matchId: lobby.match_id,
         gameNumber: lobby.game_number,
         status: data.status,
@@ -246,7 +257,7 @@ class BotPool {
     const lobbyId = Number(data.lobbyId)
     const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyId])
     if (lobby && this.io) {
-      this.io.to(`comp:${lobby.competition_id}`).to(`match:${lobby.match_id}`).emit('lobby:statusUpdate', {
+      (await this._lobbyRooms(lobby)).emit('lobby:statusUpdate', {
         matchId: lobby.match_id,
         gameNumber: lobby.game_number,
         status: lobby.status,
@@ -311,17 +322,20 @@ class BotPool {
 
     // Broadcast
     if (this.io) {
-      this.io.to(`comp:${lobby.competition_id}`).to(`match:${lobby.match_id}`).emit('lobby:statusUpdate', {
+      const rooms = await this._lobbyRooms(lobby)
+      rooms.emit('lobby:statusUpdate', {
         matchId: lobby.match_id,
         gameNumber: lobby.game_number,
         status: 'completed',
       })
-      this.io.to(`comp:${lobby.competition_id}`).to(`match:${lobby.match_id}`).emit('lobby:matchIdCaptured', {
+      rooms.emit('lobby:matchIdCaptured', {
         matchId: lobby.match_id,
         gameNumber: lobby.game_number,
         dotaMatchId,
       })
-      this.io.to(`comp:${lobby.competition_id}`).emit('tournament:updated')
+      if (lobby.competition_id) {
+        this.io.to(`comp:${lobby.competition_id}`).emit('tournament:updated')
+      }
     }
 
     // Schedule OpenDota stats fetch
@@ -348,7 +362,7 @@ class BotPool {
 
     // Broadcast to frontend
     if (this.io) {
-      this.io.to(`comp:${lobby.competition_id}`).to(`match:${lobby.match_id}`).emit('lobby:teamIds', {
+      (await this._lobbyRooms(lobby)).emit('lobby:teamIds', {
         matchId: lobby.match_id,
         gameNumber: lobby.game_number,
         radiantTeamId,
@@ -386,7 +400,7 @@ class BotPool {
         [lobbyId]
       )
       if (this.io) {
-        this.io.to(`comp:${lobby.competition_id}`).to(`match:${lobby.match_id}`).emit('lobby:statusUpdate', {
+        (await this._lobbyRooms(lobby)).emit('lobby:statusUpdate', {
           matchId: lobby.match_id,
           gameNumber: lobby.game_number,
           status: 'waiting',
@@ -408,7 +422,7 @@ class BotPool {
     }
 
     if (this.io) {
-      this.io.to(`comp:${lobby.competition_id}`).to(`match:${lobby.match_id}`).emit('lobby:statusUpdate', {
+      (await this._lobbyRooms(lobby)).emit('lobby:statusUpdate', {
         matchId: lobby.match_id,
         gameNumber: lobby.game_number,
         status: 'error',
@@ -1034,7 +1048,7 @@ class BotPool {
     await execute("UPDATE match_lobbies SET status = 'launching', updated_at = NOW() WHERE id = $1", [lobbyDbId])
     const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyDbId])
     if (lobby && this.io) {
-      this.io.to(`comp:${lobby.competition_id}`).to(`match:${lobby.match_id}`).emit('lobby:statusUpdate', {
+      (await this._lobbyRooms(lobby)).emit('lobby:statusUpdate', {
         matchId: lobby.match_id,
         gameNumber: lobby.game_number,
         status: 'launching',
