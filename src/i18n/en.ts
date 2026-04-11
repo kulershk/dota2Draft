@@ -1042,6 +1042,7 @@ export default {
   queueMatchCancelled: 'Match Cancelled',
   queueBackToQueue: 'Back to Queue',
   queueLobbyCreated: 'Lobby Created!',
+  queueYouAreInvited: 'You are invited',
   queueLobbyName: 'Lobby Name',
   queueLobbyPassword: 'Password',
   queueCreatingLobby: 'Creating lobby...',

@@ -53,7 +53,7 @@ const queuePlayers = ref<QueuePlayer[]>([])
 const activeMatch = ref<QueueMatchFound | null>(null)
 const pickState = ref<QueuePickState | null>(null)
 const teamsFormed = ref<{ team1: QueuePlayer[]; team2: QueuePlayer[] } | null>(null)
-const lobbyInfo = ref<{ matchId: number; gameName: string; password: string } | null>(null)
+const lobbyInfo = ref<{ matchId: number; gameName: string; password: string; expiresAt: number } | null>(null)
 const queueError = ref<string | null>(null)
 const cancelled = ref<string | null>(null)
 
@@ -103,8 +103,8 @@ function initSocket() {
     teamsFormed.value = { team1: data.team1, team2: data.team2 }
   })
 
-  socket.on('queue:lobbyCreated', (data: { queueMatchId: number; matchId: number; lobbyInfo: { gameName: string; password: string } }) => {
-    lobbyInfo.value = { matchId: data.matchId, gameName: data.lobbyInfo.gameName, password: data.lobbyInfo.password }
+  socket.on('queue:lobbyCreated', (data: { queueMatchId: number; matchId: number; lobbyInfo: { gameName: string; password: string }; lobbyExpiresAt?: number }) => {
+    lobbyInfo.value = { matchId: data.matchId, gameName: data.lobbyInfo.gameName, password: data.lobbyInfo.password, expiresAt: data.lobbyExpiresAt || 0 }
   })
 
   socket.on('queue:cancelled', (data: { queueMatchId: number; reason: string }) => {

@@ -145,14 +145,17 @@ export function registerQueueHandlers(socket, io) {
             const qm = await queryOne('SELECT match_id FROM queue_matches WHERE id = $1', [qmId])
             if (qm?.match_id) {
               const lobby = await queryOne(
-                "SELECT game_name, password FROM match_lobbies WHERE match_id = $1 ORDER BY id DESC LIMIT 1",
+                "SELECT game_name, password, created_at FROM match_lobbies WHERE match_id = $1 ORDER BY id DESC LIMIT 1",
                 [qm.match_id]
               )
               if (lobby) {
+                const timeoutMs = (match.pool?.lobby_timeout_minutes || 10) * 60 * 1000
+                const expiresAt = match.lobbyExpiresAt || (new Date(lobby.created_at).getTime() + timeoutMs)
                 socket.emit('queue:lobbyCreated', {
                   queueMatchId: qmId,
                   matchId: qm.match_id,
                   lobbyInfo: { gameName: lobby.game_name, password: lobby.password },
+                  lobbyExpiresAt: expiresAt,
                 })
               }
             }
@@ -394,6 +397,9 @@ async function finalizeQueueMatch(queueMatchId, io) {
     await execute(`UPDATE queue_matches SET status = 'live' WHERE id = $1`, [queueMatchId])
     match.status = 'live'
 
+    const timeoutMs = (match.pool?.lobby_timeout_minutes || 10) * 60 * 1000
+    match.lobbyExpiresAt = Date.now() + timeoutMs
+
     io.to(`queue-match:${queueMatchId}`).emit('queue:lobbyCreated', {
       queueMatchId,
       matchId: matchRow.id,
@@ -401,6 +407,7 @@ async function finalizeQueueMatch(queueMatchId, io) {
         gameName: lobby.game_name,
         password: lobby.password,
       },
+      lobbyExpiresAt: match.lobbyExpiresAt,
     })
   } catch (e) {
     console.error('[Queue] Failed to create lobby:', e.message)

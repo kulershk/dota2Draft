@@ -1034,6 +1034,7 @@ export default {
   queueMatchCancelled: 'Spēle atcelta',
   queueBackToQueue: 'Atpakaļ uz rindu',
   queueLobbyCreated: 'Lobijs izveidots!',
+  queueYouAreInvited: 'Tu esi uzaicināts',
   queueLobbyName: 'Lobija nosaukums',
   queueLobbyPassword: 'Parole',
   queueCreatingLobby: 'Veido lobiju...',

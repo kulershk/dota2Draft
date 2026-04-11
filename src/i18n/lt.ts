@@ -1034,6 +1034,7 @@ export default {
   queueMatchCancelled: 'Žaidimas atšauktas',
   queueBackToQueue: 'Grįžti į eilę',
   queueLobbyCreated: 'Lobis sukurtas!',
+  queueYouAreInvited: 'Jūs esate pakviestas',
   queueLobbyName: 'Lobio pavadinimas',
   queueLobbyPassword: 'Slaptažodis',
   queueCreatingLobby: 'Kuriamas lobis...',

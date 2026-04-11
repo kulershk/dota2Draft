@@ -52,6 +52,18 @@ function formatTimer(ms: number): string {
   return `${s}s`
 }
 
+const lobbyTimeLeft = computed(() => {
+  if (!queue.lobbyInfo.value?.expiresAt) return null
+  return Math.max(0, queue.lobbyInfo.value.expiresAt - now.value)
+})
+
+function formatLobbyTimer(ms: number): string {
+  const totalSec = Math.ceil(ms / 1000)
+  const m = Math.floor(totalSec / 60)
+  const s = totalSec % 60
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
 function selectPool(poolId: number) {
   selectedPoolId.value = poolId
   queue.requestState(poolId)
@@ -121,19 +133,79 @@ onUnmounted(() => {
           </div>
 
           <!-- Lobby Created -->
-          <div v-else-if="queue.lobbyInfo.value" class="card px-8 py-12 text-center">
-            <div class="w-14 h-14 rounded-full bg-green-500/{{ totalPlayers }} flex items-center justify-center mx-auto mb-4">
-              <Check class="w-7 h-7 text-green-500" />
-            </div>
-            <p class="text-xl font-bold mb-4">{{ t('queueLobbyCreated') }}</p>
-            <div class="inline-flex flex-col gap-3 bg-accent/50 rounded-xl px-8 py-5">
+          <div v-else-if="queue.lobbyInfo.value" class="card overflow-hidden">
+            <!-- Green accent bar -->
+            <div class="h-1 bg-green-500"></div>
+
+            <!-- Header -->
+            <div class="px-6 py-4 border-b border-border/30 flex items-center justify-between">
               <div class="flex items-center gap-3">
-                <span class="text-xs text-muted-foreground w-20 text-right">{{ t('queueLobbyName') }}</span>
+                <Check class="w-5 h-5 text-green-500" />
+                <span class="text-lg font-bold">{{ t('queueLobbyCreated') }}</span>
+                <span class="text-xs font-semibold bg-green-500/15 text-green-500 px-2.5 py-1 rounded-full">
+                  {{ t('queueYouAreInvited') }}
+                </span>
+              </div>
+              <div v-if="lobbyTimeLeft != null && lobbyTimeLeft > 0" class="flex items-center gap-2">
+                <Timer class="w-4 h-4" :class="lobbyTimeLeft < 60000 ? 'text-destructive' : 'text-muted-foreground'" />
+                <span class="font-mono font-bold text-xl tabular-nums" :class="lobbyTimeLeft < 60000 ? 'text-destructive' : 'text-foreground'">
+                  {{ formatLobbyTimer(lobbyTimeLeft) }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Lobby info -->
+            <div class="px-6 py-4 border-b border-border/30 flex items-center justify-center gap-8 bg-accent/30">
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-muted-foreground">{{ t('queueLobbyName') }}:</span>
                 <span class="font-mono font-bold text-sm">{{ queue.lobbyInfo.value.gameName }}</span>
               </div>
-              <div class="flex items-center gap-3">
-                <span class="text-xs text-muted-foreground w-20 text-right">{{ t('queueLobbyPassword') }}</span>
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-muted-foreground">{{ t('queueLobbyPassword') }}:</span>
                 <span class="font-mono font-bold text-sm select-all">{{ queue.lobbyInfo.value.password }}</span>
+              </div>
+            </div>
+
+            <!-- Teams -->
+            <div class="grid grid-cols-2 min-h-[200px]">
+              <!-- Team 1 (Radiant) -->
+              <div class="p-5 border-r border-border/30">
+                <div class="flex items-center gap-2 mb-4">
+                  <div class="w-2.5 h-2.5 rounded-full bg-green-500"></div>
+                  <span class="text-sm font-bold text-green-400 uppercase tracking-wider">{{ t('queueRadiant') }}</span>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <div v-for="(p, idx) in (queue.teamsFormed.value?.team1 || [])" :key="p.playerId"
+                    class="flex items-center gap-2.5 px-3 py-2 rounded-lg"
+                    :class="idx === 0 ? 'bg-green-500/8 border border-green-500/15' : 'bg-accent/50'">
+                    <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-7 h-7 rounded-full" :class="idx === 0 ? 'ring-2 ring-green-500/30' : ''" />
+                    <div class="flex-1 min-w-0">
+                      <div class="text-sm font-semibold truncate">{{ p.name }}</div>
+                      <div class="text-[10px] text-muted-foreground">{{ p.mmr }} MMR</div>
+                    </div>
+                    <span v-if="idx === 0" class="text-[10px] font-bold text-green-400 bg-green-500/10 px-2 py-0.5 rounded">CPT</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Team 2 (Dire) -->
+              <div class="p-5">
+                <div class="flex items-center gap-2 mb-4">
+                  <div class="w-2.5 h-2.5 rounded-full bg-red-500"></div>
+                  <span class="text-sm font-bold text-red-400 uppercase tracking-wider">{{ t('queueDire') }}</span>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <div v-for="(p, idx) in (queue.teamsFormed.value?.team2 || [])" :key="p.playerId"
+                    class="flex items-center gap-2.5 px-3 py-2 rounded-lg"
+                    :class="idx === 0 ? 'bg-red-500/8 border border-red-500/15' : 'bg-accent/50'">
+                    <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-7 h-7 rounded-full" :class="idx === 0 ? 'ring-2 ring-red-500/30' : ''" />
+                    <div class="flex-1 min-w-0">
+                      <div class="text-sm font-semibold truncate">{{ p.name }}</div>
+                      <div class="text-[10px] text-muted-foreground">{{ p.mmr }} MMR</div>
+                    </div>
+                    <span v-if="idx === 0" class="text-[10px] font-bold text-red-400 bg-red-500/10 px-2 py-0.5 rounded">CPT</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
