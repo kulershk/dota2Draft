@@ -125,14 +125,39 @@ export function registerQueueHandlers(socket, io) {
       players: getPoolQueuePlayers(poolId),
     })
 
-    // If player is in an active match, re-send pick state
+    // If player is in an active match, re-send appropriate state
     if (playerId && playerInMatch.has(playerId)) {
       const qmId = playerInMatch.get(playerId)
       const match = activeQueueMatches.get(qmId)
       if (match) {
         socket.join(`queue-match:${qmId}`)
         socket.emit('queue:matchFound', buildMatchFoundPayload(match))
-        socket.emit('queue:pickState', buildPickStatePayload(match))
+
+        if (match.status === 'picking') {
+          socket.emit('queue:pickState', buildPickStatePayload(match))
+        } else {
+          // Teams are already formed (lobby_creating or live)
+          const team1 = [match.captain1, ...match.captain1Picks]
+          const team2 = [match.captain2, ...match.captain2Picks]
+          socket.emit('queue:teamsFormed', { queueMatchId: qmId, team1, team2 })
+
+          if (match.status === 'live') {
+            const qm = await queryOne('SELECT match_id FROM queue_matches WHERE id = $1', [qmId])
+            if (qm?.match_id) {
+              const lobby = await queryOne(
+                "SELECT game_name, password FROM match_lobbies WHERE match_id = $1 ORDER BY id DESC LIMIT 1",
+                [qm.match_id]
+              )
+              if (lobby) {
+                socket.emit('queue:lobbyCreated', {
+                  queueMatchId: qmId,
+                  matchId: qm.match_id,
+                  lobbyInfo: { gameName: lobby.game_name, password: lobby.password },
+                })
+              }
+            }
+          }
+        }
       }
     }
   })
