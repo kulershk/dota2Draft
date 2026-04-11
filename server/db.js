@@ -640,13 +640,15 @@ export async function initDb() {
       lobby_cm_pick INTEGER DEFAULT 0,
       lobby_series_type INTEGER DEFAULT 0,
       lobby_timeout_minutes INTEGER DEFAULT 10,
+      team_size INTEGER DEFAULT 5,
       xp_win INTEGER DEFAULT 15,
       xp_participate INTEGER DEFAULT 5,
       created_at TIMESTAMP DEFAULT NOW()
     )
   `)
 
-  // Add xp columns to queue_pools if missing (existing databases)
+  // Add columns to queue_pools if missing (existing databases)
+  try { await execute('ALTER TABLE queue_pools ADD COLUMN team_size INTEGER DEFAULT 5') } catch {}
   try { await execute('ALTER TABLE queue_pools ADD COLUMN xp_win INTEGER DEFAULT 15') } catch {}
   try { await execute('ALTER TABLE queue_pools ADD COLUMN xp_participate INTEGER DEFAULT 5') } catch {}
 

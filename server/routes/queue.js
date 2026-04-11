@@ -98,7 +98,7 @@ export default function createQueueRouter(io) {
     if (!admin) return
 
     const {
-      name, enabled, min_mmr, max_mmr, pick_timer, best_of,
+      name, enabled, min_mmr, max_mmr, pick_timer, best_of, team_size,
       lobby_server_region, lobby_game_mode, lobby_league_id,
       lobby_dotv_delay, lobby_cheats, lobby_allow_spectating,
       lobby_pause_setting, lobby_selection_priority, lobby_cm_pick,
@@ -111,17 +111,17 @@ export default function createQueueRouter(io) {
     try {
       const pool = await queryOne(`
         INSERT INTO queue_pools (
-          name, enabled, min_mmr, max_mmr, pick_timer, best_of,
+          name, enabled, min_mmr, max_mmr, pick_timer, best_of, team_size,
           lobby_server_region, lobby_game_mode, lobby_league_id,
           lobby_dotv_delay, lobby_cheats, lobby_allow_spectating,
           lobby_pause_setting, lobby_selection_priority, lobby_cm_pick,
           lobby_series_type, lobby_timeout_minutes,
           xp_win, xp_participate
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
         RETURNING *
       `, [
         name, enabled !== false, min_mmr || 0, max_mmr || 0,
-        pick_timer || 30, best_of || 1,
+        pick_timer || 30, best_of || 1, team_size || 5,
         lobby_server_region || 3, lobby_game_mode || 2, lobby_league_id || 0,
         lobby_dotv_delay ?? 1, !!lobby_cheats, lobby_allow_spectating !== false,
         lobby_pause_setting || 0, lobby_selection_priority || 0, lobby_cm_pick || 0,
@@ -145,7 +145,7 @@ export default function createQueueRouter(io) {
       if (!existing) return res.status(404).json({ error: 'Pool not found' })
 
       const fields = [
-        'name', 'enabled', 'min_mmr', 'max_mmr', 'pick_timer', 'best_of',
+        'name', 'enabled', 'min_mmr', 'max_mmr', 'pick_timer', 'best_of', 'team_size',
         'lobby_server_region', 'lobby_game_mode', 'lobby_league_id',
         'lobby_dotv_delay', 'lobby_cheats', 'lobby_allow_spectating',
         'lobby_pause_setting', 'lobby_selection_priority', 'lobby_cm_pick',

@@ -28,13 +28,14 @@ const form = ref<Record<string, any>>({
   lobby_cm_pick: 0,
   lobby_series_type: 0,
   lobby_timeout_minutes: 10,
+  team_size: 5,
   xp_win: 15,
   xp_participate: 5,
 })
 
 function resetForm() {
   form.value = {
-    name: '', enabled: true, min_mmr: 0, max_mmr: 0, pick_timer: 30, best_of: 1,
+    name: '', enabled: true, min_mmr: 0, max_mmr: 0, pick_timer: 30, best_of: 1, team_size: 5,
     lobby_server_region: 3, lobby_game_mode: 2, lobby_league_id: 0, lobby_dotv_delay: 1,
     lobby_cheats: false, lobby_allow_spectating: true, lobby_pause_setting: 0,
     lobby_selection_priority: 0, lobby_cm_pick: 0, lobby_series_type: 0, lobby_timeout_minutes: 10,
@@ -121,7 +122,8 @@ onMounted(fetchPools)
               {{ pool.enabled ? 'Enabled' : 'Disabled' }}
             </span>
             <span class="text-xs text-muted-foreground ml-3">
-              MMR: {{ pool.min_mmr || 0 }}{{ pool.max_mmr ? `-${pool.max_mmr}` : '+' }}
+              {{ pool.team_size || 5 }}v{{ pool.team_size || 5 }}
+              | MMR: {{ pool.min_mmr || 0 }}{{ pool.max_mmr ? `-${pool.max_mmr}` : '+' }}
               | Pick: {{ pool.pick_timer }}s
               | Region: {{ SERVER_REGIONS[pool.lobby_server_region] || pool.lobby_server_region }}
               | League: {{ pool.lobby_league_id || 'None' }}
@@ -175,6 +177,16 @@ onMounted(fetchPools)
             <option :value="1">Bo1</option>
             <option :value="3">Bo3</option>
             <option :value="5">Bo5</option>
+          </select>
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-muted-foreground">{{ t('queueTeamSize') }}</label>
+          <select class="input-field" v-model.number="form.team_size">
+            <option :value="1">1v1</option>
+            <option :value="2">2v2</option>
+            <option :value="3">3v3</option>
+            <option :value="4">4v4</option>
+            <option :value="5">5v5</option>
           </select>
         </div>
 

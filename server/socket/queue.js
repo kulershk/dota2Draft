@@ -2,12 +2,30 @@ import { query, queryOne, execute } from '../db.js'
 import { socketPlayers } from './state.js'
 import {
   poolQueues, activeQueueMatches, queuePickTimers,
-  playerInQueue, playerInMatch, PICK_ORDER,
+  playerInQueue, playerInMatch,
   getPoolQueue, getPoolQueueCount, getPoolQueuePlayers, clearPickTimer,
 } from './queueState.js'
 import { botPool } from '../services/botPool.js'
 
-const PLAYERS_PER_MATCH = 10
+// Generate pick order for a given team size
+// For 5v5: [1,2,2,1,1,2,2,1] (8 picks for 8 non-captain players)
+// For 1v1: no picks needed (both are captains)
+function generatePickOrder(teamSize) {
+  if (teamSize <= 1) return [] // 1v1: no picks, both players are captains
+  const picks = []
+  const totalPicks = (teamSize - 1) * 2 // each team needs teamSize-1 more players
+  // Standard alternating: 1, 2, 2, 1, 1, 2, 2, 1, ...
+  for (let i = 0; i < totalPicks; i++) {
+    const phase = Math.floor(i / 2) // 0,0,1,1,2,2,...
+    if (i === 0) picks.push(1) // first pick always captain 1
+    else if (i % 2 === 1) picks.push(picks[i - 1]) // same as previous (back-to-back)
+    else picks.push(picks[i - 1] === 1 ? 2 : 1) // switch
+  }
+  return picks
+}
+
+// Cache pool sizes to avoid DB lookups on every join check
+const poolSizeCache = new Map() // poolId -> { teamSize, totalPlayers }
 
 export function registerQueueHandlers(socket, io) {
 
@@ -46,11 +64,16 @@ export function registerQueueHandlers(socket, io) {
       playerInQueue.set(playerId, poolId)
       socket.join(`queue:${poolId}`)
 
+      // Cache pool size
+      const teamSize = pool.team_size || 5
+      const totalPlayers = teamSize * 2
+      poolSizeCache.set(poolId, { teamSize, totalPlayers })
+
       // Broadcast updated queue
       broadcastQueueUpdate(io, poolId)
 
       // Check if enough players
-      if (q.size >= PLAYERS_PER_MATCH) {
+      if (q.size >= totalPlayers) {
         await startQueueMatch(poolId, io)
       }
     } catch (e) {
@@ -80,7 +103,7 @@ export function registerQueueHandlers(socket, io) {
     if (!match) return socket.emit('queue:error', { message: 'Match not found' })
 
     // Validate it's this player's turn
-    const currentCaptainNum = PICK_ORDER[match.pickIndex]
+    const currentCaptainNum = match.pickOrder[match.pickIndex]
     const currentCaptain = currentCaptainNum === 1 ? match.captain1 : match.captain2
     if (currentCaptain.playerId !== playerId) return socket.emit('queue:error', { message: 'Not your turn to pick' })
 
@@ -160,13 +183,17 @@ function broadcastQueueUpdate(io, poolId) {
 
 async function startQueueMatch(poolId, io) {
   const q = getPoolQueue(poolId)
-  if (q.size < PLAYERS_PER_MATCH) return
+  const pool = await queryOne('SELECT * FROM queue_pools WHERE id = $1', [poolId])
+  const teamSize = pool?.team_size || 5
+  const totalPlayers = teamSize * 2
 
-  // Take first 10 players from queue
+  if (q.size < totalPlayers) return
+
+  // Take players from queue
   const players = []
   for (const [pid, info] of q) {
     players.push(info)
-    if (players.length >= PLAYERS_PER_MATCH) break
+    if (players.length >= totalPlayers) break
   }
 
   // Remove them from queue
@@ -181,8 +208,7 @@ async function startQueueMatch(poolId, io) {
   const captain2 = players[1]
   const available = players.slice(2)
 
-  // Get pool settings for pick timer
-  const pool = await queryOne('SELECT * FROM queue_pools WHERE id = $1', [poolId])
+  const pickOrder = generatePickOrder(teamSize)
   const pickTimer = pool?.pick_timer || 30
 
   // Insert queue_matches row
@@ -196,6 +222,8 @@ async function startQueueMatch(poolId, io) {
     id: queueMatchId,
     poolId,
     pool,
+    teamSize,
+    pickOrder,
     captain1,
     captain2,
     captain1Picks: [],
@@ -220,11 +248,15 @@ async function startQueueMatch(poolId, io) {
   // Emit match found
   io.to(`queue-match:${queueMatchId}`).emit('queue:matchFound', buildMatchFoundPayload(match))
 
-  // Broadcast updated queue count (10 fewer)
+  // Broadcast updated queue count
   broadcastQueueUpdate(io, poolId)
 
-  // Start pick timer for captain 1
-  startPickTimer(queueMatchId, io)
+  // For 1v1 (no picks needed), go straight to finalize
+  if (pickOrder.length === 0) {
+    finalizeQueueMatch(queueMatchId, io)
+  } else {
+    startPickTimer(queueMatchId, io)
+  }
 }
 
 function joinPlayersToRoom(io, players, room) {
@@ -267,7 +299,7 @@ function makePick(queueMatchId, match, pickedIdx, io) {
   clearPickTimer(queueMatchId)
 
   const picked = match.availablePlayers.splice(pickedIdx, 1)[0]
-  const captainNum = PICK_ORDER[match.pickIndex]
+  const captainNum = match.pickOrder[match.pickIndex]
 
   if (captainNum === 1) {
     match.captain1Picks.push(picked)
@@ -283,7 +315,7 @@ function makePick(queueMatchId, match, pickedIdx, io) {
   })
 
   // Check if all picks done
-  if (match.pickIndex >= PICK_ORDER.length) {
+  if (match.pickIndex >= match.pickOrder.length) {
     finalizeQueueMatch(queueMatchId, io)
   } else {
     startPickTimer(queueMatchId, io)
@@ -388,13 +420,14 @@ function buildMatchFoundPayload(match) {
     captain1: match.captain1,
     captain2: match.captain2,
     availablePlayers: match.availablePlayers,
-    pickOrder: PICK_ORDER,
+    pickOrder: match.pickOrder,
+    teamSize: match.teamSize,
     pickTimer: match.pickTimer,
   }
 }
 
 function buildPickStatePayload(match) {
-  const currentCaptainNum = match.pickIndex < PICK_ORDER.length ? PICK_ORDER[match.pickIndex] : null
+  const currentCaptainNum = match.pickIndex < match.pickOrder.length ? match.pickOrder[match.pickIndex] : null
   return {
     queueMatchId: match.id,
     currentPicker: currentCaptainNum,

@@ -1047,6 +1047,7 @@ export default {
   queueNoLimit: 'be limito',
   queuePickTimer: 'Pasirinkimo laikmatis',
   queueBestOf: 'Best Of',
+  queueTeamSize: 'Komandos dydis',
   queueXpWin: 'XP laimėjusiai komandai',
   queueXpParticipate: 'XP pralaimėjusiai komandai',
   queueLobbySettings: 'Lobio nustatymai',

@@ -15,6 +15,9 @@ const queue = useQueueStore()
 const selectedPoolId = ref<number | null>(null)
 
 const selectedPool = computed(() => queue.pools.value.find(p => p.id === selectedPoolId.value) || null)
+const teamSize = computed(() => (selectedPool.value as any)?.team_size || 5)
+const totalPlayers = computed(() => teamSize.value * 2)
+const emptySlots = computed(() => teamSize.value - 1) // per team, excluding captain
 
 const currentUserId = computed(() => store.currentUser.value?.id || null)
 
@@ -87,7 +90,7 @@ onUnmounted(() => {
     <!-- Hero header -->
     <div class="border-b border-border/50">
       <div class="max-w-5xl mx-auto px-4 md:px-8 pt-10 pb-8 flex flex-col items-center text-center gap-4">
-        <div class="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-1">
+        <div class="w-12 h-12 rounded-xl bg-primary/{{ totalPlayers }} flex items-center justify-center mb-1">
           <Swords class="w-6 h-6 text-primary" />
         </div>
         <h1 class="text-2xl md:text-3xl font-bold">{{ t('queue') }}</h1>
@@ -109,7 +112,7 @@ onUnmounted(() => {
 
           <!-- Cancelled -->
           <div v-if="queue.cancelled.value" class="card px-8 py-12 text-center">
-            <div class="w-14 h-14 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
+            <div class="w-14 h-14 rounded-full bg-destructive/{{ totalPlayers }} flex items-center justify-center mx-auto mb-4">
               <X class="w-7 h-7 text-destructive" />
             </div>
             <p class="text-xl font-bold mb-2">{{ t('queueMatchCancelled') }}</p>
@@ -119,7 +122,7 @@ onUnmounted(() => {
 
           <!-- Lobby Created -->
           <div v-else-if="queue.lobbyInfo.value" class="card px-8 py-12 text-center">
-            <div class="w-14 h-14 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-4">
+            <div class="w-14 h-14 rounded-full bg-green-500/{{ totalPlayers }} flex items-center justify-center mx-auto mb-4">
               <Check class="w-7 h-7 text-green-500" />
             </div>
             <p class="text-xl font-bold mb-4">{{ t('queueLobbyCreated') }}</p>
@@ -185,7 +188,7 @@ onUnmounted(() => {
                     <div class="text-sm font-semibold truncate">{{ queue.activeMatch.value.captain1.name }}</div>
                     <div class="text-[10px] text-muted-foreground">{{ queue.activeMatch.value.captain1.mmr }} MMR</div>
                   </div>
-                  <span class="text-[10px] font-bold text-green-400 bg-green-500/10 px-2 py-0.5 rounded">CPT</span>
+                  <span class="text-[10px] font-bold text-green-400 bg-green-500/{{ totalPlayers }} px-2 py-0.5 rounded">CPT</span>
                 </div>
                 <!-- Picked players -->
                 <div class="flex flex-col gap-1">
@@ -196,7 +199,7 @@ onUnmounted(() => {
                     <span class="text-[10px] text-muted-foreground tabular-nums">{{ p.mmr }}</span>
                   </div>
                   <!-- Empty slots -->
-                  <div v-for="i in (4 - queue.pickState.value.captain1Picks.length)" :key="'e1-' + i"
+                  <div v-for="i in (emptySlots - queue.pickState.value.captain1Picks.length)" :key="'e1-' + i"
                     class="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-dashed border-border/40">
                     <div class="w-6 h-6 rounded-full bg-accent/50"></div>
                     <span class="text-sm text-muted-foreground/30">---</span>
@@ -214,7 +217,7 @@ onUnmounted(() => {
                     v-for="p in queue.pickState.value.availablePlayers" :key="p.playerId"
                     class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-all text-left"
                     :class="isMyTurn
-                      ? 'hover:bg-primary/10 hover:ring-1 hover:ring-primary/30 cursor-pointer'
+                      ? 'hover:bg-primary/{{ totalPlayers }} hover:ring-1 hover:ring-primary/30 cursor-pointer'
                       : 'cursor-default opacity-60'"
                     :disabled="!isMyTurn"
                     @click="isMyTurn && handlePick(p.playerId)"
@@ -240,7 +243,7 @@ onUnmounted(() => {
                     <div class="text-sm font-semibold truncate">{{ queue.activeMatch.value.captain2.name }}</div>
                     <div class="text-[10px] text-muted-foreground">{{ queue.activeMatch.value.captain2.mmr }} MMR</div>
                   </div>
-                  <span class="text-[10px] font-bold text-red-400 bg-red-500/10 px-2 py-0.5 rounded">CPT</span>
+                  <span class="text-[10px] font-bold text-red-400 bg-red-500/{{ totalPlayers }} px-2 py-0.5 rounded">CPT</span>
                 </div>
                 <!-- Picked players -->
                 <div class="flex flex-col gap-1">
@@ -251,7 +254,7 @@ onUnmounted(() => {
                     <span class="text-[10px] text-muted-foreground tabular-nums">{{ p.mmr }}</span>
                   </div>
                   <!-- Empty slots -->
-                  <div v-for="i in (4 - queue.pickState.value.captain2Picks.length)" :key="'e2-' + i"
+                  <div v-for="i in (emptySlots - queue.pickState.value.captain2Picks.length)" :key="'e2-' + i"
                     class="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-dashed border-border/40">
                     <div class="w-6 h-6 rounded-full bg-accent/50"></div>
                     <span class="text-sm text-muted-foreground/30">---</span>
@@ -280,6 +283,7 @@ onUnmounted(() => {
                 <div class="flex-1 min-w-0">
                   <div class="font-semibold truncate">{{ pool.name }}</div>
                   <div class="text-xs text-muted-foreground flex items-center gap-3 mt-0.5">
+                    <span>{{ pool.team_size || 5 }}v{{ pool.team_size || 5 }}</span>
                     <span v-if="pool.min_mmr || pool.max_mmr">
                       MMR {{ pool.min_mmr || 0 }}{{ pool.max_mmr ? `–${pool.max_mmr}` : '+' }}
                     </span>
@@ -292,7 +296,7 @@ onUnmounted(() => {
                     <span class="font-mono font-bold" :class="selectedPoolId === pool.id ? 'text-primary' : ''">
                       {{ selectedPoolId === pool.id ? queue.queueCount.value : '—' }}
                     </span>
-                    <span class="text-muted-foreground text-xs">/10</span>
+                    <span class="text-muted-foreground text-xs">/{{ totalPlayers }}</span>
                   </div>
                 </div>
               </div>
@@ -306,12 +310,12 @@ onUnmounted(() => {
               <div class="flex items-center gap-4">
                 <div class="flex items-center gap-2">
                   <div class="flex gap-0.5">
-                    <div v-for="i in 10" :key="i"
+                    <div v-for="i in totalPlayers" :key="i"
                       class="w-2 h-6 rounded-sm transition-colors"
                       :class="i <= queue.queueCount.value ? 'bg-primary' : 'bg-accent'"
                     />
                   </div>
-                  <span class="font-mono text-lg font-bold tabular-nums ml-2">{{ queue.queueCount.value }}<span class="text-muted-foreground font-normal">/10</span></span>
+                  <span class="font-mono text-lg font-bold tabular-nums ml-2">{{ queue.queueCount.value }}<span class="text-muted-foreground font-normal">/{{ totalPlayers }}</span></span>
                 </div>
               </div>
               <div>
@@ -321,7 +325,7 @@ onUnmounted(() => {
                   {{ t('queueJoin') }}
                 </button>
                 <button v-else
-                  class="relative px-8 py-2.5 rounded-lg text-sm font-semibold border border-primary/30 text-primary bg-primary/5 hover:bg-primary/10 transition-colors flex items-center gap-2"
+                  class="relative px-8 py-2.5 rounded-lg text-sm font-semibold border border-primary/30 text-primary bg-primary/5 hover:bg-primary/{{ totalPlayers }} transition-colors flex items-center gap-2"
                   @click="handleLeave">
                   <Loader2 class="w-4 h-4 animate-spin" />
                   {{ t('queueSearching') }}...
@@ -332,7 +336,7 @@ onUnmounted(() => {
 
             <!-- Error -->
             <div v-if="queue.queueError.value" class="px-6 pb-4">
-              <div class="px-3 py-2 rounded-lg bg-destructive/10 text-destructive text-sm">
+              <div class="px-3 py-2 rounded-lg bg-destructive/{{ totalPlayers }} text-destructive text-sm">
                 {{ queue.queueError.value }}
               </div>
             </div>
@@ -369,7 +373,7 @@ onUnmounted(() => {
                   <img v-if="qm.captain2_avatar" :src="qm.captain2_avatar" class="w-7 h-7 rounded-full" />
                 </div>
                 <span class="text-[10px] font-semibold px-2.5 py-1 rounded-full"
-                  :class="qm.status === 'completed' ? 'bg-green-500/10 text-green-500' : qm.status === 'live' ? 'bg-amber-500/10 text-amber-500' : 'bg-accent text-muted-foreground'">
+                  :class="qm.status === 'completed' ? 'bg-green-500/{{ totalPlayers }} text-green-500' : qm.status === 'live' ? 'bg-amber-500/{{ totalPlayers }} text-amber-500' : 'bg-accent text-muted-foreground'">
                   {{ qm.status === 'completed' ? t('matchCompleted') : qm.status === 'live' ? t('matchLive') : qm.status }}
                 </span>
               </div>
