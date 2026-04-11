@@ -637,12 +637,16 @@ class BotPool {
       }
 
       // Recalculate match score from all games
+      // For queue matches, use captain player IDs from queue_matches; for comp matches use captains IDs
+      const cap1Id = queueMatch ? queueMatch.captain1_player_id : match.team1_captain_id
+      const cap2Id = queueMatch ? queueMatch.captain2_player_id : match.team2_captain_id
+
       const games = await query(
         'SELECT winner_captain_id FROM match_games WHERE match_id = $1 AND winner_captain_id IS NOT NULL',
         [matchId]
       )
-      const score1 = games.filter(g => g.winner_captain_id === match.team1_captain_id).length
-      const score2 = games.filter(g => g.winner_captain_id === match.team2_captain_id).length
+      const score1 = games.filter(g => g.winner_captain_id === cap1Id).length
+      const score2 = games.filter(g => g.winner_captain_id === cap2Id).length
       const bestOf = match.best_of || 3
       const winsNeeded = Math.ceil(bestOf / 2)
 
@@ -652,15 +656,15 @@ class BotPool {
         // Bo2: always play both games, then mark completed
         if (games.length >= 2) {
           newStatus = 'completed'
-          if (score1 > score2) matchWinner = match.team1_captain_id
-          else if (score2 > score1) matchWinner = match.team2_captain_id
+          if (score1 > score2) matchWinner = cap1Id
+          else if (score2 > score1) matchWinner = cap2Id
           // 1-1 draw: matchWinner stays null
         }
       } else if (score1 >= winsNeeded) {
-        matchWinner = match.team1_captain_id
+        matchWinner = cap1Id
         newStatus = 'completed'
       } else if (score2 >= winsNeeded) {
-        matchWinner = match.team2_captain_id
+        matchWinner = cap2Id
         newStatus = 'completed'
       }
 
@@ -669,8 +673,8 @@ class BotPool {
         [score1, score2, matchWinner, newStatus, matchId]
       )
 
-      // ── XP: match win (series) ──
-      if (matchWinner && newStatus === 'completed') {
+      // ── XP: match win (series) — competition only ──
+      if (matchWinner && newStatus === 'completed' && match.competition_id) {
         const matchWinPlayers = await getTeamPlayerIds(matchWinner, match.competition_id)
         const matchLoserId = matchWinner === match.team1_captain_id ? match.team2_captain_id : match.team1_captain_id
         const matchLoseCap = matchLoserId ? await queryOne('SELECT team FROM captains WHERE id = $1', [matchLoserId]) : null

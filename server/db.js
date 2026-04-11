@@ -658,6 +658,10 @@ export async function initDb() {
   try { await execute('ALTER TABLE queue_pools ADD COLUMN lobby_penalty_radiant INTEGER DEFAULT 0') } catch {}
   try { await execute('ALTER TABLE queue_pools ADD COLUMN lobby_penalty_dire INTEGER DEFAULT 0') } catch {}
 
+  // Drop FK constraints on winner_captain_id so queue matches can store player IDs
+  try { await execute('ALTER TABLE match_games DROP CONSTRAINT IF EXISTS match_games_winner_captain_id_fkey') } catch {}
+  try { await execute('ALTER TABLE matches DROP CONSTRAINT IF EXISTS matches_winner_captain_id_fkey') } catch {}
+
   // Make matches.competition_id nullable for queue matches
   try { await execute(`ALTER TABLE matches ALTER COLUMN competition_id DROP NOT NULL`) } catch {}
   // Make match_lobbies.competition_id nullable for queue matches
