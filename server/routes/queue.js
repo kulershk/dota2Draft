@@ -4,6 +4,7 @@ import { requirePermission } from '../middleware/permissions.js'
 import { getAuthPlayer } from '../middleware/auth.js'
 import { activeQueueMatches, playerInMatch, clearPickTimer } from '../socket/queueState.js'
 import { socketPlayers } from '../socket/state.js'
+import { botPool } from '../services/botPool.js'
 
 export default function createQueueRouter(io) {
   const router = Router()
@@ -260,6 +261,18 @@ export default function createQueueRouter(io) {
 
       // Always update DB status
       await execute(`UPDATE queue_matches SET status = 'cancelled' WHERE id = $1`, [qmId])
+
+      // Cancel the Dota 2 lobby via bot if one exists
+      const qm = await queryOne('SELECT match_id FROM queue_matches WHERE id = $1', [qmId])
+      if (qm?.match_id) {
+        const lobbies = await query(
+          "SELECT id FROM match_lobbies WHERE match_id = $1 AND status NOT IN ('completed', 'cancelled', 'error')",
+          [qm.match_id]
+        )
+        for (const lobby of lobbies) {
+          try { await botPool.cancelLobby(lobby.id) } catch (e) { console.error('[Queue] Failed to cancel lobby:', e.message) }
+        }
+      }
 
       res.json({ ok: true })
     } catch (e) {
