@@ -26,6 +26,9 @@ const form = ref<Record<string, any>>({
   lobby_pause_setting: 0,
   lobby_selection_priority: 0,
   lobby_cm_pick: 0,
+  lobby_auto_assign_teams: true,
+  lobby_penalty_radiant: 0,
+  lobby_penalty_dire: 0,
   lobby_series_type: 0,
   lobby_timeout_minutes: 10,
   team_size: 5,
@@ -38,7 +41,9 @@ function resetForm() {
     name: '', enabled: true, min_mmr: 0, max_mmr: 0, pick_timer: 30, best_of: 1, team_size: 5,
     lobby_server_region: 3, lobby_game_mode: 2, lobby_league_id: 0, lobby_dotv_delay: 1,
     lobby_cheats: false, lobby_allow_spectating: true, lobby_pause_setting: 0,
-    lobby_selection_priority: 0, lobby_cm_pick: 0, lobby_series_type: 0, lobby_timeout_minutes: 10,
+    lobby_selection_priority: 0, lobby_cm_pick: 0, lobby_auto_assign_teams: true,
+    lobby_penalty_radiant: 0, lobby_penalty_dire: 0,
+    lobby_series_type: 0, lobby_timeout_minutes: 10,
     xp_win: 15, xp_participate: 5,
   }
 }
@@ -95,10 +100,13 @@ const SERVER_REGIONS: Record<number, string> = {
   14: 'Chile', 15: 'Peru', 16: 'India', 17: 'Japan', 19: 'Taiwan',
 }
 
-const GAME_MODES: Record<number, string> = {
-  1: 'All Pick', 2: "Captain's Mode", 3: 'Random Draft',
-  4: 'Single Draft', 5: 'All Random', 22: 'Ranked All Pick',
-}
+const GAME_MODES: [number, string][] = [
+  [1, 'gameModeAP'], [2, 'gameModeCM'], [3, 'gameModeRD'],
+  [4, 'gameModeSD'], [5, 'gameModeAR'], [8, 'gameModeReverseCM'],
+  [11, 'gameModeMO'], [12, 'gameModeLP'], [16, 'gameModeCD'],
+  [18, 'gameModeABD'], [20, 'gameModeARDM'], [21, 'gameMode1v1'],
+  [22, 'gameModeAD'], [23, 'gameModeTurbo'],
+]
 
 onMounted(fetchPools)
 </script>
@@ -214,7 +222,7 @@ onMounted(fetchPools)
         <div class="flex flex-col gap-1">
           <label class="text-xs text-muted-foreground">{{ t('gameMode') }}</label>
           <select class="input-field" v-model.number="form.lobby_game_mode">
-            <option v-for="(name, id) in GAME_MODES" :key="id" :value="Number(id)">{{ name }}</option>
+            <option v-for="[id, key] in GAME_MODES" :key="id" :value="id">{{ t(key) }}</option>
           </select>
         </div>
         <div class="flex flex-col gap-1">
@@ -241,7 +249,11 @@ onMounted(fetchPools)
             <option :value="2">Bo5</option>
           </select>
         </div>
-        <div class="flex items-center gap-4 col-span-2">
+        <div class="flex items-center gap-4 col-span-2 flex-wrap">
+          <label class="flex items-center gap-1.5">
+            <input type="checkbox" :checked="form.lobby_auto_assign_teams" @change="form.lobby_auto_assign_teams = ($event.target as HTMLInputElement).checked" />
+            <span class="text-sm">{{ t('lobbyAutoAssignTeams') }}</span>
+          </label>
           <label class="flex items-center gap-1.5">
             <input type="checkbox" :checked="form.lobby_cheats" @change="form.lobby_cheats = ($event.target as HTMLInputElement).checked" />
             <span class="text-sm">Cheats</span>
@@ -250,6 +262,39 @@ onMounted(fetchPools)
             <input type="checkbox" :checked="form.lobby_allow_spectating" @change="form.lobby_allow_spectating = ($event.target as HTMLInputElement).checked" />
             <span class="text-sm">Allow Spectating</span>
           </label>
+        </div>
+        <p class="text-xs text-muted-foreground col-span-2 -mt-2">{{ t('lobbyAutoAssignTeamsHint') }}</p>
+
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-muted-foreground">{{ t('lobbyPauseSetting') }}</label>
+          <select class="input-field" v-model.number="form.lobby_pause_setting">
+            <option :value="0">{{ t('pauseUnlimited') }}</option>
+            <option :value="1">{{ t('pauseLimited') }}</option>
+            <option :value="2">{{ t('pauseDisabled') }}</option>
+          </select>
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-muted-foreground">{{ t('lobbySelectionPriority') }}</label>
+          <select class="input-field" v-model.number="form.lobby_selection_priority">
+            <option :value="0">{{ t('selectionPriorityManual') }}</option>
+            <option :value="1">{{ t('selectionPriorityAutomatic') }}</option>
+          </select>
+        </div>
+        <div v-if="form.lobby_selection_priority === 0" class="flex flex-col gap-1">
+          <label class="text-xs text-muted-foreground">{{ t('lobbyCmPick') }}</label>
+          <select class="input-field" v-model.number="form.lobby_cm_pick">
+            <option :value="0">{{ t('cmPickRandom') }}</option>
+            <option :value="1">{{ t('cmPickRadiant') }}</option>
+            <option :value="2">{{ t('cmPickDire') }}</option>
+          </select>
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-muted-foreground">{{ t('lobbyPenaltyRadiant') }}</label>
+          <input class="input-field" type="number" v-model.number="form.lobby_penalty_radiant" />
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-muted-foreground">{{ t('lobbyPenaltyDire') }}</label>
+          <input class="input-field" type="number" v-model.number="form.lobby_penalty_dire" />
         </div>
       </div>
 

@@ -102,6 +102,7 @@ export default function createQueueRouter(io) {
       lobby_server_region, lobby_game_mode, lobby_league_id,
       lobby_dotv_delay, lobby_cheats, lobby_allow_spectating,
       lobby_pause_setting, lobby_selection_priority, lobby_cm_pick,
+      lobby_auto_assign_teams, lobby_penalty_radiant, lobby_penalty_dire,
       lobby_series_type, lobby_timeout_minutes,
       xp_win, xp_participate,
     } = req.body
@@ -115,9 +116,10 @@ export default function createQueueRouter(io) {
           lobby_server_region, lobby_game_mode, lobby_league_id,
           lobby_dotv_delay, lobby_cheats, lobby_allow_spectating,
           lobby_pause_setting, lobby_selection_priority, lobby_cm_pick,
+          lobby_auto_assign_teams, lobby_penalty_radiant, lobby_penalty_dire,
           lobby_series_type, lobby_timeout_minutes,
           xp_win, xp_participate
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
         RETURNING *
       `, [
         name, enabled !== false, min_mmr || 0, max_mmr || 0,
@@ -125,6 +127,7 @@ export default function createQueueRouter(io) {
         lobby_server_region || 3, lobby_game_mode || 2, lobby_league_id || 0,
         lobby_dotv_delay ?? 1, !!lobby_cheats, lobby_allow_spectating !== false,
         lobby_pause_setting || 0, lobby_selection_priority || 0, lobby_cm_pick || 0,
+        lobby_auto_assign_teams !== false, lobby_penalty_radiant || 0, lobby_penalty_dire || 0,
         lobby_series_type || 0, lobby_timeout_minutes || 10,
         xp_win ?? 15, xp_participate ?? 5,
       ])
@@ -149,6 +152,7 @@ export default function createQueueRouter(io) {
         'lobby_server_region', 'lobby_game_mode', 'lobby_league_id',
         'lobby_dotv_delay', 'lobby_cheats', 'lobby_allow_spectating',
         'lobby_pause_setting', 'lobby_selection_priority', 'lobby_cm_pick',
+        'lobby_auto_assign_teams', 'lobby_penalty_radiant', 'lobby_penalty_dire',
         'lobby_series_type', 'lobby_timeout_minutes',
         'xp_win', 'xp_participate',
       ]

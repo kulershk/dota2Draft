@@ -21,6 +21,7 @@
     { "name": "Permissions", "description": "Permission groups" },
     { "name": "Settings", "description": "Site settings" },
     { "name": "Streams", "description": "Twitch streams" },
+    { "name": "Queue", "description": "Queue matchmaking pools & matches" },
     { "name": "Dota", "description": "Dota 2 constants (heroes, items)" }
   ],
   "components": {
@@ -169,6 +170,65 @@
         "type": "object",
         "properties": {
           "error": { "type": "string" }
+        }
+      },
+      "QueuePool": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "name": { "type": "string" },
+          "enabled": { "type": "boolean" },
+          "min_mmr": { "type": "integer" },
+          "max_mmr": { "type": "integer" },
+          "pick_timer": { "type": "integer" },
+          "best_of": { "type": "integer" },
+          "team_size": { "type": "integer" },
+          "lobby_server_region": { "type": "integer" },
+          "lobby_game_mode": { "type": "integer" },
+          "lobby_league_id": { "type": "integer" },
+          "lobby_dotv_delay": { "type": "integer" },
+          "lobby_cheats": { "type": "boolean" },
+          "lobby_allow_spectating": { "type": "boolean" },
+          "lobby_pause_setting": { "type": "integer", "description": "0 = unlimited, 1 = limited, 2 = disabled" },
+          "lobby_selection_priority": { "type": "integer", "description": "0 = manual, 1 = automatic (coin toss)" },
+          "lobby_cm_pick": { "type": "integer", "description": "0 = random, 1 = radiant, 2 = dire" },
+          "lobby_auto_assign_teams": { "type": "boolean", "description": "Bot enforces team assignments" },
+          "lobby_penalty_radiant": { "type": "integer", "description": "Radiant penalty in seconds" },
+          "lobby_penalty_dire": { "type": "integer", "description": "Dire penalty in seconds" },
+          "lobby_series_type": { "type": "integer" },
+          "lobby_timeout_minutes": { "type": "integer" },
+          "xp_win": { "type": "integer" },
+          "xp_participate": { "type": "integer" },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "QueuePoolInput": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string" },
+          "enabled": { "type": "boolean", "default": true },
+          "min_mmr": { "type": "integer", "default": 0 },
+          "max_mmr": { "type": "integer", "default": 0 },
+          "pick_timer": { "type": "integer", "default": 30 },
+          "best_of": { "type": "integer", "default": 1 },
+          "team_size": { "type": "integer", "default": 5 },
+          "lobby_server_region": { "type": "integer", "default": 3 },
+          "lobby_game_mode": { "type": "integer", "default": 2 },
+          "lobby_league_id": { "type": "integer", "default": 0 },
+          "lobby_dotv_delay": { "type": "integer", "default": 1 },
+          "lobby_cheats": { "type": "boolean", "default": false },
+          "lobby_allow_spectating": { "type": "boolean", "default": true },
+          "lobby_pause_setting": { "type": "integer", "default": 0 },
+          "lobby_selection_priority": { "type": "integer", "default": 0 },
+          "lobby_cm_pick": { "type": "integer", "default": 0 },
+          "lobby_auto_assign_teams": { "type": "boolean", "default": true },
+          "lobby_penalty_radiant": { "type": "integer", "default": 0 },
+          "lobby_penalty_dire": { "type": "integer", "default": 0 },
+          "lobby_series_type": { "type": "integer", "default": 0 },
+          "lobby_timeout_minutes": { "type": "integer", "default": 10 },
+          "xp_win": { "type": "integer", "default": 15 },
+          "xp_participate": { "type": "integer", "default": 5 }
         }
       }
     }
@@ -1327,6 +1387,62 @@
         "tags": ["Streams"],
         "summary": "Get live Dota 2 streamers from registered users",
         "responses": { "200": { "description": "Live streamers list" } }
+      }
+    },
+    "/api/queue/pools": {
+      "get": {
+        "tags": ["Queue"],
+        "summary": "List enabled queue pools",
+        "responses": { "200": { "description": "Array of enabled queue pools", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/QueuePool" } } } } } }
+      }
+    },
+    "/api/queue/pools/{poolId}": {
+      "get": {
+        "tags": ["Queue"],
+        "summary": "Get queue pool details",
+        "parameters": [{ "name": "poolId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": { "description": "Queue pool", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/QueuePool" } } } },
+          "404": { "description": "Pool not found" }
+        }
+      }
+    },
+    "/api/admin/queue/pools": {
+      "get": {
+        "tags": ["Queue"],
+        "summary": "Admin: list all queue pools",
+        "description": "Returns all queue pools including disabled ones. Requires manage_competitions permission.",
+        "responses": { "200": { "description": "Array of all queue pools", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/QueuePool" } } } } } }
+      },
+      "post": {
+        "tags": ["Queue"],
+        "summary": "Admin: create queue pool",
+        "description": "Creates a new queue pool. Requires manage_competitions permission.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/QueuePoolInput" } } } },
+        "responses": {
+          "201": { "description": "Created pool", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/QueuePool" } } } },
+          "400": { "description": "Name is required" }
+        }
+      }
+    },
+    "/api/admin/queue/pools/{id}": {
+      "put": {
+        "tags": ["Queue"],
+        "summary": "Admin: update queue pool",
+        "description": "Updates an existing queue pool. Requires manage_competitions permission. Only provided fields are updated.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/QueuePoolInput" } } } },
+        "responses": {
+          "200": { "description": "Updated pool", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/QueuePool" } } } },
+          "404": { "description": "Pool not found" }
+        }
+      },
+      "delete": {
+        "tags": ["Queue"],
+        "summary": "Admin: delete queue pool",
+        "description": "Deletes a queue pool and cascades to queue_matches. Requires manage_competitions permission.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Deleted" } }
       }
     },
     "/api/dota/constants": {

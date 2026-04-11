@@ -638,6 +638,9 @@ export async function initDb() {
       lobby_pause_setting INTEGER DEFAULT 0,
       lobby_selection_priority INTEGER DEFAULT 0,
       lobby_cm_pick INTEGER DEFAULT 0,
+      lobby_auto_assign_teams BOOLEAN DEFAULT TRUE,
+      lobby_penalty_radiant INTEGER DEFAULT 0,
+      lobby_penalty_dire INTEGER DEFAULT 0,
       lobby_series_type INTEGER DEFAULT 0,
       lobby_timeout_minutes INTEGER DEFAULT 10,
       team_size INTEGER DEFAULT 5,
@@ -651,6 +654,9 @@ export async function initDb() {
   try { await execute('ALTER TABLE queue_pools ADD COLUMN team_size INTEGER DEFAULT 5') } catch {}
   try { await execute('ALTER TABLE queue_pools ADD COLUMN xp_win INTEGER DEFAULT 15') } catch {}
   try { await execute('ALTER TABLE queue_pools ADD COLUMN xp_participate INTEGER DEFAULT 5') } catch {}
+  try { await execute('ALTER TABLE queue_pools ADD COLUMN lobby_auto_assign_teams BOOLEAN DEFAULT TRUE') } catch {}
+  try { await execute('ALTER TABLE queue_pools ADD COLUMN lobby_penalty_radiant INTEGER DEFAULT 0') } catch {}
+  try { await execute('ALTER TABLE queue_pools ADD COLUMN lobby_penalty_dire INTEGER DEFAULT 0') } catch {}
 
   // Make matches.competition_id nullable for queue matches
   try { await execute(`ALTER TABLE matches ALTER COLUMN competition_id DROP NOT NULL`) } catch {}
