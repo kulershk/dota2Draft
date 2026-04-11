@@ -379,5 +379,8 @@ export function useApi() {
       request(`/api/admin/queue/pools/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     deleteQueuePool: (id: number) =>
       request(`/api/admin/queue/pools/${id}`, { method: 'DELETE' }),
+    getAdminQueueMatches: () => request('/api/admin/queue/matches'),
+    cancelQueueMatch: (id: number) =>
+      request(`/api/admin/queue/matches/${id}/cancel`, { method: 'POST' }),
   }
 }

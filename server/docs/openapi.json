@@ -1445,6 +1445,25 @@
         "responses": { "200": { "description": "Deleted" } }
       }
     },
+    "/api/admin/queue/matches": {
+      "get": {
+        "tags": ["Queue"],
+        "summary": "Admin: list active queue matches",
+        "description": "Returns all queue matches in picking, lobby_creating, or live status. Enriched with in-memory state and lobby info. Requires manage_competitions permission.",
+        "responses": { "200": { "description": "Array of active queue matches with team rosters and lobby info" } }
+      }
+    },
+    "/api/admin/queue/matches/{id}/cancel": {
+      "post": {
+        "tags": ["Queue"],
+        "summary": "Admin: cancel a queue match",
+        "description": "Cancels an active queue match. Notifies all players via socket, cleans up in-memory state, and sets DB status to cancelled. Requires manage_competitions permission.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": { "description": "Match cancelled" }
+        }
+      }
+    },
     "/api/dota/constants": {
       "get": {
         "tags": ["Dota"],

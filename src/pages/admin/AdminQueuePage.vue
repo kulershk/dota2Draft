@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Plus, Trash2, Pencil, X, Check } from 'lucide-vue-next'
+import { Plus, Trash2, Pencil, X, Check, Ban, RefreshCw, Swords, Loader2 } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 
 const { t } = useI18n()
@@ -9,6 +9,9 @@ const api = useApi()
 const pools = ref<any[]>([])
 const editingId = ref<number | null>(null)
 const showCreate = ref(false)
+const activeMatches = ref<any[]>([])
+const loadingMatches = ref(false)
+let refreshInterval: ReturnType<typeof setInterval> | null = null
 
 const form = ref<Record<string, any>>({
   name: '',
@@ -93,6 +96,40 @@ async function deletePool(id: number) {
   await fetchPools()
 }
 
+async function fetchActiveMatches() {
+  loadingMatches.value = true
+  try { activeMatches.value = await api.getAdminQueueMatches() } catch { activeMatches.value = [] }
+  loadingMatches.value = false
+}
+
+async function cancelMatch(id: number) {
+  if (!confirm(t('queueAdminCancelConfirm'))) return
+  try {
+    await api.cancelQueueMatch(id)
+    await fetchActiveMatches()
+  } catch (e: any) {
+    alert(e.message)
+  }
+}
+
+function statusLabel(status: string) {
+  switch (status) {
+    case 'picking': return t('queueStatusPicking')
+    case 'lobby_creating': return t('queueStatusCreatingLobby')
+    case 'live': return t('queueStatusLive')
+    default: return status
+  }
+}
+
+function statusColor(status: string) {
+  switch (status) {
+    case 'picking': return 'bg-amber-500/10 text-amber-500'
+    case 'lobby_creating': return 'bg-blue-500/10 text-blue-500'
+    case 'live': return 'bg-green-500/10 text-green-500'
+    default: return 'bg-accent text-muted-foreground'
+  }
+}
+
 const SERVER_REGIONS: Record<number, string> = {
   0: 'US West', 1: 'US East', 2: 'Europe', 3: 'Europe East',
   5: 'SE Asia', 6: 'Dubai', 7: 'Australia', 8: 'Stockholm',
@@ -108,11 +145,112 @@ const GAME_MODES: [number, string][] = [
   [22, 'gameModeAD'], [23, 'gameModeTurbo'],
 ]
 
-onMounted(fetchPools)
+onMounted(() => {
+  fetchPools()
+  fetchActiveMatches()
+  refreshInterval = setInterval(fetchActiveMatches, 10000)
+})
+
+onUnmounted(() => {
+  if (refreshInterval) clearInterval(refreshInterval)
+})
 </script>
 
 <template>
   <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[1200px] w-full">
+
+    <!-- ═══════════════════ Active Queue Matches ═══════════════════ -->
+    <div>
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-3">
+          <h2 class="text-xl font-bold">{{ t('queueAdminActiveMatches') }}</h2>
+          <span v-if="activeMatches.length > 0" class="text-xs font-semibold bg-primary/15 text-primary px-2 py-0.5 rounded-full">
+            {{ activeMatches.length }}
+          </span>
+        </div>
+        <button class="p-1.5 rounded hover:bg-accent" :class="loadingMatches ? 'animate-spin' : ''" @click="fetchActiveMatches">
+          <RefreshCw class="w-4 h-4" />
+        </button>
+      </div>
+
+      <div v-if="activeMatches.length === 0" class="card px-6 py-8 text-center mb-8">
+        <Swords class="w-8 h-8 text-muted-foreground/20 mx-auto mb-2" />
+        <p class="text-sm text-muted-foreground">{{ t('queueAdminNoActive') }}</p>
+      </div>
+
+      <div v-else class="flex flex-col gap-3 mb-8">
+        <div v-for="qm in activeMatches" :key="qm.id" class="card overflow-hidden">
+          <div class="px-4 py-3 flex items-center justify-between gap-4">
+            <!-- Left: match info -->
+            <div class="flex items-center gap-3 flex-1 min-w-0">
+              <span class="text-xs px-2 py-0.5 rounded font-semibold" :class="statusColor(qm.status)">
+                {{ statusLabel(qm.status) }}
+              </span>
+              <span class="text-sm font-semibold text-muted-foreground">#{{ qm.id }}</span>
+              <span v-if="qm.pool_name" class="text-xs text-muted-foreground bg-accent px-2 py-0.5 rounded">{{ qm.pool_name }}</span>
+            </div>
+
+            <!-- Right: cancel -->
+            <button
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-destructive hover:bg-destructive/10 transition-colors"
+              @click="cancelMatch(qm.id)"
+            >
+              <Ban class="w-3.5 h-3.5" /> {{ t('cancel') }}
+            </button>
+          </div>
+
+          <!-- Teams row -->
+          <div class="px-4 pb-3 flex items-center gap-4">
+            <!-- Team 1 (Radiant) -->
+            <div class="flex-1 min-w-0">
+              <div class="text-[10px] font-bold text-green-400 uppercase tracking-wider mb-1.5">{{ t('queueRadiant') }}</div>
+              <div class="flex flex-wrap gap-1.5">
+                <div v-for="(p, idx) in qm.team1" :key="p.playerId || idx"
+                  class="flex items-center gap-1.5 px-2 py-1 rounded text-xs"
+                  :class="idx === 0 ? 'bg-green-500/8 border border-green-500/15' : 'bg-accent/50'">
+                  <img v-if="p.avatarUrl || p.avatar_url" :src="p.avatarUrl || p.avatar_url" class="w-4 h-4 rounded-full" />
+                  <span class="font-medium truncate max-w-[100px]">{{ p.name }}</span>
+                  <span v-if="idx === 0" class="text-[9px] font-bold text-green-400">CPT</span>
+                </div>
+                <div v-if="!qm.team1 || qm.team1.length === 0" class="text-xs text-muted-foreground/40">
+                  {{ qm.captain1_display_name || qm.captain1_name || '—' }}
+                </div>
+              </div>
+            </div>
+
+            <div class="text-xs font-bold text-muted-foreground/40 px-2">VS</div>
+
+            <!-- Team 2 (Dire) -->
+            <div class="flex-1 min-w-0">
+              <div class="text-[10px] font-bold text-red-400 uppercase tracking-wider mb-1.5">{{ t('queueDire') }}</div>
+              <div class="flex flex-wrap gap-1.5">
+                <div v-for="(p, idx) in qm.team2" :key="p.playerId || idx"
+                  class="flex items-center gap-1.5 px-2 py-1 rounded text-xs"
+                  :class="idx === 0 ? 'bg-red-500/8 border border-red-500/15' : 'bg-accent/50'">
+                  <img v-if="p.avatarUrl || p.avatar_url" :src="p.avatarUrl || p.avatar_url" class="w-4 h-4 rounded-full" />
+                  <span class="font-medium truncate max-w-[100px]">{{ p.name }}</span>
+                  <span v-if="idx === 0" class="text-[9px] font-bold text-red-400">CPT</span>
+                </div>
+                <div v-if="!qm.team2 || qm.team2.length === 0" class="text-xs text-muted-foreground/40">
+                  {{ qm.captain2_display_name || qm.captain2_name || '—' }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Lobby info (if live) -->
+          <div v-if="qm.lobby_name" class="px-4 pb-3 flex items-center gap-4 text-xs text-muted-foreground">
+            <span>{{ t('queueLobbyName') }}: <strong class="text-foreground font-mono">{{ qm.lobby_name }}</strong></span>
+            <span>{{ t('queueLobbyPassword') }}: <strong class="text-foreground font-mono select-all">{{ qm.lobby_password }}</strong></span>
+            <span v-if="qm.lobby_status" class="px-1.5 py-0.5 rounded text-[10px] font-semibold" :class="statusColor(qm.lobby_status)">
+              {{ qm.lobby_status }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════ Queue Pools ═══════════════════ -->
     <div class="flex items-center justify-between mb-6">
       <h2 class="text-xl font-bold">{{ t('adminQueuePools') }}</h2>
       <button class="btn-primary flex items-center gap-1.5 text-sm" @click="startCreate">

@@ -2,6 +2,8 @@ import { Router } from 'express'
 import { query, queryOne, execute } from '../db.js'
 import { requirePermission } from '../middleware/permissions.js'
 import { getAuthPlayer } from '../middleware/auth.js'
+import { activeQueueMatches, playerInMatch, clearPickTimer } from '../socket/queueState.js'
+import { socketPlayers } from '../socket/state.js'
 
 export default function createQueueRouter(io) {
   const router = Router()
@@ -183,6 +185,82 @@ export default function createQueueRouter(io) {
     if (!admin) return
     try {
       await execute('DELETE FROM queue_pools WHERE id = $1', [req.params.id])
+      res.json({ ok: true })
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  // ── Admin: list active queue matches ──
+  router.get('/api/admin/queue/matches', async (req, res) => {
+    const admin = await requirePermission(req, res, 'manage_competitions')
+    if (!admin) return
+
+    try {
+      // Get matches from DB that are still active
+      const dbMatches = await query(`
+        SELECT qm.*,
+          p1.name AS captain1_name, COALESCE(p1.display_name, p1.name) AS captain1_display_name, p1.avatar_url AS captain1_avatar,
+          p2.name AS captain2_name, COALESCE(p2.display_name, p2.name) AS captain2_display_name, p2.avatar_url AS captain2_avatar,
+          qp.name AS pool_name, qp.team_size AS pool_team_size,
+          ml.game_name AS lobby_name, ml.password AS lobby_password, ml.status AS lobby_status
+        FROM queue_matches qm
+        LEFT JOIN players p1 ON p1.id = qm.captain1_player_id
+        LEFT JOIN players p2 ON p2.id = qm.captain2_player_id
+        LEFT JOIN queue_pools qp ON qp.id = qm.pool_id
+        LEFT JOIN match_lobbies ml ON ml.match_id = qm.match_id AND ml.game_number = 1
+        WHERE qm.status IN ('picking', 'lobby_creating', 'live')
+        ORDER BY qm.created_at DESC
+      `)
+
+      // Enrich with in-memory state where available
+      const result = dbMatches.map(qm => {
+        const mem = activeQueueMatches.get(qm.id)
+        return {
+          ...qm,
+          inMemory: !!mem,
+          memStatus: mem?.status || null,
+          team1: mem ? [mem.captain1, ...mem.captain1Picks] : qm.team1_players || [],
+          team2: mem ? [mem.captain2, ...mem.captain2Picks] : qm.team2_players || [],
+          pickIndex: mem?.pickIndex || null,
+          pickOrderLength: mem?.pickOrder?.length || null,
+        }
+      })
+
+      res.json(result)
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  // ── Admin: cancel a queue match ──
+  router.post('/api/admin/queue/matches/:id/cancel', async (req, res) => {
+    const admin = await requirePermission(req, res, 'manage_competitions')
+    if (!admin) return
+
+    const qmId = Number(req.params.id)
+    try {
+      const match = activeQueueMatches.get(qmId)
+      if (match) {
+        // Cancel in-memory match (picking / lobby_creating / live)
+        clearPickTimer(qmId)
+        io.to(`queue-match:${qmId}`).emit('queue:cancelled', { queueMatchId: qmId, reason: 'Cancelled by admin' })
+        for (const p of match.allPlayers) {
+          playerInMatch.delete(p.playerId)
+        }
+        const room = `queue-match:${qmId}`
+        for (const [socketId, playerId] of socketPlayers) {
+          if (match.allPlayers.some(p => p.playerId === playerId)) {
+            const s = io.sockets.sockets.get(socketId)
+            if (s) s.leave(room)
+          }
+        }
+        activeQueueMatches.delete(qmId)
+      }
+
+      // Always update DB status
+      await execute(`UPDATE queue_matches SET status = 'cancelled' WHERE id = $1`, [qmId])
+
       res.json({ ok: true })
     } catch (e) {
       res.status(500).json({ error: e.message })
