@@ -63,6 +63,21 @@ export function registerQueueHandlers(socket, io) {
       if (playerInQueue.has(playerId)) return socket.emit('queue:error', { message: 'Already in a queue' })
       if (playerInMatch.has(playerId)) return socket.emit('queue:error', { message: 'Already in an active match' })
 
+      // Also check the DB — in-memory state is wiped on server restart, so a
+      // player whose queue match is still picking/lobby/live in the DB must
+      // remain blocked from re-queuing until that match is completed/cancelled.
+      const dbActive = await queryOne(`
+        SELECT id FROM queue_matches
+        WHERE status IN ('picking', 'lobby_creating', 'live')
+          AND all_player_ids @> $1::jsonb
+        LIMIT 1
+      `, [JSON.stringify([playerId])])
+      if (dbActive) {
+        // Re-hydrate the in-memory flag so subsequent checks short-circuit
+        playerInMatch.set(playerId, dbActive.id)
+        return socket.emit('queue:error', { message: 'Already in an active match' })
+      }
+
       // Add to queue
       const q = getPoolQueue(poolId)
       q.set(playerId, {
