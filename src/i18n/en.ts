@@ -987,6 +987,8 @@ export default {
   xpReason_game_win: 'Game win',
   xpReason_game_loss: 'Game played',
   xpReason_match_win: 'Series win',
+  xpReason_queue_win: 'Queue win',
+  xpReason_queue_loss: 'Queue played',
   xpReason_placement_1: '1st place',
   xpReason_placement_2: '2nd place',
   xpReason_placement_3: '3rd place',

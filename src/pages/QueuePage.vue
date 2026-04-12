@@ -91,6 +91,16 @@ function handlePick(playerId: number) {
   queue.pickPlayer(queue.activeMatch.value.queueMatchId, playerId)
 }
 
+// Ready sound — plays when a match is found (10/10)
+const readySound = new Audio('/sounds/ready.wav')
+readySound.preload = 'auto'
+watch(() => queue.activeMatch.value, (m, prev) => {
+  if (m && !prev) {
+    readySound.currentTime = 0
+    readySound.play().catch(() => {})
+  }
+})
+
 // Chat
 const chatInput = ref('')
 const chatScroll = ref<HTMLElement | null>(null)

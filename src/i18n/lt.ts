@@ -979,6 +979,8 @@ export default {
   xpReason_game_win: 'Žaidimo pergalė',
   xpReason_game_loss: 'Žaidimas sužaistas',
   xpReason_match_win: 'Serijos pergalė',
+  xpReason_queue_win: 'Eilės pergalė',
+  xpReason_queue_loss: 'Eilės žaidimas',
   xpReason_placement_1: '1 vieta',
   xpReason_placement_2: '2 vieta',
   xpReason_placement_3: '3 vieta',

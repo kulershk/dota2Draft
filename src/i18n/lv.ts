@@ -979,6 +979,8 @@ export default {
   xpReason_game_win: 'Spēles uzvara',
   xpReason_game_loss: 'Spēle aizvadīta',
   xpReason_match_win: 'Sērijas uzvara',
+  xpReason_queue_win: 'Rindas uzvara',
+  xpReason_queue_loss: 'Rindas spēle',
   xpReason_placement_1: '1. vieta',
   xpReason_placement_2: '2. vieta',
   xpReason_placement_3: '3. vieta',
