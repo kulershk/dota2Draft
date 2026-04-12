@@ -12,6 +12,7 @@ const route = useRoute()
 const router = useRouter()
 const api = useApi()
 const dota = useDotaConstants()
+dota.loadConstants()
 
 const match = ref<any>(null)
 const loading = ref(true)
