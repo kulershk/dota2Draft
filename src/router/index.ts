@@ -12,6 +12,7 @@ const router = createRouter({
     { path: '/news', name: 'news', component: () => import('@/pages/NewsPage.vue') },
     { path: '/news/:id', name: 'news-post', component: () => import('@/pages/NewsPostPage.vue') },
     { path: '/queue', name: 'queue', component: () => import('@/pages/QueuePage.vue') },
+    { path: '/queue/match/:id', name: 'queue-match', component: () => import('@/pages/QueueMatchPage.vue') },
     { path: '/leaderboard', name: 'leaderboard', component: () => import('@/pages/LeaderboardPage.vue') },
     { path: '/player/:id', name: 'player-profile', component: () => import('@/pages/PlayerProfilePage.vue') },
     { path: '/team/:id', name: 'team-profile', component: () => import('@/pages/TeamProfilePage.vue') },

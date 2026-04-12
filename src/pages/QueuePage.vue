@@ -433,8 +433,9 @@ onUnmounted(() => {
           <div v-if="queue.queueHistory.value.length > 0">
             <h2 class="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">{{ t('queueRecentMatches') }}</h2>
             <div class="flex flex-col gap-2">
-              <div v-for="qm in queue.queueHistory.value" :key="qm.id"
-                class="card px-5 py-3.5 flex items-center gap-4 hover:bg-accent/30 transition-colors">
+              <router-link v-for="qm in queue.queueHistory.value" :key="qm.id"
+                :to="{ name: 'queue-match', params: { id: qm.id } }"
+                class="card px-5 py-3.5 flex items-center gap-4 hover:bg-accent/30 transition-colors cursor-pointer">
                 <div class="flex items-center gap-2.5 flex-1 min-w-0">
                   <img v-if="qm.captain1_avatar" :src="qm.captain1_avatar" class="w-7 h-7 rounded-full" />
                   <span class="font-medium text-sm truncate">{{ qm.captain1_display_name || qm.captain1_name }}</span>
@@ -448,7 +449,7 @@ onUnmounted(() => {
                   :class="qm.status === 'completed' ? 'bg-green-500/{{ totalPlayers }} text-green-500' : qm.status === 'live' ? 'bg-amber-500/{{ totalPlayers }} text-amber-500' : 'bg-accent text-muted-foreground'">
                   {{ qm.status === 'completed' ? t('matchCompleted') : qm.status === 'live' ? t('matchLive') : qm.status }}
                 </span>
-              </div>
+              </router-link>
             </div>
           </div>
         </template>
