@@ -370,6 +370,8 @@ export function useApi() {
       return request(`/api/queue/history?${qs}`)
     },
     getQueueMatch: (id: number) => request(`/api/queue/match/${id}`),
+    getQueueMatchGameStats: (queueMatchId: number, gameNumber: number) =>
+      request(`/api/queue/match/${queueMatchId}/games/${gameNumber}/stats`),
 
     // Admin Queue
     getAdminQueuePools: () => request('/api/admin/queue/pools'),

@@ -74,13 +74,42 @@ export default function createQueueRouter(io) {
     `, [req.params.id])
     if (!qm) return res.status(404).json({ error: 'Queue match not found' })
 
-    // Include game stats if match has a linked match row
+    // Include games with has_stats flag
     let games = []
     if (qm.match_id) {
       games = await query('SELECT * FROM match_games WHERE match_id = $1 ORDER BY game_number', [qm.match_id])
+      if (games.length > 0) {
+        const gameIds = games.map(g => g.id)
+        const statsCounts = await query(
+          'SELECT match_game_id, COUNT(*) as count FROM match_game_player_stats WHERE match_game_id = ANY($1) GROUP BY match_game_id',
+          [gameIds]
+        )
+        const statsMap = {}
+        for (const sc of statsCounts) statsMap[sc.match_game_id] = Number(sc.count)
+        for (const g of games) g.has_stats = (statsMap[g.id] || 0) > 0
+      }
     }
 
     res.json({ ...qm, games })
+  })
+
+  // ── Public: game stats for a queue match ──
+  router.get('/api/queue/match/:id/games/:gameNumber/stats', async (req, res) => {
+    const qm = await queryOne('SELECT match_id FROM queue_matches WHERE id = $1', [req.params.id])
+    if (!qm?.match_id) return res.status(404).json({ error: 'Queue match not found' })
+
+    const mg = await queryOne('SELECT id, picks_bans FROM match_games WHERE match_id = $1 AND game_number = $2', [qm.match_id, req.params.gameNumber])
+    if (!mg) return res.json({ stats: [], picks_bans: [] })
+
+    const stats = await query(
+      `SELECT s.*, p.id AS profile_id, p.name AS profile_name, p.display_name AS profile_display_name, p.avatar_url AS profile_avatar
+       FROM match_game_player_stats s
+       LEFT JOIN players p ON p.steam_id = CAST((s.account_id + 76561197960265728) AS TEXT)
+       WHERE s.match_game_id = $1
+       ORDER BY s.is_radiant DESC, s.account_id`,
+      [mg.id]
+    )
+    res.json({ stats, picks_bans: mg.picks_bans || [] })
   })
 
   // ── Admin: list all pools ──
