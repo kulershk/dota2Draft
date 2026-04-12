@@ -344,6 +344,10 @@ class BotPool {
             queueMatchId: qm.id,
             dotaMatchId,
           })
+          // Drop in-memory match state so a page reload after the game launched
+          // does not restore the stale "lobby created" banner via queue:getState.
+          // playerInMatch stays set until _autoFillGameWinner runs (re-queue gating).
+          activeQueueMatches.delete(qm.id)
         }
       }
     }

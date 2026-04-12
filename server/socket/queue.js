@@ -7,19 +7,19 @@ import {
 } from './queueState.js'
 import { botPool } from '../services/botPool.js'
 
-// Generate pick order for a given team size
-// For 5v5: [1,2,2,1,1,2,2,1] (8 picks for 8 non-captain players)
-// For 1v1: no picks needed (both are captains)
+// Generate pick order for a given team size (snake draft).
+// For 5v5: [1,2,2,1,1,2,2,1] — captain 1 picks first, then captain 2 picks
+// back-to-back, then captain 1 back-to-back, etc., so each captain ends up
+// with the same number of picks and neither gets two in a row at the start.
+// For 1v1: no picks needed (both are captains).
 function generatePickOrder(teamSize) {
-  if (teamSize <= 1) return [] // 1v1: no picks, both players are captains
+  if (teamSize <= 1) return []
   const picks = []
-  const totalPicks = (teamSize - 1) * 2 // each team needs teamSize-1 more players
-  // Standard alternating: 1, 2, 2, 1, 1, 2, 2, 1, ...
+  const totalPicks = (teamSize - 1) * 2
   for (let i = 0; i < totalPicks; i++) {
-    const phase = Math.floor(i / 2) // 0,0,1,1,2,2,...
-    if (i === 0) picks.push(1) // first pick always captain 1
-    else if (i % 2 === 1) picks.push(picks[i - 1]) // same as previous (back-to-back)
-    else picks.push(picks[i - 1] === 1 ? 2 : 1) // switch
+    if (i === 0) picks.push(1)
+    else if (i % 2 === 1) picks.push(picks[i - 1] === 1 ? 2 : 1) // odd index: switch
+    else picks.push(picks[i - 1]) // even index (>0): same as previous (back-to-back)
   }
   return picks
 }
@@ -292,10 +292,21 @@ async function startQueueMatch(poolId, io) {
     playerInQueue.delete(p.playerId)
   }
 
-  // Sort by MMR descending — top 2 are captains
+  // Sort by MMR descending — top 2 are captains.
+  // Captain 1 picks first; assign captain 1 = LOWER MMR of the two so the
+  // weaker captain gets first pick. If MMRs are equal, pick randomly.
   players.sort((a, b) => b.mmr - a.mmr)
-  const captain1 = players[0]
-  const captain2 = players[1]
+  const top1 = players[0]
+  const top2 = players[1]
+  let captain1, captain2
+  if (top1.mmr === top2.mmr) {
+    if (Math.random() < 0.5) { captain1 = top1; captain2 = top2 }
+    else { captain1 = top2; captain2 = top1 }
+  } else {
+    // top1 has higher mmr → captain2; top2 has lower mmr → captain1 (picks first)
+    captain1 = top2
+    captain2 = top1
+  }
   const available = players.slice(2)
 
   const pickOrder = generatePickOrder(teamSize)
