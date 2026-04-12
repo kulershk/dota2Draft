@@ -1,4 +1,5 @@
 import { query, queryOne, execute } from '../db.js'
+import { playerInMatch, activeQueueMatches } from '../socket/queueState.js'
 import { fetchAndSaveGameStats, fetchOpenDotaMatch, saveMatchGameStats, requestOpenDotaParse } from '../helpers/opendota.js'
 import { awardXp, getTeamPlayerIds } from '../helpers/xp.js'
 import { getCompetition, parseCompSettings } from '../helpers/competition.js'
@@ -233,11 +234,11 @@ class BotPool {
 
     // Auto force-launch for queue matches when all players joined + both teams set
     if (lobby && !lobby.competition_id && data.status === 'waiting') {
-      const expected = (lobby.players_expected || []).length
-      const joined = (data.playersJoined || []).length
+      const expectedList = lobby.players_expected || []
       const teamIds = this.lobbyTeamIds.get(lobbyId) || (lobby.team_ids ? JSON.parse(lobby.team_ids) : null)
-      if (expected > 0 && joined >= expected && teamIds?.radiant && teamIds?.dire) {
-        console.log(`[Queue] All ${joined} players joined + both teams set — auto force-launching lobby ${lobbyId}`)
+      const slotted = this._countExpectedInSlots(expectedList, data.playersJoined || [])
+      if (expectedList.length > 0 && slotted === expectedList.length && teamIds?.radiant && teamIds?.dire) {
+        console.log(`[Queue] All ${slotted}/${expectedList.length} expected players in team slots + both teams set — auto force-launching lobby ${lobbyId}`)
         try {
           await this.forceLaunch(lobbyId, { skipValidation: false })
         } catch (e) {
@@ -335,11 +336,41 @@ class BotPool {
       })
       if (lobby.competition_id) {
         this.io.to(`comp:${lobby.competition_id}`).emit('tournament:updated')
+      } else {
+        // Queue match: notify queue-match room so the queue page clears the lobby banner
+        const qm = await queryOne('SELECT id FROM queue_matches WHERE match_id = $1', [lobby.match_id])
+        if (qm) {
+          this.io.to(`queue-match:${qm.id}`).emit('queue:gameStarted', {
+            queueMatchId: qm.id,
+            dotaMatchId,
+          })
+        }
       }
     }
 
     // Schedule OpenDota stats fetch
     this._scheduleStatsFetch(lobby.match_id, lobby.game_number, dotaMatchId)
+  }
+
+  // Counts how many expected players are sitting in their correct team slot.
+  // Each expected player must be present in `joined` AND on the same side
+  // (radiant/dire) as expected — not unassigned, spectator, or wrong team.
+  _countExpectedInSlots(expected, joined) {
+    if (!Array.isArray(expected) || !Array.isArray(joined)) return 0
+    const joinedTeamBySteamId = new Map()
+    for (const p of joined) {
+      if (!p) continue
+      const sid = String(p.steamId || p.steam_id || '')
+      if (sid) joinedTeamBySteamId.set(sid, p.team)
+    }
+    let count = 0
+    for (const e of expected) {
+      const sid = String(e?.steam_id || e?.steamId || '')
+      const expectedTeam = e?.team
+      if (!sid || (expectedTeam !== 'radiant' && expectedTeam !== 'dire')) continue
+      if (joinedTeamBySteamId.get(sid) === expectedTeam) count++
+    }
+    return count
   }
 
   async _onLobbyTeamIds(data) {
@@ -374,10 +405,10 @@ class BotPool {
 
     // Auto force-launch for queue matches: team IDs just arrived, check if all players are already in
     if (!lobby.competition_id && lobby.status === 'waiting' && radiantTeamId && direTeamId) {
-      const expected = (lobby.players_expected || []).length
-      const joined = (lobby.players_joined || []).length
-      if (expected > 0 && joined >= expected) {
-        console.log(`[Queue] Both teams set + all ${joined} players already in — auto force-launching lobby ${lobbyId}`)
+      const expectedList = lobby.players_expected || []
+      const slotted = this._countExpectedInSlots(expectedList, lobby.players_joined || [])
+      if (expectedList.length > 0 && slotted === expectedList.length) {
+        console.log(`[Queue] Both teams set + all ${slotted}/${expectedList.length} expected players in team slots — auto force-launching lobby ${lobbyId}`)
         try {
           await this.forceLaunch(lobbyId, { skipValidation: false })
         } catch (e) {
@@ -613,6 +644,13 @@ class BotPool {
         }
         // Update queue match status
         await execute("UPDATE queue_matches SET status = 'completed', completed_at = NOW() WHERE id = $1", [queueMatchXp.id])
+
+        // Free players so they can re-queue now that the game is over
+        const allIds = [...team1Ids, ...team2Ids]
+        for (const pid of allIds) {
+          if (playerInMatch.get(pid) === queueMatchXp.id) playerInMatch.delete(pid)
+        }
+        activeQueueMatches.delete(queueMatchXp.id)
       } else if (match.competition_id) {
         // Competition match XP
         const comp = await getCompetition(match.competition_id)

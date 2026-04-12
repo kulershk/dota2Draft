@@ -31,6 +31,13 @@ const isMyTurn = computed(() => {
   return (cp === 1 && iAmCaptain1.value) || (cp === 2 && iAmCaptain2.value)
 })
 
+const currentPickerCaptain = computed(() => {
+  const m = queue.activeMatch.value
+  const cp = queue.pickState.value?.currentPicker
+  if (!m || !cp) return null
+  return cp === 1 ? m.captain1 : m.captain2
+})
+
 // Pick timer countdown
 const now = ref(getServerNow())
 let tickInterval: ReturnType<typeof setInterval> | null = null
@@ -254,6 +261,11 @@ onUnmounted(() => {
                 <span class="text-lg font-bold">{{ t('queuePickPhase') }}</span>
                 <span v-if="isMyTurn" class="text-xs font-semibold bg-primary/15 text-primary px-2.5 py-1 rounded-full animate-pulse">
                   {{ t('queueYourTurn') }}
+                </span>
+                <span v-else-if="currentPickerCaptain" class="flex items-center gap-2 text-xs font-semibold px-2.5 py-1 rounded-full"
+                  :class="queue.pickState.value.currentPicker === 1 ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'">
+                  <img v-if="currentPickerCaptain.avatarUrl" :src="currentPickerCaptain.avatarUrl" class="w-4 h-4 rounded-full" />
+                  <span>{{ currentPickerCaptain.name }} {{ t('queuePicking') }}</span>
                 </span>
                 <span v-else class="text-xs text-muted-foreground">
                   {{ t('queueWaitingForPick') }}

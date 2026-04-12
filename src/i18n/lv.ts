@@ -1044,6 +1044,7 @@ export default {
   queueChatEmpty: 'Vēl nav ziņu. Saki sveiki!',
   queueChatPlaceholder: 'Ieraksti ziņu...',
   queueChatSend: 'Sūtīt',
+  queuePicking: 'izvēlas',
   queueMatchDetails: 'Spēles detaļas',
   queueGames: 'Spēles',
   queueGameNumber: 'Spēle {n}',

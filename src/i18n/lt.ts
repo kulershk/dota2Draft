@@ -1044,6 +1044,7 @@ export default {
   queueChatEmpty: 'Dar nėra žinučių. Pasisveikink!',
   queueChatPlaceholder: 'Rašyk žinutę...',
   queueChatSend: 'Siųsti',
+  queuePicking: 'renkasi',
   queueMatchDetails: 'Rungtynių informacija',
   queueGames: 'Žaidimai',
   queueGameNumber: 'Žaidimas {n}',

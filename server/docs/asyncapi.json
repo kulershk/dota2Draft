@@ -824,6 +824,20 @@
         }
       }
     },
+    "queue:gameStarted": {
+      "subscribe": {
+        "summary": "Broadcast: Dota match ID captured for a queue match (queue-match:${queueMatchId}). Frontend should clear lobby banner.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "queueMatchId": { "type": "integer" },
+              "dotaMatchId": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
     "queue:chatSend": {
       "publish": {
         "summary": "Send a chat message to a queue pool room (rate-limited to 1s per player)",

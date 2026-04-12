@@ -132,6 +132,14 @@ function initSocket() {
     setTimeout(() => { queueError.value = null }, 5000)
   })
 
+  socket.on('queue:gameStarted', (_data: { queueMatchId: number; dotaMatchId: string }) => {
+    activeMatch.value = null
+    pickState.value = null
+    teamsFormed.value = null
+    lobbyInfo.value = null
+    cancelled.value = null
+  })
+
   socket.on('queue:chatHistory', (data: { poolId: number; messages: QueueChatMessage[] }) => {
     if (data.poolId !== currentPoolId.value) return
     chatMessages.value = data.messages

@@ -1052,6 +1052,7 @@ export default {
   queueChatEmpty: 'No messages yet. Say hi!',
   queueChatPlaceholder: 'Type a message...',
   queueChatSend: 'Send',
+  queuePicking: 'is picking',
   queueMatchDetails: 'Match Details',
   queueGames: 'Games',
   queueGameNumber: 'Game {n}',
