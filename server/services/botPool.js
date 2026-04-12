@@ -473,8 +473,8 @@ class BotPool {
 
   // Polling job: checks for games with dotabuff_id but no winner, fetches from OpenDota
   _startResultsPolling() {
-    // Run every 10 minutes
-    this._pollTimer = setInterval(() => this._pollUnresolvedGames(), 10 * 60 * 1000)
+    // Run every 1 minute
+    this._pollTimer = setInterval(() => this._pollUnresolvedGames(), 60 * 1000)
     // Also run once on startup after a short delay (catch games missed during downtime)
     setTimeout(() => this._pollUnresolvedGames(), 15 * 1000)
   }
