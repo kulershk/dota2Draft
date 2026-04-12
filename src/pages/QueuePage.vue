@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { Clock, Users, Swords, X, Check, Loader2, Shield, ChevronRight, Timer } from 'lucide-vue-next'
+import { Clock, Users, Swords, X, Check, Loader2, Shield, ChevronRight, Timer, Send, MessageSquare } from 'lucide-vue-next'
 import { useQueueStore, type QueuePlayer } from '@/composables/useQueueStore'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { getServerNow } from '@/composables/useSocket'
@@ -84,12 +84,33 @@ function handlePick(playerId: number) {
   queue.pickPlayer(queue.activeMatch.value.queueMatchId, playerId)
 }
 
+// Chat
+const chatInput = ref('')
+const chatScroll = ref<HTMLElement | null>(null)
+const chatCooldownLeft = ref(0)
+const canSendChat = computed(() => chatInput.value.trim().length > 0 && chatCooldownLeft.value <= 0)
+
+function sendChat() {
+  if (!canSendChat.value) return
+  if (queue.sendChat(chatInput.value)) {
+    chatInput.value = ''
+  }
+}
+
+watch(() => queue.chatMessages.value.length, async () => {
+  await nextTick()
+  if (chatScroll.value) chatScroll.value.scrollTop = chatScroll.value.scrollHeight
+})
+
 onMounted(async () => {
   await queue.fetchPools()
   if (queue.pools.value.length > 0) {
     selectPool(queue.pools.value[0].id)
   }
-  tickInterval = setInterval(() => { now.value = getServerNow() }, 200)
+  tickInterval = setInterval(() => {
+    now.value = getServerNow()
+    chatCooldownLeft.value = Math.max(0, queue.chatRateLimitedUntil.value - Date.now())
+  }, 200)
 })
 
 onUnmounted(() => {
@@ -427,6 +448,49 @@ onUnmounted(() => {
                 </div>
               </div>
             </div>
+          </div>
+
+          <!-- Pool Chat -->
+          <div v-if="selectedPool" class="card overflow-hidden mb-8">
+            <div class="px-5 py-3 border-b border-border/30 flex items-center gap-2">
+              <MessageSquare class="w-4 h-4 text-muted-foreground" />
+              <span class="text-sm font-semibold">{{ t('queueChat') }}</span>
+              <span class="text-[10px] text-muted-foreground ml-auto">{{ t('queueChatHint') }}</span>
+            </div>
+            <div ref="chatScroll" class="px-5 py-3 max-h-64 min-h-[8rem] overflow-y-auto flex flex-col gap-2">
+              <div v-if="queue.chatMessages.value.length === 0" class="text-xs text-muted-foreground text-center py-6">
+                {{ t('queueChatEmpty') }}
+              </div>
+              <div v-for="m in queue.chatMessages.value" :key="m.id" class="flex items-start gap-2.5">
+                <img v-if="m.avatarUrl" :src="m.avatarUrl" class="w-6 h-6 rounded-full mt-0.5 shrink-0" />
+                <div v-else class="w-6 h-6 rounded-full bg-accent shrink-0" />
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-baseline gap-2">
+                    <span class="text-xs font-semibold truncate">{{ m.name }}</span>
+                    <span class="text-[10px] text-muted-foreground tabular-nums">{{ new Date(m.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}</span>
+                  </div>
+                  <div class="text-sm break-words whitespace-pre-wrap">{{ m.text }}</div>
+                </div>
+              </div>
+            </div>
+            <form class="px-5 py-3 border-t border-border/30 flex items-center gap-2" @submit.prevent="sendChat">
+              <input
+                v-model="chatInput"
+                type="text"
+                maxlength="300"
+                :placeholder="t('queueChatPlaceholder')"
+                class="flex-1 bg-accent/40 border border-border/40 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40"
+              />
+              <button
+                type="submit"
+                :disabled="!canSendChat"
+                class="btn-primary px-3 py-2 text-sm flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Send class="w-3.5 h-3.5" />
+                <span v-if="chatCooldownLeft > 0" class="tabular-nums">{{ Math.ceil(chatCooldownLeft / 1000) }}s</span>
+                <span v-else>{{ t('queueChatSend') }}</span>
+              </button>
+            </form>
           </div>
 
           <!-- Recent Matches -->

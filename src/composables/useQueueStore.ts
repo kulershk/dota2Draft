@@ -59,6 +59,18 @@ const cancelled = ref<string | null>(null)
 
 const queueHistory = ref<any[]>([])
 
+export interface QueueChatMessage {
+  id: number
+  poolId: number
+  playerId: number
+  name: string
+  avatarUrl: string | null
+  text: string
+  ts: number
+}
+const chatMessages = ref<QueueChatMessage[]>([])
+const chatRateLimitedUntil = ref(0)
+
 let socketInitialized = false
 
 function initSocket() {
@@ -119,6 +131,20 @@ function initSocket() {
     queueError.value = data.message
     setTimeout(() => { queueError.value = null }, 5000)
   })
+
+  socket.on('queue:chatHistory', (data: { poolId: number; messages: QueueChatMessage[] }) => {
+    if (data.poolId !== currentPoolId.value) return
+    chatMessages.value = data.messages
+  })
+
+  socket.on('queue:chatMessage', (msg: QueueChatMessage) => {
+    if (msg.poolId !== currentPoolId.value) return
+    chatMessages.value = [...chatMessages.value, msg].slice(-50)
+  })
+
+  socket.on('queue:chatRateLimited', (data: { retryAfterMs: number }) => {
+    chatRateLimitedUntil.value = Date.now() + (data?.retryAfterMs || 1000)
+  })
 }
 
 export function useQueueStore() {
@@ -142,11 +168,13 @@ export function useQueueStore() {
   }
 
   function leaveQueue() {
+    const poolId = currentPoolId.value
     getSocket().emit('queue:leave')
     inQueue.value = false
-    currentPoolId.value = null
     queueCount.value = 0
     queuePlayers.value = []
+    // Re-join the pool room so chat keeps working while still browsing this pool
+    if (poolId) getSocket().emit('queue:getState', { poolId })
   }
 
   function pickPlayer(queueMatchId: number, playerId: number) {
@@ -155,7 +183,18 @@ export function useQueueStore() {
 
   function requestState(poolId: number) {
     currentPoolId.value = poolId
+    chatMessages.value = []
     getSocket().emit('queue:getState', { poolId })
+  }
+
+  function sendChat(text: string): boolean {
+    if (!currentPoolId.value) return false
+    const trimmed = text.trim()
+    if (!trimmed) return false
+    if (Date.now() < chatRateLimitedUntil.value) return false
+    chatRateLimitedUntil.value = Date.now() + 1000
+    getSocket().emit('queue:chatSend', { poolId: currentPoolId.value, text: trimmed })
+    return true
   }
 
   async function fetchHistory(poolId?: number) {
@@ -187,6 +226,8 @@ export function useQueueStore() {
     queueError,
     cancelled,
     queueHistory,
+    chatMessages,
+    chatRateLimitedUntil,
 
     fetchPools,
     joinQueue,
@@ -195,5 +236,6 @@ export function useQueueStore() {
     requestState,
     fetchHistory,
     resetMatchState,
+    sendChat,
   }
 }

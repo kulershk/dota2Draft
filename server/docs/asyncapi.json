@@ -823,6 +823,70 @@
           ]
         }
       }
+    },
+    "queue:chatSend": {
+      "publish": {
+        "summary": "Send a chat message to a queue pool room (rate-limited to 1s per player)",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "poolId": { "type": "integer" },
+              "text": { "type": "string", "maxLength": 300 }
+            },
+            "required": ["poolId", "text"]
+          },
+          "examples": [
+            { "name": "Send chat", "payload": { "poolId": 1, "text": "anyone for 5v5?" } }
+          ]
+        }
+      }
+    },
+    "queue:chatMessage": {
+      "subscribe": {
+        "summary": "Broadcast: chat message in a queue pool room (queue:${poolId})",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "integer" },
+              "poolId": { "type": "integer" },
+              "playerId": { "type": "integer" },
+              "name": { "type": "string" },
+              "avatarUrl": { "type": "string", "nullable": true },
+              "text": { "type": "string" },
+              "ts": { "type": "integer", "description": "Unix timestamp ms" }
+            }
+          }
+        }
+      }
+    },
+    "queue:chatHistory": {
+      "subscribe": {
+        "summary": "Private: chat history sent to socket on queue:getState",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "poolId": { "type": "integer" },
+              "messages": { "type": "array", "items": { "type": "object" } }
+            }
+          }
+        }
+      }
+    },
+    "queue:chatRateLimited": {
+      "subscribe": {
+        "summary": "Private: sender exceeded the 1s chat rate limit",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "retryAfterMs": { "type": "integer" }
+            }
+          }
+        }
+      }
     }
   }
 }

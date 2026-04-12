@@ -27,6 +27,17 @@ function generatePickOrder(teamSize) {
 // Cache pool sizes to avoid DB lookups on every join check
 const poolSizeCache = new Map() // poolId -> { teamSize, totalPlayers }
 
+// Per-pool chat history (last 50 messages)
+const poolChatHistory = new Map() // poolId -> [{ id, playerId, name, avatarUrl, text, ts }]
+// Per-player rate limit timestamps for chat
+const lastChatAt = new Map() // playerId -> ms timestamp
+// Track which pool a socket is currently watching (for chat room membership)
+const socketWatchingPool = new Map() // socketId -> poolId
+let chatMsgSeq = 0
+const CHAT_RATE_LIMIT_MS = 1000
+const CHAT_HISTORY_MAX = 50
+const CHAT_TEXT_MAX = 300
+
 export function registerQueueHandlers(socket, io) {
 
   // ── Join queue ──
@@ -114,9 +125,59 @@ export function registerQueueHandlers(socket, io) {
     makePick(queueMatchId, match, pickedIdx, io)
   })
 
+  // ── Chat send ──
+  socket.on('queue:chatSend', ({ poolId, text }) => {
+    const playerId = socketPlayers.get(socket.id)
+    if (!playerId) return socket.emit('queue:error', { message: 'Not authenticated' })
+    if (!poolId || typeof text !== 'string') return
+    const trimmed = text.trim()
+    if (!trimmed) return
+
+    const now = Date.now()
+    const last = lastChatAt.get(playerId) || 0
+    if (now - last < CHAT_RATE_LIMIT_MS) {
+      return socket.emit('queue:chatRateLimited', { retryAfterMs: CHAT_RATE_LIMIT_MS - (now - last) })
+    }
+    lastChatAt.set(playerId, now)
+
+    queryOne('SELECT id, name, display_name, avatar_url FROM players WHERE id = $1', [playerId])
+      .then(p => {
+        if (!p) return
+        const msg = {
+          id: ++chatMsgSeq,
+          poolId,
+          playerId,
+          name: p.display_name || p.name,
+          avatarUrl: p.avatar_url,
+          text: trimmed.slice(0, CHAT_TEXT_MAX),
+          ts: now,
+        }
+        const hist = poolChatHistory.get(poolId) || []
+        hist.push(msg)
+        if (hist.length > CHAT_HISTORY_MAX) hist.splice(0, hist.length - CHAT_HISTORY_MAX)
+        poolChatHistory.set(poolId, hist)
+        io.to(`queue:${poolId}`).emit('queue:chatMessage', msg)
+      })
+      .catch(() => {})
+  })
+
   // ── Get state (on page load) ──
   socket.on('queue:getState', async ({ poolId }) => {
     const playerId = socketPlayers.get(socket.id)
+
+    // Join the pool's chat room (leaving any previous one)
+    const prevPool = socketWatchingPool.get(socket.id)
+    if (prevPool && prevPool !== poolId) {
+      // Only leave if not actively queued in that pool
+      if (!playerId || playerInQueue.get(playerId) !== prevPool) {
+        socket.leave(`queue:${prevPool}`)
+      }
+    }
+    socket.join(`queue:${poolId}`)
+    socketWatchingPool.set(socket.id, poolId)
+
+    // Send chat history
+    socket.emit('queue:chatHistory', { poolId, messages: poolChatHistory.get(poolId) || [] })
 
     // Send queue count
     socket.emit('queue:updated', {
@@ -167,6 +228,7 @@ export function registerQueueHandlers(socket, io) {
 
   // ── Disconnect handling ──
   socket.on('disconnect', () => {
+    socketWatchingPool.delete(socket.id)
     const playerId = socketPlayers.get(socket.id)
     if (!playerId) return
 
