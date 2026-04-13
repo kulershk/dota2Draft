@@ -1017,7 +1017,7 @@ export default {
   reason: 'Iemesls',
 
   // Queue
-  queue: 'Rinda',
+  queue: 'Matchmaking',
   queueDesc: 'Pievienojies rindai, atrodi spēli, izveido komandu un spēlē.',
   queueAllSkillLevels: 'Visi līmeņi',
   queueAvailablePlayers: 'Pieejamie spēlētāji',

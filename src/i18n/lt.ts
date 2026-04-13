@@ -1017,7 +1017,7 @@ export default {
   reason: 'Priežastis',
 
   // Queue
-  queue: 'Eilė',
+  queue: 'Matchmaking',
   queueDesc: 'Prisijunk prie eilės, rask žaidimą, sudaryk komandą ir žaisk.',
   queueAllSkillLevels: 'Visi lygiai',
   queueAvailablePlayers: 'Galimi žaidėjai',

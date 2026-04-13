@@ -1025,7 +1025,7 @@ export default {
   reason: 'Reason',
 
   // Queue
-  queue: 'Queue',
+  queue: 'Matchmaking',
   queueDesc: 'Join a queue, get matched, draft your team, and play.',
   queueAllSkillLevels: 'All skill levels',
   queueAvailablePlayers: 'Available Players',
