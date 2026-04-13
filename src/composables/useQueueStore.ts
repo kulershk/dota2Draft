@@ -131,6 +131,12 @@ function initSocket() {
   socket.on('queue:error', (data: { message: string }) => {
     queueError.value = data.message
     setTimeout(() => { queueError.value = null }, 5000)
+    // Roll back optimistic join state — if the server rejected the join,
+    // we're not actually in queue.
+    inQueue.value = false
+    currentPoolName.value = null
+    queueCount.value = 0
+    queuePlayers.value = []
   })
 
   socket.on('queue:myState', (data: {
