@@ -6,6 +6,7 @@ import { ArrowLeft, ExternalLink, Clock, Trophy, Swords, Loader2, ChevronDown } 
 import { useApi } from '@/composables/useApi'
 import { useDotaConstants } from '@/composables/useDotaConstants'
 import PositionIcon from '@/components/common/PositionIcon.vue'
+import UserName from '@/components/common/UserName.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -199,9 +200,13 @@ onMounted(async () => {
           <!-- Score header -->
           <div class="grid grid-cols-[1fr_auto_1fr] items-center px-6 py-5 border-b border-border/30">
             <div class="flex items-center gap-3">
-              <img v-if="match.captain1_avatar" :src="match.captain1_avatar" class="w-10 h-10 rounded-full ring-2 ring-green-500/30" />
+              <router-link :to="{ name: 'player-profile', params: { id: match.captain1_player_id } }" class="shrink-0 hover:opacity-80 transition-opacity">
+                <img v-if="match.captain1_avatar" :src="match.captain1_avatar" class="w-10 h-10 rounded-full ring-2 ring-green-500/30" />
+              </router-link>
               <div>
-                <div class="font-bold">{{ match.captain1_display_name || match.captain1_name }}</div>
+                <router-link :to="{ name: 'player-profile', params: { id: match.captain1_player_id } }" class="font-bold hover:text-primary transition-colors">
+                  {{ match.captain1_display_name || match.captain1_name }}
+                </router-link>
                 <div class="text-[10px] font-bold text-green-400 uppercase">{{ t('queueRadiant') }}</div>
               </div>
             </div>
@@ -216,10 +221,14 @@ onMounted(async () => {
             </div>
             <div class="flex items-center gap-3 justify-end">
               <div class="text-right">
-                <div class="font-bold">{{ match.captain2_display_name || match.captain2_name }}</div>
+                <router-link :to="{ name: 'player-profile', params: { id: match.captain2_player_id } }" class="font-bold hover:text-primary transition-colors">
+                  {{ match.captain2_display_name || match.captain2_name }}
+                </router-link>
                 <div class="text-[10px] font-bold text-red-400 uppercase">{{ t('queueDire') }}</div>
               </div>
-              <img v-if="match.captain2_avatar" :src="match.captain2_avatar" class="w-10 h-10 rounded-full ring-2 ring-red-500/30" />
+              <router-link :to="{ name: 'player-profile', params: { id: match.captain2_player_id } }" class="shrink-0 hover:opacity-80 transition-opacity">
+                <img v-if="match.captain2_avatar" :src="match.captain2_avatar" class="w-10 h-10 rounded-full ring-2 ring-red-500/30" />
+              </router-link>
             </div>
           </div>
 
@@ -230,8 +239,7 @@ onMounted(async () => {
                 <div v-for="(p, idx) in team1" :key="p.playerId || idx"
                   class="flex items-center gap-2.5 px-3 py-2 rounded-lg"
                   :class="idx === 0 ? 'bg-green-500/8 border border-green-500/15' : 'bg-accent/40'">
-                  <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-6 h-6 rounded-full" />
-                  <span class="text-sm font-medium flex-1 truncate">{{ p.name }}</span>
+                  <UserName :id="p.playerId" :name="p.name" :avatar-url="p.avatarUrl" size="md" class="flex-1 min-w-0" />
                   <span class="text-[10px] text-muted-foreground tabular-nums">{{ p.mmr }} MMR</span>
                   <span v-if="idx === 0" class="text-[9px] font-bold text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded">CPT</span>
                 </div>
@@ -242,8 +250,7 @@ onMounted(async () => {
                 <div v-for="(p, idx) in team2" :key="p.playerId || idx"
                   class="flex items-center gap-2.5 px-3 py-2 rounded-lg"
                   :class="idx === 0 ? 'bg-red-500/8 border border-red-500/15' : 'bg-accent/40'">
-                  <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-6 h-6 rounded-full" />
-                  <span class="text-sm font-medium flex-1 truncate">{{ p.name }}</span>
+                  <UserName :id="p.playerId" :name="p.name" :avatar-url="p.avatarUrl" size="md" class="flex-1 min-w-0" />
                   <span class="text-[10px] text-muted-foreground tabular-nums">{{ p.mmr }} MMR</span>
                   <span v-if="idx === 0" class="text-[9px] font-bold text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded">CPT</span>
                 </div>
