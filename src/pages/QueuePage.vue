@@ -122,7 +122,16 @@ watch(() => queue.chatMessages.value.length, async () => {
 onMounted(async () => {
   await queue.fetchPools()
   if (queue.pools.value.length > 0) {
-    selectPool(queue.pools.value[0].id)
+    // If we're already queued or in an active match on some pool, preselect
+    // that one instead of clobbering state with pools[0]. Otherwise fall back
+    // to the first pool.
+    const preferred = (queue.inQueue.value || queue.activeMatch.value)
+      ? queue.currentPoolId.value
+      : null
+    const initial = preferred && queue.pools.value.some(p => p.id === preferred)
+      ? preferred
+      : queue.pools.value[0].id
+    selectPool(initial)
   }
   tickInterval = setInterval(() => {
     now.value = getServerNow()
@@ -411,7 +420,7 @@ onUnmounted(() => {
                     <span class="font-mono font-bold" :class="selectedPoolId === pool.id ? 'text-primary' : ''">
                       {{ selectedPoolId === pool.id ? queue.queueCount.value : '—' }}
                     </span>
-                    <span class="text-muted-foreground text-xs">/{{ totalPlayers }}</span>
+                    <span class="text-muted-foreground text-xs">/{{ ((pool as any).team_size || 5) * 2 }}</span>
                   </div>
                 </div>
               </div>

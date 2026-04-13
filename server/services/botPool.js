@@ -636,15 +636,21 @@ class BotPool {
         const team1Won = team1IsRadiant ? radiantWin : !radiantWin
         const winIds = team1Won ? team1Ids : team2Ids
         const loseIds = team1Won ? team2Ids : team1Ids
-        for (const pid of winIds) {
-          awardXp(pid, queueMatchXp.xp_win || 15, 'queue_win', 'match_game', `${matchId}:${gameNumber}:${pid}`, {
-            detail: `Queue win (${queueMatchXp.pool_name})`,
-          })
+        const xpWin = queueMatchXp.xp_win == null ? 15 : Number(queueMatchXp.xp_win)
+        const xpLoss = queueMatchXp.xp_participate == null ? 5 : Number(queueMatchXp.xp_participate)
+        if (xpWin > 0) {
+          for (const pid of winIds) {
+            awardXp(pid, xpWin, 'queue_win', 'match_game', `${matchId}:${gameNumber}:${pid}`, {
+              detail: `Queue win (${queueMatchXp.pool_name})`,
+            })
+          }
         }
-        for (const pid of loseIds) {
-          awardXp(pid, queueMatchXp.xp_participate || 5, 'queue_loss', 'match_game', `${matchId}:${gameNumber}:${pid}`, {
-            detail: `Queue loss (${queueMatchXp.pool_name})`,
-          })
+        if (xpLoss > 0) {
+          for (const pid of loseIds) {
+            awardXp(pid, xpLoss, 'queue_loss', 'match_game', `${matchId}:${gameNumber}:${pid}`, {
+              detail: `Queue loss (${queueMatchXp.pool_name})`,
+            })
+          }
         }
         // Update queue match status
         await execute("UPDATE queue_matches SET status = 'completed', completed_at = NOW() WHERE id = $1", [queueMatchXp.id])
