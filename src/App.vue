@@ -4,9 +4,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { onMounted, ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDraftStore } from '@/composables/useDraftStore'
+import { useQueueStore } from '@/composables/useQueueStore'
 import { useApi } from '@/composables/useApi'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 import AppFooter from '@/components/common/AppFooter.vue'
+import QueueStatusOverlay from '@/components/common/QueueStatusOverlay.vue'
 import InputGroup from '@/components/common/InputGroup.vue'
 import { setLocale } from '@/i18n'
 import { getSocket } from '@/composables/useSocket'
@@ -15,6 +17,7 @@ const { t, locale } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const store = useDraftStore()
+const queue = useQueueStore()
 
 const isDark = ref(localStorage.getItem('draft_theme') !== 'light')
 
@@ -106,6 +109,26 @@ onMounted(async () => {
   }
 
   await store.restoreAuth()
+
+  // After auth is restored, ask the server for the current player's queue/match
+  // state so we can restore the "finding match" overlay on page refresh or
+  // when loading the app on a non-queue page.
+  if (store.currentUser.value) {
+    queue.fetchPools().then(() => queue.requestMyState())
+  }
+})
+
+// If the user gets logged in later (e.g. Steam redirect), also sync then.
+watch(() => store.currentUser.value?.id, (uid) => {
+  if (uid) queue.fetchPools().then(() => queue.requestMyState())
+})
+
+// Auto-navigate to /queue when a match is found while the user is on another
+// page — skip if they're already on /queue.
+watch(() => queue.activeMatch.value, (m, prev) => {
+  if (m && !prev && route.path !== '/queue') {
+    router.push('/queue')
+  }
 })
 
 const mainRef = ref<HTMLElement | null>(null)
@@ -432,6 +455,9 @@ async function handleClaimAdmin() {
       <!-- Footer (only on public pages) -->
       <AppFooter v-if="!route.path.startsWith('/admin') && !route.path.startsWith('/c/')" class="mt-auto relative z-[1]" />
     </main>
+
+    <!-- Global queue status overlay (hidden while on /queue) -->
+    <QueueStatusOverlay />
 
     <!-- Claim Admin Modal -->
     <ModalOverlay :show="showClaimAdmin" @close="showClaimAdmin = false">

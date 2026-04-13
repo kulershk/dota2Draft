@@ -47,6 +47,7 @@ export interface QueueMatchFound {
 const pools = ref<QueuePool[]>([])
 const inQueue = ref(false)
 const currentPoolId = ref<number | null>(null)
+const currentPoolName = ref<string | null>(null)
 const queueCount = ref(0)
 const queuePlayers = ref<QueuePlayer[]>([])
 
@@ -132,6 +133,30 @@ function initSocket() {
     setTimeout(() => { queueError.value = null }, 5000)
   })
 
+  socket.on('queue:myState', (data: {
+    inQueue: boolean
+    poolId: number | null
+    poolName: string | null
+    inMatch: boolean
+    queueMatchId: number | null
+    count: number
+    players: QueuePlayer[]
+  }) => {
+    inQueue.value = data.inQueue
+    if (data.inQueue && data.poolId) {
+      currentPoolId.value = data.poolId
+      currentPoolName.value = data.poolName
+      queueCount.value = data.count
+      queuePlayers.value = data.players
+    } else if (!data.inMatch) {
+      // Truly idle — clear any stale state
+      if (!data.poolId) {
+        queueCount.value = 0
+        queuePlayers.value = []
+      }
+    }
+  })
+
   socket.on('queue:gameStarted', (_data: { queueMatchId: number; dotaMatchId: string }) => {
     activeMatch.value = null
     pickState.value = null
@@ -170,15 +195,22 @@ export function useQueueStore() {
 
   function joinQueue(poolId: number) {
     currentPoolId.value = poolId
+    const p = pools.value.find(x => x.id === poolId)
+    if (p) currentPoolName.value = p.name
     cancelled.value = null
     getSocket().emit('queue:join', { poolId })
     inQueue.value = true
+  }
+
+  function requestMyState() {
+    getSocket().emit('queue:getMyState')
   }
 
   function leaveQueue() {
     const poolId = currentPoolId.value
     getSocket().emit('queue:leave')
     inQueue.value = false
+    currentPoolName.value = null
     queueCount.value = 0
     queuePlayers.value = []
     // Re-join the pool room so chat keeps working while still browsing this pool
@@ -225,6 +257,7 @@ export function useQueueStore() {
     pools,
     inQueue,
     currentPoolId,
+    currentPoolName,
     queueCount,
     queuePlayers,
     activeMatch,
@@ -242,6 +275,7 @@ export function useQueueStore() {
     leaveQueue,
     pickPlayer,
     requestState,
+    requestMyState,
     fetchHistory,
     resetMatchState,
     sendChat,

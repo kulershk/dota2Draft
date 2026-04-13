@@ -140,6 +140,67 @@ export function registerQueueHandlers(socket, io) {
     makePick(queueMatchId, match, pickedIdx, io)
   })
 
+  // ── Get *my* current state (used on app boot / page reload / route change) ──
+  // Unlike queue:getState (which needs a poolId), this figures out from the
+  // server-side maps whether the authenticated player is already in a queue
+  // or an active match, rejoins the appropriate socket rooms, and re-sends
+  // the state events so the client can restore its UI.
+  socket.on('queue:getMyState', async () => {
+    const playerId = socketPlayers.get(socket.id)
+    if (!playerId) return socket.emit('queue:myState', { inQueue: false, inMatch: false })
+
+    // Check DB-backed match gating (survives server restart)
+    if (!playerInMatch.has(playerId)) {
+      try {
+        const dbActive = await queryOne(`
+          SELECT id FROM queue_matches
+          WHERE status IN ('picking', 'lobby_creating', 'live')
+            AND all_player_ids @> $1::jsonb
+          LIMIT 1
+        `, [JSON.stringify([playerId])])
+        if (dbActive) playerInMatch.set(playerId, dbActive.id)
+      } catch {}
+    }
+
+    const inQueuePoolId = playerInQueue.get(playerId) || null
+    const inMatchId = playerInMatch.get(playerId) || null
+
+    let poolName = null
+    if (inQueuePoolId) {
+      const pool = await queryOne('SELECT name FROM queue_pools WHERE id = $1', [inQueuePoolId])
+      poolName = pool?.name || null
+      socket.join(`queue:${inQueuePoolId}`)
+      socketWatchingPool.set(socket.id, inQueuePoolId)
+    }
+
+    socket.emit('queue:myState', {
+      inQueue: !!inQueuePoolId,
+      poolId: inQueuePoolId,
+      poolName,
+      inMatch: !!inMatchId,
+      queueMatchId: inMatchId,
+      count: inQueuePoolId ? getPoolQueueCount(inQueuePoolId) : 0,
+      players: inQueuePoolId ? getPoolQueuePlayers(inQueuePoolId) : [],
+    })
+
+    // If they're in an active match in memory, also re-send match state so
+    // navigating to /queue while in pick phase lands back on the right screen.
+    if (inMatchId) {
+      const match = activeQueueMatches.get(inMatchId)
+      if (match) {
+        socket.join(`queue-match:${inMatchId}`)
+        socket.emit('queue:matchFound', buildMatchFoundPayload(match))
+        if (match.status === 'picking') {
+          socket.emit('queue:pickState', buildPickStatePayload(match))
+        } else {
+          const team1 = [match.captain1, ...match.captain1Picks]
+          const team2 = [match.captain2, ...match.captain2Picks]
+          socket.emit('queue:teamsFormed', { queueMatchId: inMatchId, team1, team2 })
+        }
+      }
+    }
+  })
+
   // ── Chat send ──
   socket.on('queue:chatSend', ({ poolId, text }) => {
     const playerId = socketPlayers.get(socket.id)

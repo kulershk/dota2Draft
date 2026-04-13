@@ -824,6 +824,31 @@
         }
       }
     },
+    "queue:getMyState": {
+      "publish": {
+        "summary": "Ask the server for this socket's current queue/match state. Used on app boot and page reload to restore the overlay and rejoin rooms.",
+        "message": { "payload": { "type": "null" } }
+      }
+    },
+    "queue:myState": {
+      "subscribe": {
+        "summary": "Private: the authenticated player's current queue/match state",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "inQueue": { "type": "boolean" },
+              "poolId": { "type": "integer", "nullable": true },
+              "poolName": { "type": "string", "nullable": true },
+              "inMatch": { "type": "boolean" },
+              "queueMatchId": { "type": "integer", "nullable": true },
+              "count": { "type": "integer" },
+              "players": { "type": "array", "items": { "type": "object" } }
+            }
+          }
+        }
+      }
+    },
     "queue:gameStarted": {
       "subscribe": {
         "summary": "Broadcast: Dota match ID captured for a queue match (queue-match:${queueMatchId}). Frontend should clear lobby banner.",
