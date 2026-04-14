@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { Clock, Users, Swords, X, Check, Loader2, Shield, ChevronRight, Timer, Send, MessageSquare } from 'lucide-vue-next'
+import { Clock, Users, Swords, X, Check, Loader2, Shield, ChevronRight, Timer, Send, MessageSquare, Ban } from 'lucide-vue-next'
 import { useQueueStore, type QueuePlayer } from '@/composables/useQueueStore'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { getServerNow } from '@/composables/useSocket'
@@ -91,6 +91,30 @@ function handlePick(playerId: number) {
   queue.pickPlayer(queue.activeMatch.value.queueMatchId, playerId)
 }
 
+// Queue ban — banner + live countdown
+const banRemainingMs = computed(() => {
+  const b = queue.myBan.value
+  if (!b) return 0
+  if (b.bannedUntil == null) return Infinity // permanent
+  const end = new Date(b.bannedUntil).getTime()
+  return Math.max(0, end - now.value)
+})
+const isBanned = computed(() => !!queue.myBan.value && (banRemainingMs.value > 0))
+function formatBanRemaining(ms: number): string {
+  if (!Number.isFinite(ms)) return t('queueAdminBanPermanent')
+  const s = Math.ceil(ms / 1000)
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60)
+  const rs = s % 60
+  if (m < 60) return rs > 0 ? `${m}m ${rs}s` : `${m}m`
+  const h = Math.floor(m / 60)
+  const rm = m % 60
+  if (h < 24) return rm > 0 ? `${h}h ${rm}m` : `${h}h`
+  const d = Math.floor(h / 24)
+  const rh = h % 24
+  return rh > 0 ? `${d}d ${rh}h` : `${d}d`
+}
+
 // Ready sound — plays when a match is found (10/10)
 const readySound = new Audio('/sounds/ready.wav')
 readySound.preload = 'auto'
@@ -158,6 +182,27 @@ onUnmounted(() => {
     </div>
 
     <div class="max-w-5xl mx-auto px-4 md:px-8 py-8">
+      <!-- Queue ban banner (shown before anything else, no pools needed) -->
+      <div v-if="isBanned" class="card overflow-hidden mb-6 border border-destructive/40">
+        <div class="h-1 bg-destructive" />
+        <div class="px-6 py-5 flex items-center gap-4">
+          <div class="w-10 h-10 rounded-lg bg-destructive/15 flex items-center justify-center shrink-0">
+            <Ban class="w-5 h-5 text-destructive" />
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-bold text-destructive">{{ t('queueBannedTitle') }}</div>
+            <div class="text-xs text-muted-foreground mt-0.5">
+              <template v-if="queue.myBan.value?.reason">{{ queue.myBan.value.reason }}</template>
+              <template v-else>{{ t('queueBannedNoReason') }}</template>
+            </div>
+          </div>
+          <div class="text-right">
+            <div class="text-[10px] font-semibold uppercase text-muted-foreground">{{ t('queueBannedUntil') }}</div>
+            <div class="text-xl font-mono font-bold tabular-nums text-destructive">{{ formatBanRemaining(banRemainingMs) }}</div>
+          </div>
+        </div>
+      </div>
+
       <!-- No pools -->
       <div v-if="queue.pools.value.length === 0" class="card px-6 py-16 text-center">
         <Swords class="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
@@ -444,7 +489,8 @@ onUnmounted(() => {
               </div>
               <div>
                 <button v-if="!queue.inQueue.value"
-                  class="btn-primary px-8 py-2.5 text-sm font-semibold"
+                  class="btn-primary px-8 py-2.5 text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+                  :disabled="isBanned"
                   @click="handleJoin">
                   {{ t('queueJoin') }}
                 </button>

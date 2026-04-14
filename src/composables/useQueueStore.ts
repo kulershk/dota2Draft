@@ -60,6 +60,12 @@ const cancelled = ref<string | null>(null)
 
 const queueHistory = ref<any[]>([])
 
+export interface QueueBanInfo {
+  bannedUntil: string | null
+  reason: string | null
+}
+const myBan = ref<QueueBanInfo | null>(null)
+
 export interface QueueChatMessage {
   id: number
   poolId: number
@@ -156,8 +162,10 @@ function initSocket() {
     queueMatchId: number | null
     count: number
     players: QueuePlayer[]
+    ban?: QueueBanInfo | null
   }) => {
     inQueue.value = data.inQueue
+    myBan.value = data.ban || null
     if (data.inQueue && data.poolId) {
       currentPoolId.value = data.poolId
       currentPoolName.value = data.poolName
@@ -282,6 +290,7 @@ export function useQueueStore() {
     queueError,
     cancelled,
     queueHistory,
+    myBan,
     chatMessages,
     chatRateLimitedUntil,
 

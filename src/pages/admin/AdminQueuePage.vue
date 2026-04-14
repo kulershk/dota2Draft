@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Plus, Trash2, Pencil, X, Check, Ban, RefreshCw, Swords, Loader2, UserX, Clock } from 'lucide-vue-next'
+import { Plus, Trash2, Pencil, X, Check, Ban, RefreshCw, Swords, Loader2, UserX, Clock, Search } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
+import ModalOverlay from '@/components/common/ModalOverlay.vue'
 
 const { t } = useI18n()
 const api = useApi()
@@ -13,11 +14,21 @@ const activeMatches = ref<any[]>([])
 const loadingMatches = ref(false)
 const queuedPlayers = ref<any[]>([])
 const bans = ref<any[]>([])
-const banForm = ref<{ player_id: number | null; duration_minutes: number; reason: string }>({
+const banForm = ref<{
+  player_id: number | null
+  player_label: string
+  duration_minutes: number
+  reason: string
+}>({
   player_id: null,
+  player_label: '',
   duration_minutes: 60,
   reason: '',
 })
+const showBanModal = ref(false)
+const banSearchQuery = ref('')
+const banSearchResults = ref<any[]>([])
+let banSearchTimer: ReturnType<typeof setTimeout> | null = null
 let refreshInterval: ReturnType<typeof setInterval> | null = null
 
 const form = ref<Record<string, any>>({
@@ -124,14 +135,41 @@ async function kickQueued(playerId: number) {
   } catch (e: any) { alert(e.message) }
 }
 
-async function banQueued(playerId: number) {
-  const mins = Number(prompt(t('queueAdminBanDurationPrompt'), '60'))
-  if (!Number.isFinite(mins) || mins < 0) return
-  const reason = prompt(t('queueAdminBanReasonPrompt')) || ''
-  try {
-    await api.addAdminQueueBan({ player_id: playerId, duration_minutes: mins, reason })
-    await Promise.all([fetchQueuedPlayers(), fetchBans()])
-  } catch (e: any) { alert(e.message) }
+function openBanModal(prefill?: { id: number; name: string }) {
+  banForm.value = {
+    player_id: prefill?.id || null,
+    player_label: prefill?.name || '',
+    duration_minutes: 60,
+    reason: '',
+  }
+  banSearchQuery.value = ''
+  banSearchResults.value = []
+  showBanModal.value = true
+}
+
+function closeBanModal() {
+  showBanModal.value = false
+  banSearchResults.value = []
+}
+
+function onBanSearchInput() {
+  if (banSearchTimer) clearTimeout(banSearchTimer)
+  const q = banSearchQuery.value.trim()
+  if (q.length < 2) { banSearchResults.value = []; return }
+  banSearchTimer = setTimeout(async () => {
+    try {
+      banSearchResults.value = await api.searchPlayers(q)
+    } catch {
+      banSearchResults.value = []
+    }
+  }, 200)
+}
+
+function pickBanPlayer(p: any) {
+  banForm.value.player_id = p.id
+  banForm.value.player_label = p.display_name || p.name
+  banSearchQuery.value = ''
+  banSearchResults.value = []
 }
 
 async function submitBan() {
@@ -142,7 +180,7 @@ async function submitBan() {
       duration_minutes: Number(banForm.value.duration_minutes) || 0,
       reason: banForm.value.reason,
     })
-    banForm.value = { player_id: null, duration_minutes: 60, reason: '' }
+    closeBanModal()
     await Promise.all([fetchBans(), fetchQueuedPlayers()])
   } catch (e: any) { alert(e.message) }
 }
@@ -344,7 +382,7 @@ onUnmounted(() => {
             <button class="flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" @click="kickQueued(p.playerId)">
               <UserX class="w-3.5 h-3.5" /> {{ t('queueAdminKick') }}
             </button>
-            <button class="flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold text-destructive hover:bg-destructive/10 transition-colors" @click="banQueued(p.playerId)">
+            <button class="flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold text-destructive hover:bg-destructive/10 transition-colors" @click="openBanModal({ id: p.playerId, name: p.name })">
               <Ban class="w-3.5 h-3.5" /> {{ t('queueAdminBan') }}
             </button>
           </div>
@@ -363,22 +401,10 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- Add ban by player id form -->
-      <div class="card px-4 py-3 mb-3 flex flex-wrap items-end gap-3">
-        <div class="flex flex-col gap-1">
-          <label class="text-[10px] font-semibold uppercase text-muted-foreground">{{ t('queueAdminBanPlayerId') }}</label>
-          <input v-model.number="banForm.player_id" type="number" class="bg-accent/40 border border-border/40 rounded px-2 py-1 text-sm w-32" />
-        </div>
-        <div class="flex flex-col gap-1">
-          <label class="text-[10px] font-semibold uppercase text-muted-foreground">{{ t('queueAdminBanDuration') }}</label>
-          <input v-model.number="banForm.duration_minutes" type="number" min="0" class="bg-accent/40 border border-border/40 rounded px-2 py-1 text-sm w-24" />
-        </div>
-        <div class="flex flex-col gap-1 flex-1 min-w-[200px]">
-          <label class="text-[10px] font-semibold uppercase text-muted-foreground">{{ t('queueAdminBanReason') }}</label>
-          <input v-model="banForm.reason" type="text" class="bg-accent/40 border border-border/40 rounded px-2 py-1 text-sm" />
-        </div>
-        <button class="btn-primary text-sm flex items-center gap-1.5" :disabled="!banForm.player_id" @click="submitBan">
-          <Ban class="w-3.5 h-3.5" /> {{ t('queueAdminBan') }}
+      <!-- Add ban button (opens modal with player picker) -->
+      <div class="mb-3">
+        <button class="btn-primary text-sm flex items-center gap-1.5" @click="openBanModal()">
+          <Plus class="w-3.5 h-3.5" /> {{ t('queueAdminBan') }}
         </button>
       </div>
 
@@ -593,5 +619,84 @@ onUnmounted(() => {
         <button class="btn-primary" @click="savePool">{{ t('save') }}</button>
       </div>
     </div>
+
+    <!-- ═══════════════════ Ban Modal ═══════════════════ -->
+    <ModalOverlay :show="showBanModal" @close="closeBanModal">
+      <div class="border-b border-border px-6 py-5">
+        <h2 class="text-lg font-bold flex items-center gap-2">
+          <Ban class="w-4 h-4 text-destructive" />
+          {{ t('queueAdminBanTitle') }}
+        </h2>
+        <p class="text-xs text-muted-foreground mt-1">{{ t('queueAdminBanDesc') }}</p>
+      </div>
+
+      <div class="px-6 py-5 flex flex-col gap-4">
+        <!-- Player picker -->
+        <div class="flex flex-col gap-1.5">
+          <label class="text-[11px] font-semibold uppercase text-muted-foreground">{{ t('queueAdminBanPlayer') }}</label>
+          <div v-if="banForm.player_id" class="flex items-center gap-2 px-3 py-2 bg-accent/40 rounded-lg">
+            <Check class="w-4 h-4 text-primary" />
+            <span class="text-sm font-medium flex-1">{{ banForm.player_label }}</span>
+            <span class="text-[10px] text-muted-foreground">#{{ banForm.player_id }}</span>
+            <button class="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground" @click="banForm.player_id = null; banForm.player_label = ''">
+              <X class="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div v-else class="relative">
+            <div class="flex items-center gap-2 px-3 py-2 bg-accent/40 border border-border/40 rounded-lg">
+              <Search class="w-4 h-4 text-muted-foreground" />
+              <input
+                v-model="banSearchQuery"
+                type="text"
+                class="flex-1 bg-transparent text-sm focus:outline-none"
+                :placeholder="t('queueAdminBanSearchPlaceholder')"
+                @input="onBanSearchInput"
+              />
+            </div>
+            <div v-if="banSearchResults.length > 0" class="absolute left-0 right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-64 overflow-y-auto z-10">
+              <button
+                v-for="p in banSearchResults" :key="p.id"
+                class="w-full flex items-center gap-2 px-3 py-2 hover:bg-accent/40 transition-colors text-left"
+                @click="pickBanPlayer(p)"
+              >
+                <img v-if="p.avatar_url" :src="p.avatar_url" class="w-6 h-6 rounded-full" />
+                <span class="text-sm font-medium flex-1 truncate">{{ p.display_name || p.name }}</span>
+                <span class="text-[10px] text-muted-foreground">#{{ p.id }}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Duration -->
+        <div class="flex flex-col gap-1.5">
+          <label class="text-[11px] font-semibold uppercase text-muted-foreground">{{ t('queueAdminBanDuration') }}</label>
+          <div class="flex items-center gap-2">
+            <input v-model.number="banForm.duration_minutes" type="number" min="0" class="bg-accent/40 border border-border/40 rounded px-3 py-2 text-sm w-28" />
+            <span class="text-xs text-muted-foreground">{{ t('queueAdminBanDurationHint') }}</span>
+          </div>
+          <div class="flex flex-wrap gap-1.5 mt-1">
+            <button v-for="m in [15, 60, 180, 720, 1440, 0]" :key="m"
+              class="px-2.5 py-1 rounded text-[11px] font-semibold border transition-colors"
+              :class="banForm.duration_minutes === m ? 'border-primary text-primary bg-primary/10' : 'border-border text-muted-foreground hover:text-foreground'"
+              @click="banForm.duration_minutes = m">
+              {{ m === 0 ? t('queueAdminBanPermanent') : m < 60 ? `${m}m` : m < 1440 ? `${m / 60}h` : `${m / 1440}d` }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Reason -->
+        <div class="flex flex-col gap-1.5">
+          <label class="text-[11px] font-semibold uppercase text-muted-foreground">{{ t('queueAdminBanReason') }}</label>
+          <input v-model="banForm.reason" type="text" class="bg-accent/40 border border-border/40 rounded px-3 py-2 text-sm" :placeholder="t('queueAdminBanReasonPlaceholder')" />
+        </div>
+      </div>
+
+      <div class="px-6 py-4 border-t border-border/30 flex justify-end gap-2">
+        <button class="btn-outline" @click="closeBanModal">{{ t('cancel') }}</button>
+        <button class="btn-primary flex items-center gap-1.5" :disabled="!banForm.player_id" @click="submitBan">
+          <Ban class="w-3.5 h-3.5" /> {{ t('queueAdminBan') }}
+        </button>
+      </div>
+    </ModalOverlay>
   </div>
 </template>

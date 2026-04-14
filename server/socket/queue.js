@@ -65,11 +65,18 @@ export function registerQueueHandlers(socket, io) {
         [playerId]
       )
       if (ban) {
-        const until = ban.banned_until
-          ? ` until ${new Date(ban.banned_until).toISOString()}`
-          : ''
-        const reason = ban.reason ? `: ${ban.reason}` : ''
-        return socket.emit('queue:error', { message: `You are banned from queue${until}${reason}` })
+        // Also re-broadcast myState so the client's banner shows up even if
+        // it hadn't received it yet (e.g. ban applied during this session).
+        socket.emit('queue:myState', {
+          inQueue: false, poolId: null, poolName: null,
+          inMatch: !!playerInMatch.get(playerId), queueMatchId: playerInMatch.get(playerId) || null,
+          count: 0, players: [],
+          ban: {
+            bannedUntil: ban.banned_until ? new Date(ban.banned_until).toISOString() : null,
+            reason: ban.reason || null,
+          },
+        })
+        return socket.emit('queue:error', { message: 'You are banned from queue' })
       }
 
       // Check not already in queue or active match
@@ -186,6 +193,22 @@ export function registerQueueHandlers(socket, io) {
       socketWatchingPool.set(socket.id, inQueuePoolId)
     }
 
+    // Active queue ban (if any) so the client can show a blocking banner
+    // with a live countdown before the user even tries to join.
+    let ban = null
+    try {
+      const row = await queryOne(
+        'SELECT banned_until, reason FROM queue_bans WHERE player_id = $1 AND (banned_until IS NULL OR banned_until > NOW())',
+        [playerId]
+      )
+      if (row) {
+        ban = {
+          bannedUntil: row.banned_until ? new Date(row.banned_until).toISOString() : null,
+          reason: row.reason || null,
+        }
+      }
+    } catch {}
+
     socket.emit('queue:myState', {
       inQueue: !!inQueuePoolId,
       poolId: inQueuePoolId,
@@ -194,6 +217,7 @@ export function registerQueueHandlers(socket, io) {
       queueMatchId: inMatchId,
       count: inQueuePoolId ? getPoolQueueCount(inQueuePoolId) : 0,
       players: inQueuePoolId ? getPoolQueuePlayers(inQueuePoolId) : [],
+      ban,
     })
 
     // If they're in an active match in memory, also re-send match state so

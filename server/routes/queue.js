@@ -387,6 +387,31 @@ export default function createQueueRouter(io) {
       // Kick them out if currently queued
       try { kickPlayerFromQueue(io, pid, reason || 'Banned from queue') } catch {}
 
+      // Push the new ban state to any connected sockets of this player so
+      // their client can immediately show the blocking banner + countdown.
+      try {
+        const banRow = await queryOne(
+          'SELECT banned_until, reason FROM queue_bans WHERE player_id = $1',
+          [pid]
+        )
+        const banPayload = banRow
+          ? {
+              bannedUntil: banRow.banned_until ? new Date(banRow.banned_until).toISOString() : null,
+              reason: banRow.reason || null,
+            }
+          : null
+        for (const [sid, playerId] of socketPlayers) {
+          if (playerId === pid) {
+            const s = io.sockets.sockets.get(sid)
+            if (s) s.emit('queue:myState', {
+              inQueue: false, poolId: null, poolName: null,
+              inMatch: false, queueMatchId: null, count: 0, players: [],
+              ban: banPayload,
+            })
+          }
+        }
+      } catch {}
+
       res.json({ ok: true })
     } catch (e) {
       res.status(500).json({ error: e.message })
@@ -397,8 +422,20 @@ export default function createQueueRouter(io) {
   router.delete('/api/admin/queue/bans/:playerId', async (req, res) => {
     const admin = await requirePermission(req, res, 'manage_competitions')
     if (!admin) return
+    const pid = Number(req.params.playerId)
     try {
-      await execute('DELETE FROM queue_bans WHERE player_id = $1', [Number(req.params.playerId)])
+      await execute('DELETE FROM queue_bans WHERE player_id = $1', [pid])
+      // Push cleared ban to the player's sockets
+      for (const [sid, playerId] of socketPlayers) {
+        if (playerId === pid) {
+          const s = io.sockets.sockets.get(sid)
+          if (s) s.emit('queue:myState', {
+            inQueue: false, poolId: null, poolName: null,
+            inMatch: false, queueMatchId: null, count: 0, players: [],
+            ban: null,
+          })
+        }
+      }
       res.json({ ok: true })
     } catch (e) {
       res.status(500).json({ error: e.message })
