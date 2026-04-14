@@ -1,5 +1,6 @@
 import { query, queryOne, execute } from '../db.js'
 import { playerInMatch, activeQueueMatches } from '../socket/queueState.js'
+import { socketPlayers } from '../socket/state.js'
 import { fetchAndSaveGameStats, fetchOpenDotaMatch, saveMatchGameStats, requestOpenDotaParse } from '../helpers/opendota.js'
 import { awardXp, getTeamPlayerIds } from '../helpers/xp.js'
 import { getCompetition, parseCompSettings } from '../helpers/competition.js'
@@ -463,6 +464,101 @@ class BotPool {
         status: 'error',
         errorMessage: data.error,
       })
+    }
+
+    // Queue match no-show penalty: if this lobby belongs to a queue match
+    // and the error is a timeout, ban every expected player who never sat
+    // in a radiant/dire slot for 10 minutes, then cancel the queue match so
+    // the players who *did* show up are freed to re-queue.
+    const isTimeout = typeof data.error === 'string' && /timed out/i.test(data.error)
+    if (!lobby.competition_id && isTimeout) {
+      try {
+        await this._handleQueueLobbyNoShows(lobby)
+      } catch (e) {
+        console.error('[Queue] No-show penalty failed:', e.message)
+      }
+    }
+  }
+
+  async _handleQueueLobbyNoShows(lobby) {
+    const expected = lobby.players_expected || []
+    const joined = lobby.players_joined || []
+    if (!Array.isArray(expected) || expected.length === 0) return
+
+    const slottedSteamIds = new Set(
+      joined
+        .filter(p => p && (p.team === 'radiant' || p.team === 'dire'))
+        .map(p => String(p.steamId || p.steam_id))
+    )
+
+    // Each expected entry is { steam_id, name, team }. Look up the player_id
+    // by steam_id so we can apply the ban row.
+    const noShowSteamIds = expected
+      .map(e => String(e?.steam_id || ''))
+      .filter(sid => sid && !slottedSteamIds.has(sid))
+
+    let bannedCount = 0
+    if (noShowSteamIds.length > 0) {
+      const bannedUntil = new Date(Date.now() + 10 * 60 * 1000) // 10 min
+      const reason = 'Failed to join lobby in time'
+      const rows = await query(
+        'SELECT id, steam_id FROM players WHERE steam_id = ANY($1::text[])',
+        [noShowSteamIds]
+      )
+      for (const r of rows) {
+        try {
+          await execute(`
+            INSERT INTO queue_bans (player_id, banned_until, reason, banned_by)
+            VALUES ($1, $2, $3, NULL)
+            ON CONFLICT (player_id) DO UPDATE SET
+              banned_until = EXCLUDED.banned_until,
+              reason = EXCLUDED.reason,
+              banned_by = NULL,
+              created_at = NOW()
+          `, [r.id, bannedUntil, reason])
+          bannedCount++
+
+          // Push the new ban state to the player's sockets so the banner
+          // appears with a live countdown without a reload.
+          if (this.io) {
+            const banPayload = { bannedUntil: bannedUntil.toISOString(), reason }
+            for (const [sid, pid] of socketPlayers) {
+              if (pid === r.id) {
+                const s = this.io.sockets.sockets.get(sid)
+                if (s) s.emit('queue:myState', {
+                  inQueue: false, poolId: null, poolName: null,
+                  inMatch: false, queueMatchId: null, count: 0, players: [],
+                  ban: banPayload,
+                })
+              }
+            }
+          }
+        } catch (e) {
+          console.error('[Queue] Failed to auto-ban no-show player', r.id, e.message)
+        }
+      }
+    }
+    console.log(`[Queue] Lobby ${lobby.id} timed out — banned ${bannedCount} no-show player(s) for 10 min`)
+
+    // Cancel the queue match (if any) so surviving players can re-queue.
+    const qm = await queryOne('SELECT id, all_player_ids FROM queue_matches WHERE match_id = $1', [lobby.match_id])
+    if (qm) {
+      try {
+        await execute("UPDATE queue_matches SET status = 'cancelled' WHERE id = $1", [qm.id])
+      } catch {}
+
+      const playerIds = Array.isArray(qm.all_player_ids) ? qm.all_player_ids : []
+      for (const pid of playerIds) {
+        if (playerInMatch.get(pid) === qm.id) playerInMatch.delete(pid)
+      }
+      activeQueueMatches.delete(qm.id)
+
+      if (this.io) {
+        this.io.to(`queue-match:${qm.id}`).emit('queue:cancelled', {
+          queueMatchId: qm.id,
+          reason: 'Lobby timed out — no-shows banned 10 minutes',
+        })
+      }
     }
   }
 
