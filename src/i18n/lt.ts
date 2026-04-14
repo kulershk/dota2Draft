@@ -587,6 +587,8 @@ export default {
   customBracketNoLink: 'Be nuorodos',
   customBracketTerminal: 'Paskutinės',
   customBracketDeleteConfirm: 'Ištrinti šias rungtynes? Nuorodos iš kitų rungtynių turi būti pašalintos pirmiausia.',
+  customBracketViewList: 'Sąrašas',
+  customBracketViewPreview: 'Peržiūra',
   upperBracket: 'Viršutinis tinklas',
   lowerBracket: 'Žemutinis tinklas',
   grandFinals: 'Didysis finalas',

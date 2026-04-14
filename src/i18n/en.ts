@@ -588,6 +588,8 @@ export default {
   customBracketNoLink: 'No link',
   customBracketTerminal: 'Terminal (no next)',
   customBracketDeleteConfirm: 'Delete this match? Links from other matches must be cleared first.',
+  customBracketViewList: 'List',
+  customBracketViewPreview: 'Preview',
   upperBracket: 'Upper Bracket',
   lowerBracket: 'Lower Bracket',
   grandFinals: 'Grand Finals',

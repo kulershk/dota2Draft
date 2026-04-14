@@ -587,6 +587,8 @@ export default {
   customBracketNoLink: 'Bez saites',
   customBracketTerminal: 'Beigu spēle',
   customBracketDeleteConfirm: 'Dzēst šo spēli? Saites no citām spēlēm jāatvieno vispirms.',
+  customBracketViewList: 'Saraksts',
+  customBracketViewPreview: 'Priekšskatījums',
   upperBracket: 'Augšējā grupa',
   lowerBracket: 'Zemākā grupa',
   grandFinals: 'Lielais fināls',

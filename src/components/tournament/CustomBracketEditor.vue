@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Plus, Trash2, ArrowRight, AlertCircle, Play, X } from 'lucide-vue-next'
+import { Plus, Trash2, ArrowRight, AlertCircle, Play, X, List, Eye } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
+import CustomBracketView from '@/components/tournament/CustomBracketView.vue'
 
 const props = defineProps<{
   stage: any
@@ -21,6 +22,7 @@ const api = useApi()
 const store = useDraftStore()
 
 const isDraft = computed(() => props.stage?.status === 'draft')
+const viewMode = ref<'list' | 'preview'>('list')
 const sortedMatches = computed(() => {
   return [...props.matches].sort((a, b) => {
     if ((a.round || 0) !== (b.round || 0)) return (a.round || 0) - (b.round || 0)
@@ -199,6 +201,24 @@ async function activate() {
       <div class="flex items-center gap-2">
         <span v-if="isDraft" class="text-[10px] font-bold text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded uppercase">{{ t('customBracketDraft') }}</span>
         <span v-else class="text-[10px] font-bold text-green-500 bg-green-500/10 px-2 py-0.5 rounded uppercase">{{ t('customBracketActive') }}</span>
+
+        <!-- View mode toggle -->
+        <div class="flex items-center gap-0 bg-accent/40 rounded-lg p-0.5 ml-2">
+          <button
+            class="flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-semibold transition-colors"
+            :class="viewMode === 'list' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+            @click="viewMode = 'list'"
+          >
+            <List class="w-3 h-3" /> {{ t('customBracketViewList') }}
+          </button>
+          <button
+            class="flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-semibold transition-colors"
+            :class="viewMode === 'preview' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+            @click="viewMode = 'preview'"
+          >
+            <Eye class="w-3 h-3" /> {{ t('customBracketViewPreview') }}
+          </button>
+        </div>
       </div>
       <div class="flex items-center gap-2">
         <button v-if="isDraft" class="btn-primary text-sm flex items-center gap-1.5" @click="addMatch">
@@ -228,7 +248,17 @@ async function activate() {
       </button>
     </div>
 
-    <!-- Match grid grouped by round -->
+    <!-- Preview mode: render as public view, clicks still open edit modal -->
+    <CustomBracketView
+      v-else-if="viewMode === 'preview'"
+      :stage="stage"
+      :matches="matches"
+      :captains="captains"
+      :is-admin="isDraft"
+      @edit-match="openEdit"
+    />
+
+    <!-- List mode: match grid grouped by round -->
     <div v-else class="flex flex-col gap-2">
       <div v-for="match in sortedMatches" :key="match.id"
         class="card px-4 py-3 cursor-pointer transition-colors hover:bg-accent/30"
