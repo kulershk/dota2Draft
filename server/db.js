@@ -357,6 +357,8 @@ export async function initDb() {
   // Per-match penalty overrides
   try { await execute('ALTER TABLE matches ADD COLUMN penalty_radiant INTEGER DEFAULT NULL') } catch {}
   try { await execute('ALTER TABLE matches ADD COLUMN penalty_dire INTEGER DEFAULT NULL') } catch {}
+  // Optional per-match label for custom brackets (e.g. "Play-in", "Upper Finals")
+  try { await execute('ALTER TABLE matches ADD COLUMN label TEXT DEFAULT NULL') } catch {}
 
   // Competition templates
   await execute(`

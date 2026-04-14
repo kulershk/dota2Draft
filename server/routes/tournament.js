@@ -4,7 +4,7 @@ import { requireCompPermission, requirePermission } from '../middleware/permissi
 import { getSessionPlayerId, getTokenFromReq, getAuthPlayer } from '../middleware/auth.js'
 import { getCompetition, getCaptains, parseCompSettings } from '../helpers/competition.js'
 import { awardXp, getTeamPlayerIds } from '../helpers/xp.js'
-import { advanceWinner, generateEliminationBracket, generateGroupMatches, generateDoubleEliminationBracket } from '../helpers/tournament.js'
+import { advanceWinner, generateEliminationBracket, generateGroupMatches, generateDoubleEliminationBracket, customBracketWouldCycle, validateCustomBracketStage } from '../helpers/tournament.js'
 import { fetchAndSaveGameStats } from '../helpers/opendota.js'
 
 export default function createTournamentRouter(io) {
@@ -255,7 +255,7 @@ export default function createTournamentRouter(io) {
     if (!comp) return res.status(404).json({ error: 'Competition not found' })
 
     const { name, format, groups, bestOf = 3, seeds } = req.body
-    if (!format || !['single_elimination', 'double_elimination', 'group_stage'].includes(format)) {
+    if (!format || !['single_elimination', 'double_elimination', 'group_stage', 'custom_bracket'].includes(format)) {
       return res.status(400).json({ error: 'Invalid format' })
     }
 
@@ -264,6 +264,16 @@ export default function createTournamentRouter(io) {
 
     const stageId = (ts.stages.length > 0 ? Math.max(...ts.stages.map(s => s.id)) : 0) + 1
     const stage = { id: stageId, name: name || `Stage ${stageId}`, format, status: 'pending', bestOf }
+
+    // Custom bracket: no generator. Stage starts as draft; admin adds
+    // matches and links manually and then activates.
+    if (format === 'custom_bracket') {
+      stage.status = 'draft'
+      ts.stages.push(stage)
+      await execute('UPDATE competitions SET tournament_state = $1 WHERE id = $2', [JSON.stringify(ts), compId])
+      io.to(`comp:${compId}`).emit('tournament:updated')
+      return res.json({ ok: true, stageId })
+    }
 
     // Check if any seeds/teams are provided
     const hasSeeds = seeds && seeds.length > 0
@@ -391,6 +401,209 @@ export default function createTournamentRouter(io) {
     await execute('DELETE FROM matches WHERE competition_id = $1 AND stage = $2', [compId, stageId])
     await execute('UPDATE competitions SET tournament_state = $1 WHERE id = $2', [JSON.stringify(ts), compId])
 
+    io.to(`comp:${compId}`).emit('tournament:updated')
+    res.json({ ok: true })
+  })
+
+  // ── Custom bracket: per-match admin routes ─────────────────────────────
+
+  // Create a new match inside a custom_bracket stage.
+  router.post('/api/competitions/:compId/tournament/stages/:stageId/matches', async (req, res) => {
+    const compId = Number(req.params.compId)
+    const stageId = Number(req.params.stageId)
+    const admin = await requireCompPermission(req, res, compId)
+    if (!admin) return
+
+    const comp = await getCompetition(compId)
+    if (!comp) return res.status(404).json({ error: 'Competition not found' })
+    const stage = (comp.tournament_state?.stages || []).find(s => s.id === stageId)
+    if (!stage) return res.status(404).json({ error: 'Stage not found' })
+    if (stage.format !== 'custom_bracket') return res.status(400).json({ error: 'Stage is not a custom bracket' })
+    if (stage.status !== 'draft') return res.status(400).json({ error: 'Stage is locked (not in draft)' })
+
+    const { best_of = 3, round = 1, match_order = 0, label = null, team1_captain_id = null, team2_captain_id = null } = req.body || {}
+    if (![1, 3, 5, 7].includes(Number(best_of))) {
+      return res.status(400).json({ error: 'best_of must be 1, 3, 5 or 7' })
+    }
+
+    const row = await queryOne(
+      `INSERT INTO matches (competition_id, stage, round, match_order, best_of, label, team1_captain_id, team2_captain_id, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending') RETURNING *`,
+      [compId, stageId, Number(round), Number(match_order), Number(best_of), label, team1_captain_id, team2_captain_id]
+    )
+
+    io.to(`comp:${compId}`).emit('tournament:updated')
+    res.json(row)
+  })
+
+  // Update the simple fields of a custom match (best_of, round, match_order,
+  // label). Allowed on a draft stage AND on an active stage as long as the
+  // match hasn't started yet (status = 'pending' and no score).
+  router.patch('/api/admin/matches/:id/meta', async (req, res) => {
+    const matchId = Number(req.params.id)
+    const match = await queryOne('SELECT * FROM matches WHERE id = $1', [matchId])
+    if (!match) return res.status(404).json({ error: 'Match not found' })
+    const admin = await requireCompPermission(req, res, match.competition_id)
+    if (!admin) return
+
+    if (match.status !== 'pending') return res.status(409).json({ error: 'Match already started' })
+
+    const { best_of, round, match_order, label } = req.body || {}
+    const sets = []
+    const values = []
+    let i = 1
+    if (best_of !== undefined) {
+      if (![1, 3, 5, 7].includes(Number(best_of))) return res.status(400).json({ error: 'best_of must be 1, 3, 5 or 7' })
+      sets.push(`best_of = $${i++}`); values.push(Number(best_of))
+    }
+    if (round !== undefined) { sets.push(`round = $${i++}`); values.push(Number(round)) }
+    if (match_order !== undefined) { sets.push(`match_order = $${i++}`); values.push(Number(match_order)) }
+    if (label !== undefined) { sets.push(`label = $${i++}`); values.push(label || null) }
+    if (sets.length === 0) return res.json({ ok: true })
+    values.push(matchId)
+    await execute(`UPDATE matches SET ${sets.join(', ')} WHERE id = $${i}`, values)
+
+    io.to(`comp:${match.competition_id}`).emit('tournament:updated')
+    res.json({ ok: true })
+  })
+
+  // Set team1/team2 captain id on a match slot (hard seed). Rejects if the
+  // slot is already the target of an incoming link from another match.
+  router.patch('/api/admin/matches/:id/teams', async (req, res) => {
+    const matchId = Number(req.params.id)
+    const match = await queryOne('SELECT * FROM matches WHERE id = $1', [matchId])
+    if (!match) return res.status(404).json({ error: 'Match not found' })
+    const admin = await requireCompPermission(req, res, match.competition_id)
+    if (!admin) return
+
+    if (match.status !== 'pending') return res.status(409).json({ error: 'Match already started' })
+
+    const { team1_captain_id, team2_captain_id } = req.body || {}
+    // Reject if slot has an incoming link
+    const incoming = await query(
+      `SELECT id, next_match_id, next_match_slot, loser_next_match_id, loser_next_match_slot
+         FROM matches
+        WHERE (next_match_id = $1 OR loser_next_match_id = $1)`,
+      [matchId]
+    )
+    const linkedSlots = new Set()
+    for (const row of incoming) {
+      if (row.next_match_id === matchId && row.next_match_slot) linkedSlots.add(row.next_match_slot)
+      if (row.loser_next_match_id === matchId && row.loser_next_match_slot) linkedSlots.add(row.loser_next_match_slot)
+    }
+    if (team1_captain_id !== undefined && linkedSlots.has(1)) {
+      return res.status(409).json({ error: 'Slot 1 is fed by another match; clear the link first' })
+    }
+    if (team2_captain_id !== undefined && linkedSlots.has(2)) {
+      return res.status(409).json({ error: 'Slot 2 is fed by another match; clear the link first' })
+    }
+
+    const sets = []
+    const values = []
+    let i = 1
+    if (team1_captain_id !== undefined) { sets.push(`team1_captain_id = $${i++}`); values.push(team1_captain_id || null) }
+    if (team2_captain_id !== undefined) { sets.push(`team2_captain_id = $${i++}`); values.push(team2_captain_id || null) }
+    if (sets.length === 0) return res.json({ ok: true })
+    values.push(matchId)
+    await execute(`UPDATE matches SET ${sets.join(', ')} WHERE id = $${i}`, values)
+
+    io.to(`comp:${match.competition_id}`).emit('tournament:updated')
+    res.json({ ok: true })
+  })
+
+  // Update winner/loser forward links on a custom-bracket match.
+  router.patch('/api/admin/matches/:id/links', async (req, res) => {
+    const matchId = Number(req.params.id)
+    const match = await queryOne('SELECT * FROM matches WHERE id = $1', [matchId])
+    if (!match) return res.status(404).json({ error: 'Match not found' })
+    const admin = await requireCompPermission(req, res, match.competition_id)
+    if (!admin) return
+
+    if (match.status !== 'pending') return res.status(409).json({ error: 'Match already started' })
+
+    const { next_match_id, next_match_slot, loser_next_match_id, loser_next_match_slot } = req.body || {}
+
+    async function validateLinkTarget(targetId, slot) {
+      if (targetId == null) return null
+      const target = await queryOne('SELECT competition_id, stage, team1_captain_id, team2_captain_id FROM matches WHERE id = $1', [targetId])
+      if (!target) return 'Target match not found'
+      if (target.competition_id !== match.competition_id || target.stage !== match.stage) return 'Target match must be in the same stage'
+      if (slot !== 1 && slot !== 2) return 'Slot must be 1 or 2'
+      const hardSeeded = slot === 1 ? target.team1_captain_id != null : target.team2_captain_id != null
+      if (hardSeeded) return `Target slot ${slot} is already hard-seeded`
+      if (await customBracketWouldCycle(matchId, targetId)) return 'Link would create a cycle'
+      return null
+    }
+
+    if (next_match_id !== undefined) {
+      const err = await validateLinkTarget(next_match_id, Number(next_match_slot))
+      if (err) return res.status(400).json({ error: err })
+    }
+    if (loser_next_match_id !== undefined) {
+      const err = await validateLinkTarget(loser_next_match_id, Number(loser_next_match_slot))
+      if (err) return res.status(400).json({ error: err })
+    }
+
+    const sets = []
+    const values = []
+    let i = 1
+    if (next_match_id !== undefined) { sets.push(`next_match_id = $${i++}`); values.push(next_match_id || null) }
+    if (next_match_slot !== undefined) { sets.push(`next_match_slot = $${i++}`); values.push(next_match_slot || null) }
+    if (loser_next_match_id !== undefined) { sets.push(`loser_next_match_id = $${i++}`); values.push(loser_next_match_id || null) }
+    if (loser_next_match_slot !== undefined) { sets.push(`loser_next_match_slot = $${i++}`); values.push(loser_next_match_slot || null) }
+    if (sets.length === 0) return res.json({ ok: true })
+    values.push(matchId)
+    await execute(`UPDATE matches SET ${sets.join(', ')} WHERE id = $${i}`, values)
+
+    io.to(`comp:${match.competition_id}`).emit('tournament:updated')
+    res.json({ ok: true })
+  })
+
+  // Delete a custom match (only if no forward link points at it).
+  router.delete('/api/admin/matches/:id', async (req, res) => {
+    const matchId = Number(req.params.id)
+    const match = await queryOne('SELECT * FROM matches WHERE id = $1', [matchId])
+    if (!match) return res.status(404).json({ error: 'Match not found' })
+    const admin = await requireCompPermission(req, res, match.competition_id)
+    if (!admin) return
+
+    const comp = await getCompetition(match.competition_id)
+    const stage = (comp?.tournament_state?.stages || []).find(s => s.id === match.stage)
+    if (!stage || stage.format !== 'custom_bracket') return res.status(400).json({ error: 'Only custom bracket matches may be deleted this way' })
+    if (stage.status !== 'draft') return res.status(409).json({ error: 'Stage is locked (not in draft)' })
+
+    const referencing = await query(
+      'SELECT id FROM matches WHERE next_match_id = $1 OR loser_next_match_id = $1',
+      [matchId]
+    )
+    if (referencing.length > 0) {
+      return res.status(409).json({ error: `Clear link(s) from match(es) ${referencing.map(r => '#' + r.id).join(', ')} first` })
+    }
+
+    await execute('DELETE FROM matches WHERE id = $1', [matchId])
+    io.to(`comp:${match.competition_id}`).emit('tournament:updated')
+    res.json({ ok: true })
+  })
+
+  // Activate a custom_bracket stage (draft → active) after validation.
+  router.post('/api/competitions/:compId/tournament/stages/:stageId/activate', async (req, res) => {
+    const compId = Number(req.params.compId)
+    const stageId = Number(req.params.stageId)
+    const admin = await requireCompPermission(req, res, compId)
+    if (!admin) return
+
+    const comp = await getCompetition(compId)
+    if (!comp) return res.status(404).json({ error: 'Competition not found' })
+    const ts = comp.tournament_state || {}
+    const stage = (ts.stages || []).find(s => s.id === stageId)
+    if (!stage) return res.status(404).json({ error: 'Stage not found' })
+    if (stage.format !== 'custom_bracket') return res.status(400).json({ error: 'Stage is not a custom bracket' })
+
+    const errors = await validateCustomBracketStage(compId, stageId)
+    if (errors.length > 0) return res.status(400).json({ error: 'Validation failed', errors })
+
+    stage.status = 'active'
+    await execute('UPDATE competitions SET tournament_state = $1 WHERE id = $2', [JSON.stringify(ts), compId])
     io.to(`comp:${compId}`).emit('tournament:updated')
     res.json({ ok: true })
   })

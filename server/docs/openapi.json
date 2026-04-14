@@ -695,8 +695,131 @@
         "summary": "Create tournament stage",
         "security": [{ "bearerAuth": [] }],
         "parameters": [{ "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }],
-        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "name": { "type": "string" }, "format": { "type": "string", "enum": ["single_elimination", "double_elimination", "round_robin", "swiss", "group_stage"] }, "bestOf": { "type": "integer" }, "seeds": { "type": "array", "items": { "type": "integer" } } } } } } },
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "name": { "type": "string" }, "format": { "type": "string", "enum": ["single_elimination", "double_elimination", "round_robin", "swiss", "group_stage", "custom_bracket"] }, "bestOf": { "type": "integer" }, "seeds": { "type": "array", "items": { "type": "integer" } } } } } } },
         "responses": { "200": { "description": "Created" } }
+      }
+    },
+    "/api/competitions/{compId}/tournament/stages/{stageId}/matches": {
+      "post": {
+        "tags": ["Tournament"],
+        "summary": "Custom bracket: create a match inside a draft custom_bracket stage",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "stageId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "best_of": { "type": "integer", "enum": [1, 3, 5, 7] },
+                  "round": { "type": "integer" },
+                  "match_order": { "type": "integer" },
+                  "label": { "type": "string", "nullable": true },
+                  "team1_captain_id": { "type": "integer", "nullable": true },
+                  "team2_captain_id": { "type": "integer", "nullable": true }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "New match row" } }
+      }
+    },
+    "/api/competitions/{compId}/tournament/stages/{stageId}/activate": {
+      "post": {
+        "tags": ["Tournament"],
+        "summary": "Custom bracket: validate and flip a draft stage to active",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "stageId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Stage activated" },
+          "400": { "description": "Validation failed — `errors` array contains per-slot issues" }
+        }
+      }
+    },
+    "/api/admin/matches/{id}/meta": {
+      "patch": {
+        "tags": ["Tournament"],
+        "summary": "Custom bracket: update best_of / round / match_order / label (pending matches only)",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "best_of": { "type": "integer", "enum": [1, 3, 5, 7] },
+                  "round": { "type": "integer" },
+                  "match_order": { "type": "integer" },
+                  "label": { "type": "string", "nullable": true }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Updated" } }
+      }
+    },
+    "/api/admin/matches/{id}/teams": {
+      "patch": {
+        "tags": ["Tournament"],
+        "summary": "Custom bracket: hard-seed a match slot (rejects if slot has an incoming link)",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "team1_captain_id": { "type": "integer", "nullable": true },
+                  "team2_captain_id": { "type": "integer", "nullable": true }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Updated" } }
+      }
+    },
+    "/api/admin/matches/{id}/links": {
+      "patch": {
+        "tags": ["Tournament"],
+        "summary": "Custom bracket: update winner/loser forward links; cycle-checked",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "next_match_id": { "type": "integer", "nullable": true },
+                  "next_match_slot": { "type": "integer", "enum": [1, 2], "nullable": true },
+                  "loser_next_match_id": { "type": "integer", "nullable": true },
+                  "loser_next_match_slot": { "type": "integer", "enum": [1, 2], "nullable": true }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Updated" } }
+      }
+    },
+    "/api/admin/matches/{id}": {
+      "delete": {
+        "tags": ["Tournament"],
+        "summary": "Custom bracket: delete a match from a draft stage (blocked if referenced)",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Deleted" } }
       }
     },
     "/api/competitions/{compId}/tournament/stages/{stageId}": {

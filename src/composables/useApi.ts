@@ -121,6 +121,19 @@ export function useApi() {
       request(`/api/competitions/${compId}/tournament/stages/${stageId}`, { method: 'PUT', body: JSON.stringify(data) }),
     deleteTournamentStage: (compId: number, stageId: number) =>
       request(`/api/competitions/${compId}/tournament/stages/${stageId}`, { method: 'DELETE' }),
+    // Custom bracket
+    addCustomStageMatch: (compId: number, stageId: number, data: { best_of?: number; round?: number; match_order?: number; label?: string | null; team1_captain_id?: number | null; team2_captain_id?: number | null }) =>
+      request(`/api/competitions/${compId}/tournament/stages/${stageId}/matches`, { method: 'POST', body: JSON.stringify(data) }),
+    updateMatchMeta: (matchId: number, data: { best_of?: number; round?: number; match_order?: number; label?: string | null }) =>
+      request(`/api/admin/matches/${matchId}/meta`, { method: 'PATCH', body: JSON.stringify(data) }),
+    updateMatchTeams: (matchId: number, data: { team1_captain_id?: number | null; team2_captain_id?: number | null }) =>
+      request(`/api/admin/matches/${matchId}/teams`, { method: 'PATCH', body: JSON.stringify(data) }),
+    updateMatchLinks: (matchId: number, data: { next_match_id?: number | null; next_match_slot?: number | null; loser_next_match_id?: number | null; loser_next_match_slot?: number | null }) =>
+      request(`/api/admin/matches/${matchId}/links`, { method: 'PATCH', body: JSON.stringify(data) }),
+    deleteCustomMatch: (matchId: number) =>
+      request(`/api/admin/matches/${matchId}`, { method: 'DELETE' }),
+    activateCustomStage: (compId: number, stageId: number) =>
+      request(`/api/competitions/${compId}/tournament/stages/${stageId}/activate`, { method: 'POST' }),
     // Match Standins
     getMatchStandins: (compId: number, matchId: number) =>
       request(`/api/competitions/${compId}/tournament/matches/${matchId}/standins`),

@@ -1,5 +1,83 @@
 import { query, queryOne, execute } from '../db.js'
 
+// ── Custom bracket helpers ─────────────────────────────────────────────────
+// Detect whether linking sourceId's winner/loser edge into targetId would
+// create a cycle — i.e. if targetId can already reach sourceId via existing
+// next_match_id / loser_next_match_id edges. Returns true if a cycle exists.
+export async function customBracketWouldCycle(sourceId, targetId) {
+  if (sourceId === targetId) return true
+  const visited = new Set()
+  const stack = [targetId]
+  while (stack.length > 0) {
+    const cur = stack.pop()
+    if (cur == null || visited.has(cur)) continue
+    visited.add(cur)
+    if (cur === sourceId) return true
+    const m = await queryOne(
+      'SELECT next_match_id, loser_next_match_id FROM matches WHERE id = $1',
+      [cur]
+    )
+    if (!m) continue
+    if (m.next_match_id) stack.push(m.next_match_id)
+    if (m.loser_next_match_id) stack.push(m.loser_next_match_id)
+  }
+  return false
+}
+
+// Return a list of validation errors for a custom-bracket stage. An empty
+// array means the stage is ready to activate. Checks:
+//   - every slot on every match is resolved (hard-seeded or incoming link)
+//   - the same slot is not both hard-seeded AND targeted by an incoming link
+//   - no cycles (sanity; link edits are already cycle-guarded on write)
+export async function validateCustomBracketStage(compId, stageId) {
+  const errors = []
+  const matches = await query(
+    'SELECT * FROM matches WHERE competition_id = $1 AND stage = $2',
+    [compId, stageId]
+  )
+  if (matches.length === 0) {
+    errors.push('Stage has no matches')
+    return errors
+  }
+
+  // Build incoming-link map: { matchId: { 1: sourceMatchId, 2: sourceMatchId } }
+  const incoming = new Map()
+  for (const m of matches) {
+    if (m.next_match_id && m.next_match_slot) {
+      const slots = incoming.get(m.next_match_id) || {}
+      if (slots[m.next_match_slot]) {
+        errors.push(`Match #${m.next_match_id} slot ${m.next_match_slot} has multiple incoming winner links`)
+      }
+      slots[m.next_match_slot] = { from: m.id, kind: 'winner' }
+      incoming.set(m.next_match_id, slots)
+    }
+    if (m.loser_next_match_id && m.loser_next_match_slot) {
+      const slots = incoming.get(m.loser_next_match_id) || {}
+      if (slots[m.loser_next_match_slot]) {
+        errors.push(`Match #${m.loser_next_match_id} slot ${m.loser_next_match_slot} has multiple incoming links`)
+      }
+      slots[m.loser_next_match_slot] = { from: m.id, kind: 'loser' }
+      incoming.set(m.loser_next_match_id, slots)
+    }
+  }
+
+  for (const m of matches) {
+    const slots = incoming.get(m.id) || {}
+    for (const slotNum of [1, 2]) {
+      const hasSeed = slotNum === 1 ? m.team1_captain_id != null : m.team2_captain_id != null
+      const hasLink = !!slots[slotNum]
+      if (!hasSeed && !hasLink) {
+        errors.push(`Match #${m.id} slot ${slotNum} has no seed and no incoming link`)
+      }
+      if (hasSeed && hasLink) {
+        errors.push(`Match #${m.id} slot ${slotNum} is both hard-seeded and linked from match #${slots[slotNum].from}`)
+      }
+    }
+  }
+
+  return errors
+}
+
 export async function advanceWinner(matchId, winnerId) {
   const match = await queryOne('SELECT * FROM matches WHERE id = $1', [matchId])
   if (!match) return

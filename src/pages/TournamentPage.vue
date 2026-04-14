@@ -10,6 +10,8 @@ import ModalOverlay from '@/components/common/ModalOverlay.vue'
 import BracketView from '@/components/tournament/BracketView.vue'
 import DoubleEliminationView from '@/components/tournament/DoubleEliminationView.vue'
 import GroupStageView from '@/components/tournament/GroupStageView.vue'
+import CustomBracketEditor from '@/components/tournament/CustomBracketEditor.vue'
+import CustomBracketView from '@/components/tournament/CustomBracketView.vue'
 import MatchScoreModal from '@/components/tournament/MatchScoreModal.vue'
 
 const { t } = useI18n()
@@ -41,7 +43,7 @@ const editHasMatches = ref(false)
 
 // Add-stage form state
 const stageName = ref('')
-const format = ref<'single_elimination' | 'double_elimination' | 'group_stage'>('single_elimination')
+const format = ref<'single_elimination' | 'double_elimination' | 'group_stage' | 'custom_bracket'>('single_elimination')
 const bestOf = ref(3)
 const seeds = ref<number[]>([])
 const selectedTeams = ref<Set<number>>(new Set())
@@ -254,13 +256,14 @@ async function addStage() {
     if (format.value === 'single_elimination' || format.value === 'double_elimination') {
       const filteredSeeds = seeds.value.filter(id => id === 0 || selectedTeams.value.has(id))
       if (filteredSeeds.length > 0) data.seeds = filteredSeeds.map(id => id === 0 ? null : id)
-    } else {
+    } else if (format.value === 'group_stage') {
       data.groups = groups.value.map(g => ({
         name: g.name,
         teamIds: g.teamIds.map(id => id === 0 ? null : id),
         colorLines: g.colorLines || [],
       }))
     }
+    // custom_bracket: name + format + bestOf is enough; server will skip the generator.
     await api.addTournamentStage(compId, data)
     showAddStage.value = false
     await store.fetchTournament()
@@ -578,6 +581,25 @@ function stageStatusClass(stage: any) {
           :is-admin="isCompAdmin && showHidden"
           @edit-match="onMatchClick"
         />
+
+        <!-- Custom bracket: editor while draft / admin, public view once active -->
+        <template v-else-if="activeStage.format === 'custom_bracket'">
+          <CustomBracketEditor
+            v-if="isCompAdmin && activeStage.status === 'draft'"
+            :stage="activeStage"
+            :matches="stageMatches"
+            :captains="store.captains.value"
+            @refresh="store.fetchTournament()"
+          />
+          <CustomBracketView
+            v-else
+            :stage="activeStage"
+            :matches="stageMatches"
+            :captains="store.captains.value"
+            :is-admin="isCompAdmin && showHidden"
+            @edit-match="onMatchClick"
+          />
+        </template>
       </div>
     </template>
 
@@ -597,7 +619,7 @@ function stageStatusClass(stage: any) {
         <!-- Format selection -->
         <div>
           <label class="label-text mb-2 block">{{ t('selectFormat') }}</label>
-          <div class="grid grid-cols-3 gap-3">
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
             <button
               class="card p-4 text-left transition-colors cursor-pointer"
               :class="format === 'single_elimination' ? 'ring-2 ring-primary bg-primary/5' : 'hover:bg-accent/50'"
@@ -621,6 +643,14 @@ function stageStatusClass(stage: any) {
             >
               <div class="text-sm font-semibold text-foreground">{{ t('groupStage') }}</div>
               <div class="text-xs text-muted-foreground mt-1">{{ t('groupStageDesc') }}</div>
+            </button>
+            <button
+              class="card p-4 text-left transition-colors cursor-pointer"
+              :class="format === 'custom_bracket' ? 'ring-2 ring-primary bg-primary/5' : 'hover:bg-accent/50'"
+              @click="format = 'custom_bracket'"
+            >
+              <div class="text-sm font-semibold text-foreground">{{ t('customBracket') }}</div>
+              <div class="text-xs text-muted-foreground mt-1">{{ t('customBracketDesc') }}</div>
             </button>
           </div>
         </div>
