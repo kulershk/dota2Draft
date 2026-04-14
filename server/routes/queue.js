@@ -2,9 +2,10 @@ import { Router } from 'express'
 import { query, queryOne, execute } from '../db.js'
 import { requirePermission } from '../middleware/permissions.js'
 import { getAuthPlayer } from '../middleware/auth.js'
-import { activeQueueMatches, playerInMatch, clearPickTimer } from '../socket/queueState.js'
+import { activeQueueMatches, playerInMatch, playerInQueue, poolQueues, getPoolQueuePlayers, clearPickTimer } from '../socket/queueState.js'
 import { socketPlayers } from '../socket/state.js'
 import { botPool } from '../services/botPool.js'
+import { kickPlayerFromQueue } from '../socket/queue.js'
 
 export default function createQueueRouter(io) {
   const router = Router()
@@ -303,6 +304,101 @@ export default function createQueueRouter(io) {
         }
       }
 
+      res.json({ ok: true })
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  // ── Admin: list currently queued players across all pools ──
+  router.get('/api/admin/queue/players', async (req, res) => {
+    const admin = await requirePermission(req, res, 'manage_competitions')
+    if (!admin) return
+    try {
+      const out = []
+      for (const [poolId] of poolQueues) {
+        const players = getPoolQueuePlayers(poolId)
+        for (const p of players) out.push({ ...p, poolId })
+      }
+      res.json(out)
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  // ── Admin: kick player from whatever queue they're in ──
+  router.post('/api/admin/queue/kick/:playerId', async (req, res) => {
+    const admin = await requirePermission(req, res, 'manage_competitions')
+    if (!admin) return
+    const playerId = Number(req.params.playerId)
+    const reason = req.body?.reason || null
+    try {
+      const kicked = kickPlayerFromQueue(io, playerId, reason)
+      res.json({ ok: true, kicked })
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  // ── Admin: list active queue bans ──
+  router.get('/api/admin/queue/bans', async (req, res) => {
+    const admin = await requirePermission(req, res, 'manage_competitions')
+    if (!admin) return
+    try {
+      const rows = await query(`
+        SELECT qb.player_id, qb.banned_until, qb.reason, qb.created_at,
+               p.name, p.display_name, p.avatar_url,
+               ab.name AS banned_by_name
+          FROM queue_bans qb
+          JOIN players p ON p.id = qb.player_id
+          LEFT JOIN players ab ON ab.id = qb.banned_by
+         WHERE qb.banned_until IS NULL OR qb.banned_until > NOW()
+         ORDER BY qb.created_at DESC
+      `)
+      res.json(rows)
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  // ── Admin: create / update a queue ban ──
+  // body: { player_id, duration_minutes (0 or null = permanent), reason }
+  router.post('/api/admin/queue/bans', async (req, res) => {
+    const admin = await requirePermission(req, res, 'manage_competitions')
+    if (!admin) return
+    const { player_id, duration_minutes, reason } = req.body || {}
+    const pid = Number(player_id)
+    if (!pid) return res.status(400).json({ error: 'player_id required' })
+
+    const mins = Number(duration_minutes) || 0
+    const bannedUntil = mins > 0 ? new Date(Date.now() + mins * 60_000) : null
+
+    try {
+      await execute(`
+        INSERT INTO queue_bans (player_id, banned_until, reason, banned_by)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (player_id) DO UPDATE SET
+          banned_until = EXCLUDED.banned_until,
+          reason = EXCLUDED.reason,
+          banned_by = EXCLUDED.banned_by,
+          created_at = NOW()
+      `, [pid, bannedUntil, reason || null, admin.id])
+
+      // Kick them out if currently queued
+      try { kickPlayerFromQueue(io, pid, reason || 'Banned from queue') } catch {}
+
+      res.json({ ok: true })
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  // ── Admin: remove a queue ban ──
+  router.delete('/api/admin/queue/bans/:playerId', async (req, res) => {
+    const admin = await requirePermission(req, res, 'manage_competitions')
+    if (!admin) return
+    try {
+      await execute('DELETE FROM queue_bans WHERE player_id = $1', [Number(req.params.playerId)])
       res.json({ ok: true })
     } catch (e) {
       res.status(500).json({ error: e.message })

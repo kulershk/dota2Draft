@@ -686,6 +686,17 @@ export async function initDb() {
   // Cancel any queue matches that were in picking state when server restarted
   try { await execute(`UPDATE queue_matches SET status = 'cancelled' WHERE status = 'picking'`) } catch {}
 
+  // Queue bans — admin can kick or temporarily ban players from joining queue.
+  // banned_until IS NULL means permanent until an admin unbans.
+  await execute(`
+    CREATE TABLE IF NOT EXISTS queue_bans (
+      player_id INTEGER PRIMARY KEY REFERENCES players(id) ON DELETE CASCADE,
+      banned_until TIMESTAMP NULL,
+      reason TEXT NULL,
+      banned_by INTEGER NULL REFERENCES players(id) ON DELETE SET NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `)
 }
 
 async function createFreshCompetitionTables() {

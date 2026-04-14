@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Plus, Trash2, Pencil, X, Check, Ban, RefreshCw, Swords, Loader2 } from 'lucide-vue-next'
+import { Plus, Trash2, Pencil, X, Check, Ban, RefreshCw, Swords, Loader2, UserX, Clock } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 
 const { t } = useI18n()
@@ -11,6 +11,13 @@ const editingId = ref<number | null>(null)
 const showCreate = ref(false)
 const activeMatches = ref<any[]>([])
 const loadingMatches = ref(false)
+const queuedPlayers = ref<any[]>([])
+const bans = ref<any[]>([])
+const banForm = ref<{ player_id: number | null; duration_minutes: number; reason: string }>({
+  player_id: null,
+  duration_minutes: 60,
+  reason: '',
+})
 let refreshInterval: ReturnType<typeof setInterval> | null = null
 
 const form = ref<Record<string, any>>({
@@ -102,6 +109,63 @@ async function fetchActiveMatches() {
   loadingMatches.value = false
 }
 
+async function fetchQueuedPlayers() {
+  try { queuedPlayers.value = await api.getAdminQueuePlayers() } catch { queuedPlayers.value = [] }
+}
+
+async function fetchBans() {
+  try { bans.value = await api.getAdminQueueBans() } catch { bans.value = [] }
+}
+
+async function kickQueued(playerId: number) {
+  try {
+    await api.adminKickFromQueue(playerId)
+    await fetchQueuedPlayers()
+  } catch (e: any) { alert(e.message) }
+}
+
+async function banQueued(playerId: number) {
+  const mins = Number(prompt(t('queueAdminBanDurationPrompt'), '60'))
+  if (!Number.isFinite(mins) || mins < 0) return
+  const reason = prompt(t('queueAdminBanReasonPrompt')) || ''
+  try {
+    await api.addAdminQueueBan({ player_id: playerId, duration_minutes: mins, reason })
+    await Promise.all([fetchQueuedPlayers(), fetchBans()])
+  } catch (e: any) { alert(e.message) }
+}
+
+async function submitBan() {
+  if (!banForm.value.player_id) return
+  try {
+    await api.addAdminQueueBan({
+      player_id: Number(banForm.value.player_id),
+      duration_minutes: Number(banForm.value.duration_minutes) || 0,
+      reason: banForm.value.reason,
+    })
+    banForm.value = { player_id: null, duration_minutes: 60, reason: '' }
+    await Promise.all([fetchBans(), fetchQueuedPlayers()])
+  } catch (e: any) { alert(e.message) }
+}
+
+async function unban(playerId: number) {
+  try {
+    await api.removeAdminQueueBan(playerId)
+    await fetchBans()
+  } catch (e: any) { alert(e.message) }
+}
+
+function formatBanUntil(until: string | null): string {
+  if (!until) return t('queueAdminBanPermanent')
+  const d = new Date(until)
+  const diffMs = d.getTime() - Date.now()
+  if (diffMs <= 0) return t('queueAdminBanExpired')
+  const mins = Math.ceil(diffMs / 60000)
+  if (mins < 60) return `${mins}m`
+  const hours = Math.floor(mins / 60)
+  const rem = mins % 60
+  return rem > 0 ? `${hours}h ${rem}m` : `${hours}h`
+}
+
 async function cancelMatch(id: number) {
   if (!confirm(t('queueAdminCancelConfirm'))) return
   try {
@@ -148,7 +212,13 @@ const GAME_MODES: [number, string][] = [
 onMounted(() => {
   fetchPools()
   fetchActiveMatches()
-  refreshInterval = setInterval(fetchActiveMatches, 10000)
+  fetchQueuedPlayers()
+  fetchBans()
+  refreshInterval = setInterval(() => {
+    fetchActiveMatches()
+    fetchQueuedPlayers()
+    fetchBans()
+  }, 10000)
 })
 
 onUnmounted(() => {
@@ -246,6 +316,88 @@ onUnmounted(() => {
               {{ qm.lobby_status }}
             </span>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════ Currently Queued Players ═══════════════════ -->
+    <div>
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-3">
+          <h2 class="text-xl font-bold">{{ t('queueAdminQueuedPlayers') }}</h2>
+          <span v-if="queuedPlayers.length > 0" class="text-xs font-semibold bg-primary/15 text-primary px-2 py-0.5 rounded-full">
+            {{ queuedPlayers.length }}
+          </span>
+        </div>
+      </div>
+
+      <div v-if="queuedPlayers.length === 0" class="card px-6 py-6 text-center mb-8">
+        <p class="text-sm text-muted-foreground">{{ t('queueAdminNobodyQueued') }}</p>
+      </div>
+      <div v-else class="card mb-8 overflow-hidden">
+        <div v-for="p in queuedPlayers" :key="p.playerId" class="flex items-center gap-3 px-4 py-2 border-b border-border/30 last:border-b-0">
+          <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-6 h-6 rounded-full" />
+          <span class="font-medium text-sm">{{ p.name }}</span>
+          <span class="text-[10px] text-muted-foreground tabular-nums">{{ p.mmr }} MMR</span>
+          <span class="text-[10px] text-muted-foreground">pool #{{ p.poolId }}</span>
+          <div class="ml-auto flex items-center gap-2">
+            <button class="flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" @click="kickQueued(p.playerId)">
+              <UserX class="w-3.5 h-3.5" /> {{ t('queueAdminKick') }}
+            </button>
+            <button class="flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold text-destructive hover:bg-destructive/10 transition-colors" @click="banQueued(p.playerId)">
+              <Ban class="w-3.5 h-3.5" /> {{ t('queueAdminBan') }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════ Queue Bans ═══════════════════ -->
+    <div>
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-3">
+          <h2 class="text-xl font-bold">{{ t('queueAdminBans') }}</h2>
+          <span v-if="bans.length > 0" class="text-xs font-semibold bg-destructive/15 text-destructive px-2 py-0.5 rounded-full">
+            {{ bans.length }}
+          </span>
+        </div>
+      </div>
+
+      <!-- Add ban by player id form -->
+      <div class="card px-4 py-3 mb-3 flex flex-wrap items-end gap-3">
+        <div class="flex flex-col gap-1">
+          <label class="text-[10px] font-semibold uppercase text-muted-foreground">{{ t('queueAdminBanPlayerId') }}</label>
+          <input v-model.number="banForm.player_id" type="number" class="bg-accent/40 border border-border/40 rounded px-2 py-1 text-sm w-32" />
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-[10px] font-semibold uppercase text-muted-foreground">{{ t('queueAdminBanDuration') }}</label>
+          <input v-model.number="banForm.duration_minutes" type="number" min="0" class="bg-accent/40 border border-border/40 rounded px-2 py-1 text-sm w-24" />
+        </div>
+        <div class="flex flex-col gap-1 flex-1 min-w-[200px]">
+          <label class="text-[10px] font-semibold uppercase text-muted-foreground">{{ t('queueAdminBanReason') }}</label>
+          <input v-model="banForm.reason" type="text" class="bg-accent/40 border border-border/40 rounded px-2 py-1 text-sm" />
+        </div>
+        <button class="btn-primary text-sm flex items-center gap-1.5" :disabled="!banForm.player_id" @click="submitBan">
+          <Ban class="w-3.5 h-3.5" /> {{ t('queueAdminBan') }}
+        </button>
+      </div>
+
+      <div v-if="bans.length === 0" class="card px-6 py-6 text-center mb-8">
+        <p class="text-sm text-muted-foreground">{{ t('queueAdminNoBans') }}</p>
+      </div>
+      <div v-else class="card mb-8 overflow-hidden">
+        <div v-for="b in bans" :key="b.player_id" class="flex items-center gap-3 px-4 py-2 border-b border-border/30 last:border-b-0">
+          <img v-if="b.avatar_url" :src="b.avatar_url" class="w-6 h-6 rounded-full" />
+          <span class="font-medium text-sm">{{ b.display_name || b.name }}</span>
+          <span class="text-[10px] text-muted-foreground">#{{ b.player_id }}</span>
+          <span class="text-[11px] flex items-center gap-1 px-1.5 py-0.5 rounded bg-destructive/10 text-destructive">
+            <Clock class="w-3 h-3" /> {{ formatBanUntil(b.banned_until) }}
+          </span>
+          <span v-if="b.reason" class="text-[11px] text-muted-foreground italic truncate max-w-[260px]">{{ b.reason }}</span>
+          <span v-if="b.banned_by_name" class="text-[10px] text-muted-foreground ml-auto">by {{ b.banned_by_name }}</span>
+          <button class="ml-2 p-1.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors" :title="t('queueAdminUnban')" @click="unban(b.player_id)">
+            <X class="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
     </div>

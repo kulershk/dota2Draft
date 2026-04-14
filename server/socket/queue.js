@@ -59,6 +59,19 @@ export function registerQueueHandlers(socket, io) {
       if (pool.min_mmr > 0 && player.mmr < pool.min_mmr) return socket.emit('queue:error', { message: `Minimum MMR for this pool is ${pool.min_mmr}` })
       if (pool.max_mmr > 0 && player.mmr > pool.max_mmr) return socket.emit('queue:error', { message: `Maximum MMR for this pool is ${pool.max_mmr}` })
 
+      // Check queue ban
+      const ban = await queryOne(
+        'SELECT banned_until, reason FROM queue_bans WHERE player_id = $1 AND (banned_until IS NULL OR banned_until > NOW())',
+        [playerId]
+      )
+      if (ban) {
+        const until = ban.banned_until
+          ? ` until ${new Date(ban.banned_until).toISOString()}`
+          : ''
+        const reason = ban.reason ? `: ${ban.reason}` : ''
+        return socket.emit('queue:error', { message: `You are banned from queue${until}${reason}` })
+      }
+
       // Check not already in queue or active match
       if (playerInQueue.has(playerId)) return socket.emit('queue:error', { message: 'Already in a queue' })
       if (playerInMatch.has(playerId)) return socket.emit('queue:error', { message: 'Already in an active match' })
@@ -345,6 +358,33 @@ function broadcastQueueUpdate(io, poolId) {
     count: getPoolQueueCount(poolId),
     players: getPoolQueuePlayers(poolId),
   })
+}
+
+// Public: kick a player from whatever queue they're in. Used by admin routes.
+// Removes them from the in-memory queue state, drops their sockets out of the
+// queue room, and notifies them individually so their client can reset UI.
+export function kickPlayerFromQueue(io, playerId, reason = null) {
+  const poolId = playerInQueue.get(playerId)
+  if (!poolId) return false
+
+  const q = poolQueues.get(poolId)
+  if (q) q.delete(playerId)
+  playerInQueue.delete(playerId)
+
+  // Leave queue room on every socket this player is connected on
+  for (const [socketId, pid] of socketPlayers) {
+    if (pid === playerId) {
+      const s = io.sockets.sockets.get(socketId)
+      if (s) {
+        s.leave(`queue:${poolId}`)
+        s.emit('queue:kicked', { poolId, reason: reason || 'Removed from queue by admin' })
+      }
+    }
+  }
+
+  // Broadcast updated count/list to everyone still watching the pool
+  broadcastQueueUpdate(io, poolId)
+  return true
 }
 
 async function startQueueMatch(poolId, io) {

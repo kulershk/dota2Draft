@@ -384,5 +384,13 @@ export function useApi() {
     getAdminQueueMatches: () => request('/api/admin/queue/matches'),
     cancelQueueMatch: (id: number) =>
       request(`/api/admin/queue/matches/${id}/cancel`, { method: 'POST' }),
+    getAdminQueuePlayers: () => request('/api/admin/queue/players'),
+    adminKickFromQueue: (playerId: number, reason?: string) =>
+      request(`/api/admin/queue/kick/${playerId}`, { method: 'POST', body: JSON.stringify({ reason }) }),
+    getAdminQueueBans: () => request('/api/admin/queue/bans'),
+    addAdminQueueBan: (data: { player_id: number; duration_minutes?: number; reason?: string }) =>
+      request('/api/admin/queue/bans', { method: 'POST', body: JSON.stringify(data) }),
+    removeAdminQueueBan: (playerId: number) =>
+      request(`/api/admin/queue/bans/${playerId}`, { method: 'DELETE' }),
   }
 }

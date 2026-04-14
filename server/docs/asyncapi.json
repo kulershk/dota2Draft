@@ -824,6 +824,20 @@
         }
       }
     },
+    "queue:kicked": {
+      "subscribe": {
+        "summary": "Private: admin kicked this socket's player out of their current queue. Client should reset queue state.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "poolId": { "type": "integer" },
+              "reason": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
     "queue:getMyState": {
       "publish": {
         "summary": "Ask the server for this socket's current queue/match state. Used on app boot and page reload to restore the overlay and rejoin rooms.",

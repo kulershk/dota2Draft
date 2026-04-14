@@ -1464,6 +1464,68 @@
         }
       }
     },
+    "/api/admin/queue/players": {
+      "get": {
+        "tags": ["Queue"],
+        "summary": "Admin: list currently queued players across all pools",
+        "description": "Returns the in-memory queue roster for every pool, each entry decorated with the poolId it's queued in. Requires manage_competitions.",
+        "responses": { "200": { "description": "Array of queued players" } }
+      }
+    },
+    "/api/admin/queue/kick/{playerId}": {
+      "post": {
+        "tags": ["Queue"],
+        "summary": "Admin: kick a player out of their current queue",
+        "parameters": [{ "name": "playerId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": { "reason": { "type": "string" } }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Kick result" } }
+      }
+    },
+    "/api/admin/queue/bans": {
+      "get": {
+        "tags": ["Queue"],
+        "summary": "Admin: list active queue bans",
+        "responses": { "200": { "description": "Array of active ban rows" } }
+      },
+      "post": {
+        "tags": ["Queue"],
+        "summary": "Admin: create or update a queue ban",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["player_id"],
+                "properties": {
+                  "player_id": { "type": "integer" },
+                  "duration_minutes": { "type": "integer", "description": "0 or null = permanent" },
+                  "reason": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Ban saved" } }
+      }
+    },
+    "/api/admin/queue/bans/{playerId}": {
+      "delete": {
+        "tags": ["Queue"],
+        "summary": "Admin: remove a queue ban",
+        "parameters": [{ "name": "playerId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Ban removed" } }
+      }
+    },
     "/api/dota/constants": {
       "get": {
         "tags": ["Dota"],
