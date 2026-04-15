@@ -328,6 +328,23 @@ export function useApi() {
     getOnlineUsers: () =>
       request('/api/admin/online-users'),
 
+    // Background jobs (admin)
+    getAdminJobs: (params?: Record<string, string | number>) => {
+      const qs = params ? '?' + new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString() : ''
+      return request(`/api/admin/jobs${qs}`)
+    },
+    getAdminJob: (id: number) => request(`/api/admin/jobs/${id}`),
+    createAdminJob: (data: { type: string; payload?: any; maxAttempts?: number }) =>
+      request('/api/admin/jobs', { method: 'POST', body: JSON.stringify(data) }),
+    retryAdminJob: (id: number) =>
+      request(`/api/admin/jobs/${id}/retry`, { method: 'POST' }),
+    cancelAdminJob: (id: number) =>
+      request(`/api/admin/jobs/${id}/cancel`, { method: 'POST' }),
+    deleteAdminJob: (id: number) =>
+      request(`/api/admin/jobs/${id}`, { method: 'DELETE' }),
+    pruneAdminJobs: (data: { status?: string; olderThanDays?: number }) =>
+      request('/api/admin/jobs/prune', { method: 'POST', body: JSON.stringify(data) }),
+
     // Competition Streams
     getCompStreams: (compId: number) => request(`/api/competitions/${compId}/streams`),
     getCompStreamsLive: (compId: number) => request(`/api/competitions/${compId}/streams/live`),

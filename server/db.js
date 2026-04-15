@@ -520,6 +520,28 @@ export async function initDb() {
     ) sub WHERE players.id = sub.player_id AND players.total_xp != sub.total
   `)
 
+  // Background jobs (Postgres-backed queue for visibility/retry)
+  await execute(`
+    CREATE TABLE IF NOT EXISTS jobs (
+      id SERIAL PRIMARY KEY,
+      type TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+      result JSONB DEFAULT NULL,
+      error TEXT DEFAULT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      max_attempts INTEGER NOT NULL DEFAULT 3,
+      run_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      started_at TIMESTAMP DEFAULT NULL,
+      completed_at TIMESTAMP DEFAULT NULL,
+      created_by INTEGER DEFAULT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_jobs_status_run_at ON jobs(status, run_at);
+    CREATE INDEX IF NOT EXISTS idx_jobs_type ON jobs(type);
+    CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs(created_at DESC);
+  `)
+
   // Lobby bot pool
   await execute(`
     CREATE TABLE IF NOT EXISTS lobby_bots (

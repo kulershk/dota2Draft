@@ -28,6 +28,8 @@ import userRoutes from './routes/users.js'
 import createNewsRouter from './routes/news.js'
 import templateRoutes from './routes/templates.js'
 import createQueueRouter from './routes/queue.js'
+import jobRoutes from './routes/jobs.js'
+import { startJobWorker, registerHandler, registerSchedule } from './services/jobs.js'
 
 // Socket
 import { initSocket } from './socket/index.js'
@@ -97,6 +99,7 @@ app.use(userRoutes)
 app.use(createNewsRouter(io))
 app.use(templateRoutes)
 app.use(createQueueRouter(io))
+app.use(jobRoutes)
 
 // Socket.io
 initSocket(io)
@@ -129,6 +132,21 @@ server.on('upgrade', (req, socket, head) => {
 
 initDb().then(async () => {
   await botPool.init(io, botWss)
+
+  // Register recurring background jobs. Handlers are thin wrappers around
+  // botPool methods so the logic stays in one place.
+  registerHandler('poll_opendota_results', async () => {
+    await botPool._pollUnresolvedGames()
+    return { ok: true }
+  })
+  registerHandler('cleanup_stuck_queue_matches', async () => {
+    await botPool._cleanupStuckQueueMatches()
+    return { ok: true }
+  })
+  registerSchedule('poll_opendota_results', { everyMs: 60_000 })
+  registerSchedule('cleanup_stuck_queue_matches', { everyMs: 5 * 60_000 })
+
+  await startJobWorker()
   server.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`)
   })

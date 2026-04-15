@@ -571,18 +571,11 @@ class BotPool {
     console.log(`[Stats] Match ${dotaMatchId} queued for auto-resolve (game ${gameNumber} of match ${matchId})`)
   }
 
-  // Polling job: checks for games with dotabuff_id but no winner, fetches from OpenDota
-  _startResultsPolling() {
-    // Run every 1 minute
-    this._pollTimer = setInterval(() => this._pollUnresolvedGames(), 60 * 1000)
-    // Also run once on startup after a short delay (catch games missed during downtime)
-    setTimeout(() => this._pollUnresolvedGames(), 15 * 1000)
-    // Separate cleanup pass: force-cancel queue matches that have been
-    // stuck in 'live' for >3h (typical worst-case game length) so their
-    // players can re-queue even if OpenDota never returns a result.
-    this._queueCleanupTimer = setInterval(() => this._cleanupStuckQueueMatches(), 5 * 60 * 1000)
-    setTimeout(() => this._cleanupStuckQueueMatches(), 30 * 1000)
-  }
+  // Polling is now driven by the background job system (see
+  // server/services/jobs.js). This method is a no-op kept for call-site
+  // compatibility; the actual schedules are registered in server/index.js
+  // after both botPool and the job worker have started.
+  _startResultsPolling() {}
 
   async _cleanupStuckQueueMatches() {
     try {

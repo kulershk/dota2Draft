@@ -22,7 +22,8 @@
     { "name": "Settings", "description": "Site settings" },
     { "name": "Streams", "description": "Twitch streams" },
     { "name": "Queue", "description": "Queue matchmaking pools & matches" },
-    { "name": "Dota", "description": "Dota 2 constants (heroes, items)" }
+    { "name": "Dota", "description": "Dota 2 constants (heroes, items)" },
+    { "name": "Jobs", "description": "Background job admin (list/retry/cancel)" }
   ],
   "components": {
     "securitySchemes": {
@@ -32,6 +33,24 @@
       }
     },
     "schemas": {
+      "Job": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "type": { "type": "string" },
+          "status": { "type": "string", "enum": ["pending", "running", "completed", "failed"] },
+          "payload": { "type": "object" },
+          "result": { "type": "object", "nullable": true },
+          "error": { "type": "string", "nullable": true },
+          "attempts": { "type": "integer" },
+          "max_attempts": { "type": "integer" },
+          "run_at": { "type": "string", "format": "date-time" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "started_at": { "type": "string", "format": "date-time", "nullable": true },
+          "completed_at": { "type": "string", "format": "date-time", "nullable": true },
+          "created_by": { "type": "integer", "nullable": true }
+        }
+      },
       "User": {
         "type": "object",
         "properties": {
@@ -1693,6 +1712,115 @@
               }
             }
           }
+        }
+      },
+      "/api/admin/jobs": {
+        "get": {
+          "tags": ["Jobs"],
+          "summary": "List background jobs",
+          "description": "Requires `manage_jobs` permission. Returns rows, counts by status, and registered handler types.",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [
+            { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["all", "pending", "running", "completed", "failed"] } },
+            { "name": "type", "in": "query", "schema": { "type": "string" } },
+            { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 100, "maximum": 500 } },
+            { "name": "offset", "in": "query", "schema": { "type": "integer", "default": 0 } }
+          ],
+          "responses": {
+            "200": {
+              "description": "Job list with counts",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "rows": { "type": "array", "items": { "$ref": "#/components/schemas/Job" } },
+                      "total": { "type": "integer" },
+                      "counts": { "type": "object", "additionalProperties": { "type": "integer" } },
+                      "types": { "type": "array", "items": { "type": "string" } }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "post": {
+          "tags": ["Jobs"],
+          "summary": "Enqueue a new job",
+          "security": [{ "bearerAuth": [] }],
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["type"],
+                  "properties": {
+                    "type": { "type": "string" },
+                    "payload": { "type": "object" },
+                    "maxAttempts": { "type": "integer", "default": 3 }
+                  }
+                }
+              }
+            }
+          },
+          "responses": { "200": { "description": "Created job", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Job" } } } } }
+        }
+      },
+      "/api/admin/jobs/{id}": {
+        "get": {
+          "tags": ["Jobs"],
+          "summary": "Get a job by id",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+          "responses": { "200": { "description": "Job", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Job" } } } } }
+        },
+        "delete": {
+          "tags": ["Jobs"],
+          "summary": "Delete a job permanently",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+          "responses": { "200": { "description": "Deleted" } }
+        }
+      },
+      "/api/admin/jobs/{id}/retry": {
+        "post": {
+          "tags": ["Jobs"],
+          "summary": "Requeue a failed or pending job",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+          "responses": { "200": { "description": "Requeued job" } }
+        }
+      },
+      "/api/admin/jobs/{id}/cancel": {
+        "post": {
+          "tags": ["Jobs"],
+          "summary": "Cancel a pending job",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+          "responses": { "200": { "description": "Cancelled job" } }
+        }
+      },
+      "/api/admin/jobs/prune": {
+        "post": {
+          "tags": ["Jobs"],
+          "summary": "Bulk delete completed jobs older than N days",
+          "security": [{ "bearerAuth": [] }],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "default": "completed" },
+                    "olderThanDays": { "type": "integer", "default": 7 }
+                  }
+                }
+              }
+            }
+          },
+          "responses": { "200": { "description": "Number deleted" } }
         }
       }
     }

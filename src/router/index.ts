@@ -44,6 +44,7 @@ const router = createRouter({
           { path: '/admin/news', perms: ['manage_news'] },
           { path: '/admin/settings', perms: ['manage_site_settings'] },
           { path: '/admin/permissions', perms: ['manage_permissions'] },
+          { path: '/admin/jobs', perms: ['manage_jobs'] },
         ]
         const first = sections.find(s => s.perms.some(p => store.hasPerm(p)))
         return first?.path || '/admin/competitions'
@@ -60,6 +61,7 @@ const router = createRouter({
         { path: 'fantasy', name: 'admin-fantasy', meta: { permissions: ['manage_competitions', 'manage_own_competitions'] }, component: () => import('@/pages/admin/AdminFantasyPage.vue') },
         { path: 'xp-log', name: 'admin-xp-log', meta: { permissions: ['manage_users'] }, component: () => import('@/pages/admin/AdminXpLogPage.vue') },
         { path: 'queue', name: 'admin-queue', meta: { permissions: ['manage_competitions'] }, component: () => import('@/pages/admin/AdminQueuePage.vue') },
+        { path: 'jobs', name: 'admin-jobs', meta: { permissions: ['manage_jobs'] }, component: () => import('@/pages/admin/AdminJobsPage.vue') },
       ],
     },
   ],
