@@ -356,14 +356,11 @@ export function registerQueueHandlers(socket, io) {
       broadcastQueueUpdate(io, poolId)
     }
 
-    // Cancel active match if in pick phase
-    const qmId = playerInMatch.get(playerId)
-    if (qmId) {
-      const match = activeQueueMatches.get(qmId)
-      if (match && match.status === 'picking') {
-        cancelQueueMatch(qmId, 'A player disconnected', io)
-      }
-    }
+    // Do NOT cancel the match when a player disconnects during the pick
+    // phase. The existing pick timer + autoPickHighestMmr will auto-pick
+    // for an absent captain, so the match progresses even if someone
+    // closed their tab. Cancelling on disconnect just punishes everyone
+    // else for one player's page refresh.
   })
 }
 
