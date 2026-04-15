@@ -471,11 +471,20 @@ class BotPool {
     // in a radiant/dire slot for 10 minutes, then cancel the queue match so
     // the players who *did* show up are freed to re-queue.
     const isTimeout = typeof data.error === 'string' && /timed out/i.test(data.error)
-    if (!lobby.competition_id && isTimeout) {
-      try {
-        await this._handleQueueLobbyNoShows(lobby)
-      } catch (e) {
-        console.error('[Queue] No-show penalty failed:', e.message)
+    if (!lobby.competition_id) {
+      if (isTimeout) {
+        try {
+          await this._handleQueueLobbyNoShows(lobby)
+        } catch (e) {
+          console.error('[Queue] No-show penalty failed:', e.message)
+        }
+      } else {
+        // Non-timeout error during lobby creation — retry with a different bot.
+        try {
+          await this._retryQueueLobby(lobby)
+        } catch (e) {
+          console.error('[Queue] Lobby retry failed:', e.message)
+        }
       }
     }
   }
@@ -1247,6 +1256,35 @@ class BotPool {
     }
     await execute("UPDATE match_lobbies SET status = 'cancelled', updated_at = NOW() WHERE id = $1", [lobbyDbId])
   }
+  // Build the create_lobby payload for the Go bot service. Shared by the
+  // initial createQueueLobby call and the retry path.
+  _buildGoLobbyPayload(lobby, pool, team1Name, team2Name, playersExpected) {
+    return {
+      lobbyId: String(lobby.id),
+      gameName: lobby.game_name,
+      password: lobby.password,
+      serverRegion: pool.lobby_server_region || 3,
+      gameMode: pool.lobby_game_mode || 2,
+      autoAssignTeams: pool.lobby_auto_assign_teams !== false,
+      leagueId: pool.lobby_league_id || 0,
+      dotaTvDelay: pool.lobby_dotv_delay ?? 1,
+      cheats: !!pool.lobby_cheats,
+      allowSpectating: pool.lobby_allow_spectating !== false,
+      pauseSetting: pool.lobby_pause_setting || 0,
+      selectionPriority: pool.lobby_selection_priority || 0,
+      cmPick: pool.lobby_cm_pick || 0,
+      penaltyRadiant: pool.lobby_penalty_radiant || 0,
+      penaltyDire: pool.lobby_penalty_dire || 0,
+      seriesType: pool.lobby_series_type || 0,
+      radiantName: team1Name,
+      direName: team2Name,
+      expectedRadiantTeamId: 0,
+      expectedDireTeamId: 0,
+      players: playersExpected.map(p => ({ steamId: p.steam_id || p.steamId, name: p.name, team: p.team })),
+      timeoutMinutes: pool.lobby_timeout_minutes || 10,
+    }
+  }
+
   async createQueueLobby(poolId, matchId, gameNumber, team1Players, team2Players) {
     // Check for active lobby
     const activeLobby = await queryOne(
@@ -1282,32 +1320,90 @@ class BotPool {
     await execute("UPDATE lobby_bots SET status = 'busy', last_used_at = NOW() WHERE id = $1", [availableBot.id])
     await execute("UPDATE matches SET status = 'live' WHERE id = $1 AND status = 'pending'", [matchId])
 
-    this._sendToGo('create_lobby', {
-      lobbyId: String(lobby.id),
-      gameName,
-      password,
-      serverRegion: pool.lobby_server_region || 3,
-      gameMode: pool.lobby_game_mode || 2,
-      autoAssignTeams: pool.lobby_auto_assign_teams !== false,
-      leagueId: pool.lobby_league_id || 0,
-      dotaTvDelay: pool.lobby_dotv_delay ?? 1,
-      cheats: !!pool.lobby_cheats,
-      allowSpectating: pool.lobby_allow_spectating !== false,
-      pauseSetting: pool.lobby_pause_setting || 0,
-      selectionPriority: pool.lobby_selection_priority || 0,
-      cmPick: pool.lobby_cm_pick || 0,
-      penaltyRadiant: pool.lobby_penalty_radiant || 0,
-      penaltyDire: pool.lobby_penalty_dire || 0,
-      seriesType: pool.lobby_series_type || 0,
-      radiantName: team1Name,
-      direName: team2Name,
-      expectedRadiantTeamId: 0,
-      expectedDireTeamId: 0,
-      players: playersExpected.map(p => ({ steamId: p.steam_id, name: p.name, team: p.team })),
-      timeoutMinutes: pool.lobby_timeout_minutes || 10,
-    })
-
+    this._sendToGo('create_lobby', this._buildGoLobbyPayload(lobby, pool, team1Name, team2Name, playersExpected))
     return lobby
+  }
+
+  // Retry a queue-match lobby with a different bot after a create-time error.
+  // Called from _onLobbyError when the failing lobby belongs to a queue match
+  // and the error is not a timeout (timeouts are handled as no-shows). Returns
+  // true if a retry was dispatched, false if we gave up (max attempts, no
+  // alternate bot, etc).
+  async _retryQueueLobby(erroredLobby) {
+    const MAX_ATTEMPTS = 3
+
+    const countRow = await queryOne(
+      "SELECT COUNT(*)::int AS n FROM match_lobbies WHERE match_id = $1 AND game_number = $2 AND status = 'error'",
+      [erroredLobby.match_id, erroredLobby.game_number]
+    )
+    const prevErrors = countRow?.n || 0
+    if (prevErrors >= MAX_ATTEMPTS) {
+      console.log(`[Queue] Lobby retry limit (${MAX_ATTEMPTS}) reached for match ${erroredLobby.match_id}, giving up`)
+      if (this.io) {
+        (await this._lobbyRooms(erroredLobby)).emit('queue:error', {
+          message: `Lobby creation failed after ${MAX_ATTEMPTS} attempts with different bots. Please contact an admin.`,
+        })
+      }
+      return false
+    }
+
+    // Pick a different available bot. Exclude the bot that just failed so we
+    // actually retry on fresh hardware.
+    const nextBot = await queryOne(
+      "SELECT id FROM lobby_bots WHERE status = 'available' AND id <> $1 ORDER BY last_used_at NULLS FIRST LIMIT 1",
+      [erroredLobby.bot_id || 0]
+    )
+    if (!nextBot) {
+      console.log(`[Queue] No alternate bot available for match ${erroredLobby.match_id} retry`)
+      if (this.io) {
+        (await this._lobbyRooms(erroredLobby)).emit('queue:error', {
+          message: 'Lobby creation failed and no alternate bot is available. Please contact an admin.',
+        })
+      }
+      return false
+    }
+
+    const qm = await queryOne(
+      'SELECT pool_id, team1_players, team2_players FROM queue_matches WHERE match_id = $1',
+      [erroredLobby.match_id]
+    )
+    if (!qm) return false
+    const pool = await queryOne('SELECT * FROM queue_pools WHERE id = $1', [qm.pool_id])
+    if (!pool) return false
+
+    const playersExpected = Array.isArray(erroredLobby.players_expected) ? erroredLobby.players_expected : []
+    const team1Name = (qm.team1_players?.[0]?.name) || 'Team 1'
+    const team2Name = (qm.team2_players?.[0]?.name) || 'Team 2'
+    const gameName = erroredLobby.game_name
+    // Fresh password so any stale clients can't accidentally join the previous
+    // (failed) lobby if it somehow came online late.
+    const password = Math.random().toString(36).slice(2, 8)
+
+    const newLobby = await queryOne(`
+      INSERT INTO match_lobbies (match_id, game_number, competition_id, bot_id, status, server_region, game_name, password, players_expected)
+      VALUES ($1, $2, NULL, $3, 'creating', $4, $5, $6, $7) RETURNING *
+    `, [
+      erroredLobby.match_id, erroredLobby.game_number, nextBot.id,
+      pool.lobby_server_region || 3, gameName, password, JSON.stringify(playersExpected),
+    ])
+
+    await execute("UPDATE lobby_bots SET status = 'busy', last_used_at = NOW() WHERE id = $1", [nextBot.id])
+
+    this._sendToGo('create_lobby', this._buildGoLobbyPayload(newLobby, pool, team1Name, team2Name, playersExpected))
+
+    console.log(`[Queue] Retrying lobby for match ${erroredLobby.match_id} on bot ${nextBot.id} (attempt ${prevErrors + 1}/${MAX_ATTEMPTS})`)
+
+    if (this.io) {
+      (await this._lobbyRooms(newLobby)).emit('queue:lobbyRetrying', {
+        matchId: erroredLobby.match_id,
+        gameNumber: erroredLobby.game_number,
+        attempt: prevErrors + 1,
+        maxAttempts: MAX_ATTEMPTS,
+        lobbyInfo: { gameName, password },
+      })
+    }
+
+    return true
   }
 }
 

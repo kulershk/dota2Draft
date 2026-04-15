@@ -126,6 +126,19 @@ function initSocket() {
     lobbyInfo.value = { matchId: data.matchId, gameName: data.lobbyInfo.gameName, password: data.lobbyInfo.password, expiresAt: data.lobbyExpiresAt || 0 }
   })
 
+  socket.on('queue:lobbyRetrying', (data: { matchId: number; gameNumber: number; attempt: number; maxAttempts: number; lobbyInfo: { gameName: string; password: string } }) => {
+    // Update visible lobby info so players see the new password from the
+    // retry bot, and surface a transient notice about the attempt count.
+    lobbyInfo.value = {
+      matchId: data.matchId,
+      gameName: data.lobbyInfo.gameName,
+      password: data.lobbyInfo.password,
+      expiresAt: lobbyInfo.value?.expiresAt || 0,
+    }
+    queueError.value = `Lobby creation failed — retrying with a different bot (${data.attempt}/${data.maxAttempts})...`
+    setTimeout(() => { if (queueError.value?.startsWith('Lobby creation failed')) queueError.value = null }, 6000)
+  })
+
   socket.on('queue:cancelled', (data: { queueMatchId: number; reason: string }) => {
     cancelled.value = data.reason
     activeMatch.value = null

@@ -863,6 +863,29 @@
         }
       }
     },
+    "queue:lobbyRetrying": {
+      "subscribe": {
+        "summary": "Broadcast: queue-match lobby creation failed with one bot and is being retried on a different one (queue-match:${queueMatchId}). Frontend should update the visible lobby name/password and show a transient retry notice.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "matchId": { "type": "integer" },
+              "gameNumber": { "type": "integer" },
+              "attempt": { "type": "integer", "description": "1-based attempt count" },
+              "maxAttempts": { "type": "integer" },
+              "lobbyInfo": {
+                "type": "object",
+                "properties": {
+                  "gameName": { "type": "string" },
+                  "password": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "queue:gameStarted": {
       "subscribe": {
         "summary": "Broadcast: Dota match ID captured for a queue match (queue-match:${queueMatchId}). Frontend should clear lobby banner.",
