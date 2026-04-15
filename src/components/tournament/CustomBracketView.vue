@@ -65,47 +65,71 @@ const layout = computed(() => {
     }
   }
 
-  // Walk rounds LEFT → RIGHT. Leftmost column gets sequential slots.
-  // Every later match centers on the average slot of its incoming
-  // feeders that we already placed; fallback to sequential for
-  // unlinked matches.
-  let nextFallbackSlot = 0
-  for (let i = 0; i < sortedRoundNumbers.value.length; i++) {
-    const round = sortedRoundNumbers.value[i]
+  function resolveCollisions(list: any[]) {
+    const placed = list
+      .map((m: any) => ({ id: m.id, slot: slotByMatch.get(m.id)! }))
+      .sort((a, b) => a.slot - b.slot)
+    let prev = -Infinity
+    for (const p of placed) {
+      if (p.slot - prev < 1) p.slot = prev + 1
+      slotByMatch.set(p.id, p.slot)
+      prev = p.slot
+    }
+    return prev
+  }
+
+  // ── Pass 1: RIGHT → LEFT ──────────────────────────────────────────────
+  // Rightmost column gets sequential slots (by match_order); earlier
+  // columns are placed at the average slot of their outgoing targets,
+  // falling back to sequential for unlinked matches. This handles
+  // expanding brackets (e.g. play-ins feeding into a wider round).
+  let fallback = 0
+  const rtl = [...sortedRoundNumbers.value].reverse()
+  for (let i = 0; i < rtl.length; i++) {
+    const round = rtl[i]
     const list = rounds.value[round]
     if (i === 0) {
-      list.forEach((m: any) => {
-        slotByMatch.set(m.id, nextFallbackSlot++)
-      })
+      list.forEach((m: any) => { slotByMatch.set(m.id, fallback++) })
     } else {
       for (const m of list) {
-        const feeders = incoming.get(m.id) || []
-        const placedFeeders = feeders
-          .map(id => slotByMatch.get(id))
-          .filter((s): s is number => s != null)
-        if (placedFeeders.length > 0) {
-          slotByMatch.set(m.id, placedFeeders.reduce((a, b) => a + b, 0) / placedFeeders.length)
+        const targets: number[] = []
+        if (m.next_match_id != null) {
+          const s = slotByMatch.get(m.next_match_id)
+          if (s != null) targets.push(s)
+        }
+        if (m.loser_next_match_id != null) {
+          const s = slotByMatch.get(m.loser_next_match_id)
+          if (s != null) targets.push(s)
+        }
+        if (targets.length > 0) {
+          slotByMatch.set(m.id, targets.reduce((a, b) => a + b, 0) / targets.length)
         } else {
-          slotByMatch.set(m.id, nextFallbackSlot++)
+          slotByMatch.set(m.id, fallback++)
         }
       }
-
-      // Collision resolver: if two matches in this column overlap,
-      // push the lower one down. Sort by current slot, then enforce
-      // a minimum 1-slot gap.
-      const placed = list
-        .map((m: any) => ({ id: m.id, slot: slotByMatch.get(m.id)! }))
-        .sort((a, b) => a.slot - b.slot)
-      let prev = -Infinity
-      for (const p of placed) {
-        if (p.slot - prev < 1) p.slot = prev + 1
-        slotByMatch.set(p.id, p.slot)
-        prev = p.slot
-      }
-      // Keep the fallback counter ahead of this column's max slot so
-      // unlinked matches in later columns don't overlap either.
-      nextFallbackSlot = Math.max(nextFallbackSlot, prev + 1)
+      const maxSlot = resolveCollisions(list)
+      fallback = Math.max(fallback, maxSlot + 1)
     }
+  }
+
+  // ── Pass 2: LEFT → RIGHT refinement ──────────────────────────────────
+  // For shrinking brackets (wide round feeding a narrower successor), the
+  // successor should sit at the centroid of its feeders. Walk columns
+  // left to right and recenter any match that has placed incoming
+  // feeders. Collisions are resolved again per column.
+  for (let i = 1; i < sortedRoundNumbers.value.length; i++) {
+    const round = sortedRoundNumbers.value[i]
+    const list = rounds.value[round]
+    for (const m of list) {
+      const feeders = incoming.get(m.id) || []
+      const placedFeeders = feeders
+        .map(id => slotByMatch.get(id))
+        .filter((s): s is number => s != null)
+      if (placedFeeders.length > 0) {
+        slotByMatch.set(m.id, placedFeeders.reduce((a, b) => a + b, 0) / placedFeeders.length)
+      }
+    }
+    resolveCollisions(list)
   }
 
   // Normalize slots to start at 0 and compute container height
