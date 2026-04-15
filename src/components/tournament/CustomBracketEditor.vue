@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { Plus, Trash2, ArrowRight, AlertCircle, Play, X, List, Eye, Pause } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
@@ -20,9 +21,21 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const api = useApi()
 const store = useDraftStore()
+const router = useRouter()
 
 const isDraft = computed(() => props.stage?.status === 'draft')
-const viewMode = ref<'list' | 'preview'>('list')
+const viewMode = ref<'list' | 'preview'>('preview')
+
+function onPreviewMatchClick(match: any) {
+  // In draft mode, open the structural editor.
+  // In active mode, jump straight to the match room.
+  if (isDraft.value) {
+    openEdit(match)
+  } else {
+    const compId = store.currentCompetitionId.value
+    if (compId) router.push({ name: 'comp-match', params: { compId, matchId: match.id } })
+  }
+}
 
 async function deactivate() {
   if (!confirm(t('customBracketDeactivateConfirm'))) return
@@ -275,14 +288,15 @@ async function activate() {
       </button>
     </div>
 
-    <!-- Preview mode: render as public view, clicks still open edit modal -->
+    <!-- Preview mode: render as public view, clicks open editor (draft)
+         or navigate to match room (active) -->
     <CustomBracketView
       v-else-if="viewMode === 'preview'"
       :stage="stage"
       :matches="matches"
       :captains="captains"
-      :is-admin="isDraft"
-      @edit-match="openEdit"
+      :is-admin="true"
+      @edit-match="onPreviewMatchClick"
     />
 
     <!-- List mode: match grid grouped by round -->

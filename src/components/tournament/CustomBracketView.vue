@@ -44,8 +44,8 @@ const sortedRoundNumbers = computed(() =>
 // right to left: the rightmost round gets evenly spaced slots 0, 1, 2…
 // and each earlier match is centered on the average slot of the match(es)
 // it links forward to.
-const CARD_H = 170   // card slot height (visible card ~110px + ~60px gap)
-const COL_W = 300    // column width (card + horizontal gap)
+const CARD_H = 85    // card slot height (visible card ~60px + ~25px gap)
+const COL_W = 150    // column width (card + horizontal gap)
 
 const layout = computed(() => {
   const slotByMatch = new Map<number, number>()
@@ -160,8 +160,8 @@ const layout = computed(() => {
 // like a real pyramid bracket.
 const connectors = computed(() => {
   const pos = layout.value.positions
-  const CARD_W = 260
-  const H = 110
+  const CARD_W = 140
+  const H = 64
   const out: { d: string; kind: 'winner' | 'loser' }[] = []
   for (const m of props.matches) {
     const from = pos[m.id]
@@ -235,12 +235,13 @@ function onMatchClick(match: any) {
       <!-- Column round labels across the top -->
       <div v-for="(round, idx) in sortedRoundNumbers" :key="'label-' + round"
         class="absolute text-[10px] font-bold uppercase tracking-wider text-muted-foreground"
-        :style="{ left: (idx * 280) + 'px', top: '0px', width: '260px' }">
+        :style="{ left: (idx * 150) + 'px', top: '0px', width: '140px' }">
         {{ t('customBracketRound') }} {{ round }}
       </div>
 
       <!-- SVG connector layer -->
-      <svg class="absolute top-8 left-0 pointer-events-none"
+      <svg class="absolute left-0 pointer-events-none"
+        :style="{ top: '20px' }"
         :width="layout.width" :height="layout.height"
         :viewBox="'0 0 ' + layout.width + ' ' + layout.height">
         <path v-for="(c, i) in connectors" :key="i"
@@ -254,21 +255,21 @@ function onMatchClick(match: any) {
 
       <!-- Match cards (absolutely positioned) -->
       <div v-for="match in matches" :key="match.id"
-        class="card p-3 transition-colors absolute"
+        class="card px-2 py-1.5 transition-colors absolute"
         :class="isAdmin ? 'cursor-pointer hover:bg-accent/30' : ''"
         :style="{
-          top: (layout.positions[match.id]?.top + 32) + 'px',
+          top: (layout.positions[match.id]?.top + 20) + 'px',
           left: layout.positions[match.id]?.left + 'px',
-          width: '260px',
+          width: '140px',
         }"
         @click="onMatchClick(match)">
-        <div class="flex items-center gap-2 mb-2">
-          <span class="text-[10px] font-mono text-muted-foreground">#{{ match.id }}</span>
-          <span v-if="match.label" class="text-[10px] font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded">{{ match.label }}</span>
-          <span class="text-[10px] text-muted-foreground ml-auto">Bo{{ match.best_of }}</span>
+        <div class="flex items-center gap-1 mb-1">
+          <span class="text-[9px] font-mono text-muted-foreground">#{{ match.id }}</span>
+          <span v-if="match.label" class="text-[9px] font-semibold text-primary bg-primary/10 px-1 py-0.5 rounded truncate">{{ match.label }}</span>
+          <span class="text-[9px] text-muted-foreground ml-auto">Bo{{ match.best_of }}</span>
         </div>
-        <div class="flex flex-col gap-1">
-          <div class="flex items-center gap-2 px-2 py-1.5 rounded"
+        <div class="flex flex-col gap-0.5">
+          <div class="flex items-center gap-1 px-1 py-0.5 rounded"
             :class="isWinner(match, 1) ? 'bg-green-500/10' : 'bg-accent/40'">
             <div class="flex-1 min-w-0" :class="isWinner(match, 1) ? 'font-bold text-green-400' : ''">
               <TeamName v-if="slotTeam(match, 1)"
@@ -276,16 +277,16 @@ function onMatchClick(match: any) {
                 :name="slotTeam(match, 1)!.name"
                 :avatar-url="slotTeam(match, 1)!.avatarUrl"
                 :banner-url="slotTeam(match, 1)!.bannerUrl"
-                size="sm"
+                size="xs"
                 no-link
               />
-              <span v-else class="text-sm text-muted-foreground truncate block">{{ slotLabel(match, 1) }}</span>
+              <span v-else class="text-[11px] text-muted-foreground truncate block">{{ slotLabel(match, 1) }}</span>
             </div>
-            <span class="text-sm font-mono tabular-nums" :class="isWinner(match, 1) ? 'text-green-400 font-bold' : 'text-muted-foreground'">
+            <span class="text-[11px] font-mono tabular-nums" :class="isWinner(match, 1) ? 'text-green-400 font-bold' : 'text-muted-foreground'">
               {{ score(match, 1) }}
             </span>
           </div>
-          <div class="flex items-center gap-2 px-2 py-1.5 rounded"
+          <div class="flex items-center gap-1 px-1 py-0.5 rounded"
             :class="isWinner(match, 2) ? 'bg-green-500/10' : 'bg-accent/40'">
             <div class="flex-1 min-w-0" :class="isWinner(match, 2) ? 'font-bold text-green-400' : ''">
               <TeamName v-if="slotTeam(match, 2)"
@@ -293,12 +294,12 @@ function onMatchClick(match: any) {
                 :name="slotTeam(match, 2)!.name"
                 :avatar-url="slotTeam(match, 2)!.avatarUrl"
                 :banner-url="slotTeam(match, 2)!.bannerUrl"
-                size="sm"
+                size="xs"
                 no-link
               />
-              <span v-else class="text-sm text-muted-foreground truncate block">{{ slotLabel(match, 2) }}</span>
+              <span v-else class="text-[11px] text-muted-foreground truncate block">{{ slotLabel(match, 2) }}</span>
             </div>
-            <span class="text-sm font-mono tabular-nums" :class="isWinner(match, 2) ? 'text-green-400 font-bold' : 'text-muted-foreground'">
+            <span class="text-[11px] font-mono tabular-nums" :class="isWinner(match, 2) ? 'text-green-400 font-bold' : 'text-muted-foreground'">
               {{ score(match, 2) }}
             </span>
           </div>
