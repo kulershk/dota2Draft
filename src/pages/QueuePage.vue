@@ -14,6 +14,15 @@ const queue = useQueueStore()
 
 const selectedPoolId = ref<number | null>(null)
 
+const HISTORY_PER_PAGE = 5
+const historyPage = ref(1)
+const totalHistoryPages = computed(() => Math.max(1, Math.ceil(queue.queueHistory.value.length / HISTORY_PER_PAGE)))
+const pagedHistory = computed(() => {
+  const start = (historyPage.value - 1) * HISTORY_PER_PAGE
+  return queue.queueHistory.value.slice(start, start + HISTORY_PER_PAGE)
+})
+watch(totalHistoryPages, (n) => { if (historyPage.value > n) historyPage.value = n })
+
 const selectedPool = computed(() => queue.pools.value.find(p => p.id === selectedPoolId.value) || null)
 const teamSize = computed(() => (selectedPool.value as any)?.team_size || 5)
 const totalPlayers = computed(() => teamSize.value * 2)
@@ -574,7 +583,7 @@ onUnmounted(() => {
           <div v-if="queue.queueHistory.value.length > 0">
             <h2 class="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">{{ t('queueRecentMatches') }}</h2>
             <div class="flex flex-col gap-2">
-              <router-link v-for="qm in queue.queueHistory.value" :key="qm.id"
+              <router-link v-for="qm in pagedHistory" :key="qm.id"
                 :to="{ name: 'queue-match', params: { id: qm.id } }"
                 class="card px-5 py-3.5 flex items-center gap-4 hover:bg-accent/30 transition-colors cursor-pointer">
                 <div class="flex items-center gap-2.5 flex-1 min-w-0">
@@ -591,6 +600,21 @@ onUnmounted(() => {
                   {{ qm.status === 'completed' ? t('matchCompleted') : qm.status === 'live' ? t('matchLive') : qm.status }}
                 </span>
               </router-link>
+            </div>
+            <div v-if="totalHistoryPages > 1" class="flex items-center justify-center gap-2 mt-3">
+              <button
+                type="button"
+                class="px-2.5 py-1.5 rounded-md bg-accent/40 border border-border/40 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-accent/60 transition-colors"
+                :disabled="historyPage <= 1"
+                @click="historyPage--"
+              >‹</button>
+              <span class="text-xs text-muted-foreground tabular-nums">{{ historyPage }} / {{ totalHistoryPages }}</span>
+              <button
+                type="button"
+                class="px-2.5 py-1.5 rounded-md bg-accent/40 border border-border/40 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-accent/60 transition-colors"
+                :disabled="historyPage >= totalHistoryPages"
+                @click="historyPage++"
+              >›</button>
             </div>
           </div>
         </template>
