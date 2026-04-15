@@ -589,6 +589,8 @@ export default {
   customBracketDeleteConfirm: 'Dzēst šo spēli? Saites no citām spēlēm jāatvieno vispirms.',
   customBracketViewList: 'Saraksts',
   customBracketViewPreview: 'Priekšskatījums',
+  customBracketDeactivate: 'Deaktivizēt',
+  customBracketDeactivateConfirm: 'Deaktivizēt šo posmu un atgriezt melnraksta režīmā? Varēsi atkal rediģēt spēles un saites.',
   upperBracket: 'Augšējā grupa',
   lowerBracket: 'Zemākā grupa',
   grandFinals: 'Lielais fināls',

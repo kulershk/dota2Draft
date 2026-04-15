@@ -339,7 +339,7 @@ export default function createTournamentRouter(io) {
     const { name, status, seeds, groups, bestOf, regenerate } = req.body
     if (name !== undefined) stage.name = name
     if (bestOf !== undefined) stage.bestOf = bestOf
-    if (status !== undefined && ['pending', 'active', 'completed'].includes(status)) {
+    if (status !== undefined && ['pending', 'active', 'completed', 'draft'].includes(status)) {
       stage.status = status
     }
 

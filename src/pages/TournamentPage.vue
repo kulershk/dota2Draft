@@ -582,10 +582,11 @@ function stageStatusClass(stage: any) {
           @edit-match="onMatchClick"
         />
 
-        <!-- Custom bracket: editor while draft / admin, public view once active -->
+        <!-- Custom bracket: editor for admins (any status — Deactivate to edit),
+             public view for everyone else -->
         <template v-else-if="activeStage.format === 'custom_bracket'">
           <CustomBracketEditor
-            v-if="isCompAdmin && activeStage.status === 'draft'"
+            v-if="isCompAdmin"
             :stage="activeStage"
             :matches="stageMatches"
             :captains="store.captains.value"
@@ -596,7 +597,7 @@ function stageStatusClass(stage: any) {
             :stage="activeStage"
             :matches="stageMatches"
             :captains="store.captains.value"
-            :is-admin="isCompAdmin && showHidden"
+            :is-admin="false"
             @edit-match="onMatchClick"
           />
         </template>

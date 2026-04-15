@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import TeamName from '@/components/common/TeamName.vue'
 
 const { t } = useI18n()
 
@@ -187,13 +188,27 @@ const connectors = computed(() => {
 
 function slotLabel(match: any, slot: 1 | 2): string {
   const captainId = slot === 1 ? match.team1_captain_id : match.team2_captain_id
-  if (captainId) return captainName(captainId)
+  if (captainId) {
+    const name = slot === 1 ? match.team1_name : match.team2_name
+    return name || captainName(captainId)
+  }
   for (const m of props.matches) {
     if (m.id === match.id) continue
     if (m.next_match_id === match.id && m.next_match_slot === slot) return `← W #${m.id}`
     if (m.loser_next_match_id === match.id && m.loser_next_match_slot === slot) return `← L #${m.id}`
   }
   return t('tbd')
+}
+
+function slotTeam(match: any, slot: 1 | 2): { id: number; name: string; avatarUrl: string; bannerUrl: string } | null {
+  const captainId = slot === 1 ? match.team1_captain_id : match.team2_captain_id
+  if (!captainId) return null
+  return {
+    id: captainId,
+    name: (slot === 1 ? match.team1_name : match.team2_name) || captainName(captainId),
+    avatarUrl: slot === 1 ? match.team1_avatar : match.team2_avatar,
+    bannerUrl: slot === 1 ? match.team1_banner : match.team2_banner,
+  }
 }
 
 function score(match: any, slot: 1 | 2): string {
@@ -255,18 +270,34 @@ function onMatchClick(match: any) {
         <div class="flex flex-col gap-1">
           <div class="flex items-center gap-2 px-2 py-1.5 rounded"
             :class="isWinner(match, 1) ? 'bg-green-500/10' : 'bg-accent/40'">
-            <span class="text-sm flex-1 truncate" :class="isWinner(match, 1) ? 'font-bold text-green-400' : ''">
-              {{ slotLabel(match, 1) }}
-            </span>
+            <div class="flex-1 min-w-0" :class="isWinner(match, 1) ? 'font-bold text-green-400' : ''">
+              <TeamName v-if="slotTeam(match, 1)"
+                :id="slotTeam(match, 1)!.id"
+                :name="slotTeam(match, 1)!.name"
+                :avatar-url="slotTeam(match, 1)!.avatarUrl"
+                :banner-url="slotTeam(match, 1)!.bannerUrl"
+                size="sm"
+                no-link
+              />
+              <span v-else class="text-sm text-muted-foreground truncate block">{{ slotLabel(match, 1) }}</span>
+            </div>
             <span class="text-sm font-mono tabular-nums" :class="isWinner(match, 1) ? 'text-green-400 font-bold' : 'text-muted-foreground'">
               {{ score(match, 1) }}
             </span>
           </div>
           <div class="flex items-center gap-2 px-2 py-1.5 rounded"
             :class="isWinner(match, 2) ? 'bg-green-500/10' : 'bg-accent/40'">
-            <span class="text-sm flex-1 truncate" :class="isWinner(match, 2) ? 'font-bold text-green-400' : ''">
-              {{ slotLabel(match, 2) }}
-            </span>
+            <div class="flex-1 min-w-0" :class="isWinner(match, 2) ? 'font-bold text-green-400' : ''">
+              <TeamName v-if="slotTeam(match, 2)"
+                :id="slotTeam(match, 2)!.id"
+                :name="slotTeam(match, 2)!.name"
+                :avatar-url="slotTeam(match, 2)!.avatarUrl"
+                :banner-url="slotTeam(match, 2)!.bannerUrl"
+                size="sm"
+                no-link
+              />
+              <span v-else class="text-sm text-muted-foreground truncate block">{{ slotLabel(match, 2) }}</span>
+            </div>
             <span class="text-sm font-mono tabular-nums" :class="isWinner(match, 2) ? 'text-green-400 font-bold' : 'text-muted-foreground'">
               {{ score(match, 2) }}
             </span>

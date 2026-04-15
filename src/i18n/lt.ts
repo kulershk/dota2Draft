@@ -589,6 +589,8 @@ export default {
   customBracketDeleteConfirm: 'Ištrinti šias rungtynes? Nuorodos iš kitų rungtynių turi būti pašalintos pirmiausia.',
   customBracketViewList: 'Sąrašas',
   customBracketViewPreview: 'Peržiūra',
+  customBracketDeactivate: 'Deaktyvuoti',
+  customBracketDeactivateConfirm: 'Deaktyvuoti šį etapą ir grįžti į juodraščio režimą? Galėsite vėl redaguoti rungtynes ir nuorodas.',
   upperBracket: 'Viršutinis tinklas',
   lowerBracket: 'Žemutinis tinklas',
   grandFinals: 'Didysis finalas',

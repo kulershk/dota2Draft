@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Plus, Trash2, ArrowRight, AlertCircle, Play, X, List, Eye } from 'lucide-vue-next'
+import { Plus, Trash2, ArrowRight, AlertCircle, Play, X, List, Eye, Pause } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
@@ -23,6 +23,14 @@ const store = useDraftStore()
 
 const isDraft = computed(() => props.stage?.status === 'draft')
 const viewMode = ref<'list' | 'preview'>('list')
+
+async function deactivate() {
+  if (!confirm(t('customBracketDeactivateConfirm'))) return
+  try {
+    await api.updateTournamentStage(store.currentCompetitionId.value!, props.stage.id, { status: 'draft' } as any)
+    emit('refresh')
+  } catch (e: any) { alert(e.message) }
+}
 const sortedMatches = computed(() => {
   return [...props.matches].sort((a, b) => {
     if ((a.round || 0) !== (b.round || 0)) return (a.round || 0) - (b.round || 0)
@@ -242,6 +250,9 @@ async function activate() {
         </button>
         <button v-if="isDraft" class="btn-primary text-sm flex items-center gap-1.5" @click="activate">
           <Play class="w-3.5 h-3.5" /> {{ t('customBracketActivate') }}
+        </button>
+        <button v-else class="btn-outline text-sm flex items-center gap-1.5" @click="deactivate">
+          <Pause class="w-3.5 h-3.5" /> {{ t('customBracketDeactivate') }}
         </button>
       </div>
     </div>

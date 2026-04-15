@@ -590,6 +590,8 @@ export default {
   customBracketDeleteConfirm: 'Delete this match? Links from other matches must be cleared first.',
   customBracketViewList: 'List',
   customBracketViewPreview: 'Preview',
+  customBracketDeactivate: 'Deactivate',
+  customBracketDeactivateConfirm: 'Deactivate this stage and return to draft mode? You will be able to edit matches and links again.',
   upperBracket: 'Upper Bracket',
   lowerBracket: 'Lower Bracket',
   grandFinals: 'Grand Finals',
