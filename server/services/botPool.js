@@ -577,6 +577,44 @@ class BotPool {
     this._pollTimer = setInterval(() => this._pollUnresolvedGames(), 60 * 1000)
     // Also run once on startup after a short delay (catch games missed during downtime)
     setTimeout(() => this._pollUnresolvedGames(), 15 * 1000)
+    // Separate cleanup pass: force-cancel queue matches that have been
+    // stuck in 'live' for >3h (typical worst-case game length) so their
+    // players can re-queue even if OpenDota never returns a result.
+    this._queueCleanupTimer = setInterval(() => this._cleanupStuckQueueMatches(), 5 * 60 * 1000)
+    setTimeout(() => this._cleanupStuckQueueMatches(), 30 * 1000)
+  }
+
+  async _cleanupStuckQueueMatches() {
+    try {
+      const stuck = await query(`
+        SELECT id, all_player_ids
+          FROM queue_matches
+         WHERE status = 'live'
+           AND created_at < NOW() - INTERVAL '3 hours'
+      `)
+      if (stuck.length === 0) return
+      console.log(`[Queue] Force-cancelling ${stuck.length} stuck queue match(es) (>3h in live)`)
+      for (const qm of stuck) {
+        try {
+          await execute("UPDATE queue_matches SET status = 'cancelled', completed_at = NOW() WHERE id = $1", [qm.id])
+          const playerIds = Array.isArray(qm.all_player_ids) ? qm.all_player_ids : []
+          for (const pid of playerIds) {
+            if (playerInMatch.get(pid) === qm.id) playerInMatch.delete(pid)
+          }
+          activeQueueMatches.delete(qm.id)
+          if (this.io) {
+            this.io.to(`queue-match:${qm.id}`).emit('queue:cancelled', {
+              queueMatchId: qm.id,
+              reason: 'Auto-cancelled after 3h without a resolved result',
+            })
+          }
+        } catch (e) {
+          console.error(`[Queue] Failed to cleanup stuck queue match ${qm.id}:`, e.message)
+        }
+      }
+    } catch (e) {
+      console.error('[Queue] Stuck cleanup error:', e.message)
+    }
   }
 
   async _pollUnresolvedGames() {
