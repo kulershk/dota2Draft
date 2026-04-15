@@ -1161,4 +1161,6 @@ export default {
   jobConfirmPrune: 'Delete completed jobs older than 7 days?',
   jobsEmpty: 'No jobs yet',
   autoRefresh: 'Auto-refresh',
+  customBracketRepair: 'Repair advancement',
+  customBracketRepairNothing: 'No broken slots found — bracket is consistent.',
 }

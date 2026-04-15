@@ -1153,4 +1153,6 @@ export default {
   jobConfirmPrune: 'Ištrinti baigtus darbus senesnius nei 7 d.?',
   jobsEmpty: 'Nėra darbų',
   autoRefresh: 'Auto atnaujinti',
+  customBracketRepair: 'Taisyti progresavimą',
+  customBracketRepairNothing: 'Sugadintų vietų nerasta — tinklelis nuoseklus.',
 }

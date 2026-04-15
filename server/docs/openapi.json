@@ -1714,6 +1714,31 @@
           }
         }
       },
+      "/api/competitions/{compId}/tournament/repair-advancement": {
+        "post": {
+          "tags": ["Tournament"],
+          "summary": "Repair bracket advancement",
+          "description": "Scans all completed matches in the competition and applies advancement for any downstream slot that's still empty. Idempotent — safe to call multiple times.",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [{ "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+          "responses": {
+            "200": {
+              "description": "Repair result",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "ok": { "type": "boolean" },
+                      "fixed": { "type": "integer", "description": "Number of slots repaired" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       "/api/admin/jobs": {
         "get": {
           "tags": ["Jobs"],

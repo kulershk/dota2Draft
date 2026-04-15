@@ -1153,4 +1153,6 @@ export default {
   jobConfirmPrune: 'Dzēst pabeigtos darbus vecākus par 7 dienām?',
   jobsEmpty: 'Nav darbu',
   autoRefresh: 'Auto atjaunot',
+  customBracketRepair: 'Labot progresēšanu',
+  customBracketRepairNothing: 'Nav bojātu slotu — turnīra tīkls ir konsekvents.',
 }

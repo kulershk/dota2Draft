@@ -4,7 +4,7 @@ import { requireCompPermission, requirePermission } from '../middleware/permissi
 import { getSessionPlayerId, getTokenFromReq, getAuthPlayer } from '../middleware/auth.js'
 import { getCompetition, getCaptains, parseCompSettings } from '../helpers/competition.js'
 import { awardXp, getTeamPlayerIds } from '../helpers/xp.js'
-import { advanceWinner, generateEliminationBracket, generateGroupMatches, generateDoubleEliminationBracket, customBracketWouldCycle, validateCustomBracketStage } from '../helpers/tournament.js'
+import { advanceWinner, repairBracketAdvancement, generateEliminationBracket, generateGroupMatches, generateDoubleEliminationBracket, customBracketWouldCycle, validateCustomBracketStage } from '../helpers/tournament.js'
 import { fetchAndSaveGameStats } from '../helpers/opendota.js'
 
 export default function createTournamentRouter(io) {
@@ -586,6 +586,22 @@ export default function createTournamentRouter(io) {
   })
 
   // Activate a custom_bracket stage (draft → active) after validation.
+  // Admin-triggered bracket repair. Walks completed matches and re-applies
+  // advancement for any downstream slot that's still empty. Idempotent.
+  router.post('/api/competitions/:compId/tournament/repair-advancement', async (req, res) => {
+    const compId = Number(req.params.compId)
+    const admin = await requireCompPermission(req, res, compId)
+    if (!admin) return
+    try {
+      const fixed = await repairBracketAdvancement(compId)
+      if (fixed > 0) io.to(`comp:${compId}`).emit('tournament:updated')
+      res.json({ ok: true, fixed })
+    } catch (e) {
+      console.error('[repair] admin route failed:', e)
+      res.status(500).json({ error: e.message || 'Repair failed' })
+    }
+  })
+
   router.post('/api/competitions/:compId/tournament/stages/:stageId/activate', async (req, res) => {
     const compId = Number(req.params.compId)
     const stageId = Number(req.params.stageId)
@@ -811,6 +827,14 @@ export default function createTournamentRouter(io) {
 
     if (winnerId && (match.next_match_id || match.loser_next_match_id)) {
       await advanceWinner(matchId, winnerId)
+    }
+    // Self-heal any previously broken advancement in the same competition.
+    // Idempotent — only writes when a downstream slot is still empty.
+    try {
+      const fixed = await repairBracketAdvancement(compId)
+      if (fixed > 0) console.log(`[repair] score route auto-fixed ${fixed} slot(s) in comp #${compId}`)
+    } catch (e) {
+      console.error('[repair] auto-repair failed:', e.message)
     }
 
     const comp = await getCompetition(compId)

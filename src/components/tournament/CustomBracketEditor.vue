@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { Plus, Trash2, ArrowRight, AlertCircle, Play, X, List, Eye, Pause } from 'lucide-vue-next'
+import { Plus, Trash2, ArrowRight, AlertCircle, Play, X, List, Eye, Pause, Wrench } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
@@ -229,6 +229,16 @@ async function activate() {
     }
   }
 }
+
+async function repair() {
+  try {
+    const r = await api.repairBracketAdvancement(store.currentCompetitionId.value!)
+    alert(r.fixed > 0 ? `Repaired ${r.fixed} slot(s)` : t('customBracketRepairNothing'))
+    emit('refresh')
+  } catch (e: any) {
+    alert('Repair failed: ' + (e.message || e))
+  }
+}
 </script>
 
 <template>
@@ -266,6 +276,9 @@ async function activate() {
         </button>
         <button v-else class="btn-outline text-sm flex items-center gap-1.5" @click="deactivate">
           <Pause class="w-3.5 h-3.5" /> {{ t('customBracketDeactivate') }}
+        </button>
+        <button v-if="!isDraft" class="btn-outline text-sm flex items-center gap-1.5" @click="repair">
+          <Wrench class="w-3.5 h-3.5" /> {{ t('customBracketRepair') }}
         </button>
       </div>
     </div>

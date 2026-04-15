@@ -80,20 +80,98 @@ export async function validateCustomBracketStage(compId, stageId) {
 
 export async function advanceWinner(matchId, winnerId) {
   const match = await queryOne('SELECT * FROM matches WHERE id = $1', [matchId])
-  if (!match) return
+  if (!match) {
+    console.warn(`[advance] match #${matchId} not found`)
+    return
+  }
+  if (!winnerId) {
+    console.warn(`[advance] match #${matchId} called with empty winnerId`)
+    return
+  }
 
   if (match.next_match_id) {
-    const col = match.next_match_slot === 1 ? 'team1_captain_id' : 'team2_captain_id'
-    await execute(`UPDATE matches SET ${col} = $1 WHERE id = $2`, [winnerId, match.next_match_id])
+    const slot = Number(match.next_match_slot)
+    if (slot !== 1 && slot !== 2) {
+      console.error(`[advance] match #${matchId} has next_match_id=${match.next_match_id} but invalid next_match_slot=${match.next_match_slot}`)
+    } else {
+      const col = slot === 1 ? 'team1_captain_id' : 'team2_captain_id'
+      const target = await queryOne(`SELECT ${col} AS cur FROM matches WHERE id = $1`, [match.next_match_id])
+      if (target && target.cur === winnerId) {
+        console.log(`[advance] #${matchId} → #${match.next_match_id} slot ${slot}: already set to ${winnerId}`)
+      } else {
+        const res = await execute(`UPDATE matches SET ${col} = $1 WHERE id = $2`, [winnerId, match.next_match_id])
+        console.log(`[advance] #${matchId} → #${match.next_match_id} slot ${slot}: winner=${winnerId} (was ${target?.cur ?? 'null'}, rows=${res.rowCount})`)
+      }
+    }
   }
 
   if (match.loser_next_match_id) {
     const loserId = match.team1_captain_id === winnerId ? match.team2_captain_id : match.team1_captain_id
-    if (loserId) {
-      const col = match.loser_next_match_slot === 1 ? 'team1_captain_id' : 'team2_captain_id'
-      await execute(`UPDATE matches SET ${col} = $1 WHERE id = $2`, [loserId, match.loser_next_match_id])
+    if (!loserId) {
+      console.warn(`[advance] #${matchId} has loser link but loserId could not be determined (winner=${winnerId}, t1=${match.team1_captain_id}, t2=${match.team2_captain_id})`)
+    } else {
+      const slot = Number(match.loser_next_match_slot)
+      if (slot !== 1 && slot !== 2) {
+        console.error(`[advance] match #${matchId} has loser_next_match_id=${match.loser_next_match_id} but invalid loser_next_match_slot=${match.loser_next_match_slot}`)
+      } else {
+        const col = slot === 1 ? 'team1_captain_id' : 'team2_captain_id'
+        const target = await queryOne(`SELECT ${col} AS cur FROM matches WHERE id = $1`, [match.loser_next_match_id])
+        if (target && target.cur === loserId) {
+          console.log(`[advance] #${matchId} → L #${match.loser_next_match_id} slot ${slot}: already set to ${loserId}`)
+        } else {
+          const res = await execute(`UPDATE matches SET ${col} = $1 WHERE id = $2`, [loserId, match.loser_next_match_id])
+          console.log(`[advance] #${matchId} → L #${match.loser_next_match_id} slot ${slot}: loser=${loserId} (was ${target?.cur ?? 'null'}, rows=${res.rowCount})`)
+        }
+      }
     }
   }
+}
+
+/**
+ * Scan all completed matches in a competition and re-apply advancement for
+ * any downstream slots that are still empty. Idempotent — safe to call
+ * multiple times. Returns the number of slots fixed.
+ */
+export async function repairBracketAdvancement(compId) {
+  const completed = await query(
+    `SELECT id, winner_captain_id, team1_captain_id, team2_captain_id,
+            next_match_id, next_match_slot,
+            loser_next_match_id, loser_next_match_slot
+       FROM matches
+      WHERE competition_id = $1
+        AND status = 'completed'
+        AND winner_captain_id IS NOT NULL
+        AND (next_match_id IS NOT NULL OR loser_next_match_id IS NOT NULL)`,
+    [compId]
+  )
+
+  let fixed = 0
+  for (const src of completed) {
+    // Winner link
+    if (src.next_match_id && (src.next_match_slot === 1 || src.next_match_slot === 2)) {
+      const col = src.next_match_slot === 1 ? 'team1_captain_id' : 'team2_captain_id'
+      const target = await queryOne(`SELECT ${col} AS cur FROM matches WHERE id = $1`, [src.next_match_id])
+      if (target && !target.cur) {
+        await execute(`UPDATE matches SET ${col} = $1 WHERE id = $2`, [src.winner_captain_id, src.next_match_id])
+        console.log(`[repair] #${src.id} → #${src.next_match_id} slot ${src.next_match_slot}: winner=${src.winner_captain_id}`)
+        fixed++
+      }
+    }
+    // Loser link
+    if (src.loser_next_match_id && (src.loser_next_match_slot === 1 || src.loser_next_match_slot === 2)) {
+      const loserId = src.team1_captain_id === src.winner_captain_id ? src.team2_captain_id : src.team1_captain_id
+      if (loserId) {
+        const col = src.loser_next_match_slot === 1 ? 'team1_captain_id' : 'team2_captain_id'
+        const target = await queryOne(`SELECT ${col} AS cur FROM matches WHERE id = $1`, [src.loser_next_match_id])
+        if (target && !target.cur) {
+          await execute(`UPDATE matches SET ${col} = $1 WHERE id = $2`, [loserId, src.loser_next_match_id])
+          console.log(`[repair] #${src.id} → L #${src.loser_next_match_id} slot ${src.loser_next_match_slot}: loser=${loserId}`)
+          fixed++
+        }
+      }
+    }
+  }
+  return fixed
 }
 
 export async function generateEliminationBracket(compId, stageId, teamIds, bestOf) {
