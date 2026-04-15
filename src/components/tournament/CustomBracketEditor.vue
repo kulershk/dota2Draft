@@ -153,10 +153,26 @@ async function saveAll() {
       loser_next_match_slot: editForm.value.loser_next_match_id ? Number(editForm.value.loser_next_match_slot) || 1 : null,
     }
     await api.updateMatchLinks(editingMatch.value.id, linksBody)
-    await api.updateMatchTeams(editingMatch.value.id, {
-      team1_captain_id: editForm.value.team1_captain_id,
-      team2_captain_id: editForm.value.team2_captain_id,
-    })
+
+    // Only send team fields for slots that aren't fed by an incoming
+    // link (otherwise the server rejects the update) AND only when the
+    // value actually changed, so editing just the label doesn't trip
+    // validation.
+    const slot1 = slotSource(editingMatch.value, 1)
+    const slot2 = slotSource(editingMatch.value, 2)
+    const teamsBody: any = {}
+    if (slot1.kind !== 'winner' && slot1.kind !== 'loser'
+        && editForm.value.team1_captain_id !== editingMatch.value.team1_captain_id) {
+      teamsBody.team1_captain_id = editForm.value.team1_captain_id
+    }
+    if (slot2.kind !== 'winner' && slot2.kind !== 'loser'
+        && editForm.value.team2_captain_id !== editingMatch.value.team2_captain_id) {
+      teamsBody.team2_captain_id = editForm.value.team2_captain_id
+    }
+    if (Object.keys(teamsBody).length > 0) {
+      await api.updateMatchTeams(editingMatch.value.id, teamsBody)
+    }
+
     await api.updateMatchMeta(editingMatch.value.id, {
       best_of: Number(editForm.value.best_of),
       round: Number(editForm.value.round),
