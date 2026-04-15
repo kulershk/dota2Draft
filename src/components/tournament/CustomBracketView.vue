@@ -48,45 +48,51 @@ const COL_W = 280    // column width (card + horizontal gap)
 
 const layout = computed(() => {
   const slotByMatch = new Map<number, number>()
-  const rightToLeft = [...sortedRoundNumbers.value].reverse()
-  const byId = new Map<number, any>()
-  for (const m of props.matches) byId.set(m.id, m)
 
-  for (let i = 0; i < rightToLeft.length; i++) {
-    const round = rightToLeft[i]
+  // Build "incoming feeders" map: matchId -> [source matchIds whose
+  // next_match_id or loser_next_match_id points at this match].
+  const incoming = new Map<number, number[]>()
+  for (const m of props.matches) {
+    if (m.next_match_id != null) {
+      const list = incoming.get(m.next_match_id) || []
+      list.push(m.id)
+      incoming.set(m.next_match_id, list)
+    }
+    if (m.loser_next_match_id != null) {
+      const list = incoming.get(m.loser_next_match_id) || []
+      list.push(m.id)
+      incoming.set(m.loser_next_match_id, list)
+    }
+  }
+
+  // Walk rounds LEFT → RIGHT. Leftmost column gets sequential slots.
+  // Every later match centers on the average slot of its incoming
+  // feeders that we already placed; fallback to sequential for
+  // unlinked matches.
+  let nextFallbackSlot = 0
+  for (let i = 0; i < sortedRoundNumbers.value.length; i++) {
+    const round = sortedRoundNumbers.value[i]
     const list = rounds.value[round]
     if (i === 0) {
-      // rightmost round: simple sequential slots
-      list.forEach((m: any, idx: number) => slotByMatch.set(m.id, idx))
+      list.forEach((m: any) => {
+        slotByMatch.set(m.id, nextFallbackSlot++)
+      })
     } else {
-      // each match's slot = average of the slots of the matches it
-      // outgoing-links to; if it has none, fall back to sequential.
-      const fallback: any[] = []
       for (const m of list) {
-        const targets: number[] = []
-        if (m.next_match_id != null) {
-          const s = slotByMatch.get(m.next_match_id)
-          if (s != null) targets.push(s)
-        }
-        if (m.loser_next_match_id != null) {
-          const s = slotByMatch.get(m.loser_next_match_id)
-          if (s != null) targets.push(s)
-        }
-        if (targets.length > 0) {
-          slotByMatch.set(m.id, targets.reduce((a, b) => a + b, 0) / targets.length)
+        const feeders = incoming.get(m.id) || []
+        const placedFeeders = feeders
+          .map(id => slotByMatch.get(id))
+          .filter((s): s is number => s != null)
+        if (placedFeeders.length > 0) {
+          slotByMatch.set(m.id, placedFeeders.reduce((a, b) => a + b, 0) / placedFeeders.length)
         } else {
-          fallback.push(m)
+          slotByMatch.set(m.id, nextFallbackSlot++)
         }
       }
-      // Unlinked matches in this round: append after the already-placed
-      // ones so they don't overlap.
-      const maxPlaced = list
-        .filter((m: any) => slotByMatch.has(m.id))
-        .reduce((max: number, m: any) => Math.max(max, slotByMatch.get(m.id)!), -1)
-      fallback.forEach((m: any, idx: number) => slotByMatch.set(m.id, maxPlaced + 1 + idx))
 
-      // Resolve vertical collisions within this column: if two matches
-      // in the same round ended up at the same slot, spread them apart.
+      // Collision resolver: if two matches in this column overlap,
+      // push the lower one down. Sort by current slot, then enforce
+      // a minimum 1-slot gap.
       const placed = list
         .map((m: any) => ({ id: m.id, slot: slotByMatch.get(m.id)! }))
         .sort((a, b) => a.slot - b.slot)
@@ -96,6 +102,9 @@ const layout = computed(() => {
         slotByMatch.set(p.id, p.slot)
         prev = p.slot
       }
+      // Keep the fallback counter ahead of this column's max slot so
+      // unlinked matches in later columns don't overlap either.
+      nextFallbackSlot = Math.max(nextFallbackSlot, prev + 1)
     }
   }
 
