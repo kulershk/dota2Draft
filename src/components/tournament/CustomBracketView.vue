@@ -43,8 +43,8 @@ const sortedRoundNumbers = computed(() =>
 // right to left: the rightmost round gets evenly spaced slots 0, 1, 2…
 // and each earlier match is centered on the average slot of the match(es)
 // it links forward to.
-const CARD_H = 120   // card height + vertical gap (px)
-const COL_W = 280    // column width (card + horizontal gap)
+const CARD_H = 170   // card slot height (visible card ~110px + ~60px gap)
+const COL_W = 300    // column width (card + horizontal gap)
 
 const layout = computed(() => {
   const slotByMatch = new Map<number, number>()
