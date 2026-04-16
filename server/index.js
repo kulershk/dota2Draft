@@ -160,7 +160,7 @@ initDb().then(async () => {
   })
   registerSchedule('cleanup_zombie_lobbies', { everyMs: 5 * 60_000 })
 
-  // ── Per-game stat fetching (replaces silent bulk polling with visible jobs) ──
+  // ── Per-game stat fetching: GC (primary) → Steam API → OpenDota (enrichment) ──
   registerHandler('fetch_match_stats', async (payload) => {
     const { matchGameId, dotabuffId, matchId, gameNumber } = payload
     if (!matchGameId || !dotabuffId) throw new Error('Missing matchGameId or dotabuffId')
@@ -171,41 +171,71 @@ initDb().then(async () => {
     )
     if (!game) throw new Error(`match_games #${matchGameId} not found`)
 
-    const result = { dotabuffId, steam: null, opendota: null, winner: !!game.winner_captain_id, parsed: !!game.parsed }
+    const result = { dotabuffId, gc: null, steam: null, opendota: null, winner: !!game.winner_captain_id, parsed: !!game.parsed }
 
-    // Phase 1: Steam API for winner + basic stats
-    const steamData = await fetchSteamMatchDetails(dotabuffId)
-    if (steamData) {
-      await saveMatchGameStats(matchGameId, steamData)
-      result.steam = { players: steamData.players?.length || 0, radiantWin: steamData.radiant_win, duration: steamData.duration }
-
-      if (!game.winner_captain_id && steamData.radiant_win != null) {
-        await botPool._autoFillGameWinner(matchId, gameNumber, steamData.radiant_win, steamData)
-        result.winner = true
+    // Phase 1: Dota 2 GC via bot (fastest, works for practice lobbies)
+    if (!game.winner_captain_id) {
+      try {
+        const gcData = await botPool.requestMatchDetailsFromGC(dotabuffId)
+        if (gcData && gcData.radiant_win != null) {
+          // Normalise GC data to the shape saveMatchGameStats expects
+          const normalised = {
+            radiant_win: gcData.radiant_win,
+            duration: gcData.duration || 0,
+            start_time: gcData.start_time || null,
+            game_mode: gcData.game_mode,
+            players: gcData.players || [],
+            _source: 'gc',
+          }
+          await saveMatchGameStats(matchGameId, normalised)
+          await botPool._autoFillGameWinner(matchId, gameNumber, gcData.radiant_win, normalised)
+          result.gc = { players: gcData.players?.length || 0, radiantWin: gcData.radiant_win, duration: gcData.duration }
+          result.winner = true
+          // Request OpenDota parse for detailed enrichment later
+          requestOpenDotaParse(dotabuffId).catch(() => {})
+        } else {
+          result.gc = { error: 'GC returned no result' }
+        }
+      } catch (e) {
+        result.gc = { error: e.message }
       }
-    } else {
-      result.steam = { error: 'Match not available on Steam API' }
     }
 
-    // Phase 2: OpenDota for detailed parsed stats
-    const odData = await fetchOpenDotaMatch(dotabuffId)
-    if (odData) {
-      const saveResult = await saveMatchGameStats(matchGameId, odData)
-      result.opendota = { players: odData.players?.length || 0, parsed: saveResult.parsed }
-      result.parsed = saveResult.parsed
-
-      if (!result.winner && odData.radiant_win != null) {
-        await botPool._autoFillGameWinner(matchId, gameNumber, odData.radiant_win, odData)
+    // Phase 2: Steam Web API fallback (if GC failed — may not work for practice lobbies)
+    if (!result.winner) {
+      const steamData = await fetchSteamMatchDetails(dotabuffId)
+      if (steamData && steamData.radiant_win != null) {
+        await saveMatchGameStats(matchGameId, steamData)
+        result.steam = { players: steamData.players?.length || 0, radiantWin: steamData.radiant_win, duration: steamData.duration }
+        await botPool._autoFillGameWinner(matchId, gameNumber, steamData.radiant_win, steamData)
         result.winner = true
+        requestOpenDotaParse(dotabuffId).catch(() => {})
+      } else {
+        result.steam = { error: 'Not available on Steam API' }
       }
-    } else {
-      requestOpenDotaParse(dotabuffId).catch(() => {})
-      result.opendota = { error: 'Not available yet, parse requested' }
+    }
+
+    // Phase 3: OpenDota for winner fallback + detailed parsed stats
+    if (!result.winner || !result.parsed) {
+      const odData = await fetchOpenDotaMatch(dotabuffId)
+      if (odData) {
+        const saveResult = await saveMatchGameStats(matchGameId, odData)
+        result.opendota = { players: odData.players?.length || 0, parsed: saveResult.parsed }
+        result.parsed = saveResult.parsed
+
+        if (!result.winner && odData.radiant_win != null) {
+          await botPool._autoFillGameWinner(matchId, gameNumber, odData.radiant_win, odData)
+          result.winner = true
+        }
+      } else {
+        requestOpenDotaParse(dotabuffId).catch(() => {})
+        result.opendota = { error: 'Not available yet, parse requested' }
+      }
     }
 
     // If winner still not resolved OR not fully parsed, fail so the job retries
-    if (!result.winner) throw new Error(`Winner not resolved yet (steam: ${result.steam?.error || 'no radiant_win'}, opendota: ${result.opendota?.error || 'no data'})`)
-    if (!result.parsed) throw new Error(`Basic stats saved but not fully parsed yet — waiting for OpenDota (attempt will retry)`)
+    if (!result.winner) throw new Error(`Winner not resolved yet — gc: ${result.gc?.error || 'skipped'}, steam: ${result.steam?.error || 'skipped'}, opendota: ${result.opendota?.error || 'no data'}`)
+    if (!result.parsed) throw new Error(`Stats saved (winner resolved) but not fully parsed — waiting for OpenDota`)
 
     return result
   })

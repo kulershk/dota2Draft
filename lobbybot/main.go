@@ -8,6 +8,7 @@ import (
 	"lobbybot/lobby"
 	"lobbybot/protocol"
 	"lobbybot/ws"
+	"strconv"
 )
 
 func main() {
@@ -94,6 +95,34 @@ func main() {
 			var cmd protocol.ForceLaunchCmd
 			json.Unmarshal(data, &cmd)
 			lobbyMgr.ForceLaunch(cmd.LobbyID, cmd.SkipValidation)
+
+		case "request_match_details":
+			var cmd protocol.RequestMatchDetailsCmd
+			json.Unmarshal(data, &cmd)
+			go func() {
+				matchID, err := strconv.ParseUint(cmd.MatchID, 10, 64)
+				if err != nil {
+					log.Printf("Invalid match ID: %s", cmd.MatchID)
+					sendFn("match_details", protocol.MatchDetailsEvent{MatchID: cmd.MatchID, Error: "Invalid match ID"})
+					return
+				}
+				b := botMgr.GetBot(cmd.BotID)
+				if b == nil {
+					// Fall back to any available bot
+					b = botMgr.FindAvailable()
+				}
+				if b == nil {
+					sendFn("match_details", protocol.MatchDetailsEvent{MatchID: cmd.MatchID, Error: "No bot available"})
+					return
+				}
+				result, err := b.RequestMatchDetails(matchID)
+				if err != nil {
+					log.Printf("Match details request failed: %v", err)
+					sendFn("match_details", protocol.MatchDetailsEvent{MatchID: cmd.MatchID, Error: err.Error()})
+					return
+				}
+				sendFn("match_details", *result)
+			}()
 
 		default:
 			log.Printf("Unknown message type: %s", msgType)

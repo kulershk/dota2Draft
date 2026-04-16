@@ -14,6 +14,7 @@ class BotPool {
     this.goWs = null
     this.botLogs = new Map() // botId -> [{ time, message }]
     this.lobbyTeamIds = new Map() // lobbyId -> { radiant, dire }
+    this._matchDetailsPending = new Map() // matchId -> { resolve, reject, timer }
   }
 
   async init(io, wss) {
@@ -108,6 +109,10 @@ class BotPool {
 
         case 'lobby_error':
           await this._onLobbyError(data)
+          break
+
+        case 'match_details':
+          this._onMatchDetails(data)
           break
 
         default:
@@ -225,6 +230,42 @@ class BotPool {
         console.error(`[Bot ${botId}] Failed to re-sync lobbies:`, e.message)
       }
     }
+  }
+
+  _onMatchDetails(data) {
+    const matchId = data.matchId || data.matchID
+    const pending = this._matchDetailsPending.get(matchId)
+    if (!pending) return
+    this._matchDetailsPending.delete(matchId)
+    clearTimeout(pending.timer)
+    if (data.error) {
+      pending.reject(new Error(data.error))
+    } else {
+      pending.resolve(data)
+    }
+  }
+
+  /**
+   * Request match details from the Dota 2 GC via an available bot.
+   * Returns a promise that resolves with the match data or rejects on error/timeout.
+   */
+  async requestMatchDetailsFromGC(dotaMatchId) {
+    const matchIdStr = String(dotaMatchId).replace(/\D/g, '')
+    if (!matchIdStr) throw new Error('Invalid match ID')
+
+    // Pick an available bot to make the request
+    const bot = await queryOne("SELECT id FROM lobby_bots WHERE status = 'available' ORDER BY last_used_at NULLS FIRST LIMIT 1")
+    if (!bot) throw new Error('No bot available for GC request')
+
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this._matchDetailsPending.delete(matchIdStr)
+        reject(new Error('GC match details request timed out (15s)'))
+      }, 15_000)
+
+      this._matchDetailsPending.set(matchIdStr, { resolve, reject, timer })
+      this._sendToGo('request_match_details', { matchId: matchIdStr, botId: String(bot.id) })
+    })
   }
 
   _onBotLog(data) {

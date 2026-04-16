@@ -366,6 +366,76 @@ func (b *Bot) SubmitSteamGuard(code string) {
 	}
 }
 
+func (b *Bot) RequestMatchDetails(matchID uint64) (*protocol.MatchDetailsEvent, error) {
+	if b.dotaClient == nil {
+		return nil, fmt.Errorf("dota client not connected")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	resp, err := b.dotaClient.RequestMatchDetails(ctx, matchID)
+	if err != nil {
+		return nil, fmt.Errorf("GC request failed: %w", err)
+	}
+	if resp.GetResult() != 1 || resp.Match == nil {
+		return nil, fmt.Errorf("GC returned no match data (result=%d)", resp.GetResult())
+	}
+
+	m := resp.Match
+	outcome := m.GetMatchOutcome()
+	// EMatchOutcome: 2 = radiant win, 3 = dire win
+	radiantWin := outcome == 2
+
+	players := make([]protocol.MatchDetailsPlayer, 0, len(m.Players))
+	for _, p := range m.Players {
+		slot := p.GetPlayerSlot()
+		isRadiant := slot < 128
+		win := 0
+		if (isRadiant && radiantWin) || (!isRadiant && !radiantWin) {
+			win = 1
+		}
+		players = append(players, protocol.MatchDetailsPlayer{
+			AccountID:   p.GetAccountId(),
+			PlayerSlot:  slot,
+			HeroID:      p.GetHeroId(),
+			Kills:       p.GetKills(),
+			Deaths:      p.GetDeaths(),
+			Assists:     p.GetAssists(),
+			LastHits:    p.GetLastHits(),
+			Denies:      p.GetDenies(),
+			GoldPerMin:  p.GetGoldPerMin(),
+			XpPerMin:    p.GetXpPerMin(),
+			HeroDamage:  p.GetHeroDamage(),
+			TowerDamage: p.GetTowerDamage(),
+			HeroHealing: p.GetHeroHealing(),
+			Level:       p.GetLevel(),
+			NetWorth:    p.GetGold() + p.GetGoldSpent(),
+			Item0:       p.GetItem_0(),
+			Item1:       p.GetItem_1(),
+			Item2:       p.GetItem_2(),
+			Item3:       p.GetItem_3(),
+			Item4:       p.GetItem_4(),
+			Item5:       p.GetItem_5(),
+			Backpack0:   p.GetItem_6(),
+			Backpack1:   p.GetItem_7(),
+			Backpack2:   p.GetItem_8(),
+			ItemNeutral: p.GetItem_9(),
+			IsRadiant:   isRadiant,
+			Win:         win,
+			PlayerName:  p.GetPlayerName(),
+		})
+	}
+
+	return &protocol.MatchDetailsEvent{
+		MatchID:    fmt.Sprintf("%d", m.GetMatchId()),
+		RadiantWin: radiantWin,
+		Duration:   m.GetDuration(),
+		StartTime:  m.GetStarttime(),
+		GameMode:   uint32(m.GetGameMode()),
+		Players:    players,
+	}, nil
+}
+
 func (b *Bot) SetSentryHashHex(hexStr string) {
 	decoded, err := hex.DecodeString(hexStr)
 	if err == nil && len(decoded) > 0 {
