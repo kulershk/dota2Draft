@@ -103,6 +103,16 @@ async function createJob() {
   }
 }
 
+function timeUntil(dateStr: string): string {
+  const diff = new Date(dateStr).getTime() - Date.now()
+  if (diff <= 0) return 'now'
+  const secs = Math.ceil(diff / 1000)
+  if (secs < 60) return `in ${secs}s`
+  const mins = Math.ceil(secs / 60)
+  if (mins < 60) return `in ${mins}m`
+  return `in ${Math.floor(mins / 60)}h ${mins % 60}m`
+}
+
 function statusClass(status: string) {
   switch (status) {
     case 'pending': return 'bg-amber-500/20 text-amber-500'
@@ -183,7 +193,7 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer) })
         <span class="w-24 shrink-0">{{ t('jobStatus') }}</span>
         <span class="w-20 shrink-0 text-right">{{ t('jobAttempts') }}</span>
         <span class="flex-1 min-w-0 ml-4">{{ t('jobError') }}</span>
-        <span class="w-[140px] shrink-0 text-right">{{ t('jobCreated') }}</span>
+        <span class="w-[160px] shrink-0 text-right">{{ t('jobNextRun') }}</span>
         <span class="w-[120px] shrink-0 text-right">{{ t('actions') }}</span>
       </div>
       <div v-if="loading && rows.length === 0" class="p-6 text-center text-sm text-muted-foreground">{{ t('loading') }}</div>
@@ -202,7 +212,12 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer) })
           </span>
           <span class="w-20 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{{ row.attempts }}/{{ row.max_attempts }}</span>
           <span class="flex-1 min-w-0 ml-4 text-xs text-red-400 truncate">{{ row.error || '' }}</span>
-          <span class="w-[140px] shrink-0 text-right text-[11px] text-muted-foreground">{{ fmtDateTime(new Date(row.created_at)) }}</span>
+          <span class="w-[160px] shrink-0 text-right text-[11px] text-muted-foreground">
+            <template v-if="row.status === 'pending' && row.run_at">
+              <span class="text-primary font-semibold">{{ timeUntil(row.run_at) }}</span>
+            </template>
+            <template v-else>{{ fmtDateTime(new Date(row.created_at)) }}</template>
+          </span>
           <span class="w-[120px] shrink-0 text-right flex items-center justify-end gap-1" @click.stop>
             <button
               v-if="row.status === 'failed' || row.status === 'pending'"

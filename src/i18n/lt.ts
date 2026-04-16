@@ -1156,5 +1156,6 @@ export default {
   customBracketRepair: 'Taisyti progresavimą',
   customBracketRepairNothing: 'Sugadintų vietų nerasta — tinklelis nuoseklus.',
   queueAdminRetryLobby: 'Kartoti lobį',
+  jobNextRun: 'Kitas paleidimas',
   queueAdminRetryLobbyHint: 'Priverstinai kurti lobį iš naujo su kitu botu',
 }
