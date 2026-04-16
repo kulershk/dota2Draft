@@ -954,7 +954,13 @@ class BotPool {
       SELECT b.id, b.username, b.display_name, b.steam_id, b.status, b.error_message, b.auto_connect, b.last_used_at, b.created_at,
         ml.match_id AS active_match_id, ml.competition_id AS active_competition_id
       FROM lobby_bots b
-      LEFT JOIN match_lobbies ml ON ml.bot_id = b.id AND ml.status IN ('creating', 'waiting', 'launching', 'active')
+      LEFT JOIN LATERAL (
+        SELECT match_id, competition_id
+          FROM match_lobbies
+         WHERE bot_id = b.id
+           AND status IN ('creating', 'waiting', 'launching', 'active')
+         ORDER BY id DESC LIMIT 1
+      ) ml ON TRUE
       ORDER BY b.id
     `)
   }
