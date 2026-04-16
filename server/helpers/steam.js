@@ -64,6 +64,72 @@ export async function resolveVanityUrl(vanityName) {
   return null
 }
 
+/**
+ * Fetch Dota 2 match details from the Steam Web API. Returns null if the
+ * match isn't available yet (still being processed by Valve) or if no API
+ * key is configured. The shape is normalised to look similar to OpenDota so
+ * the caller can mostly treat them the same.
+ */
+export async function fetchSteamMatchDetails(dotaMatchId) {
+  const steamApiKey = process.env.STEAM_API_KEY
+  if (!steamApiKey) return null
+  const matchId = String(dotaMatchId).replace(/\D/g, '')
+  if (!matchId) return null
+
+  try {
+    const res = await fetch(
+      `https://api.steampowered.com/IDOTA2Match_570/GetMatchDetails/v1/?key=${steamApiKey}&match_id=${matchId}`
+    )
+    if (!res.ok) return null
+    const data = await res.json()
+    const r = data?.result
+    if (!r || r.error) return null
+
+    return {
+      match_id: r.match_id,
+      radiant_win: r.radiant_win,
+      duration: r.duration || 0,
+      start_time: r.start_time || null,
+      game_mode: r.game_mode,
+      radiant_team_id: r.radiant_team_id || 0,
+      dire_team_id: r.dire_team_id || 0,
+      players: (r.players || []).map(p => ({
+        account_id: p.account_id,
+        hero_id: p.hero_id,
+        kills: p.kills || 0,
+        deaths: p.deaths || 0,
+        assists: p.assists || 0,
+        last_hits: p.last_hits || 0,
+        denies: p.denies || 0,
+        gold_per_min: p.gold_per_min || 0,
+        xp_per_min: p.xp_per_min || 0,
+        hero_damage: p.hero_damage || 0,
+        tower_damage: p.tower_damage || 0,
+        hero_healing: p.hero_healing || 0,
+        net_worth: p.net_worth || 0,
+        level: p.level || 0,
+        item_0: p.item_0 || 0,
+        item_1: p.item_1 || 0,
+        item_2: p.item_2 || 0,
+        item_3: p.item_3 || 0,
+        item_4: p.item_4 || 0,
+        item_5: p.item_5 || 0,
+        backpack_0: p.backpack_0 || 0,
+        backpack_1: p.backpack_1 || 0,
+        backpack_2: p.backpack_2 || 0,
+        item_neutral: p.item_neutral || 0,
+        isRadiant: p.player_slot < 128,
+        win: p.player_slot < 128 ? (r.radiant_win ? 1 : 0) : (r.radiant_win ? 0 : 1),
+        lane_role: null,
+      })),
+      _source: 'steam',
+    }
+  } catch (e) {
+    console.error(`[Steam] GetMatchDetails failed for ${matchId}:`, e.message)
+    return null
+  }
+}
+
 export async function parseSteamIds(text) {
   const lines = text.split(/[\n,]+/).map(l => l.trim()).filter(Boolean)
   const steamIds = []

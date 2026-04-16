@@ -2,6 +2,7 @@ import { query, queryOne, execute } from '../db.js'
 import { playerInMatch, activeQueueMatches } from '../socket/queueState.js'
 import { socketPlayers } from '../socket/state.js'
 import { fetchAndSaveGameStats, fetchOpenDotaMatch, saveMatchGameStats, requestOpenDotaParse } from '../helpers/opendota.js'
+import { fetchSteamMatchDetails } from '../helpers/steam.js'
 import { awardXp, getTeamPlayerIds } from '../helpers/xp.js'
 import { getCompetition, parseCompSettings } from '../helpers/competition.js'
 import SteamCommunity from 'steamcommunity'
@@ -623,7 +624,7 @@ class BotPool {
     try {
       // Poll games that either have no winner yet, or have stats but are not fully parsed
       const unresolvedGames = await query(`
-        SELECT mg.id, mg.match_id, mg.game_number, mg.dotabuff_id, mg.created_at, mg.winner_captain_id
+        SELECT mg.id, mg.match_id, mg.game_number, mg.dotabuff_id, mg.created_at, mg.winner_captain_id, mg.parsed
         FROM match_games mg
         JOIN matches m ON m.id = mg.match_id
         WHERE mg.dotabuff_id IS NOT NULL
@@ -642,23 +643,35 @@ class BotPool {
 
       for (const game of unresolvedGames) {
         try {
+          // ── Phase 1: resolve winner via Steam API (fast, reliable) ──
+          if (!game.winner_captain_id) {
+            const steamData = await fetchSteamMatchDetails(game.dotabuff_id)
+            if (steamData && steamData.radiant_win != null) {
+              // Save basic stats from Steam (items, KDA, duration)
+              await saveMatchGameStats(game.id, steamData)
+              await this._autoFillGameWinner(game.match_id, game.game_number, steamData.radiant_win, steamData)
+              console.log(`[Stats] Resolved via Steam: game ${game.game_number} of match ${game.match_id} (dota: ${game.dotabuff_id})`)
+              // Request OpenDota parse for detailed enrichment later
+              requestOpenDotaParse(game.dotabuff_id).catch(() => {})
+              continue
+            }
+            // Steam doesn't have it yet — fall through to OpenDota
+          }
+
+          // ── Phase 2: OpenDota for winner fallback + detailed parsed stats ──
           const matchData = await fetchOpenDotaMatch(game.dotabuff_id)
           if (!matchData) {
-            // Request parse if match not found yet
-            await requestOpenDotaParse(game.dotabuff_id).catch(() => {})
+            requestOpenDotaParse(game.dotabuff_id).catch(() => {})
             continue
           }
 
-          // Save stats (will overwrite with parsed data if now available)
           const result = await saveMatchGameStats(game.id, matchData)
 
-          // Auto-fill winner if OpenDota has the result and winner not yet set
           if (!game.winner_captain_id && matchData.radiant_win != null) {
             await this._autoFillGameWinner(game.match_id, game.game_number, matchData.radiant_win, matchData)
-            console.log(`[Stats] Resolved game ${game.game_number} of match ${game.match_id} (dota: ${game.dotabuff_id})`)
+            console.log(`[Stats] Resolved via OpenDota: game ${game.game_number} of match ${game.match_id} (dota: ${game.dotabuff_id})`)
           } else if (!result.parsed) {
-            // Still not fully parsed, request parse again
-            await requestOpenDotaParse(game.dotabuff_id).catch(() => {})
+            requestOpenDotaParse(game.dotabuff_id).catch(() => {})
           } else if (game.winner_captain_id) {
             console.log(`[Stats] Updated parsed stats for game ${game.game_number} of match ${game.match_id}`)
           }
