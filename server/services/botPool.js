@@ -650,8 +650,8 @@ class BotPool {
         await enqueueJob({
           type: 'fetch_match_stats',
           payload: { matchGameId: mg.id, dotabuffId: String(dotaMatchId), matchId, gameNumber },
-          maxAttempts: 15, // ~45 min of retries with exponential backoff
-          runAt: new Date(Date.now() + 30_000), // wait 30s for Steam to process
+          maxAttempts: 999,
+          runAt: new Date(Date.now() + 30_000), // wait 30s for Valve to process
         })
         console.log(`[Stats] Enqueued fetch_match_stats job for match ${matchId} game ${gameNumber} (dota: ${dotaMatchId})`)
       }
@@ -835,7 +835,7 @@ class BotPool {
         await enqueueJob({
           type: 'fetch_match_stats',
           payload: { matchGameId: game.id, dotabuffId: game.dotabuff_id, matchId: game.match_id, gameNumber: game.game_number },
-          maxAttempts: 15,
+          maxAttempts: 999,
         })
         console.log(`[Stats] Safety net: enqueued fetch_match_stats for match_games #${game.id} (dota: ${game.dotabuff_id})`)
       }

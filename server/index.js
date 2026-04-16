@@ -160,7 +160,9 @@ initDb().then(async () => {
   })
   registerSchedule('cleanup_zombie_lobbies', { everyMs: 5 * 60_000 })
 
-  // ── Per-game stat fetching: GC (primary) → Steam API → OpenDota (enrichment) ──
+  // ── Per-game stat fetching with tiered polling ──
+  // Phase 1 (fetch_match_stats): GC every 60s until winner resolved
+  // Phase 2 (enrich_match_stats): OpenDota every 10min for 2h, then every 1h for 3 days
   registerHandler('fetch_match_stats', async (payload) => {
     const { matchGameId, dotabuffId, matchId, gameNumber } = payload
     if (!matchGameId || !dotabuffId) throw new Error('Missing matchGameId or dotabuffId')
@@ -170,94 +172,109 @@ initDb().then(async () => {
       [matchGameId]
     )
     if (!game) throw new Error(`match_games #${matchGameId} not found`)
-
-    const result = { dotabuffId, gc: null, steam: null, opendota: null, winner: !!game.winner_captain_id, parsed: !!game.parsed }
-
-    // Phase 1: Dota 2 GC via bot (fastest, works for practice lobbies)
-    if (!game.winner_captain_id) {
-      try {
-        const gcData = await botPool.requestMatchDetailsFromGC(dotabuffId)
-        if (gcData && gcData.radiant_win != null) {
-          // Normalise GC data to the shape saveMatchGameStats expects
-          const normalised = {
-            radiant_win: gcData.radiant_win,
-            duration: gcData.duration || 0,
-            start_time: gcData.start_time || null,
-            game_mode: gcData.game_mode,
-            players: gcData.players || [],
-            _source: 'gc',
-          }
-          await saveMatchGameStats(matchGameId, normalised)
-          await botPool._autoFillGameWinner(matchId, gameNumber, gcData.radiant_win, normalised)
-          result.gc = { players: gcData.players?.length || 0, radiantWin: gcData.radiant_win, duration: gcData.duration }
-          result.winner = true
-          // Request OpenDota parse for detailed enrichment later
-          requestOpenDotaParse(dotabuffId).catch(() => {})
-        } else {
-          result.gc = { error: 'GC returned no result' }
-        }
-      } catch (e) {
-        result.gc = { error: e.message }
+    if (game.winner_captain_id) {
+      // Winner already resolved (maybe by manual entry) — skip to enrichment
+      if (!game.parsed) {
+        await enqueueJob({ type: 'enrich_match_stats', payload: { matchGameId, dotabuffId, startedAt: Date.now() }, maxAttempts: 999 })
       }
+      return { status: 'already_resolved', winner: true, parsed: !!game.parsed }
     }
 
-    // Phase 2: Steam Web API fallback (if GC failed — may not work for practice lobbies)
+    const result = { dotabuffId, gc: null, steam: null, winner: false }
+
+    // Try GC first (works for practice lobbies, instant)
+    try {
+      const gcData = await botPool.requestMatchDetailsFromGC(dotabuffId)
+      if (gcData && gcData.radiant_win != null) {
+        const normalised = {
+          radiant_win: gcData.radiant_win,
+          duration: gcData.duration || 0,
+          start_time: gcData.start_time || null,
+          game_mode: gcData.game_mode,
+          players: gcData.players || [],
+          _source: 'gc',
+        }
+        await saveMatchGameStats(matchGameId, normalised)
+        await botPool._autoFillGameWinner(matchId, gameNumber, gcData.radiant_win, normalised)
+        result.gc = { players: gcData.players?.length || 0, radiantWin: gcData.radiant_win, duration: gcData.duration }
+        result.winner = true
+      } else {
+        result.gc = { error: 'GC returned no match data (game likely still in progress)' }
+      }
+    } catch (e) {
+      result.gc = { error: e.message }
+    }
+
+    // Steam Web API fallback
     if (!result.winner) {
       const steamData = await fetchSteamMatchDetails(dotabuffId)
       if (steamData && steamData.radiant_win != null) {
         await saveMatchGameStats(matchGameId, steamData)
-        result.steam = { players: steamData.players?.length || 0, radiantWin: steamData.radiant_win, duration: steamData.duration }
         await botPool._autoFillGameWinner(matchId, gameNumber, steamData.radiant_win, steamData)
+        result.steam = { players: steamData.players?.length || 0, radiantWin: steamData.radiant_win, duration: steamData.duration }
         result.winner = true
-        requestOpenDotaParse(dotabuffId).catch(() => {})
       } else {
         result.steam = { error: 'Not available on Steam API' }
       }
     }
 
-    // Phase 3: OpenDota for winner fallback + detailed parsed stats
-    if (!result.winner || !result.parsed) {
-      const odData = await fetchOpenDotaMatch(dotabuffId)
-      if (odData) {
-        const saveResult = await saveMatchGameStats(matchGameId, odData)
-        result.opendota = { players: odData.players?.length || 0, parsed: saveResult.parsed }
-        result.parsed = saveResult.parsed
+    // Winner resolved → enqueue enrichment job, complete this one
+    if (result.winner) {
+      requestOpenDotaParse(dotabuffId).catch(() => {})
+      await enqueueJob({ type: 'enrich_match_stats', payload: { matchGameId, dotabuffId, startedAt: Date.now() }, maxAttempts: 999 })
+      return result
+    }
 
-        if (!result.winner && odData.radiant_win != null) {
-          await botPool._autoFillGameWinner(matchId, gameNumber, odData.radiant_win, odData)
-          result.winner = true
-        }
-      } else {
-        requestOpenDotaParse(dotabuffId).catch(() => {})
-        result.opendota = { error: 'Not available yet, parse requested' }
+    // Not resolved yet → schedule next GC poll in 60s
+    await enqueueJob({
+      type: 'fetch_match_stats',
+      payload,
+      maxAttempts: 999,
+      runAt: new Date(Date.now() + 60_000),
+    })
+    // Complete this job (not fail) — the next poll is a new job
+    return { ...result, status: 'game_in_progress_requeued_60s' }
+  })
+
+  // Phase 2+3: OpenDota enrichment with tiered polling
+  // First 2h: every 10min. After 2h: every 1h. Give up after 3 days.
+  registerHandler('enrich_match_stats', async (payload) => {
+    const { matchGameId, dotabuffId, startedAt } = payload
+    if (!matchGameId || !dotabuffId) throw new Error('Missing matchGameId or dotabuffId')
+
+    const game = await queryOne('SELECT parsed FROM match_games WHERE id = $1', [matchGameId])
+    if (!game) throw new Error(`match_games #${matchGameId} not found`)
+    if (game.parsed) return { status: 'already_parsed' }
+
+    const elapsed = Date.now() - (startedAt || Date.now())
+    const THREE_DAYS = 3 * 24 * 60 * 60 * 1000
+    const TWO_HOURS = 2 * 60 * 60 * 1000
+
+    if (elapsed > THREE_DAYS) {
+      return { status: 'gave_up_after_3_days', elapsed: Math.round(elapsed / 60000) + 'min' }
+    }
+
+    const odData = await fetchOpenDotaMatch(dotabuffId)
+    if (odData) {
+      const saveResult = await saveMatchGameStats(matchGameId, odData)
+      if (saveResult.parsed) {
+        return { status: 'parsed', players: saveResult.saved }
       }
     }
 
-    // If winner still not resolved OR not fully parsed, fail so the job retries
-    if (!result.winner) throw new Error(`Winner not resolved yet — gc: ${result.gc?.error || 'skipped'}, steam: ${result.steam?.error || 'skipped'}, opendota: ${result.opendota?.error || 'no data'}`)
-    if (!result.parsed) throw new Error(`Stats saved (winner resolved) but not fully parsed — waiting for OpenDota`)
+    // Request parse and schedule next check
+    requestOpenDotaParse(dotabuffId).catch(() => {})
+    const nextDelay = elapsed < TWO_HOURS ? 10 * 60_000 : 60 * 60_000
+    const tier = elapsed < TWO_HOURS ? 'every 10min (first 2h)' : 'every 1h (after 2h)'
 
-    return result
-  })
+    await enqueueJob({
+      type: 'enrich_match_stats',
+      payload: { matchGameId, dotabuffId, startedAt: startedAt || Date.now() },
+      maxAttempts: 999,
+      runAt: new Date(Date.now() + nextDelay),
+    })
 
-  // Enrich: dedicated job for OpenDota detailed stats on already-resolved games
-  registerHandler('enrich_match_stats', async (payload) => {
-    const { matchGameId, dotabuffId } = payload
-    if (!matchGameId || !dotabuffId) throw new Error('Missing matchGameId or dotabuffId')
-
-    const odData = await fetchOpenDotaMatch(dotabuffId)
-    if (!odData) {
-      requestOpenDotaParse(dotabuffId).catch(() => {})
-      throw new Error('OpenDota data not available yet, parse requested')
-    }
-
-    const saveResult = await saveMatchGameStats(matchGameId, odData)
-    if (!saveResult.parsed) {
-      requestOpenDotaParse(dotabuffId).catch(() => {})
-      throw new Error('OpenDota returned data but not fully parsed yet')
-    }
-
-    return { parsed: true, players: saveResult.saved }
+    return { status: 'not_parsed_yet', tier, nextIn: Math.round(nextDelay / 60000) + 'min', odAvailable: !!odData }
   })
 
   await startJobWorker()
