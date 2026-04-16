@@ -151,6 +151,12 @@ initDb().then(async () => {
   registerSchedule('cleanup_stuck_queue_matches', { everyMs: 5 * 60_000 })
   registerSchedule('cleanup_stuck_creating_lobbies', { everyMs: 60_000 })
 
+  registerHandler('cleanup_zombie_lobbies', async () => {
+    await botPool._cleanupZombieLobbies()
+    return { ok: true }
+  })
+  registerSchedule('cleanup_zombie_lobbies', { everyMs: 5 * 60_000 })
+
   await startJobWorker()
   server.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`)

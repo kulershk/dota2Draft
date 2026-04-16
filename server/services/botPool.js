@@ -656,6 +656,48 @@ class BotPool {
     }
   }
 
+  // Clean up zombie lobbies: match_lobbies still 'creating'/'waiting'/'launching'/'active'
+  // but their queue_match (or match) is already completed/cancelled. Free the bot.
+  async _cleanupZombieLobbies() {
+    try {
+      const zombies = await query(`
+        SELECT ml.id, ml.bot_id, ml.match_id, ml.game_name
+          FROM match_lobbies ml
+         WHERE ml.status IN ('creating', 'waiting', 'launching', 'active')
+           AND (
+             -- Queue match already finished
+             EXISTS (
+               SELECT 1 FROM queue_matches qm
+               WHERE qm.match_id = ml.match_id
+                 AND qm.status IN ('completed', 'cancelled')
+             )
+             -- Or match itself is completed/cancelled
+             OR EXISTS (
+               SELECT 1 FROM matches m
+               WHERE m.id = ml.match_id
+                 AND m.status IN ('completed', 'cancelled')
+             )
+             -- Or lobby is older than 4 hours with no resolution
+             OR ml.updated_at < NOW() - INTERVAL '4 hours'
+           )
+      `)
+      if (zombies.length === 0) return
+      console.log(`[Lobby] Cleaning up ${zombies.length} zombie lobby(ies)`)
+      for (const z of zombies) {
+        await execute(
+          "UPDATE match_lobbies SET status = 'cancelled', error_message = 'Auto-cleaned: match already finished', updated_at = NOW() WHERE id = $1",
+          [z.id]
+        )
+        if (z.bot_id) {
+          await execute("UPDATE lobby_bots SET status = 'available' WHERE id = $1 AND status = 'busy'", [z.bot_id])
+          console.log(`[Lobby] Freed bot ${z.bot_id} from zombie lobby ${z.id} (${z.game_name})`)
+        }
+      }
+    } catch (e) {
+      console.error('[Lobby] Zombie cleanup error:', e.message)
+    }
+  }
+
   async _cleanupStuckQueueMatches() {
     try {
       const stuck = await query(`
