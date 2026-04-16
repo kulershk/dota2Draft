@@ -145,15 +145,23 @@ class BotPool {
       })),
     })
 
-    // Auto-connect bots that have auto_connect enabled
-    for (const bot of bots) {
-      if (bot.auto_connect && (bot.status === 'offline' || bot.status === 'error')) {
-        console.log(`[Bot] Auto-connecting bot ${bot.id} (${bot.username})`)
-        try {
-          await this.connectBot(bot.id)
-        } catch (e) {
-          console.error(`[Bot] Auto-connect failed for ${bot.id}:`, e.message)
-        }
+    // Auto-connect bots that have auto_connect enabled.
+    // Stagger connections by 5s each to avoid Steam rate-limiting / IP throttle
+    // when multiple bots share the same IP.
+    const toConnect = bots.filter(b => b.auto_connect && (b.status === 'offline' || b.status === 'error'))
+    if (toConnect.length > 0) {
+      console.log(`[Bot] Auto-connecting ${toConnect.length} bot(s) (staggered 5s apart)`)
+      let delay = 0
+      for (const bot of toConnect) {
+        setTimeout(async () => {
+          console.log(`[Bot] Auto-connecting bot ${bot.id} (${bot.username})`)
+          try {
+            await this.connectBot(bot.id)
+          } catch (e) {
+            console.error(`[Bot] Auto-connect failed for ${bot.id}:`, e.message)
+          }
+        }, delay)
+        delay += 5000
       }
     }
   }

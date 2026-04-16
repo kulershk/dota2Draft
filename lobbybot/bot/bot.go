@@ -252,11 +252,14 @@ func (b *Bot) handleSteamEvents() {
 				b.log("Disconnected (waiting for Steam Guard code)")
 				continue // don't exit the event loop, we'll reconnect after code
 			}
-			// If we were online or connecting, auto-reconnect with a fresh client
+			// If we were online or connecting, auto-reconnect with a fresh client.
+			// Add jitter (3-8s) so multiple bots on the same IP don't all hit
+			// Steam simultaneously after a mass disconnect.
 			if status != StatusOffline {
-				b.log("Disconnected from Steam — reconnecting in 3s...")
+				delay := b.reconnectDelay()
+				b.log(fmt.Sprintf("Disconnected from Steam — reconnecting in %s...", delay))
 				b.setStatus(StatusConnecting)
-				time.Sleep(3 * time.Second)
+				time.Sleep(delay)
 				select {
 				case <-b.cancelCh:
 					b.setStatus(StatusOffline)
@@ -269,9 +272,10 @@ func (b *Bot) handleSteamEvents() {
 			return
 
 		case error:
-			b.log(fmt.Sprintf("Steam error: %v — reconnecting in 3s...", e))
+			delay := b.reconnectDelay()
+			b.log(fmt.Sprintf("Steam error: %v — reconnecting in %s...", e, delay))
 			b.setStatus(StatusConnecting)
-			time.Sleep(3 * time.Second)
+			time.Sleep(delay)
 			select {
 			case <-b.cancelCh:
 				b.setStatus(StatusOffline)
@@ -282,6 +286,19 @@ func (b *Bot) handleSteamEvents() {
 			return // exit this event loop; reconnect starts a new one
 		}
 	}
+}
+
+// reconnectDelay returns 3-8s of jitter so multiple bots on the same IP
+// don't all slam Steam at the same instant after a mass disconnect.
+func (b *Bot) reconnectDelay() time.Duration {
+	// Use bot ID hash as a simple per-bot offset so each bot gets a
+	// different delay even if called at the exact same moment.
+	h := 0
+	for _, c := range b.ID {
+		h += int(c)
+	}
+	base := 3 + (h % 6) // 3-8 seconds
+	return time.Duration(base) * time.Second
 }
 
 func (b *Bot) reconnect() {
