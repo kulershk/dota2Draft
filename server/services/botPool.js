@@ -952,15 +952,24 @@ class BotPool {
   async getBotStatuses() {
     return await query(`
       SELECT b.id, b.username, b.display_name, b.steam_id, b.status, b.error_message, b.auto_connect, b.last_used_at, b.created_at,
-        ml.match_id AS active_match_id, ml.competition_id AS active_competition_id
+        ml.match_id AS active_match_id,
+        ml.competition_id AS active_competition_id,
+        ml.game_name AS active_game_name,
+        ml.status AS active_lobby_status,
+        qm.id AS active_queue_match_id,
+        qp.name AS active_queue_pool_name,
+        c.name AS active_competition_name
       FROM lobby_bots b
       LEFT JOIN LATERAL (
-        SELECT match_id, competition_id
+        SELECT match_id, competition_id, game_name, status
           FROM match_lobbies
          WHERE bot_id = b.id
            AND status IN ('creating', 'waiting', 'launching', 'active')
          ORDER BY id DESC LIMIT 1
       ) ml ON TRUE
+      LEFT JOIN competitions c ON c.id = ml.competition_id
+      LEFT JOIN queue_matches qm ON qm.match_id = ml.match_id AND ml.competition_id IS NULL
+      LEFT JOIN queue_pools qp ON qp.id = qm.pool_id
       ORDER BY b.id
     `)
   }

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Bot, Plus, Trash2, Plug, Unplug, ShieldQuestion, ChevronDown, ChevronUp, X, Circle, ExternalLink, Image as ImageIcon, Upload } from 'lucide-vue-next'
+import { Bot, Plus, Trash2, Plug, Unplug, ShieldQuestion, ChevronDown, ChevronUp, X, Circle, ExternalLink, Image as ImageIcon, Upload, Swords, Trophy } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { getSocket } from '@/composables/useSocket'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
@@ -290,13 +290,28 @@ onUnmounted(() => {
             <span v-if="bot.display_name && bot.display_name !== bot.username" class="text-[10px] text-muted-foreground font-mono">{{ bot.username }}</span>
             <span v-if="bot.steam_id" class="text-[10px] text-muted-foreground font-mono">{{ bot.steam_id }}</span>
           </div>
-          <div class="flex items-center gap-2 mt-0.5">
+          <div class="flex items-center gap-2 mt-0.5 flex-wrap">
             <span class="text-xs font-medium" :class="statusColor(bot.status)">{{ statusLabel(bot.status) }}</span>
             <span v-if="bot.error_message" class="text-xs text-red-500">— {{ bot.error_message }}</span>
             <label class="flex items-center gap-1 cursor-pointer ml-2" @click.stop>
               <input type="checkbox" class="w-3.5 h-3.5 accent-primary" :checked="bot.auto_connect" @change="toggleAutoConnect(bot)" />
               <span class="text-[10px] text-muted-foreground">{{ t('autoConnect') }}</span>
             </label>
+          </div>
+          <!-- Active lobby context: tournament match or queue match -->
+          <div v-if="bot.active_match_id" class="flex items-center gap-2 mt-1 text-[11px] text-muted-foreground flex-wrap">
+            <span v-if="bot.active_queue_match_id" class="flex items-center gap-1">
+              <Swords class="w-3 h-3" />
+              <span>Queue #{{ bot.active_queue_match_id }}</span>
+              <span v-if="bot.active_queue_pool_name" class="text-muted-foreground/70">· {{ bot.active_queue_pool_name }}</span>
+            </span>
+            <span v-else-if="bot.active_competition_name" class="flex items-center gap-1">
+              <Trophy class="w-3 h-3" />
+              <span>{{ bot.active_competition_name }}</span>
+            </span>
+            <span class="font-mono text-muted-foreground/70">match #{{ bot.active_match_id }}</span>
+            <span v-if="bot.active_game_name" class="font-mono truncate max-w-[320px]">· {{ bot.active_game_name }}</span>
+            <span v-if="bot.active_lobby_status" class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-accent">{{ bot.active_lobby_status }}</span>
           </div>
         </div>
 
@@ -325,6 +340,14 @@ onUnmounted(() => {
           >
             <ExternalLink class="w-3.5 h-3.5" />
             {{ t('matchDetails') || 'Match' }}
+          </router-link>
+          <router-link
+            v-if="bot.status === 'busy' && bot.active_queue_match_id"
+            :to="`/queue/match/${bot.active_queue_match_id}`"
+            class="btn-primary text-xs px-3 py-1.5"
+          >
+            <ExternalLink class="w-3.5 h-3.5" />
+            Queue
           </router-link>
           <button
             v-if="bot.status === 'busy'"
