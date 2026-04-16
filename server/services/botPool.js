@@ -177,6 +177,20 @@ class BotPool {
     if (data.sentryHash) updates.sentry_hash = data.sentryHash
     if (data.loginKey) updates.login_key = data.loginKey
 
+    // Don't let a GC-reconnect flicker reset a busy bot to available if it
+    // still has an active lobby. This prevents createQueueLobby from picking
+    // the same bot for a second match (double-bot bug).
+    if (data.status === 'available') {
+      const activeLobby = await queryOne(
+        "SELECT 1 FROM match_lobbies WHERE bot_id = $1 AND status IN ('creating', 'waiting', 'launching')",
+        [botId]
+      )
+      if (activeLobby) {
+        console.log(`[Bot ${botId}] Reported available but has active lobby — keeping busy`)
+        updates.status = 'busy'
+      }
+    }
+
     const setClauses = Object.keys(updates).map((k, i) => `${k} = $${i + 1}`).join(', ')
     const values = [...Object.values(updates), botId]
     await execute(`UPDATE lobby_bots SET ${setClauses} WHERE id = $${values.length}`, values)

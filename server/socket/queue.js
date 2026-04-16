@@ -563,6 +563,8 @@ function makePick(queueMatchId, match, pickedIdx, io) {
 async function finalizeQueueMatch(queueMatchId, io) {
   const match = activeQueueMatches.get(queueMatchId)
   if (!match) return
+  // Guard: don't finalize twice (e.g. race between manual pick + auto-pick)
+  if (match.status !== 'picking') return
 
   match.status = 'lobby_creating'
 

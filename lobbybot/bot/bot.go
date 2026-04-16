@@ -237,7 +237,15 @@ func (b *Bot) handleSteamEvents() {
 		case *devents.GCConnectionStatusChanged:
 			b.log(fmt.Sprintf("GC status: %s → %s", e.OldState.String(), e.NewState.String()))
 			if e.NewState == gcccm.GCConnectionStatus_GCConnectionStatus_HAVE_SESSION {
-				b.setStatus(StatusAvailable)
+				// Only transition to available if we're NOT busy with an active
+				// lobby. GC session can flicker during lobby creation — blindly
+				// resetting to available would let Node reassign us to a second
+				// match, causing double-bot bugs.
+				if b.activeLobbyID == "" {
+					b.setStatus(StatusAvailable)
+				} else {
+					b.log(fmt.Sprintf("GC session restored but still busy with lobby %s — staying busy", b.activeLobbyID))
+				}
 			}
 
 		case *devents.UnhandledGCPacket:
