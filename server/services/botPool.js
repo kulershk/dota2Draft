@@ -623,6 +623,12 @@ class BotPool {
       console.log(`[Lobby] Found ${stuck.length} lobby(ies) stuck in 'creating' >2min, marking errored`)
       for (const lobby of stuck) {
         try {
+          // Tell Go to abandon this lobby BEFORE marking it errored, so Go
+          // won't execute a queued create_lobby when the bot reconnects.
+          try {
+            this._sendToGo('cancel_lobby', { lobbyId: String(lobby.id) })
+          } catch {}
+
           await execute(
             "UPDATE match_lobbies SET status = 'error', error_message = 'Timed out in creating (>2min, likely GC loss)', updated_at = NOW() WHERE id = $1",
             [lobby.id]
@@ -1342,9 +1348,10 @@ class BotPool {
 
     console.log('[Lobby] Settings from DB:', { cheats, allowSpectating, pauseSetting, selectionPriority, cmPick, penaltyRadiant, penaltyDire, seriesType })
 
-    // Send to Go service
+    // Send to Go service — include botId so Go uses the same bot Node selected
     this._sendToGo('create_lobby', {
       lobbyId: String(lobby.id),
+      botId: String(availableBot.id),
       gameName,
       password,
       serverRegion,
@@ -1400,6 +1407,7 @@ class BotPool {
   _buildGoLobbyPayload(lobby, pool, team1Name, team2Name, playersExpected) {
     return {
       lobbyId: String(lobby.id),
+      botId: lobby.bot_id ? String(lobby.bot_id) : undefined,
       gameName: lobby.game_name,
       password: lobby.password,
       serverRegion: pool.lobby_server_region || 3,
@@ -1481,9 +1489,10 @@ class BotPool {
     )
     if (!latest) throw new Error('No lobby found for this match')
 
-    // If there's an in-flight lobby, mark it errored and free its bot so the
-    // retry picks a different one and we don't leak bot state.
+    // If there's an in-flight lobby, tell Go to drop it, mark it errored, and
+    // free its bot so the retry picks a different one.
     if (latest.status !== 'error' && latest.status !== 'cancelled' && latest.status !== 'completed') {
+      try { this._sendToGo('cancel_lobby', { lobbyId: String(latest.id) }) } catch {}
       await execute(
         "UPDATE match_lobbies SET status = 'error', error_message = 'Admin retry requested', updated_at = NOW() WHERE id = $1",
         [latest.id]

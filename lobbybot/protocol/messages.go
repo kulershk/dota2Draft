@@ -42,6 +42,7 @@ type LobbyPlayer struct {
 
 type CreateLobbyCmd struct {
 	LobbyID             string        `json:"lobbyId"`
+	BotID               string        `json:"botId,omitempty"`
 	GameName            string        `json:"gameName"`
 	Password            string        `json:"password"`
 	ServerRegion        int           `json:"serverRegion"`

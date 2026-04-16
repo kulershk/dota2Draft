@@ -71,15 +71,37 @@ func (m *Manager) CreateLobby(cmd protocol.CreateLobbyCmd) error {
 		return fmt.Errorf("lobby %s already exists", cmd.LobbyID)
 	}
 
-	// Find an available bot
-	b := m.botManager.FindAvailable()
-	if b == nil {
-		m.mu.Unlock()
-		m.send("lobby_error", protocol.LobbyErrorEvent{
-			LobbyID: cmd.LobbyID,
-			Error:   "No available bot",
-		})
-		return fmt.Errorf("no available bot")
+	// Use the specific bot that Node selected (so both sides agree on which
+	// bot is busy). Fall back to FindAvailable for backwards compatibility.
+	var b *bot.Bot
+	if cmd.BotID != "" {
+		b = m.botManager.GetBot(cmd.BotID)
+		if b == nil {
+			m.mu.Unlock()
+			m.send("lobby_error", protocol.LobbyErrorEvent{
+				LobbyID: cmd.LobbyID,
+				Error:   fmt.Sprintf("Specified bot %s not found", cmd.BotID),
+			})
+			return fmt.Errorf("bot %s not found", cmd.BotID)
+		}
+		if !b.IsAvailable() {
+			m.mu.Unlock()
+			m.send("lobby_error", protocol.LobbyErrorEvent{
+				LobbyID: cmd.LobbyID,
+				Error:   fmt.Sprintf("Specified bot %s is not available (status: %s)", cmd.BotID, b.Status),
+			})
+			return fmt.Errorf("bot %s not available", cmd.BotID)
+		}
+	} else {
+		b = m.botManager.FindAvailable()
+		if b == nil {
+			m.mu.Unlock()
+			m.send("lobby_error", protocol.LobbyErrorEvent{
+				LobbyID: cmd.LobbyID,
+				Error:   "No available bot",
+			})
+			return fmt.Errorf("no available bot")
+		}
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
