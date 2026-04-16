@@ -304,13 +304,13 @@ onUnmounted(() => {
                 {{ statusLabel(qm.status) }}
               </span>
               <span class="text-sm font-semibold text-muted-foreground">#{{ qm.id }}</span>
+              <span v-if="qm.match_id" class="text-[10px] font-mono text-muted-foreground bg-accent/60 px-1.5 py-0.5 rounded">match #{{ qm.match_id }}</span>
               <span v-if="qm.pool_name" class="text-xs text-muted-foreground bg-accent px-2 py-0.5 rounded">{{ qm.pool_name }}</span>
             </div>
 
             <!-- Right: retry + cancel -->
             <div class="flex items-center gap-1.5">
               <button
-                v-if="qm.match_id"
                 class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-primary hover:bg-primary/10 transition-colors"
                 :title="t('queueAdminRetryLobbyHint')"
                 @click="retryLobby(qm.id)"
