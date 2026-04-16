@@ -587,6 +587,53 @@ class BotPool {
   // after both botPool and the job worker have started.
   _startResultsPolling() {}
 
+  // Lobbies stuck in 'creating' for >2 min usually mean the Go service lost
+  // GC connectivity or crashed without reporting an error. Mark them errored,
+  // free the bot, and trigger the automatic retry-with-different-bot flow.
+  async _cleanupStuckCreatingLobbies() {
+    try {
+      const stuck = await query(`
+        SELECT ml.* FROM match_lobbies ml
+        WHERE ml.status = 'creating'
+          AND ml.updated_at < NOW() - INTERVAL '2 minutes'
+      `)
+      if (stuck.length === 0) return
+      console.log(`[Lobby] Found ${stuck.length} lobby(ies) stuck in 'creating' >2min, marking errored`)
+      for (const lobby of stuck) {
+        try {
+          await execute(
+            "UPDATE match_lobbies SET status = 'error', error_message = 'Timed out in creating (>2min, likely GC loss)', updated_at = NOW() WHERE id = $1",
+            [lobby.id]
+          )
+          if (lobby.bot_id) {
+            await execute("UPDATE lobby_bots SET status = 'available' WHERE id = $1", [lobby.bot_id])
+            console.log(`[Lobby] Freed bot ${lobby.bot_id} from stuck lobby ${lobby.id}`)
+          }
+          if (this.io) {
+            (await this._lobbyRooms(lobby)).emit('lobby:statusUpdate', {
+              matchId: lobby.match_id,
+              gameNumber: lobby.game_number,
+              status: 'error',
+              errorMessage: 'Lobby creation timed out — retrying with a different bot',
+            })
+          }
+          // Trigger auto-retry for queue matches
+          if (!lobby.competition_id) {
+            try {
+              await this._retryQueueLobby(lobby)
+            } catch (e) {
+              console.error(`[Lobby] Auto-retry after creating timeout failed:`, e.message)
+            }
+          }
+        } catch (e) {
+          console.error(`[Lobby] Failed to cleanup stuck lobby ${lobby.id}:`, e.message)
+        }
+      }
+    } catch (e) {
+      console.error('[Lobby] Stuck-creating cleanup error:', e.message)
+    }
+  }
+
   async _cleanupStuckQueueMatches() {
     try {
       const stuck = await query(`
@@ -1357,6 +1404,13 @@ class BotPool {
   // then dispatches a fresh create via a different bot. Does NOT enforce the
   // 3-attempt cap — the admin is deciding.
   async adminRetryQueueLobby(matchId) {
+    // Guard: if there's already a non-terminal lobby, don't create another
+    const active = await queryOne(
+      "SELECT 1 FROM match_lobbies WHERE match_id = $1 AND game_number = 1 AND status NOT IN ('completed', 'cancelled', 'error')",
+      [matchId]
+    )
+    if (active) throw new Error('A lobby is already active for this match — wait for it to finish or cancel it first')
+
     const latest = await queryOne(
       "SELECT * FROM match_lobbies WHERE match_id = $1 AND game_number = 1 ORDER BY id DESC LIMIT 1",
       [matchId]

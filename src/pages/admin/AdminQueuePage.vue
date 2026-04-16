@@ -214,12 +214,17 @@ async function cancelMatch(id: number) {
   }
 }
 
+const retryingLobby = ref<number | null>(null)
 async function retryLobby(id: number) {
+  if (retryingLobby.value) return
+  retryingLobby.value = id
   try {
     await api.adminRetryQueueLobby(id)
     await fetchActiveMatches()
   } catch (e: any) {
     alert(e.message)
+  } finally {
+    retryingLobby.value = null
   }
 }
 
@@ -311,11 +316,12 @@ onUnmounted(() => {
             <!-- Right: retry + cancel -->
             <div class="flex items-center gap-1.5">
               <button
-                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-primary hover:bg-primary/10 transition-colors"
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-primary hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 :title="t('queueAdminRetryLobbyHint')"
+                :disabled="retryingLobby === qm.id"
                 @click="retryLobby(qm.id)"
               >
-                <RefreshCw class="w-3.5 h-3.5" /> {{ t('queueAdminRetryLobby') }}
+                <RefreshCw class="w-3.5 h-3.5" :class="retryingLobby === qm.id ? 'animate-spin' : ''" /> {{ t('queueAdminRetryLobby') }}
               </button>
               <button
                 class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-destructive hover:bg-destructive/10 transition-colors"

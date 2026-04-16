@@ -143,8 +143,13 @@ initDb().then(async () => {
     await botPool._cleanupStuckQueueMatches()
     return { ok: true }
   })
+  registerHandler('cleanup_stuck_creating_lobbies', async () => {
+    await botPool._cleanupStuckCreatingLobbies()
+    return { ok: true }
+  })
   registerSchedule('poll_opendota_results', { everyMs: 60_000 })
   registerSchedule('cleanup_stuck_queue_matches', { everyMs: 5 * 60_000 })
+  registerSchedule('cleanup_stuck_creating_lobbies', { everyMs: 60_000 })
 
   await startJobWorker()
   server.listen(PORT, () => {
