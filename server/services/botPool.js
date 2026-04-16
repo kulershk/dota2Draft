@@ -1324,20 +1324,51 @@ class BotPool {
     return lobby
   }
 
+  // Admin-triggered manual retry. Marks any non-terminal existing lobby for
+  // this match as errored (so _retryQueueLobby's prev-error count works),
+  // then dispatches a fresh create via a different bot. Does NOT enforce the
+  // 3-attempt cap — the admin is deciding.
+  async adminRetryQueueLobby(matchId) {
+    const latest = await queryOne(
+      "SELECT * FROM match_lobbies WHERE match_id = $1 AND game_number = 1 ORDER BY id DESC LIMIT 1",
+      [matchId]
+    )
+    if (!latest) throw new Error('No lobby found for this match')
+
+    // If there's an in-flight lobby, mark it errored and free its bot so the
+    // retry picks a different one and we don't leak bot state.
+    if (latest.status !== 'error' && latest.status !== 'cancelled' && latest.status !== 'completed') {
+      await execute(
+        "UPDATE match_lobbies SET status = 'error', error_message = 'Admin retry requested', updated_at = NOW() WHERE id = $1",
+        [latest.id]
+      )
+      if (latest.bot_id) {
+        await execute("UPDATE lobby_bots SET status = 'available' WHERE id = $1", [latest.bot_id])
+      }
+    }
+
+    // Reload with updated status/error before delegating
+    const reloaded = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [latest.id])
+    const ok = await this._retryQueueLobby(reloaded, { force: true })
+    if (!ok) throw new Error('Retry dispatch failed (no alternate bot available)')
+    return true
+  }
+
   // Retry a queue-match lobby with a different bot after a create-time error.
   // Called from _onLobbyError when the failing lobby belongs to a queue match
   // and the error is not a timeout (timeouts are handled as no-shows). Returns
   // true if a retry was dispatched, false if we gave up (max attempts, no
   // alternate bot, etc).
-  async _retryQueueLobby(erroredLobby) {
+  async _retryQueueLobby(erroredLobby, opts = {}) {
     const MAX_ATTEMPTS = 3
+    const force = !!opts.force
 
     const countRow = await queryOne(
       "SELECT COUNT(*)::int AS n FROM match_lobbies WHERE match_id = $1 AND game_number = $2 AND status = 'error'",
       [erroredLobby.match_id, erroredLobby.game_number]
     )
     const prevErrors = countRow?.n || 0
-    if (prevErrors >= MAX_ATTEMPTS) {
+    if (!force && prevErrors >= MAX_ATTEMPTS) {
       console.log(`[Queue] Lobby retry limit (${MAX_ATTEMPTS}) reached for match ${erroredLobby.match_id}, giving up`)
       if (this.io) {
         (await this._lobbyRooms(erroredLobby)).emit('queue:error', {

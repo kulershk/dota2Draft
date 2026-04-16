@@ -234,12 +234,19 @@ export default function createQueueRouter(io) {
           p1.name AS captain1_name, COALESCE(p1.display_name, p1.name) AS captain1_display_name, p1.avatar_url AS captain1_avatar,
           p2.name AS captain2_name, COALESCE(p2.display_name, p2.name) AS captain2_display_name, p2.avatar_url AS captain2_avatar,
           qp.name AS pool_name, qp.team_size AS pool_team_size,
-          ml.game_name AS lobby_name, ml.password AS lobby_password, ml.status AS lobby_status
+          ml.game_name AS lobby_name, ml.password AS lobby_password, ml.status AS lobby_status,
+          ml.error_message AS lobby_error, ml.bot_id AS lobby_bot_id,
+          (SELECT COUNT(*)::int FROM match_lobbies WHERE match_id = qm.match_id AND status = 'error') AS lobby_error_count
         FROM queue_matches qm
         LEFT JOIN players p1 ON p1.id = qm.captain1_player_id
         LEFT JOIN players p2 ON p2.id = qm.captain2_player_id
         LEFT JOIN queue_pools qp ON qp.id = qm.pool_id
-        LEFT JOIN match_lobbies ml ON ml.match_id = qm.match_id AND ml.game_number = 1
+        LEFT JOIN LATERAL (
+          SELECT game_name, password, status, error_message, bot_id
+            FROM match_lobbies
+           WHERE match_id = qm.match_id AND game_number = 1
+           ORDER BY id DESC LIMIT 1
+        ) ml ON TRUE
         WHERE qm.status IN ('picking', 'lobby_creating', 'live')
         ORDER BY qm.created_at DESC
       `)
@@ -306,6 +313,28 @@ export default function createQueueRouter(io) {
 
       res.json({ ok: true })
     } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  // ── Admin: manually retry lobby creation for a queue match ──
+  router.post('/api/admin/queue/matches/:id/retry-lobby', async (req, res) => {
+    const admin = await requirePermission(req, res, 'manage_competitions')
+    if (!admin) return
+    const qmId = Number(req.params.id)
+    try {
+      const qm = await queryOne('SELECT match_id, status FROM queue_matches WHERE id = $1', [qmId])
+      if (!qm) return res.status(404).json({ error: 'Queue match not found' })
+      if (!qm.match_id) return res.status(400).json({ error: 'No match row linked to this queue match yet' })
+      if (qm.status === 'cancelled' || qm.status === 'completed') {
+        return res.status(409).json({ error: `Queue match is ${qm.status}` })
+      }
+      await botPool.adminRetryQueueLobby(qm.match_id)
+      // Make sure queue_matches is flagged live so the usual flow resumes
+      await execute(`UPDATE queue_matches SET status = 'live' WHERE id = $1 AND status IN ('lobby_creating', 'live')`, [qmId])
+      res.json({ ok: true })
+    } catch (e) {
+      console.error('[Queue] Admin retry lobby failed:', e.message)
       res.status(500).json({ error: e.message })
     }
   })

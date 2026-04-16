@@ -1155,4 +1155,6 @@ export default {
   autoRefresh: 'Auto atnaujinti',
   customBracketRepair: 'Taisyti progresavimą',
   customBracketRepairNothing: 'Sugadintų vietų nerasta — tinklelis nuoseklus.',
+  queueAdminRetryLobby: 'Kartoti lobį',
+  queueAdminRetryLobbyHint: 'Priverstinai kurti lobį iš naujo su kitu botu',
 }

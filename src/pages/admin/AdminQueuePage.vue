@@ -214,6 +214,15 @@ async function cancelMatch(id: number) {
   }
 }
 
+async function retryLobby(id: number) {
+  try {
+    await api.adminRetryQueueLobby(id)
+    await fetchActiveMatches()
+  } catch (e: any) {
+    alert(e.message)
+  }
+}
+
 function statusLabel(status: string) {
   switch (status) {
     case 'picking': return t('queueStatusPicking')
@@ -298,13 +307,23 @@ onUnmounted(() => {
               <span v-if="qm.pool_name" class="text-xs text-muted-foreground bg-accent px-2 py-0.5 rounded">{{ qm.pool_name }}</span>
             </div>
 
-            <!-- Right: cancel -->
-            <button
-              class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-destructive hover:bg-destructive/10 transition-colors"
-              @click="cancelMatch(qm.id)"
-            >
-              <Ban class="w-3.5 h-3.5" /> {{ t('cancel') }}
-            </button>
+            <!-- Right: retry + cancel -->
+            <div class="flex items-center gap-1.5">
+              <button
+                v-if="qm.match_id"
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-primary hover:bg-primary/10 transition-colors"
+                :title="t('queueAdminRetryLobbyHint')"
+                @click="retryLobby(qm.id)"
+              >
+                <RefreshCw class="w-3.5 h-3.5" /> {{ t('queueAdminRetryLobby') }}
+              </button>
+              <button
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-destructive hover:bg-destructive/10 transition-colors"
+                @click="cancelMatch(qm.id)"
+              >
+                <Ban class="w-3.5 h-3.5" /> {{ t('cancel') }}
+              </button>
+            </div>
           </div>
 
           <!-- Teams row -->
@@ -347,12 +366,21 @@ onUnmounted(() => {
           </div>
 
           <!-- Lobby info (if live) -->
-          <div v-if="qm.lobby_name" class="px-4 pb-3 flex items-center gap-4 text-xs text-muted-foreground">
-            <span>{{ t('queueLobbyName') }}: <strong class="text-foreground font-mono">{{ qm.lobby_name }}</strong></span>
-            <span>{{ t('queueLobbyPassword') }}: <strong class="text-foreground font-mono select-all">{{ qm.lobby_password }}</strong></span>
-            <span v-if="qm.lobby_status" class="px-1.5 py-0.5 rounded text-[10px] font-semibold" :class="statusColor(qm.lobby_status)">
-              {{ qm.lobby_status }}
-            </span>
+          <div v-if="qm.lobby_name" class="px-4 pb-3 flex flex-col gap-1.5 text-xs text-muted-foreground">
+            <div class="flex items-center gap-4 flex-wrap">
+              <span>{{ t('queueLobbyName') }}: <strong class="text-foreground font-mono">{{ qm.lobby_name }}</strong></span>
+              <span>{{ t('queueLobbyPassword') }}: <strong class="text-foreground font-mono select-all">{{ qm.lobby_password }}</strong></span>
+              <span v-if="qm.lobby_status" class="px-1.5 py-0.5 rounded text-[10px] font-semibold" :class="statusColor(qm.lobby_status)">
+                {{ qm.lobby_status }}
+              </span>
+              <span v-if="qm.lobby_bot_id" class="text-[10px]">bot #{{ qm.lobby_bot_id }}</span>
+              <span v-if="qm.lobby_error_count > 0" class="text-[10px] text-amber-500">
+                {{ qm.lobby_error_count }} failed {{ qm.lobby_error_count === 1 ? 'attempt' : 'attempts' }}
+              </span>
+            </div>
+            <div v-if="qm.lobby_error" class="px-2 py-1.5 rounded bg-red-500/10 border border-red-500/30 text-red-400 text-[11px] font-mono whitespace-pre-wrap break-all">
+              {{ qm.lobby_error }}
+            </div>
           </div>
         </div>
       </div>

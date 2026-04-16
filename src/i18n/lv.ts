@@ -1155,4 +1155,6 @@ export default {
   autoRefresh: 'Auto atjaunot',
   customBracketRepair: 'Labot progresēšanu',
   customBracketRepairNothing: 'Nav bojātu slotu — turnīra tīkls ir konsekvents.',
+  queueAdminRetryLobby: 'Atkārtot lobiju',
+  queueAdminRetryLobbyHint: 'Piespiest botu pūlu mēģināt izveidot lobiju vēlreiz ar citu botu',
 }

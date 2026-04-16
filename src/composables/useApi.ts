@@ -114,6 +114,8 @@ export function useApi() {
     getTournament: (compId: number) => request(`/api/competitions/${compId}/tournament`),
     repairBracketAdvancement: (compId: number) =>
       request(`/api/competitions/${compId}/tournament/repair-advancement`, { method: 'POST' }),
+    adminRetryQueueLobby: (queueMatchId: number) =>
+      request(`/api/admin/queue/matches/${queueMatchId}/retry-lobby`, { method: 'POST' }),
     getUpcomingMatches: () => request('/api/upcoming-matches'),
     getAllMatches: (status?: string) => request(`/api/matches${status && status !== 'all' ? `?status=${status}` : ''}`),
     getMyUpcomingMatchCount: () => request('/api/matches/my-upcoming-count'),
