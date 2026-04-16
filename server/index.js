@@ -29,7 +29,10 @@ import createNewsRouter from './routes/news.js'
 import templateRoutes from './routes/templates.js'
 import createQueueRouter from './routes/queue.js'
 import jobRoutes from './routes/jobs.js'
-import { startJobWorker, registerHandler, registerSchedule } from './services/jobs.js'
+import { startJobWorker, registerHandler, registerSchedule, enqueueJob } from './services/jobs.js'
+import { fetchSteamMatchDetails } from './helpers/steam.js'
+import { fetchOpenDotaMatch, saveMatchGameStats, requestOpenDotaParse } from './helpers/opendota.js'
+import { queryOne } from './db.js'
 
 // Socket
 import { initSocket } from './socket/index.js'
@@ -156,6 +159,76 @@ initDb().then(async () => {
     return { ok: true }
   })
   registerSchedule('cleanup_zombie_lobbies', { everyMs: 5 * 60_000 })
+
+  // ── Per-game stat fetching (replaces silent bulk polling with visible jobs) ──
+  registerHandler('fetch_match_stats', async (payload) => {
+    const { matchGameId, dotabuffId, matchId, gameNumber } = payload
+    if (!matchGameId || !dotabuffId) throw new Error('Missing matchGameId or dotabuffId')
+
+    const game = await queryOne(
+      'SELECT id, winner_captain_id, parsed FROM match_games WHERE id = $1',
+      [matchGameId]
+    )
+    if (!game) throw new Error(`match_games #${matchGameId} not found`)
+
+    const result = { dotabuffId, steam: null, opendota: null, winner: !!game.winner_captain_id, parsed: !!game.parsed }
+
+    // Phase 1: Steam API for winner + basic stats
+    const steamData = await fetchSteamMatchDetails(dotabuffId)
+    if (steamData) {
+      await saveMatchGameStats(matchGameId, steamData)
+      result.steam = { players: steamData.players?.length || 0, radiantWin: steamData.radiant_win, duration: steamData.duration }
+
+      if (!game.winner_captain_id && steamData.radiant_win != null) {
+        await botPool._autoFillGameWinner(matchId, gameNumber, steamData.radiant_win, steamData)
+        result.winner = true
+      }
+    } else {
+      result.steam = { error: 'Match not available on Steam API' }
+    }
+
+    // Phase 2: OpenDota for detailed parsed stats
+    const odData = await fetchOpenDotaMatch(dotabuffId)
+    if (odData) {
+      const saveResult = await saveMatchGameStats(matchGameId, odData)
+      result.opendota = { players: odData.players?.length || 0, parsed: saveResult.parsed }
+      result.parsed = saveResult.parsed
+
+      if (!result.winner && odData.radiant_win != null) {
+        await botPool._autoFillGameWinner(matchId, gameNumber, odData.radiant_win, odData)
+        result.winner = true
+      }
+    } else {
+      requestOpenDotaParse(dotabuffId).catch(() => {})
+      result.opendota = { error: 'Not available yet, parse requested' }
+    }
+
+    // If winner still not resolved OR not fully parsed, fail so the job retries
+    if (!result.winner) throw new Error(`Winner not resolved yet (steam: ${result.steam?.error || 'no radiant_win'}, opendota: ${result.opendota?.error || 'no data'})`)
+    if (!result.parsed) throw new Error(`Basic stats saved but not fully parsed yet — waiting for OpenDota (attempt will retry)`)
+
+    return result
+  })
+
+  // Enrich: dedicated job for OpenDota detailed stats on already-resolved games
+  registerHandler('enrich_match_stats', async (payload) => {
+    const { matchGameId, dotabuffId } = payload
+    if (!matchGameId || !dotabuffId) throw new Error('Missing matchGameId or dotabuffId')
+
+    const odData = await fetchOpenDotaMatch(dotabuffId)
+    if (!odData) {
+      requestOpenDotaParse(dotabuffId).catch(() => {})
+      throw new Error('OpenDota data not available yet, parse requested')
+    }
+
+    const saveResult = await saveMatchGameStats(matchGameId, odData)
+    if (!saveResult.parsed) {
+      requestOpenDotaParse(dotabuffId).catch(() => {})
+      throw new Error('OpenDota returned data but not fully parsed yet')
+    }
+
+    return { parsed: true, players: saveResult.saved }
+  })
 
   await startJobWorker()
   server.listen(PORT, () => {

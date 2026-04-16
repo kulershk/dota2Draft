@@ -594,13 +594,29 @@ class BotPool {
     }
   }
 
-  _scheduleStatsFetch(matchId, gameNumber, dotaMatchId) {
+  async _scheduleStatsFetch(matchId, gameNumber, dotaMatchId) {
     // Request OpenDota to parse this match early
     requestOpenDotaParse(dotaMatchId).catch(() => {})
 
-    // The actual fetching is handled by the polling job (_pollUnresolvedGames)
-    // which runs every 2 minutes and picks up any game with dotabuff_id but no winner
-    console.log(`[Stats] Match ${dotaMatchId} queued for auto-resolve (game ${gameNumber} of match ${matchId})`)
+    // Enqueue a visible background job so admins can see the fetch progress
+    try {
+      const { enqueueJob } = await import('./jobs.js')
+      const mg = await queryOne(
+        'SELECT id FROM match_games WHERE match_id = $1 AND game_number = $2',
+        [matchId, gameNumber]
+      )
+      if (mg) {
+        await enqueueJob({
+          type: 'fetch_match_stats',
+          payload: { matchGameId: mg.id, dotabuffId: String(dotaMatchId), matchId, gameNumber },
+          maxAttempts: 15, // ~45 min of retries with exponential backoff
+          runAt: new Date(Date.now() + 30_000), // wait 30s for Steam to process
+        })
+        console.log(`[Stats] Enqueued fetch_match_stats job for match ${matchId} game ${gameNumber} (dota: ${dotaMatchId})`)
+      }
+    } catch (e) {
+      console.error(`[Stats] Failed to enqueue fetch job:`, e.message)
+    }
   }
 
   // Polling is now driven by the background job system (see
@@ -737,11 +753,14 @@ class BotPool {
     }
   }
 
+  // Safety net: find unresolved games that don't have a pending fetch_match_stats
+  // job and enqueue one. Catches games missed during server restarts, manual
+  // dotabuff_id edits, or if _scheduleStatsFetch failed.
   async _pollUnresolvedGames() {
     try {
-      // Poll games that either have no winner yet, or have stats but are not fully parsed
+      const { enqueueJob } = await import('./jobs.js')
       const unresolvedGames = await query(`
-        SELECT mg.id, mg.match_id, mg.game_number, mg.dotabuff_id, mg.created_at, mg.winner_captain_id, mg.parsed
+        SELECT mg.id, mg.match_id, mg.game_number, mg.dotabuff_id
         FROM match_games mg
         JOIN matches m ON m.id = mg.match_id
         WHERE mg.dotabuff_id IS NOT NULL
@@ -753,48 +772,31 @@ class BotPool {
         ORDER BY mg.created_at ASC
         LIMIT 10
       `)
-
       if (unresolvedGames.length === 0) return
 
-      console.log(`[Stats] Polling ${unresolvedGames.length} unresolved/unparsed game(s)...`)
-
       for (const game of unresolvedGames) {
-        try {
-          // ── Phase 1: resolve winner via Steam API (fast, reliable) ──
-          if (!game.winner_captain_id) {
-            const steamData = await fetchSteamMatchDetails(game.dotabuff_id)
-            if (steamData && steamData.radiant_win != null) {
-              // Save basic stats from Steam (items, KDA, duration)
-              await saveMatchGameStats(game.id, steamData)
-              await this._autoFillGameWinner(game.match_id, game.game_number, steamData.radiant_win, steamData)
-              console.log(`[Stats] Resolved via Steam: game ${game.game_number} of match ${game.match_id} (dota: ${game.dotabuff_id})`)
-              // Request OpenDota parse for detailed enrichment later
-              requestOpenDotaParse(game.dotabuff_id).catch(() => {})
-              continue
-            }
-            // Steam doesn't have it yet — fall through to OpenDota
-          }
+        // Check if there's already a pending/running job for this game
+        const existing = await queryOne(
+          `SELECT 1 FROM jobs WHERE type = 'fetch_match_stats' AND status IN ('pending', 'running')
+             AND payload->>'matchGameId' = $1 LIMIT 1`,
+          [String(game.id)]
+        )
+        if (existing) continue
 
-          // ── Phase 2: OpenDota for winner fallback + detailed parsed stats ──
-          const matchData = await fetchOpenDotaMatch(game.dotabuff_id)
-          if (!matchData) {
-            requestOpenDotaParse(game.dotabuff_id).catch(() => {})
-            continue
-          }
+        // Also check enrich jobs for games that have a winner but aren't parsed
+        const hasEnrich = await queryOne(
+          `SELECT 1 FROM jobs WHERE type = 'enrich_match_stats' AND status IN ('pending', 'running')
+             AND payload->>'matchGameId' = $1 LIMIT 1`,
+          [String(game.id)]
+        )
+        if (hasEnrich) continue
 
-          const result = await saveMatchGameStats(game.id, matchData)
-
-          if (!game.winner_captain_id && matchData.radiant_win != null) {
-            await this._autoFillGameWinner(game.match_id, game.game_number, matchData.radiant_win, matchData)
-            console.log(`[Stats] Resolved via OpenDota: game ${game.game_number} of match ${game.match_id} (dota: ${game.dotabuff_id})`)
-          } else if (!result.parsed) {
-            requestOpenDotaParse(game.dotabuff_id).catch(() => {})
-          } else if (game.winner_captain_id) {
-            console.log(`[Stats] Updated parsed stats for game ${game.game_number} of match ${game.match_id}`)
-          }
-        } catch (e) {
-          console.log(`[Stats] Poll failed for ${game.dotabuff_id}: ${e.message}`)
-        }
+        await enqueueJob({
+          type: 'fetch_match_stats',
+          payload: { matchGameId: game.id, dotabuffId: game.dotabuff_id, matchId: game.match_id, gameNumber: game.game_number },
+          maxAttempts: 15,
+        })
+        console.log(`[Stats] Safety net: enqueued fetch_match_stats for match_games #${game.id} (dota: ${game.dotabuff_id})`)
       }
     } catch (e) {
       console.error('[Stats] Poll error:', e.message)
