@@ -691,6 +691,26 @@ export async function initDb() {
   // Make match_lobbies.competition_id nullable for queue matches
   try { await execute(`ALTER TABLE match_lobbies ALTER COLUMN competition_id DROP NOT NULL`) } catch {}
 
+  // Replace the plain UNIQUE(match_id, game_number) with a partial unique
+  // index that only enforces uniqueness for non-terminal lobby rows. This
+  // lets retry attempts leave errored/cancelled/completed rows behind for
+  // history while still guaranteeing at most one active lobby per game.
+  try {
+    const hasOldConstraint = await queryOne(
+      `SELECT 1 FROM pg_constraint WHERE conname = 'match_lobbies_match_id_game_number_key'`
+    )
+    if (hasOldConstraint) {
+      await execute(`ALTER TABLE match_lobbies DROP CONSTRAINT match_lobbies_match_id_game_number_key`)
+    }
+    await execute(`
+      CREATE UNIQUE INDEX IF NOT EXISTS match_lobbies_active_unique
+        ON match_lobbies(match_id, game_number)
+        WHERE status NOT IN ('completed', 'cancelled', 'error')
+    `)
+  } catch (e) {
+    console.error('[db] Failed to migrate match_lobbies unique constraint:', e.message)
+  }
+
   await execute(`
     CREATE TABLE IF NOT EXISTS queue_matches (
       id SERIAL PRIMARY KEY,
