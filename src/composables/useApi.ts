@@ -302,6 +302,10 @@ export function useApi() {
     // Users (global)
     getPlayerProfile: (id: number) => request(`/api/players/${id}/profile`),
     getPlayerXpLog: (id: number) => request(`/api/players/${id}/xp-log`),
+    getPlayerMatches: (id: number, params?: { limit?: number; offset?: number }) => {
+      const qs = params ? '?' + new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString() : ''
+      return request(`/api/players/${id}/matches${qs}`)
+    },
     getAdminXpLog: (params?: Record<string, string | number>) => {
       const qs = params ? '?' + new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString() : ''
       return request(`/api/admin/xp-log${qs}`)

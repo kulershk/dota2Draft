@@ -1156,6 +1156,9 @@ export default {
   customBracketRepair: 'Labot progresēšanu',
   customBracketRepairNothing: 'Nav bojātu slotu — turnīra tīkls ir konsekvents.',
   queueAdminRetryLobby: 'Atkārtot lobiju',
+  matchHistory: 'Spēļu vēsture',
+  matches: 'spēles',
+  noMatches: 'Vēl nav nospēlētu spēļu',
   jobNextRun: 'Nākamā izpilde',
   queueAdminRetryLobbyHint: 'Piespiest botu pūlu mēģināt izveidot lobiju vēlreiz ar citu botu',
 }

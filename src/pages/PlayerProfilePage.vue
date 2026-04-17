@@ -27,8 +27,13 @@ const loading = ref(true)
 const error = ref(false)
 
 const PAGE_SIZE = 5
+const MATCH_PAGE_SIZE = 10
 const xpPage = ref(1)
 const compPage = ref(1)
+const matchPage = ref(0)
+const matchHistory = ref<any[]>([])
+const matchTotal = ref(0)
+const matchLoading = ref(false)
 
 const xpTotalPages = computed(() => Math.max(1, Math.ceil(xpLog.value.length / PAGE_SIZE)))
 const pagedXpLog = computed(() => xpLog.value.slice((xpPage.value - 1) * PAGE_SIZE, xpPage.value * PAGE_SIZE))
@@ -45,6 +50,8 @@ watch(playerId, async (id) => {
   try {
     profile.value = await api.getPlayerProfile(id)
     api.getPlayerXpLog(id).then(logs => { xpLog.value = logs }).catch(() => {})
+    matchPage.value = 0
+    fetchMatches(id)
   } catch {
     error.value = true
     profile.value = null
@@ -52,6 +59,23 @@ watch(playerId, async (id) => {
     loading.value = false
   }
 }, { immediate: true })
+
+async function fetchMatches(id?: number) {
+  const pid = id || playerId.value
+  if (!pid) return
+  matchLoading.value = true
+  try {
+    const data = await api.getPlayerMatches(pid, { limit: MATCH_PAGE_SIZE, offset: matchPage.value * MATCH_PAGE_SIZE })
+    matchHistory.value = data.rows
+    matchTotal.value = data.total
+  } catch { /* ignore */ }
+  matchLoading.value = false
+}
+
+const matchTotalPages = computed(() => Math.max(1, Math.ceil(matchTotal.value / MATCH_PAGE_SIZE)))
+
+function prevMatchPage() { if (matchPage.value > 0) { matchPage.value--; fetchMatches() } }
+function nextMatchPage() { if (matchPage.value + 1 < matchTotalPages.value) { matchPage.value++; fetchMatches() } }
 
 function formatDate(dateStr: string) {
   return fmtDateOnly(new Date(dateStr))
@@ -225,6 +249,69 @@ function placementBg(n: number) {
               {{ placementLabel(result.placement) }}
             </span>
           </div>
+        </div>
+      </div>
+
+      <!-- Match History (full width) -->
+      <div class="card flex flex-col">
+        <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
+          <Swords class="w-5 h-5 text-foreground" />
+          <span class="text-sm font-semibold text-foreground">{{ t('matchHistory') }}</span>
+          <span class="text-xs font-mono text-muted-foreground ml-auto">{{ matchTotal }} {{ t('matches') }}</span>
+        </div>
+        <div v-if="matchLoading && matchHistory.length === 0" class="p-6 text-center text-sm text-muted-foreground">{{ t('loading') }}</div>
+        <div v-else-if="matchHistory.length === 0" class="p-6 text-center text-sm text-muted-foreground">{{ t('noMatches') }}</div>
+        <div v-else class="divide-y divide-border">
+          <component
+            :is="m.type === 'queue' && m.queueMatchId ? 'router-link' : m.type === 'competition' && m.competitionId ? 'router-link' : 'div'"
+            v-for="m in matchHistory"
+            :key="(m.type === 'queue' ? 'q' : 'c') + m.id"
+            :to="m.type === 'queue' ? { name: 'queue-match', params: { id: m.queueMatchId } } : { name: 'comp-match', params: { compId: m.competitionId, matchId: m.id } }"
+            class="flex items-center gap-3 px-4 py-3 hover:bg-accent/30 transition-colors"
+          >
+            <!-- Result indicator -->
+            <div class="w-1.5 h-8 rounded-full shrink-0" :class="m.status !== 'completed' ? 'bg-muted-foreground/30' : m.won ? 'bg-green-500' : 'bg-red-500'" />
+
+            <!-- Team 1 -->
+            <div class="flex items-center gap-2 flex-1 min-w-0 justify-end">
+              <span class="text-sm truncate" :class="m.status === 'completed' && m.winnerCaptainId === m.team1.captainId ? 'font-bold text-foreground' : 'text-muted-foreground'">
+                {{ m.team1.name || 'TBD' }}
+              </span>
+              <img v-if="m.team1.avatar" :src="m.team1.avatar" class="w-6 h-6 rounded-full shrink-0" />
+            </div>
+
+            <!-- Score -->
+            <div class="flex items-center gap-1.5 shrink-0 px-2">
+              <span class="text-sm font-mono font-bold" :class="m.status === 'completed' && m.winnerCaptainId === m.team1.captainId ? 'text-foreground' : 'text-muted-foreground'">{{ m.score1 ?? '-' }}</span>
+              <span class="text-xs text-muted-foreground">:</span>
+              <span class="text-sm font-mono font-bold" :class="m.status === 'completed' && m.winnerCaptainId === m.team2.captainId ? 'text-foreground' : 'text-muted-foreground'">{{ m.score2 ?? '-' }}</span>
+            </div>
+
+            <!-- Team 2 -->
+            <div class="flex items-center gap-2 flex-1 min-w-0">
+              <img v-if="m.team2.avatar" :src="m.team2.avatar" class="w-6 h-6 rounded-full shrink-0" />
+              <span class="text-sm truncate" :class="m.status === 'completed' && m.winnerCaptainId === m.team2.captainId ? 'font-bold text-foreground' : 'text-muted-foreground'">
+                {{ m.team2.name || 'TBD' }}
+              </span>
+            </div>
+
+            <!-- Meta -->
+            <div class="flex items-center gap-2 shrink-0 text-right">
+              <span v-if="m.type === 'queue'" class="text-[10px] px-1.5 py-0.5 rounded bg-accent text-muted-foreground">{{ m.poolName || 'Queue' }}</span>
+              <span v-else class="text-[10px] px-1.5 py-0.5 rounded bg-accent text-muted-foreground truncate max-w-[120px]">{{ m.competitionName }}</span>
+              <span class="text-[10px] text-muted-foreground tabular-nums w-[70px]">{{ formatDate(m.date) }}</span>
+            </div>
+          </component>
+        </div>
+        <!-- Pagination -->
+        <div v-if="matchTotalPages > 1" class="flex items-center justify-between px-4 py-2 border-t border-border">
+          <button class="p-1 rounded hover:bg-accent disabled:opacity-30" :disabled="matchPage <= 0" @click="prevMatchPage">
+            <ChevronLeft class="w-4 h-4 text-muted-foreground" />
+          </button>
+          <span class="text-xs text-muted-foreground font-mono">{{ matchPage + 1 }} / {{ matchTotalPages }}</span>
+          <button class="p-1 rounded hover:bg-accent disabled:opacity-30" :disabled="matchPage + 1 >= matchTotalPages" @click="nextMatchPage">
+            <ChevronRight class="w-4 h-4 text-muted-foreground" />
+          </button>
         </div>
       </div>
 

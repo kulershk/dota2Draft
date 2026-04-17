@@ -1164,6 +1164,9 @@ export default {
   customBracketRepair: 'Repair advancement',
   customBracketRepairNothing: 'No broken slots found — bracket is consistent.',
   queueAdminRetryLobby: 'Retry lobby',
+  matchHistory: 'Match History',
+  matches: 'matches',
+  noMatches: 'No matches played yet',
   jobNextRun: 'Next Run',
   queueAdminRetryLobbyHint: 'Force the bot pool to try creating the lobby again with a different bot',
 }
