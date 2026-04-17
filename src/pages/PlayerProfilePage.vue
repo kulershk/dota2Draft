@@ -168,36 +168,27 @@ function placementBg(n: number) {
                 </a>
               </div>
             </div>
-            <div class="flex flex-wrap items-center gap-3 mt-2 text-xs text-muted-foreground">
+            <div class="flex flex-wrap items-center gap-2 mt-2 text-xs text-muted-foreground">
               <span class="flex items-center gap-1">
                 <Calendar class="w-3.5 h-3.5" />
                 {{ t('memberSince') }} {{ formatDate(profile.created_at) }}
               </span>
+              <a v-if="profile.twitch_username"
+                :href="`https://twitch.tv/${profile.twitch_username}`"
+                target="_blank" rel="noopener"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#9146FF]/10 border border-[#9146FF]/20 text-[#9146FF] hover:bg-[#9146FF]/20 transition-colors"
+              >
+                <Tv class="w-3.5 h-3.5" />
+                <span class="font-medium">{{ profile.twitch_username }}</span>
+              </a>
+              <span v-if="profile.discord_username"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#5865F2]/10 border border-[#5865F2]/20 text-[#5865F2]"
+              >
+                <MessageCircle class="w-3.5 h-3.5" />
+                <span class="font-medium">{{ profile.discord_username }}</span>
+              </span>
             </div>
             <p v-if="profile.info" class="text-sm text-muted-foreground mt-2">{{ profile.info }}</p>
-          </div>
-        </div>
-
-        <!-- Twitch -->
-        <div v-if="profile.twitch_username" class="mt-4 flex items-center gap-3 p-3 rounded-lg bg-[#9146FF]/10 border border-[#9146FF]/20">
-          <Tv class="w-5 h-5 text-[#9146FF] shrink-0" />
-          <div class="flex-1 min-w-0">
-            <p class="text-sm font-medium text-foreground truncate">{{ profile.twitch_username }}</p>
-            <p class="text-xs text-muted-foreground">{{ t('twitchLinked') }}</p>
-          </div>
-          <a
-            :href="`https://twitch.tv/${profile.twitch_username}`"
-            target="_blank" rel="noopener"
-            class="shrink-0 px-3 py-1.5 rounded-md text-xs font-medium bg-[#9146FF] text-white hover:bg-[#7c3aed] transition-colors"
-          >{{ t('watchStream') }}</a>
-        </div>
-
-        <!-- Discord -->
-        <div v-if="profile.discord_username" class="mt-4 flex items-center gap-3 p-3 rounded-lg bg-[#5865F2]/10 border border-[#5865F2]/20">
-          <MessageCircle class="w-5 h-5 text-[#5865F2] shrink-0" />
-          <div class="flex-1 min-w-0">
-            <p class="text-sm font-medium text-foreground truncate">{{ profile.discord_username }}</p>
-            <p class="text-xs text-muted-foreground">{{ t('discordLinked') }}</p>
           </div>
         </div>
       </div>
