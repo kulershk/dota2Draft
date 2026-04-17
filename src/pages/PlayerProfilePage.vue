@@ -109,7 +109,8 @@ function placementBg(n: number) {
     <div v-else-if="error" class="text-center py-12 text-muted-foreground">{{ t('playerNotFound') }}</div>
 
     <template v-else-if="profile">
-      <!-- Player header -->
+      <!-- Player header + Top heroes side by side -->
+      <div class="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-5">
       <div class="card p-6">
         <div class="flex items-start gap-4">
           <img v-if="profile.avatar_url" :src="profile.avatar_url" class="w-16 h-16 rounded-full" />
@@ -201,14 +202,14 @@ function placementBg(n: number) {
         </div>
       </div>
 
-      <!-- Top heroes -->
-      <div v-if="profile.top_heroes?.length" class="card">
+      <!-- Top heroes (right column) -->
+      <div v-if="profile.top_heroes?.length" class="card self-start">
         <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
           <Shield class="w-5 h-5 text-foreground" />
           <span class="text-sm font-semibold text-foreground">{{ t('topHeroes') }}</span>
         </div>
-        <div class="p-4 flex gap-4">
-          <div v-for="hero in profile.top_heroes" :key="hero.hero_id" class="flex items-center gap-3 flex-1 p-3 rounded-lg bg-accent/50 border border-border/50">
+        <div class="p-4 flex flex-col gap-3">
+          <div v-for="hero in profile.top_heroes" :key="hero.hero_id" class="flex items-center gap-3 p-3 rounded-lg bg-accent/50 border border-border/50">
             <img v-if="dota.heroImg(hero.hero_id)" :src="dota.heroImg(hero.hero_id)" :alt="dota.heroName(hero.hero_id)"
               class="w-16 h-9 rounded object-cover border border-border/30 shrink-0" />
             <div class="min-w-0 flex-1">
@@ -224,6 +225,7 @@ function placementBg(n: number) {
             </div>
           </div>
         </div>
+      </div>
       </div>
 
       <!-- Tournament placements -->

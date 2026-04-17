@@ -253,7 +253,7 @@ router.get('/api/players/:id/matches', async (req, res) => {
       LEFT JOIN players p1 ON p1.id = t1.player_id
       LEFT JOIN captains t2 ON t2.id = m.team2_captain_id
       LEFT JOIN players p2 ON p2.id = t2.player_id
-      WHERE m.hidden = false AND m.competition_id IS NOT NULL
+      WHERE m.hidden = false AND m.competition_id IS NOT NULL AND m.status IN ('completed', 'live')
         AND (
           -- Player is a captain in this match
           EXISTS (SELECT 1 FROM captains cap WHERE cap.player_id = $1 AND cap.id IN (m.team1_captain_id, m.team2_captain_id))
@@ -281,7 +281,7 @@ router.get('/api/players/:id/matches', async (req, res) => {
       LEFT JOIN queue_pools qp ON qp.id = qm.pool_id
       LEFT JOIN matches m ON m.id = qm.match_id
       WHERE qm.all_player_ids @> $1::jsonb
-        AND qm.status IN ('live', 'completed')
+        AND qm.status IN ('completed', 'live')
     `, [JSON.stringify([playerId])])
 
     // Merge + sort by date descending
