@@ -740,8 +740,11 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 		b.log(fmt.Sprintf("  Slot: %d | %s | player %d", m.GetSlot(), teamName(m.GetTeam()), m.GetId()))
 	}
 
-	// Enforce team assignments — kick players on wrong team back to unassigned
-	if b.expectedTeams != nil && b.dotaClient != nil && b.steamClient != nil {
+	// Enforce team assignments — kick players on wrong team back to unassigned.
+	// Skip once the game is running: a concurrent cleanup may have cleared
+	// expectedTeams, and enforcement is pointless after launch anyway.
+	if lobbyState != gcccm.CSODOTALobby_RUN &&
+		b.expectedTeams != nil && b.dotaClient != nil && b.steamClient != nil {
 		for _, m := range newMembers {
 			playerID := m.GetId()
 			currentTeam := m.GetTeam()
@@ -806,6 +809,10 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 }
 
 func (b *Bot) SetExpectedTeams(players []protocol.LobbyPlayer) {
+	if players == nil {
+		b.expectedTeams = nil
+		return
+	}
 	b.expectedTeams = make(map[uint64]string)
 	for _, p := range players {
 		sid := parseSteamID(p.SteamID)
