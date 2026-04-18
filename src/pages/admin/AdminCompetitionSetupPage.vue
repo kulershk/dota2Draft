@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Settings, DollarSign, Users, UserPlus, RotateCcw, Play, Pencil, ArrowDown, Wifi, ArrowLeft, Plus, Trash2, Search, Tv, Upload, Swords, ChevronDown, ChevronRight, X } from 'lucide-vue-next'
+import { Settings, DollarSign, Users, UserPlus, RotateCcw, Play, Pencil, ArrowDown, Wifi, ArrowLeft, Plus, Trash2, Search, Tv, Upload, Swords, ChevronDown, ChevronRight, X, Trophy, Medal, Check } from 'lucide-vue-next'
 import { ref, computed, onMounted, reactive, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
@@ -400,6 +400,47 @@ async function saveAsTemplate() {
   } catch {}
   savingTemplate.value = false
 }
+
+// ── Placement XP ──
+type PlacementPlayer = { id: number; name: string; alreadyAwarded: boolean }
+type PlacementEntry = { place: number; label: string; xp: number; captain: { id: number; team: string } | null; players: PlacementPlayer[] }
+type PlacementStage = { id: number; name: string; format: string; status: string; blocked: string | null; placements: PlacementEntry[] }
+
+const placementStages = ref<PlacementStage[]>([])
+const placementsLoading = ref(false)
+const confirmAwardStage = ref<PlacementStage | null>(null)
+const awardingStageId = ref<number | null>(null)
+const awardResult = ref<{ stageId: number; awarded: number; skipped: number } | null>(null)
+
+async function loadPlacements() {
+  placementsLoading.value = true
+  try {
+    const { stages } = await api.getPlacementsPreview(compId.value)
+    placementStages.value = stages || []
+  } finally {
+    placementsLoading.value = false
+  }
+}
+
+async function awardPlacements(stage: PlacementStage) {
+  awardingStageId.value = stage.id
+  try {
+    const r = await api.awardPlacementXp(compId.value, stage.id)
+    awardResult.value = { stageId: stage.id, awarded: r.awarded || 0, skipped: r.skipped || 0 }
+    await loadPlacements()
+  } catch (e: any) {
+    alert(e?.message || 'Failed to award XP')
+  } finally {
+    awardingStageId.value = null
+    confirmAwardStage.value = null
+  }
+}
+
+watch(activeTab, (tab) => {
+  if (tab === 'placements' && placementStages.value.length === 0) {
+    loadPlacements()
+  }
+})
 </script>
 
 <template>
@@ -420,7 +461,7 @@ async function saveAsTemplate() {
     <template v-else>
     <!-- Tabs -->
     <div class="flex gap-1 border-b border-border overflow-x-auto">
-      <button v-for="tab in ['settings', 'rules', 'lobby', 'fantasy', 'captains', 'other']" :key="tab"
+      <button v-for="tab in ['settings', 'rules', 'lobby', 'fantasy', 'captains', 'placements', 'other']" :key="tab"
         class="px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px"
         :class="activeTab === tab ? 'text-primary border-primary' : 'text-muted-foreground border-transparent hover:text-foreground hover:border-border'"
         @click="activeTab = tab"
@@ -848,6 +889,104 @@ async function saveAsTemplate() {
       </button>
     </div>
 
+    </template>
+
+    <!-- Tab: Placements -->
+    <template v-if="activeTab === 'placements'">
+      <div class="card">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-border">
+          <div class="flex items-center gap-2">
+            <Trophy class="w-5 h-5 text-foreground" />
+            <span class="text-sm font-semibold text-foreground">{{ t('placementXpTitle') }}</span>
+          </div>
+          <button class="btn-ghost text-xs" @click="loadPlacements" :disabled="placementsLoading">
+            <RotateCcw class="w-3.5 h-3.5" :class="{ 'animate-spin': placementsLoading }" />
+            {{ t('refresh') }}
+          </button>
+        </div>
+        <div class="px-4 py-3 text-xs text-muted-foreground border-b border-border">
+          {{ t('placementXpHelp') }}
+        </div>
+        <div v-if="placementsLoading && placementStages.length === 0" class="px-4 py-8 text-center text-sm text-muted-foreground">
+          {{ t('loading') }}
+        </div>
+        <div v-else-if="placementStages.length === 0" class="px-4 py-8 text-center text-sm text-muted-foreground">
+          {{ t('noStagesYet') }}
+        </div>
+        <div v-else class="divide-y divide-border">
+          <div v-for="stage in placementStages" :key="stage.id" class="px-4 py-4">
+            <div class="flex items-center justify-between gap-3 mb-3">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-medium text-foreground">{{ stage.name || t('stageLabel') }}</span>
+                  <span class="text-xs text-muted-foreground">{{ stage.format }}</span>
+                  <span v-if="stage.status === 'completed'" class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-color-success text-color-success-foreground">
+                    <Check class="w-3 h-3" />
+                    {{ t('stageCompleted') }}
+                  </span>
+                </div>
+              </div>
+              <button
+                class="btn-primary text-sm"
+                :disabled="!!stage.blocked || stage.placements.length === 0 || awardingStageId === stage.id"
+                @click="confirmAwardStage = stage"
+              >
+                <Medal class="w-4 h-4" />
+                {{ t('awardXpButton') }}
+              </button>
+            </div>
+            <div v-if="stage.blocked" class="text-xs text-muted-foreground bg-accent/40 rounded px-3 py-2">
+              {{ stage.blocked }}
+            </div>
+            <div v-else-if="stage.placements.length === 0" class="text-xs text-muted-foreground">
+              {{ t('placementXpNone') }}
+            </div>
+            <div v-else class="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div v-for="p in stage.placements" :key="p.place" class="rounded-md border border-border bg-accent/20 p-3">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-xs font-semibold text-foreground">{{ p.label }}</span>
+                  <span class="text-xs text-primary font-medium">+{{ p.xp }} XP</span>
+                </div>
+                <div class="text-sm font-medium text-foreground mb-2">{{ p.captain?.team || '—' }}</div>
+                <ul class="text-xs text-muted-foreground space-y-1">
+                  <li v-for="pl in p.players" :key="pl.id" class="flex items-center justify-between gap-2">
+                    <span>{{ pl.name }}</span>
+                    <Check v-if="pl.alreadyAwarded" class="w-3 h-3 text-color-success shrink-0" :title="t('placementXpAlready')" />
+                  </li>
+                </ul>
+              </div>
+            </div>
+            <div v-if="awardResult && awardResult.stageId === stage.id" class="mt-2 text-xs text-muted-foreground">
+              {{ t('placementXpResult', { awarded: awardResult.awarded, skipped: awardResult.skipped }) }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <ModalOverlay :show="!!confirmAwardStage" @close="confirmAwardStage = null">
+        <div v-if="confirmAwardStage" class="p-6">
+          <h3 class="text-lg font-semibold text-foreground mb-2">{{ t('confirmAwardXp') }}</h3>
+          <p class="text-sm text-muted-foreground mb-4">
+            {{ t('confirmAwardXpBody', { stage: confirmAwardStage.name || '' }) }}
+          </p>
+          <ul class="text-sm text-foreground space-y-1 mb-4">
+            <li v-for="p in confirmAwardStage.placements" :key="p.place" class="flex items-center justify-between">
+              <span>{{ p.label }} — {{ p.captain?.team || '—' }} ({{ p.players.length }})</span>
+              <span class="text-primary font-medium">+{{ p.xp }} XP</span>
+            </li>
+          </ul>
+          <div class="flex justify-end gap-2">
+            <button class="btn-ghost text-sm" @click="confirmAwardStage = null">{{ t('cancel') }}</button>
+            <button
+              class="btn-primary text-sm"
+              :disabled="awardingStageId === confirmAwardStage.id"
+              @click="awardPlacements(confirmAwardStage)"
+            >
+              {{ awardingStageId === confirmAwardStage.id ? t('working') : t('confirmAction') }}
+            </button>
+          </div>
+        </div>
+      </ModalOverlay>
     </template>
 
     <!-- Tab: Captains & Participants -->

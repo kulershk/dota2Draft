@@ -3,7 +3,7 @@ import { query, queryOne, execute } from '../db.js'
 import { requireCompPermission, requirePermission } from '../middleware/permissions.js'
 import { getSessionPlayerId, getTokenFromReq, getAuthPlayer } from '../middleware/auth.js'
 import { getCompetition, getCaptains, parseCompSettings } from '../helpers/competition.js'
-import { awardXp, getTeamPlayerIds } from '../helpers/xp.js'
+import { awardXp, getTeamPlayerIds, computeStagePlacements, awardStagePlacements } from '../helpers/xp.js'
 import { advanceWinner, repairBracketAdvancement, generateEliminationBracket, generateGroupMatches, generateDoubleEliminationBracket, customBracketWouldCycle, validateCustomBracketStage } from '../helpers/tournament.js'
 import { fetchAndSaveGameStats } from '../helpers/opendota.js'
 
@@ -889,50 +889,7 @@ export default function createTournamentRouter(io) {
         if (stageMatches.length === 0) {
           stage.status = 'completed'
           await execute('UPDATE competitions SET tournament_state = $1 WHERE id = $2', [JSON.stringify(ts), compId])
-
-          // ── XP: tournament placements ──
-          if (stage.format !== 'group_stage') {
-            const allStageMatches = await query(
-              'SELECT * FROM matches WHERE competition_id = $1 AND stage = $2 ORDER BY round DESC, match_order',
-              [compId, match.stage]
-            )
-            const finalMatch = allStageMatches.find(m => !m.next_match_id && m.winner_captain_id && m.bracket !== 'lower')
-            if (finalMatch) {
-              const placementMap = new Map()
-              // 1st = winner of final
-              placementMap.set(finalMatch.winner_captain_id, 1)
-              // 2nd = loser of final
-              const finalistLoser = finalMatch.team1_captain_id === finalMatch.winner_captain_id
-                ? finalMatch.team2_captain_id : finalMatch.team1_captain_id
-              if (finalistLoser) placementMap.set(finalistLoser, 2)
-              // 3rd = lost in semi-finals (round before final, single elim)
-              if (stage.format === 'single_elimination' && stage.totalRounds) {
-                const semiRound = stage.totalRounds - 1
-                const semis = allStageMatches.filter(m => m.round === semiRound && m.bracket !== 'lower')
-                for (const semi of semis) {
-                  if (semi.winner_captain_id) {
-                    const loser = semi.team1_captain_id === semi.winner_captain_id
-                      ? semi.team2_captain_id : semi.team1_captain_id
-                    if (loser && !placementMap.has(loser)) placementMap.set(loser, 3)
-                  }
-                }
-              }
-              const xpAmounts = { 1: settings.xpPlacement1st, 2: settings.xpPlacement2nd, 3: settings.xpPlacement3rd }
-              const placementLabels = { 1: '1st place', 2: '2nd place', 3: '3rd place' }
-              for (const [captainId, place] of placementMap) {
-                const xp = xpAmounts[place]
-                if (!xp) continue
-                const players = await getTeamPlayerIds(captainId, compId)
-                const cap = await queryOne('SELECT team FROM captains WHERE id = $1', [captainId])
-                for (const pid of players) {
-                  awardXp(pid, xp, `placement_${place}`, 'stage', `${compId}:${match.stage}:${pid}`, {
-                    competitionId: compId, competitionName: comp.name,
-                    detail: `${placementLabels[place]} — ${cap?.team || 'Team'} in ${stage.name || 'Stage'}`,
-                  })
-                }
-              }
-            }
-          }
+          await awardStagePlacements(comp, stage, settings)
         }
       }
     }
@@ -1067,6 +1024,89 @@ export default function createTournamentRouter(io) {
     } catch (e) {
       res.status(500).json({ error: 'Failed to fetch from OpenDota: ' + e.message })
     }
+  })
+
+  // Preview placement XP awards for all non-group stages in a competition
+  router.get('/api/competitions/:compId/placements/preview', async (req, res) => {
+    const compId = Number(req.params.compId)
+    const admin = await requireCompPermission(req, res, compId)
+    if (!admin) return
+
+    const comp = await getCompetition(compId)
+    if (!comp) return res.status(404).json({ error: 'Competition not found' })
+    const settings = parseCompSettings(comp)
+    const ts = comp.tournament_state || {}
+    const stages = Array.isArray(ts.stages) ? ts.stages : []
+    const xpAmounts = { 1: settings.xpPlacement1st, 2: settings.xpPlacement2nd, 3: settings.xpPlacement3rd }
+    const labels = { 1: '1st place', 2: '2nd place', 3: '3rd place' }
+
+    const stageResults = []
+    for (const stage of stages) {
+      const { placements, blocked } = await computeStagePlacements(compId, stage)
+      const placementList = []
+      for (const [captainId, place] of placements) {
+        const xp = xpAmounts[place] || 0
+        const cap = await queryOne('SELECT id, team FROM captains WHERE id = $1', [captainId])
+        const playerIds = await getTeamPlayerIds(captainId, compId)
+        const players = playerIds.length > 0
+          ? await query(
+              `SELECT p.id, COALESCE(p.display_name, p.name) AS name FROM players p WHERE p.id = ANY($1::int[])`,
+              [playerIds]
+            )
+          : []
+        // Which of these players already have this placement XP logged?
+        const alreadyRows = playerIds.length > 0
+          ? await query(
+              `SELECT player_id FROM xp_log
+               WHERE reason = $1 AND ref_type = 'stage' AND ref_id LIKE $2 AND player_id = ANY($3::int[])`,
+              [`placement_${place}`, `${compId}:${stage.id}:%`, playerIds]
+            )
+          : []
+        const alreadySet = new Set(alreadyRows.map(r => r.player_id))
+        placementList.push({
+          place,
+          label: labels[place],
+          xp,
+          captain: cap ? { id: cap.id, team: cap.team } : null,
+          players: players.map(p => ({ id: p.id, name: p.name, alreadyAwarded: alreadySet.has(p.id) })),
+        })
+      }
+      stageResults.push({
+        id: stage.id,
+        name: stage.name,
+        format: stage.format,
+        status: stage.status,
+        blocked,
+        placements: placementList,
+      })
+    }
+    res.json({ stages: stageResults })
+  })
+
+  // Award placement XP for a specific stage (idempotent)
+  router.post('/api/competitions/:compId/placements/:stageId/award', async (req, res) => {
+    const compId = Number(req.params.compId)
+    const stageId = Number(req.params.stageId)
+    const admin = await requireCompPermission(req, res, compId)
+    if (!admin) return
+
+    const comp = await getCompetition(compId)
+    if (!comp) return res.status(404).json({ error: 'Competition not found' })
+    const settings = parseCompSettings(comp)
+    const ts = comp.tournament_state || {}
+    const stage = (ts.stages || []).find(s => s.id === stageId)
+    if (!stage) return res.status(404).json({ error: 'Stage not found' })
+
+    const result = await awardStagePlacements(comp, stage, settings)
+    if (result.blocked) return res.status(409).json({ error: result.blocked })
+
+    // Mark stage completed if it isn't already
+    if (stage.status !== 'completed') {
+      stage.status = 'completed'
+      await execute('UPDATE competitions SET tournament_state = $1 WHERE id = $2', [JSON.stringify(ts), compId])
+    }
+    io.to(`comp:${compId}`).emit('tournament:updated')
+    res.json({ ok: true, awarded: result.awarded, skipped: result.skipped })
   })
 
   return router

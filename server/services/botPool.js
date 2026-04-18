@@ -3,7 +3,7 @@ import { playerInMatch, activeQueueMatches } from '../socket/queueState.js'
 import { socketPlayers } from '../socket/state.js'
 import { fetchAndSaveGameStats, fetchOpenDotaMatch, saveMatchGameStats, requestOpenDotaParse } from '../helpers/opendota.js'
 import { fetchSteamMatchDetails } from '../helpers/steam.js'
-import { awardXp, getTeamPlayerIds } from '../helpers/xp.js'
+import { awardXp, getTeamPlayerIds, awardStagePlacements } from '../helpers/xp.js'
 import { getCompetition, parseCompSettings } from '../helpers/competition.js'
 import SteamCommunity from 'steamcommunity'
 import { LoginSession, EAuthTokenPlatformType } from 'steam-session'
@@ -1061,46 +1061,7 @@ class BotPool {
           if (stageMatches.length === 0) {
             stage.status = 'completed'
             await execute('UPDATE competitions SET tournament_state = $1 WHERE id = $2', [JSON.stringify(ts), match.competition_id])
-
-            if (stage.format !== 'group_stage') {
-              const allStageMatches = await query(
-                'SELECT * FROM matches WHERE competition_id = $1 AND stage = $2 ORDER BY round DESC, match_order',
-                [match.competition_id, match.stage]
-              )
-              const finalMatch = allStageMatches.find(m => !m.next_match_id && m.winner_captain_id && m.bracket !== 'lower')
-              if (finalMatch) {
-                const placementMap = new Map()
-                placementMap.set(finalMatch.winner_captain_id, 1)
-                const finalistLoser = finalMatch.team1_captain_id === finalMatch.winner_captain_id
-                  ? finalMatch.team2_captain_id : finalMatch.team1_captain_id
-                if (finalistLoser) placementMap.set(finalistLoser, 2)
-                if (stage.format === 'single_elimination' && stage.totalRounds) {
-                  const semiRound = stage.totalRounds - 1
-                  const semis = allStageMatches.filter(m => m.round === semiRound && m.bracket !== 'lower')
-                  for (const semi of semis) {
-                    if (semi.winner_captain_id) {
-                      const loser = semi.team1_captain_id === semi.winner_captain_id
-                        ? semi.team2_captain_id : semi.team1_captain_id
-                      if (loser && !placementMap.has(loser)) placementMap.set(loser, 3)
-                    }
-                  }
-                }
-                const xpAmounts = { 1: settings.xpPlacement1st, 2: settings.xpPlacement2nd, 3: settings.xpPlacement3rd }
-                const placementLabels = { 1: '1st place', 2: '2nd place', 3: '3rd place' }
-                for (const [captainId, place] of placementMap) {
-                  const xp = xpAmounts[place]
-                  if (!xp) continue
-                  const players = await getTeamPlayerIds(captainId, match.competition_id)
-                  const cap = await queryOne('SELECT team FROM captains WHERE id = $1', [captainId])
-                  for (const pid of players) {
-                    awardXp(pid, xp, `placement_${place}`, 'stage', `${match.competition_id}:${match.stage}:${pid}`, {
-                      competitionId: match.competition_id, competitionName: comp.name,
-                      detail: `${placementLabels[place]} — ${cap?.team || 'Team'} in ${stage.name || 'Stage'}`,
-                    })
-                  }
-                }
-              }
-            }
+            await awardStagePlacements(comp, stage, settings)
           }
         }
       }

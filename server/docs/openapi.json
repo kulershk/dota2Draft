@@ -947,6 +947,55 @@
         }
       }
     },
+    "/api/competitions/{compId}/placements/preview": {
+      "get": {
+        "tags": ["Tournament"],
+        "summary": "Preview placement XP awards per stage",
+        "description": "Returns each non-group stage with its would-be 1st/2nd/3rd placements: captain + team, player list with alreadyAwarded flag, XP amount, and a `blocked` reason if the award can't run (e.g. pending matches, missing final winner). Requires competition admin permission.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": {
+            "description": "Per-stage placement preview",
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "stages": { "type": "array", "items": { "type": "object", "properties": {
+              "id": { "type": "integer" },
+              "name": { "type": "string" },
+              "format": { "type": "string" },
+              "status": { "type": "string" },
+              "blocked": { "type": "string", "nullable": true, "description": "Reason awards cannot run, or null if ready" },
+              "placements": { "type": "array", "items": { "type": "object", "properties": {
+                "place": { "type": "integer", "enum": [1, 2, 3] },
+                "label": { "type": "string" },
+                "xp": { "type": "integer" },
+                "captain": { "type": "object", "nullable": true, "properties": { "id": { "type": "integer" }, "team": { "type": "string" } } },
+                "players": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "integer" }, "name": { "type": "string" }, "alreadyAwarded": { "type": "boolean" } } } }
+              } } }
+            } } } } } } }
+          },
+          "404": { "description": "Competition not found" }
+        }
+      }
+    },
+    "/api/competitions/{compId}/placements/{stageId}/award": {
+      "post": {
+        "tags": ["Tournament"],
+        "summary": "Award placement XP for a stage",
+        "description": "Awards 1st/2nd/3rd placement XP to all players on placed teams and marks the stage completed. Idempotent via XP log unique constraint — re-running skips already-awarded rows. Returns counts of awarded vs skipped entries. Requires competition admin permission.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "stageId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Placements awarded",
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "ok": { "type": "boolean" }, "awarded": { "type": "integer" }, "skipped": { "type": "integer" } } } } }
+          },
+          "404": { "description": "Competition or stage not found" },
+          "409": { "description": "Stage not eligible — see error message (pending matches, no final winner, group stage, etc.)" }
+        }
+      }
+    },
     "/api/competitions/{compId}/fantasy": {
       "get": {
         "tags": ["Fantasy"],

@@ -156,6 +156,12 @@ export function useApi() {
     refetchMatchGameStats: (compId: number, matchId: number, gameNumber: number) =>
       request(`/api/competitions/${compId}/tournament/matches/${matchId}/games/${gameNumber}/refetch`, { method: 'POST' }),
 
+    // Placement XP
+    getPlacementsPreview: (compId: number) =>
+      request(`/api/competitions/${compId}/placements/preview`),
+    awardPlacementXp: (compId: number, stageId: number) =>
+      request(`/api/competitions/${compId}/placements/${stageId}/award`, { method: 'POST' }),
+
     // Fantasy
     getFantasy: (compId: number) => request(`/api/competitions/${compId}/fantasy`),
     getFantasyLeaderboard: (compId: number) => request(`/api/competitions/${compId}/fantasy/leaderboard`),
