@@ -55,6 +55,7 @@ const registrationStatus = computed(() => {
 const canJoinAsParticipant = computed(() => {
   if (!store.currentUser.value) return false
   if (store.compUser.value?.in_pool || store.compUser.value?.captain) return false
+  if (!store.settings.allowSteamRegistration && !store.isAdmin.value) return false
   return registrationStatus.value.open || store.isAdmin.value
 })
 

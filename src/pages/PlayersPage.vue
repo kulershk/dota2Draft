@@ -226,7 +226,7 @@ watch(searchQuery, () => { playersPage.value = 1 })
             <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input v-model="searchQuery" type="text" :placeholder="t('search')" class="input-field pl-9 w-full sm:w-56" />
           </div>
-          <template v-if="store.currentUser.value && !store.compUser.value?.in_pool && !store.compUser.value?.captain">
+          <template v-if="store.currentUser.value && !store.compUser.value?.in_pool && !store.compUser.value?.captain && (store.settings.allowSteamRegistration || store.isAdmin.value)">
             <button v-if="registrationOpen || store.isAdmin.value" class="btn-primary text-sm flex-shrink-0" @click="openRegister">
               <UserPlus class="w-4 h-4" />
               <span class="hidden sm:inline">{{ t('joinAsParticipant') }}</span>

@@ -22,6 +22,9 @@ export default function createPlayersRouter(io) {
     if (!player.is_admin) {
       const comp = await getCompetition(compId)
       if (!comp) return res.status(404).json({ error: 'Competition not found' })
+      if (comp.settings?.allowSteamRegistration === false) {
+        return res.status(403).json({ error: 'Self-registration is disabled for this competition' })
+      }
       const now = new Date()
       if (comp.registration_start && new Date(comp.registration_start) > now) {
         return res.status(403).json({ error: 'Registration has not opened yet' })

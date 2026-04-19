@@ -541,10 +541,15 @@
       "post": {
         "tags": ["Players"],
         "summary": "Register as participant",
+        "description": "Self-registration must be enabled via settings.allowSteamRegistration (admins bypass this).",
         "security": [{ "bearerAuth": [] }],
         "parameters": [{ "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }],
         "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "roles": { "type": "array", "items": { "type": "string" } }, "mmr": { "type": "integer" }, "info": { "type": "string" } } } } } },
-        "responses": { "200": { "description": "Registered" } }
+        "responses": {
+          "200": { "description": "Registered" },
+          "403": { "description": "Self-registration disabled, banned, or outside registration window" },
+          "409": { "description": "Already registered as a participant" }
+        }
       }
     },
     "/api/competitions/{compId}/players/{playerId}": {
