@@ -314,12 +314,20 @@ func (m *Manager) RejoinLobby(cmd protocol.RejoinLobbyCmd) error {
 			b.AbandonAndLeaveLobby()
 		case <-ctx.Done():
 			log.Printf("[Lobby %s] Lobby cancelled after rejoin", cmd.LobbyID)
+			m.send("bot_log", protocol.BotLogEvent{
+				BotID:   cmd.BotID,
+				Message: "Lobby cancelled after rejoin — destroying",
+			})
 			destroyCtx, destroyCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			b.DestroyLobby(destroyCtx)
 			destroyCancel()
 			b.LeaveLobby()
 		case <-time.After(timeout):
 			log.Printf("[Lobby %s] Lobby timed out after rejoin (%d min)", cmd.LobbyID, int(timeout.Minutes()))
+			m.send("bot_log", protocol.BotLogEvent{
+				BotID:   cmd.BotID,
+				Message: fmt.Sprintf("Lobby timed out after rejoin (%d min) — destroying", int(timeout.Minutes())),
+			})
 			m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: cmd.LobbyID, Error: fmt.Sprintf("Lobby timed out (%d min)", int(timeout.Minutes()))})
 			destroyCtx, destroyCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			b.DestroyLobby(destroyCtx)
@@ -345,6 +353,12 @@ func (m *Manager) CancelLobby(lobbyID string) error {
 	}
 
 	log.Printf("[Lobby %s] Cancelling", lobbyID)
+	if lobby.Bot != nil {
+		m.send("bot_log", protocol.BotLogEvent{
+			BotID:   lobby.Bot.ID,
+			Message: fmt.Sprintf("ACTION: CancelLobby(%s)", lobbyID),
+		})
+	}
 	if lobby.cancel != nil {
 		lobby.cancel()
 	}
@@ -374,6 +388,10 @@ func (m *Manager) ForceLaunch(lobbyID string, skipValidation bool) error {
 	}
 
 	log.Printf("[Lobby %s] Force launching", lobbyID)
+	m.send("bot_log", protocol.BotLogEvent{
+		BotID:   lobby.Bot.ID,
+		Message: fmt.Sprintf("ACTION: ForceLaunch(%s, skipValidation=%v)", lobbyID, skipValidation),
+	})
 
 	if !skipValidation {
 		// Validate team IDs — both sides must have a team selected

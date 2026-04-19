@@ -170,7 +170,7 @@ function onBotStatusChanged(data: any) {
 function onBotLog(data: any) {
   if (!botLogs.value[data.botId]) botLogs.value[data.botId] = []
   botLogs.value[data.botId].push({ time: data.time, message: data.message })
-  if (botLogs.value[data.botId].length > 100) botLogs.value[data.botId].shift()
+  if (botLogs.value[data.botId].length > 500) botLogs.value[data.botId].shift()
   if (expandedBotId.value === data.botId) {
     nextTick(scrollLogsToBottom)
   }

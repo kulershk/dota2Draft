@@ -274,7 +274,7 @@ class BotPool {
     if (!this.botLogs.has(botId)) this.botLogs.set(botId, [])
     const logs = this.botLogs.get(botId)
     logs.push(entry)
-    if (logs.length > 50) logs.shift()
+    if (logs.length > 500) logs.shift()
     console.log(`[Bot ${botId}] ${data.message}`)
     if (this.io) {
       this.io.emit('bot:log', { botId, ...entry })

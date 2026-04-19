@@ -448,6 +448,11 @@ func (b *Bot) SetLoginKey(key string) {
 }
 
 func (b *Bot) SetActiveLobbyID(id string) {
+	if id == "" {
+		b.log("ACTION: SetActiveLobbyID cleared")
+	} else {
+		b.log(fmt.Sprintf("ACTION: SetActiveLobbyID(%s)", id))
+	}
 	b.activeLobbyID = id
 }
 
@@ -810,9 +815,11 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 
 func (b *Bot) SetExpectedTeams(players []protocol.LobbyPlayer) {
 	if players == nil {
+		b.log("ACTION: SetExpectedTeams cleared")
 		b.expectedTeams = nil
 		return
 	}
+	b.log(fmt.Sprintf("ACTION: SetExpectedTeams(%d players)", len(players)))
 	b.expectedTeams = make(map[uint64]string)
 	for _, p := range players {
 		sid := parseSteamID(p.SteamID)
@@ -849,10 +856,12 @@ func (b *Bot) SetBusy(busy bool) {
 	}
 	status := b.Status
 	b.mu.Unlock()
+	b.log(fmt.Sprintf("ACTION: SetBusy(%v) → status=%s", busy, status))
 	b.send("bot_status", protocol.BotStatusEvent{BotID: b.ID, Status: status})
 }
 
 func (b *Bot) SetExpectedTeamIds(radiant, dire int) {
+	b.log(fmt.Sprintf("ACTION: SetExpectedTeamIds(radiant=%d, dire=%d)", radiant, dire))
 	b.expectedRadiantTeamId = radiant
 	b.expectedDireTeamId = dire
 }
@@ -1013,19 +1022,25 @@ func (b *Bot) CreatePracticeLobby(gameName, password string, opts LobbyOptions) 
 
 func (b *Bot) InvitePlayer(steamID64 string) {
 	if b.dotaClient == nil {
+		b.log(fmt.Sprintf("ACTION: InvitePlayer(%s) skipped — dota client not connected", steamID64))
 		return
 	}
+	b.log(fmt.Sprintf("ACTION: InvitePlayer(%s)", steamID64))
 	sid := steamid.SteamId(parseSteamID(steamID64))
 	b.dotaClient.InviteLobbyMember(sid)
 }
 
 func (b *Bot) LaunchLobby() {
-	if b.dotaClient != nil {
-		b.dotaClient.LaunchLobby()
+	if b.dotaClient == nil {
+		b.log("ACTION: LaunchLobby skipped — dota client not connected")
+		return
 	}
+	b.log("ACTION: LaunchLobby")
+	b.dotaClient.LaunchLobby()
 }
 
 func (b *Bot) LeaveLobby() {
+	b.log("ACTION: LeaveLobby")
 	b.lastLobby = nil
 	b.detectedRadiantTeamId = 0
 	b.detectedDireTeamId = 0
@@ -1036,6 +1051,7 @@ func (b *Bot) LeaveLobby() {
 }
 
 func (b *Bot) AbandonAndLeaveLobby() {
+	b.log("ACTION: AbandonAndLeaveLobby")
 	b.lastLobby = nil
 	b.detectedRadiantTeamId = 0
 	b.detectedDireTeamId = 0
@@ -1047,9 +1063,12 @@ func (b *Bot) AbandonAndLeaveLobby() {
 }
 
 func (b *Bot) DestroyLobby(ctx context.Context) {
-	if b.dotaClient != nil {
-		b.dotaClient.DestroyLobby(ctx)
+	if b.dotaClient == nil {
+		b.log("ACTION: DestroyLobby skipped — dota client not connected")
+		return
 	}
+	b.log("ACTION: DestroyLobby")
+	b.dotaClient.DestroyLobby(ctx)
 }
 
 func parseSteamID(s string) uint64 {
