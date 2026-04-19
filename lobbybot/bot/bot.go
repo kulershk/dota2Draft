@@ -965,59 +965,17 @@ func (b *Bot) CreatePracticeLobby(gameName, password string, opts LobbyOptions) 
 		return err
 	}
 
-	// Subscribe to lobby cache updates so we can wait for GC to confirm team change
-	cacheCtr, err := b.dotaClient.GetCache().GetContainerForTypeID(uint32(cso.Lobby))
-	if err != nil {
-		// Fallback: just send the command without waiting
-		b.log("Could not subscribe to lobby cache, sending team change without waiting")
-		b.dotaClient.JoinLobbyTeam(gcccm.DOTA_GC_TEAM_DOTA_GC_TEAM_PLAYER_POOL, 0)
-		return nil
-	}
-
-	eventCh, eventCancel, err := cacheCtr.Subscribe()
-	if err != nil {
-		b.dotaClient.JoinLobbyTeam(gcccm.DOTA_GC_TEAM_DOTA_GC_TEAM_PLAYER_POOL, 0)
-		return nil
-	}
-	defer eventCancel()
-
-	// Move bot to unassigned (player pool) so real players can pick Radiant/Dire
+	// Move bot to unassigned so real players can pick Radiant/Dire. Do NOT
+	// subscribe to the cache container here — it competes with the main
+	// watcher's SubscribeType slot and orphans its channel when we unsubscribe,
+	// causing all subsequent lobby events to be missed. Fire-and-forget both
+	// commands instead; the bot is already in the player pool after lobby
+	// creation anyway, so confirmation isn't required.
 	accountID := uint32(b.steamClient.SteamId().ToUint64() & 0xFFFFFFFF)
 	b.dotaClient.KickLobbyMemberFromTeam(accountID)
-
-	// Wait for GC to confirm the team change
-	moveCtx, moveCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer moveCancel()
-
-	for {
-		select {
-		case <-moveCtx.Done():
-			b.log("Timed out waiting for team move confirmation, trying JoinLobbyTeam fallback")
-			b.dotaClient.JoinLobbyTeam(gcccm.DOTA_GC_TEAM_DOTA_GC_TEAM_PLAYER_POOL, 0)
-			return nil
-		case <-eventCh:
-			// Check if bot is no longer on Radiant/Dire
-			lobbyObj := cacheCtr.GetOne()
-			if lobbyObj == nil {
-				continue
-			}
-			lob := lobbyObj.(*gcccm.CSODOTALobby)
-			botOnTeam := false
-			for _, m := range lob.GetAllMembers() {
-				if m.GetId() == b.steamClient.SteamId().ToUint64() {
-					team := m.GetTeam()
-					if team == gcccm.DOTA_GC_TEAM_DOTA_GC_TEAM_GOOD_GUYS || team == gcccm.DOTA_GC_TEAM_DOTA_GC_TEAM_BAD_GUYS {
-						botOnTeam = true
-					}
-					break
-				}
-			}
-			if !botOnTeam {
-				b.log("Bot moved to unassigned — team slots are free")
-				return nil
-			}
-		}
-	}
+	b.dotaClient.JoinLobbyTeam(gcccm.DOTA_GC_TEAM_DOTA_GC_TEAM_PLAYER_POOL, 0)
+	b.log("Sent team-pool commands (no wait)")
+	return nil
 }
 
 func (b *Bot) InvitePlayer(steamID64 string) {
