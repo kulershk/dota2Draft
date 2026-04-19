@@ -1071,6 +1071,33 @@ func (b *Bot) DestroyLobby(ctx context.Context) {
 	b.dotaClient.DestroyLobby(ctx)
 }
 
+// PollLobbyFromCache reads the current lobby state directly from the cache
+// container and re-runs processLobbyUpdate. Safety net for when cache
+// subscription events stop firing — the cache itself stays fresh even when
+// subscriber channels go quiet, so a direct read still catches state changes
+// (match ID assigned, state → RUN, etc).
+func (b *Bot) PollLobbyFromCache() {
+	if b.dotaClient == nil {
+		return
+	}
+	container, err := b.dotaClient.GetCache().GetContainerForTypeID(uint32(cso.Lobby))
+	if err != nil {
+		return
+	}
+	obj := container.GetOne()
+	if obj == nil {
+		return
+	}
+	lob, ok := obj.(*gcccm.CSODOTALobby)
+	if !ok {
+		return
+	}
+	b.log(fmt.Sprintf("POLL: Cache read — state: %s, matchID: %d, members: %d",
+		lob.GetState().String(), lob.GetMatchId(), len(lob.GetAllMembers())))
+	b.processLobbyUpdate(b.lastLobby, lob)
+	b.lastLobby = lob
+}
+
 func parseSteamID(s string) uint64 {
 	var id uint64
 	fmt.Sscanf(s, "%d", &id)

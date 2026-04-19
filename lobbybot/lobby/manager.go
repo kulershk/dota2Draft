@@ -206,7 +206,26 @@ func (m *Manager) runLobby(ctx context.Context, lobby *Lobby) {
 	}
 
 	botLog("Lobby ready. Waiting for players to join...")
-	botLog("(Lobby state updates are tracked via GC events)")
+	botLog("(Lobby state updates are tracked via GC events + cache polling fallback)")
+
+	// Poll the lobby cache as a safety net: go-dota2 sometimes stops delivering
+	// cache subscription events mid-lobby, which means we'd miss the match-id
+	// assignment and game-start transition. Polling keeps b.lastLobby fresh and
+	// triggers gameStartedCh even when the subscriber channel goes quiet.
+	pollCtx, pollCancel := context.WithCancel(ctx)
+	go func() {
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-pollCtx.Done():
+				return
+			case <-ticker.C:
+				lobby.Bot.PollLobbyFromCache()
+			}
+		}
+	}()
+	defer pollCancel()
 
 	// Wait for game start, cancel, or timeout
 	timeout := lobby.timeoutDuration()
@@ -304,6 +323,23 @@ func (m *Manager) RejoinLobby(cmd protocol.RejoinLobbyCmd) error {
 	// Run the lobby watcher (waits for game start or cancel)
 	go func() {
 		timeout := lobby.timeoutDuration()
+
+		// Cache polling fallback — see runLobby for rationale
+		pollCtx, pollCancel := context.WithCancel(ctx)
+		defer pollCancel()
+		go func() {
+			ticker := time.NewTicker(15 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-pollCtx.Done():
+					return
+				case <-ticker.C:
+					b.PollLobbyFromCache()
+				}
+			}
+		}()
+
 		select {
 		case <-b.GameStartedCh():
 			log.Printf("[Lobby %s] Game started after rejoin", cmd.LobbyID)
