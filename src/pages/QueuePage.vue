@@ -6,6 +6,14 @@ import { Clock, Users, Swords, X, Check, Loader2, Shield, ChevronRight, Timer, S
 import { useQueueStore, type QueuePlayer } from '@/composables/useQueueStore'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { getServerNow } from '@/composables/useSocket'
+import { formatRelativeTime } from '@/utils/format'
+
+function teamAvgMmr(players: any[] | undefined | null): number {
+  if (!players?.length) return 0
+  const withMmr = players.filter(p => Number(p?.mmr) > 0)
+  if (!withMmr.length) return 0
+  return Math.round(withMmr.reduce((s, p) => s + Number(p.mmr), 0) / withMmr.length)
+}
 
 const { t } = useI18n()
 const router = useRouter()
@@ -589,9 +597,20 @@ onUnmounted(() => {
                 <div class="flex items-center gap-2.5 flex-1 min-w-0">
                   <img v-if="qm.captain1_avatar" :src="qm.captain1_avatar" class="w-7 h-7 rounded-full" />
                   <span class="font-medium text-sm truncate">{{ qm.captain1_display_name || qm.captain1_name }}</span>
+                  <span v-if="teamAvgMmr(qm.team1_players)" class="text-[10px] font-mono text-muted-foreground whitespace-nowrap">
+                    {{ t('avgMmr') }} {{ teamAvgMmr(qm.team1_players) }}
+                  </span>
                 </div>
-                <div class="px-3 py-1 rounded bg-accent text-xs font-semibold text-muted-foreground">VS</div>
+                <div class="flex flex-col items-center gap-0.5">
+                  <div class="px-3 py-1 rounded bg-accent text-xs font-semibold text-muted-foreground">VS</div>
+                  <span v-if="qm.status === 'completed' && qm.completed_at" class="text-[10px] text-muted-foreground whitespace-nowrap">
+                    {{ formatRelativeTime(qm.completed_at) }}
+                  </span>
+                </div>
                 <div class="flex items-center gap-2.5 flex-1 min-w-0 justify-end">
+                  <span v-if="teamAvgMmr(qm.team2_players)" class="text-[10px] font-mono text-muted-foreground whitespace-nowrap">
+                    {{ t('avgMmr') }} {{ teamAvgMmr(qm.team2_players) }}
+                  </span>
                   <span class="font-medium text-sm truncate">{{ qm.captain2_display_name || qm.captain2_name }}</span>
                   <img v-if="qm.captain2_avatar" :src="qm.captain2_avatar" class="w-7 h-7 rounded-full" />
                 </div>
