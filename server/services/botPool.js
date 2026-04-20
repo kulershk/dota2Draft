@@ -184,10 +184,15 @@ class BotPool {
 
     // Don't let a GC-reconnect flicker reset a busy bot to available if it
     // still has an active lobby. This prevents createQueueLobby from picking
-    // the same bot for a second match (double-bot bug).
+    // the same bot for a second match (double-bot bug). Exclude rows with a
+    // dota_match_id — once the match started, the bot left the lobby on
+    // purpose and is legitimately free.
     if (data.status === 'available') {
       const activeLobby = await queryOne(
-        "SELECT 1 FROM match_lobbies WHERE bot_id = $1 AND status IN ('creating', 'waiting', 'launching')",
+        `SELECT 1 FROM match_lobbies
+         WHERE bot_id = $1
+           AND status IN ('creating', 'waiting', 'launching')
+           AND dota_match_id IS NULL`,
         [botId]
       )
       if (activeLobby) {
@@ -207,8 +212,15 @@ class BotPool {
     // When a bot comes back online, re-sync its active lobbies so Go can rejoin them
     if (data.status === 'available') {
       try {
+        // Belt-and-suspenders: exclude rows that already have a dota_match_id.
+        // If the match already started, any rejoin is wrong — the bot left
+        // the lobby on purpose and the lobby is effectively done, even if a
+        // status race left the row in a non-terminal state.
         const activeLobbies = await query(
-          "SELECT * FROM match_lobbies WHERE bot_id = $1 AND status IN ('creating', 'waiting', 'launching')",
+          `SELECT * FROM match_lobbies
+           WHERE bot_id = $1
+             AND status IN ('creating', 'waiting', 'launching')
+             AND dota_match_id IS NULL`,
           [botId]
         )
         if (activeLobbies.length > 0) {
@@ -497,6 +509,20 @@ class BotPool {
     const lobbyId = Number(data.lobbyId)
     const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyId])
     if (!lobby) return
+
+    // If the game already started (dota_match_id set) the lobby is effectively
+    // done and any error is late noise — most notably the spurious "Bot lost
+    // connection to lobby after reconnect" that fires when a rejoin_lobby is
+    // sent to a bot that correctly left a running lobby. Swallow it so we
+    // don't flip 'completed' to 'error' and kick off a retry that times out
+    // into a no-show ban on players who actually played.
+    if (lobby.dota_match_id) {
+      console.log(`[Lobby ${lobbyId}] Ignoring late error (match ${lobby.dota_match_id} already started): ${data.error}`)
+      if (lobby.bot_id) {
+        await execute("UPDATE lobby_bots SET status = 'available' WHERE id = $1", [lobby.bot_id])
+      }
+      return
+    }
 
     // If lobby was launching and got a validation error, revert to waiting (don't kill the lobby)
     if (lobby.status === 'launching') {
