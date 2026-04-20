@@ -283,8 +283,13 @@ class BotPool {
 
   async _onLobbyStatus(data) {
     const lobbyId = Number(data.lobbyId)
+    // Don't overwrite terminal states — the bot keeps sending lobby_status
+    // "waiting" on every cache update, and a late event can race against
+    // _onGameStarted (which sets 'completed') and flip the row back, which
+    // then re-arms the rejoin-on-available path below and bans players.
     await execute(
-      "UPDATE match_lobbies SET status = $1, players_joined = $2, updated_at = NOW() WHERE id = $3",
+      `UPDATE match_lobbies SET status = $1, players_joined = $2, updated_at = NOW()
+       WHERE id = $3 AND status NOT IN ('completed', 'error', 'cancelled')`,
       [data.status, JSON.stringify(data.playersJoined || []), lobbyId]
     )
     const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyId])
