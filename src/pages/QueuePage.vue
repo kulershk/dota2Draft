@@ -15,6 +15,13 @@ function teamAvgMmr(players: any[] | undefined | null): number {
   return Math.round(withMmr.reduce((s, p) => s + Number(p.mmr), 0) / withMmr.length)
 }
 
+function winnerSide(qm: any): 1 | 2 | null {
+  if (qm?.winner_captain_id == null) return null
+  if (qm.winner_captain_id === qm.captain1_player_id) return 1
+  if (qm.winner_captain_id === qm.captain2_player_id) return 2
+  return null
+}
+
 const { t } = useI18n()
 const router = useRouter()
 const store = useDraftStore()
@@ -595,31 +602,58 @@ onUnmounted(() => {
                 <div class="flex flex-col gap-2">
                   <router-link v-for="qm in pagedHistory" :key="qm.id"
                     :to="{ name: 'queue-match', params: { id: qm.id } }"
-                    class="card px-5 py-3.5 flex items-center gap-4 hover:bg-accent/30 transition-colors cursor-pointer">
-                    <div class="flex items-center gap-2.5 flex-1 min-w-0">
-                      <img v-if="qm.captain1_avatar" :src="qm.captain1_avatar" class="w-7 h-7 rounded-full" />
-                      <span class="font-medium text-sm truncate">{{ qm.captain1_display_name || qm.captain1_name }}</span>
-                      <span v-if="teamAvgMmr(qm.team1_players)" class="text-[10px] font-mono text-muted-foreground whitespace-nowrap">
-                        {{ t('avgMmr') }} {{ teamAvgMmr(qm.team1_players) }}
-                      </span>
+                    class="card px-5 py-3 flex items-center gap-4 hover:bg-accent/30 transition-colors cursor-pointer">
+                    <!-- Team 1 (left) -->
+                    <div class="flex items-center gap-3 flex-1 min-w-0">
+                      <div class="flex -space-x-1.5 shrink-0">
+                        <template v-for="(p, i) in (qm.team1_players?.length ? qm.team1_players : (qm.captain1_avatar ? [{ avatarUrl: qm.captain1_avatar }] : []))" :key="i">
+                          <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-6 h-6 rounded-full ring-2 ring-card object-cover" />
+                          <div v-else class="w-6 h-6 rounded-full bg-accent ring-2 ring-card" />
+                        </template>
+                      </div>
+                      <div class="flex flex-col min-w-0">
+                        <span class="text-sm truncate"
+                          :class="winnerSide(qm) === 1 ? 'font-semibold' : (winnerSide(qm) === 2 ? 'text-muted-foreground' : 'font-medium')">
+                          {{ qm.captain1_display_name || qm.captain1_name }}
+                        </span>
+                        <span v-if="teamAvgMmr(qm.team1_players)" class="text-[10px] font-mono text-muted-foreground">
+                          {{ t('avgMmr') }} {{ teamAvgMmr(qm.team1_players) }}
+                        </span>
+                      </div>
                     </div>
-                    <div class="flex flex-col items-center gap-0.5">
-                      <div class="px-3 py-1 rounded bg-accent text-xs font-semibold text-muted-foreground">VS</div>
-                      <span v-if="qm.status === 'completed' && qm.completed_at" class="text-[10px] text-muted-foreground whitespace-nowrap">
+
+                    <!-- Score / VS + relative time -->
+                    <div class="flex flex-col items-center shrink-0 min-w-[72px]">
+                      <div v-if="qm.score1 != null && qm.score2 != null" class="flex items-center gap-2 font-mono font-bold text-sm tabular-nums">
+                        <span :class="winnerSide(qm) === 1 ? 'text-green-500' : 'text-muted-foreground'">{{ qm.score1 }}</span>
+                        <span class="text-muted-foreground/50">–</span>
+                        <span :class="winnerSide(qm) === 2 ? 'text-green-500' : 'text-muted-foreground'">{{ qm.score2 }}</span>
+                      </div>
+                      <div v-else class="px-3 py-1 rounded bg-accent text-xs font-semibold text-muted-foreground">VS</div>
+                      <span v-if="qm.status === 'live'" class="text-[10px] text-amber-500 font-semibold mt-0.5">{{ t('matchLive') }}</span>
+                      <span v-else-if="qm.completed_at" class="text-[10px] text-muted-foreground whitespace-nowrap mt-0.5">
                         {{ formatRelativeTime(qm.completed_at) }}
                       </span>
                     </div>
-                    <div class="flex items-center gap-2.5 flex-1 min-w-0 justify-end">
-                      <span v-if="teamAvgMmr(qm.team2_players)" class="text-[10px] font-mono text-muted-foreground whitespace-nowrap">
-                        {{ t('avgMmr') }} {{ teamAvgMmr(qm.team2_players) }}
-                      </span>
-                      <span class="font-medium text-sm truncate">{{ qm.captain2_display_name || qm.captain2_name }}</span>
-                      <img v-if="qm.captain2_avatar" :src="qm.captain2_avatar" class="w-7 h-7 rounded-full" />
+
+                    <!-- Team 2 (right) -->
+                    <div class="flex items-center gap-3 flex-1 min-w-0 justify-end">
+                      <div class="flex flex-col items-end min-w-0">
+                        <span class="text-sm truncate"
+                          :class="winnerSide(qm) === 2 ? 'font-semibold' : (winnerSide(qm) === 1 ? 'text-muted-foreground' : 'font-medium')">
+                          {{ qm.captain2_display_name || qm.captain2_name }}
+                        </span>
+                        <span v-if="teamAvgMmr(qm.team2_players)" class="text-[10px] font-mono text-muted-foreground">
+                          {{ t('avgMmr') }} {{ teamAvgMmr(qm.team2_players) }}
+                        </span>
+                      </div>
+                      <div class="flex flex-row-reverse -space-x-1.5 space-x-reverse shrink-0">
+                        <template v-for="(p, i) in (qm.team2_players?.length ? qm.team2_players : (qm.captain2_avatar ? [{ avatarUrl: qm.captain2_avatar }] : []))" :key="i">
+                          <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-6 h-6 rounded-full ring-2 ring-card object-cover" />
+                          <div v-else class="w-6 h-6 rounded-full bg-accent ring-2 ring-card" />
+                        </template>
+                      </div>
                     </div>
-                    <span class="text-[10px] font-semibold px-2.5 py-1 rounded-full"
-                      :class="qm.status === 'completed' ? 'bg-green-500/10 text-green-500' : qm.status === 'live' ? 'bg-amber-500/10 text-amber-500' : 'bg-accent text-muted-foreground'">
-                      {{ qm.status === 'completed' ? t('matchCompleted') : qm.status === 'live' ? t('matchLive') : qm.status }}
-                    </span>
                   </router-link>
                 </div>
                 <div v-if="totalHistoryPages > 1" class="flex items-center justify-center gap-2 mt-3">

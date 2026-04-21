@@ -41,11 +41,13 @@ export default function createQueueRouter(io) {
       SELECT qm.*,
         p1.name AS captain1_name, COALESCE(p1.display_name, p1.name) AS captain1_display_name, p1.avatar_url AS captain1_avatar,
         p2.name AS captain2_name, COALESCE(p2.display_name, p2.name) AS captain2_display_name, p2.avatar_url AS captain2_avatar,
-        qp.name AS pool_name
+        qp.name AS pool_name,
+        m.score1, m.score2, m.winner_captain_id, m.best_of
       FROM queue_matches qm
       LEFT JOIN players p1 ON p1.id = qm.captain1_player_id
       LEFT JOIN players p2 ON p2.id = qm.captain2_player_id
       LEFT JOIN queue_pools qp ON qp.id = qm.pool_id
+      LEFT JOIN matches m ON m.id = qm.match_id
       WHERE qm.status IN ('live', 'completed')
     `
     const params = []
