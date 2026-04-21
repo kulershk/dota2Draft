@@ -1117,6 +1117,7 @@ export default {
   queueNeedMoreToStart: 'Dar {n} iki pradžios',
   queueEmptyPool: 'Eilėje dar nieko nėra',
   queuePlayerStatsTooltip: 'Paskutinės 10 rungtynių šiame pule',
+  queuePlayerCardOpenProfile: 'Atidaryti profilį naujame skirtuke',
   queueMatchDetails: 'Rungtynių informacija',
   queueGames: 'Žaidimai',
   queueGameNumber: 'Žaidimas {n}',

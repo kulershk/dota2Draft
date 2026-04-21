@@ -575,8 +575,14 @@ onUnmounted(() => {
                   {{ t('queueEmptyPool') }}
                 </div>
                 <div v-else class="grid grid-cols-4 gap-4">
-                  <div v-for="p in queue.queuePlayers.value" :key="p.playerId"
-                    class="flex flex-col items-center gap-1 min-w-0">
+                  <router-link
+                    v-for="p in queue.queuePlayers.value" :key="p.playerId"
+                    :to="{ name: 'player-profile', params: { id: p.playerId } }"
+                    target="_blank"
+                    rel="noopener"
+                    class="flex flex-col items-center gap-1 min-w-0 p-2 -m-2 rounded-lg hover:bg-accent/40 transition-colors"
+                    :title="t('queuePlayerCardOpenProfile')"
+                  >
                     <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-14 h-14 rounded-lg object-cover" />
                     <div v-else class="w-14 h-14 rounded-lg bg-accent flex items-center justify-center">
                       <Users class="w-6 h-6 text-muted-foreground/40" />
@@ -592,7 +598,7 @@ onUnmounted(() => {
                       </template>
                       <span v-else class="text-muted-foreground/50">—</span>
                     </span>
-                  </div>
+                  </router-link>
                 </div>
               </div>
 
