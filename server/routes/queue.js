@@ -60,6 +60,67 @@ export default function createQueueRouter(io) {
     res.json(matches)
   })
 
+  // ── Public: per-player W/L over the last N completed queue matches in a pool ──
+  // Used by the in-queue roster to show a mini form guide next to each player.
+  router.get('/api/queue/players/stats', async (req, res) => {
+    const poolId = Number(req.query.poolId)
+    if (!poolId) return res.status(400).json({ error: 'poolId required' })
+    const ids = String(req.query.playerIds || '')
+      .split(',').map(s => Number(s)).filter(n => Number.isFinite(n) && n > 0)
+    if (ids.length === 0) return res.json([])
+    const limit = Math.min(Math.max(Number(req.query.limit) || 10, 1), 50)
+
+    try {
+      const rows = await query(`
+        WITH player_list AS (
+          SELECT unnest($1::int[]) AS player_id
+        ),
+        ranked AS (
+          SELECT
+            pl.player_id,
+            qm.captain1_player_id,
+            qm.captain2_player_id,
+            m.winner_captain_id,
+            CASE
+              WHEN qm.captain1_player_id = pl.player_id
+                OR qm.team1_players @> jsonb_build_array(jsonb_build_object('playerId', pl.player_id))
+                THEN 1
+              WHEN qm.captain2_player_id = pl.player_id
+                OR qm.team2_players @> jsonb_build_array(jsonb_build_object('playerId', pl.player_id))
+                THEN 2
+            END AS player_team,
+            ROW_NUMBER() OVER (
+              PARTITION BY pl.player_id
+              ORDER BY COALESCE(qm.completed_at, qm.created_at) DESC
+            ) AS rn
+          FROM player_list pl
+          JOIN queue_matches qm
+            ON qm.all_player_ids @> to_jsonb(pl.player_id)
+           AND qm.pool_id = $2
+           AND qm.status = 'completed'
+          LEFT JOIN matches m ON m.id = qm.match_id
+          WHERE m.winner_captain_id IS NOT NULL
+        )
+        SELECT
+          player_id AS "playerId",
+          COUNT(*) FILTER (WHERE
+            (player_team = 1 AND winner_captain_id = captain1_player_id) OR
+            (player_team = 2 AND winner_captain_id = captain2_player_id)
+          )::int AS wins,
+          COUNT(*) FILTER (WHERE player_team IS NOT NULL AND (
+            (player_team = 1 AND winner_captain_id <> captain1_player_id) OR
+            (player_team = 2 AND winner_captain_id <> captain2_player_id)
+          ))::int AS losses
+        FROM ranked
+        WHERE rn <= $3 AND player_team IS NOT NULL
+        GROUP BY player_id
+      `, [ids, poolId, limit])
+      res.json(rows)
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
   // ── Public: single queue match details ──
   router.get('/api/queue/match/:id', async (req, res) => {
     const qm = await queryOne(`

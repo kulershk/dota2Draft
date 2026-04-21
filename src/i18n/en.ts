@@ -1124,6 +1124,7 @@ export default {
   queueYouAreReady: 'You are ready',
   queueNeedMoreToStart: '{n} more to start',
   queueEmptyPool: 'No one in queue yet',
+  queuePlayerStatsTooltip: 'Last 10 games in this pool',
   queueMatchDetails: 'Match Details',
   queueGames: 'Games',
   queueGameNumber: 'Game {n}',

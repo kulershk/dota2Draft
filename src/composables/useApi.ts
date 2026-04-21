@@ -413,6 +413,13 @@ export function useApi() {
       if (params?.offset) qs.set('offset', String(params.offset))
       return request(`/api/queue/history?${qs}`)
     },
+    getQueuePlayerStats: (params: { poolId: number; playerIds: number[]; limit?: number }) => {
+      const qs = new URLSearchParams()
+      qs.set('poolId', String(params.poolId))
+      qs.set('playerIds', params.playerIds.join(','))
+      if (params.limit) qs.set('limit', String(params.limit))
+      return request(`/api/queue/players/stats?${qs}`) as Promise<Array<{ playerId: number; wins: number; losses: number }>>
+    },
     getQueueMatch: (id: number) => request(`/api/queue/match/${id}`),
     getQueueMatchGameStats: (queueMatchId: number, gameNumber: number) =>
       request(`/api/queue/match/${queueMatchId}/games/${gameNumber}/stats`),

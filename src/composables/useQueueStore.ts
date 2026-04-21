@@ -79,6 +79,9 @@ export interface QueueChatMessage {
 const chatMessages = ref<QueueChatMessage[]>([])
 const chatRateLimitedUntil = ref(0)
 
+export interface QueuePlayerStats { wins: number; losses: number }
+const playerStats = ref<Record<number, QueuePlayerStats>>({})
+
 let socketInitialized = false
 
 function initSocket() {
@@ -282,6 +285,18 @@ export function useQueueStore() {
     }
   }
 
+  async function fetchPlayerStats(poolId: number, ids: number[]) {
+    if (!poolId || ids.length === 0) { playerStats.value = {}; return }
+    try {
+      const rows = await api.getQueuePlayerStats({ poolId, playerIds: ids, limit: 10 })
+      const next: Record<number, QueuePlayerStats> = {}
+      for (const r of rows) next[r.playerId] = { wins: r.wins, losses: r.losses }
+      playerStats.value = next
+    } catch {
+      playerStats.value = {}
+    }
+  }
+
   function resetMatchState() {
     activeMatch.value = null
     pickState.value = null
@@ -307,6 +322,7 @@ export function useQueueStore() {
     myBan,
     chatMessages,
     chatRateLimitedUntil,
+    playerStats,
 
     fetchPools,
     joinQueue,
@@ -315,6 +331,7 @@ export function useQueueStore() {
     requestState,
     requestMyState,
     fetchHistory,
+    fetchPlayerStats,
     resetMatchState,
     sendChat,
   }

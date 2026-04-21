@@ -1116,6 +1116,7 @@ export default {
   queueYouAreReady: 'Tu esi gatavs',
   queueNeedMoreToStart: 'Vēl {n} līdz sākumam',
   queueEmptyPool: 'Rindā vēl neviena nav',
+  queuePlayerStatsTooltip: 'Pēdējās 10 spēles šajā pūlā',
   queueMatchDetails: 'Spēles detaļas',
   queueGames: 'Spēles',
   queueGameNumber: 'Spēle {n}',

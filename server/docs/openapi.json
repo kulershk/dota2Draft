@@ -1603,6 +1603,40 @@
         }
       }
     },
+    "/api/queue/players/stats": {
+      "get": {
+        "tags": ["Queue"],
+        "summary": "Per-player W/L over the last N completed queue matches in a pool",
+        "description": "Returns win/loss counts computed from each player's most recent completed queue matches in the given pool. Used by the in-queue roster to show a mini form guide.",
+        "parameters": [
+          { "name": "poolId", "in": "query", "required": true, "schema": { "type": "integer" }, "description": "Queue pool id" },
+          { "name": "playerIds", "in": "query", "required": true, "schema": { "type": "string" }, "description": "Comma-separated player ids" },
+          { "name": "limit", "in": "query", "required": false, "schema": { "type": "integer", "default": 10, "minimum": 1, "maximum": 50 }, "description": "How many recent completed matches per player to aggregate over" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of per-player W/L; players with no completed matches in the pool are omitted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "playerId": { "type": "integer" },
+                      "wins": { "type": "integer" },
+                      "losses": { "type": "integer" }
+                    },
+                    "required": ["playerId", "wins", "losses"]
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "poolId missing" }
+        }
+      }
+    },
     "/api/admin/queue/pools": {
       "get": {
         "tags": ["Queue"],

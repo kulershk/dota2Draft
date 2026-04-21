@@ -160,6 +160,22 @@ watch(() => queue.chatMessages.value.length, async () => {
   if (chatScroll.value) chatScroll.value.scrollTop = chatScroll.value.scrollHeight
 })
 
+// Keep the W/L mini form guide in sync with the live queue roster. Only
+// fetch when the viewer is themselves queued (the card is hidden otherwise).
+watch(
+  () => [
+    queue.inQueue.value,
+    selectedPoolId.value,
+    queue.queuePlayers.value.map(p => p.playerId).sort((a, b) => a - b).join(','),
+  ] as const,
+  ([inQ, poolId, ids]) => {
+    if (!inQ || !poolId || !ids) return
+    const idList = ids.split(',').map(Number).filter(Boolean)
+    if (idList.length > 0) queue.fetchPlayerStats(poolId, idList)
+  },
+  { immediate: true }
+)
+
 onMounted(async () => {
   await queue.fetchPools()
   if (queue.pools.value.length > 0) {
@@ -542,8 +558,8 @@ onUnmounted(() => {
                 </div>
               </div>
 
-              <!-- Players in Queue grid -->
-              <div v-if="selectedPool" class="card p-5">
+              <!-- Players in Queue grid (only visible once you've joined) -->
+              <div v-if="selectedPool && queue.inQueue.value" class="card p-5">
                 <div class="flex items-center justify-between mb-4">
                   <h3 class="text-sm font-semibold">{{ t('queuePlayersInQueue') }}</h3>
                   <span class="text-[11px] text-muted-foreground tabular-nums">{{ queue.queuePlayers.value.length }}/{{ totalPlayers }}</span>
@@ -553,13 +569,22 @@ onUnmounted(() => {
                 </div>
                 <div v-else class="grid grid-cols-4 gap-4">
                   <div v-for="p in queue.queuePlayers.value" :key="p.playerId"
-                    class="flex flex-col items-center gap-1.5 min-w-0">
+                    class="flex flex-col items-center gap-1 min-w-0">
                     <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-14 h-14 rounded-lg object-cover" />
                     <div v-else class="w-14 h-14 rounded-lg bg-accent flex items-center justify-center">
                       <Users class="w-6 h-6 text-muted-foreground/40" />
                     </div>
                     <span class="text-xs font-medium truncate max-w-full">{{ p.name }}</span>
                     <span class="text-[10px] text-muted-foreground tabular-nums">{{ p.mmr }}</span>
+                    <span class="text-[10px] tabular-nums flex items-center gap-1 mt-0.5"
+                      :title="t('queuePlayerStatsTooltip')">
+                      <template v-if="queue.playerStats.value[p.playerId]">
+                        <span class="text-green-500 font-semibold">{{ queue.playerStats.value[p.playerId].wins }}W</span>
+                        <span class="text-muted-foreground/60">·</span>
+                        <span class="text-destructive font-semibold">{{ queue.playerStats.value[p.playerId].losses }}L</span>
+                      </template>
+                      <span v-else class="text-muted-foreground/50">—</span>
+                    </span>
                   </div>
                 </div>
               </div>
