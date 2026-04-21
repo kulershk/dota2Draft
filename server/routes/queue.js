@@ -420,13 +420,17 @@ export default function createQueueRouter(io) {
       // their client can immediately show the blocking banner + countdown.
       try {
         const banRow = await queryOne(
-          'SELECT banned_until, reason FROM queue_bans WHERE player_id = $1',
+          `SELECT qb.banned_until, qb.reason, ab.name AS banned_by_name
+             FROM queue_bans qb
+             LEFT JOIN players ab ON ab.id = qb.banned_by
+            WHERE qb.player_id = $1`,
           [pid]
         )
         const banPayload = banRow
           ? {
               bannedUntil: banRow.banned_until ? new Date(banRow.banned_until).toISOString() : null,
               reason: banRow.reason || null,
+              bannedBy: banRow.banned_by_name || null,
             }
           : null
         for (const [sid, playerId] of socketPlayers) {

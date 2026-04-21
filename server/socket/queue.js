@@ -61,7 +61,10 @@ export function registerQueueHandlers(socket, io) {
 
       // Check queue ban
       const ban = await queryOne(
-        'SELECT banned_until, reason FROM queue_bans WHERE player_id = $1 AND (banned_until IS NULL OR banned_until > NOW())',
+        `SELECT qb.banned_until, qb.reason, ab.name AS banned_by_name
+           FROM queue_bans qb
+           LEFT JOIN players ab ON ab.id = qb.banned_by
+          WHERE qb.player_id = $1 AND (qb.banned_until IS NULL OR qb.banned_until > NOW())`,
         [playerId]
       )
       if (ban) {
@@ -74,6 +77,7 @@ export function registerQueueHandlers(socket, io) {
           ban: {
             bannedUntil: ban.banned_until ? new Date(ban.banned_until).toISOString() : null,
             reason: ban.reason || null,
+            bannedBy: ban.banned_by_name || null,
           },
         })
         return socket.emit('queue:error', { message: 'You are banned from queue' })
@@ -198,13 +202,17 @@ export function registerQueueHandlers(socket, io) {
     let ban = null
     try {
       const row = await queryOne(
-        'SELECT banned_until, reason FROM queue_bans WHERE player_id = $1 AND (banned_until IS NULL OR banned_until > NOW())',
+        `SELECT qb.banned_until, qb.reason, ab.name AS banned_by_name
+           FROM queue_bans qb
+           LEFT JOIN players ab ON ab.id = qb.banned_by
+          WHERE qb.player_id = $1 AND (qb.banned_until IS NULL OR qb.banned_until > NOW())`,
         [playerId]
       )
       if (row) {
         ban = {
           bannedUntil: row.banned_until ? new Date(row.banned_until).toISOString() : null,
           reason: row.reason || null,
+          bannedBy: row.banned_by_name || null,
         }
       }
     } catch {}

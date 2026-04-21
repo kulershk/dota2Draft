@@ -212,6 +212,9 @@ onUnmounted(() => {
               <template v-if="queue.myBan.value?.reason">{{ queue.myBan.value.reason }}</template>
               <template v-else>{{ t('queueBannedNoReason') }}</template>
             </div>
+            <div class="text-xs text-muted-foreground mt-0.5">
+              {{ t('queueBannedBy', { name: queue.myBan.value?.bannedBy || t('queueBannedBySystem') }) }}
+            </div>
           </div>
           <div class="text-right">
             <div class="text-[10px] font-semibold uppercase text-muted-foreground">{{ t('queueBannedUntil') }}</div>

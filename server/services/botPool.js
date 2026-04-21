@@ -625,7 +625,7 @@ class BotPool {
           // Push the new ban state to the player's sockets so the banner
           // appears with a live countdown without a reload.
           if (this.io) {
-            const banPayload = { bannedUntil: bannedUntil.toISOString(), reason }
+            const banPayload = { bannedUntil: bannedUntil.toISOString(), reason, bannedBy: null }
             for (const [sid, pid] of socketPlayers) {
               if (pid === r.id) {
                 const s = this.io.sockets.sockets.get(sid)

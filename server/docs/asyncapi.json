@@ -857,7 +857,17 @@
               "inMatch": { "type": "boolean" },
               "queueMatchId": { "type": "integer", "nullable": true },
               "count": { "type": "integer" },
-              "players": { "type": "array", "items": { "type": "object" } }
+              "players": { "type": "array", "items": { "type": "object" } },
+              "ban": {
+                "type": "object",
+                "nullable": true,
+                "description": "Active queue ban (if any). Null when the player is not banned.",
+                "properties": {
+                  "bannedUntil": { "type": "string", "format": "date-time", "nullable": true, "description": "ISO timestamp when the ban expires; null = permanent" },
+                  "reason": { "type": "string", "nullable": true },
+                  "bannedBy": { "type": "string", "nullable": true, "description": "Name of the admin who issued the ban; null when issued by the system (e.g. auto-ban for failing to join a lobby)" }
+                }
+              }
             }
           }
         }

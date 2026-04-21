@@ -1118,6 +1118,8 @@ export default {
   queueBannedTitle: 'You are banned from matchmaking',
   queueBannedNoReason: 'No reason provided',
   queueBannedUntil: 'Time remaining',
+  queueBannedBy: 'Banned by {name}',
+  queueBannedBySystem: 'System',
   queueMatchDetails: 'Match Details',
   queueGames: 'Games',
   queueGameNumber: 'Game {n}',

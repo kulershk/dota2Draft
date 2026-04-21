@@ -63,6 +63,7 @@ const queueHistory = ref<any[]>([])
 export interface QueueBanInfo {
   bannedUntil: string | null
   reason: string | null
+  bannedBy: string | null
 }
 const myBan = ref<QueueBanInfo | null>(null)
 

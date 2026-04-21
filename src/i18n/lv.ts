@@ -1110,6 +1110,8 @@ export default {
   queueBannedTitle: 'Tu esi banots no matchmaking',
   queueBannedNoReason: 'Iemesls nav norādīts',
   queueBannedUntil: 'Atlikušais laiks',
+  queueBannedBy: 'Banojis: {name}',
+  queueBannedBySystem: 'Sistēma',
   queueMatchDetails: 'Spēles detaļas',
   queueGames: 'Spēles',
   queueGameNumber: 'Spēle {n}',
