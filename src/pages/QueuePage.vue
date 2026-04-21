@@ -186,19 +186,35 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div>
-    <!-- Hero header -->
-    <div class="border-b border-border/50">
-      <div class="max-w-5xl mx-auto px-4 md:px-8 pt-10 pb-8 flex flex-col items-center text-center gap-4">
-        <div class="w-12 h-12 rounded-xl bg-primary/{{ totalPlayers }} flex items-center justify-center mb-1">
-          <Swords class="w-6 h-6 text-primary" />
-        </div>
-        <h1 class="text-2xl md:text-3xl font-bold">{{ t('queue') }}</h1>
-        <p class="text-muted-foreground text-sm max-w-md">{{ t('queueDesc') }}</p>
-      </div>
+  <div class="flex flex-col flex-1">
+    <!-- Slim page header -->
+    <div class="max-w-[1200px] mx-auto w-full px-4 md:px-8 pt-6 pb-4">
+      <h1 class="text-2xl font-bold">{{ t('queue') }}</h1>
+      <p class="text-muted-foreground text-sm mt-0.5">{{ t('queueDesc') }}</p>
     </div>
 
-    <div class="max-w-5xl mx-auto px-4 md:px-8 py-8">
+    <!-- Pool submenu (tab bar, full-width, only when there are pools and not in pick phase) -->
+    <template v-if="queue.pools.value.length > 0 && !queue.activeMatch.value">
+      <div class="bg-muted">
+        <div class="max-w-[1200px] mx-auto w-full px-4 md:px-8 flex items-center overflow-x-auto">
+          <button
+            v-for="pool in queue.pools.value" :key="pool.id"
+            type="button"
+            class="flex items-center gap-1.5 px-6 py-3.5 text-sm transition-colors whitespace-nowrap border-b-2"
+            :class="selectedPoolId === pool.id
+              ? 'text-primary font-semibold border-primary'
+              : 'text-text-tertiary border-transparent hover:text-foreground'"
+            @click="selectPool(pool.id)"
+          >
+            <Shield class="w-3.5 h-3.5" />
+            {{ pool.name }}
+          </button>
+        </div>
+      </div>
+      <div class="h-px bg-border" />
+    </template>
+
+    <div class="max-w-[1200px] mx-auto w-full px-4 md:px-8 py-6">
       <!-- Queue ban banner (shown before anything else, no pools needed) -->
       <div v-if="isBanned" class="card overflow-hidden mb-6 border border-destructive/40">
         <div class="h-1 bg-destructive" />
@@ -456,187 +472,192 @@ onUnmounted(() => {
 
         <!-- ═══════════════════ QUEUE / IDLE ═══════════════════ -->
         <template v-else>
-          <!-- Pool cards -->
-          <div :class="queue.pools.value.length > 1 ? 'grid grid-cols-1 md:grid-cols-2 gap-4 mb-8' : 'mb-8'">
-            <div
-              v-for="pool in queue.pools.value" :key="pool.id"
-              class="card overflow-hidden cursor-pointer transition-all hover:ring-1 hover:ring-primary/30"
-              :class="selectedPoolId === pool.id ? 'ring-2 ring-primary' : ''"
-              @click="selectPool(pool.id)"
-            >
-              <div class="px-5 py-4 flex items-center gap-4">
-                <div class="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
-                  :class="selectedPoolId === pool.id ? 'bg-primary/15' : 'bg-accent'">
-                  <Shield class="w-5 h-5" :class="selectedPoolId === pool.id ? 'text-primary' : 'text-muted-foreground'" />
+          <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-6">
+            <!-- Left column -->
+            <div class="flex flex-col gap-6 min-w-0">
+              <!-- Pool card: header + big count + progress + ready row + CTA -->
+              <div v-if="selectedPool" class="card overflow-hidden">
+                <div class="px-6 py-4 border-b border-border/30 flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
+                    <Shield class="w-5 h-5 text-primary" />
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="font-bold truncate">{{ selectedPool.name }}</div>
+                    <div class="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
+                      <span>{{ teamSize }}v{{ teamSize }}</span>
+                      <span v-if="(selectedPool as any).min_mmr || (selectedPool as any).max_mmr">
+                        · MMR {{ (selectedPool as any).min_mmr || 0 }}{{ (selectedPool as any).max_mmr ? `–${(selectedPool as any).max_mmr}` : '+' }}
+                      </span>
+                      <span v-else>· {{ t('queueAllSkillLevels') }}</span>
+                    </div>
+                  </div>
+                  <span class="text-[10px] font-semibold bg-primary/10 text-primary px-2.5 py-1 rounded-full uppercase tracking-wider">
+                    {{ t('captains') }}
+                  </span>
                 </div>
-                <div class="flex-1 min-w-0">
-                  <div class="font-semibold truncate">{{ pool.name }}</div>
-                  <div class="text-xs text-muted-foreground flex items-center gap-3 mt-0.5">
-                    <span>{{ pool.team_size || 5 }}v{{ pool.team_size || 5 }}</span>
-                    <span v-if="pool.min_mmr || pool.max_mmr">
-                      MMR {{ pool.min_mmr || 0 }}{{ pool.max_mmr ? `–${pool.max_mmr}` : '+' }}
+
+                <div class="px-6 py-6">
+                  <div class="flex items-baseline gap-3 mb-3">
+                    <span class="text-6xl font-bold tabular-nums leading-none">{{ queue.queueCount.value }}</span>
+                    <span class="text-sm text-muted-foreground">/ {{ totalPlayers }} {{ t('queuePlayers') }}</span>
+                  </div>
+                  <div class="w-full h-1.5 bg-accent rounded-full overflow-hidden">
+                    <div class="h-full bg-primary transition-all duration-300"
+                         :style="{ width: Math.min(100, (queue.queueCount.value / totalPlayers) * 100) + '%' }" />
+                  </div>
+                  <div v-if="queue.queueCount.value < totalPlayers" class="text-[11px] text-muted-foreground mt-2">
+                    {{ t('queueNeedMoreToStart', { n: totalPlayers - queue.queueCount.value }) }}
+                  </div>
+                </div>
+
+                <div class="px-6 py-4 border-t border-border/30 bg-accent/20 flex items-center justify-between gap-4">
+                  <div class="flex items-center gap-2 min-w-0">
+                    <Check class="w-4 h-4 text-green-500 shrink-0" />
+                    <span class="text-sm font-medium">{{ t('queueYouAreReady') }}</span>
+                    <span v-if="store.currentUser.value?.mmr" class="text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+                      · {{ store.currentUser.value.mmr }} MMR
                     </span>
-                    <span v-else>{{ t('queueAllSkillLevels') }}</span>
+                  </div>
+                  <div class="shrink-0">
+                    <button v-if="!queue.inQueue.value"
+                      class="btn-primary px-8 py-2.5 text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+                      :disabled="isBanned"
+                      @click="handleJoin">
+                      {{ t('queueJoin') }}
+                    </button>
+                    <button v-else
+                      class="px-6 py-2.5 rounded-lg text-sm font-semibold border border-primary/30 text-primary bg-primary/5 hover:bg-primary/10 transition-colors flex items-center gap-2"
+                      @click="handleLeave">
+                      <Loader2 class="w-4 h-4 animate-spin" />
+                      <span>{{ t('queueSearching') }}...</span>
+                      <span class="text-primary/60 ml-1">{{ t('queueLeave') }}</span>
+                    </button>
                   </div>
                 </div>
-                <div class="flex flex-col items-end gap-1">
-                  <div class="flex items-center gap-1.5 text-sm">
-                    <Users class="w-3.5 h-3.5 text-muted-foreground" />
-                    <span class="font-mono font-bold" :class="selectedPoolId === pool.id ? 'text-primary' : ''">
-                      {{ selectedPoolId === pool.id ? queue.queueCount.value : '—' }}
-                    </span>
-                    <span class="text-muted-foreground text-xs">/{{ ((pool as any).team_size || 5) * 2 }}</span>
+
+                <div v-if="queue.queueError.value" class="px-6 py-3 border-t border-border/30">
+                  <div class="px-3 py-2 rounded-lg bg-destructive/10 text-destructive text-sm">
+                    {{ queue.queueError.value }}
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
 
-          <!-- Active queue section -->
-          <div v-if="selectedPool" class="card overflow-hidden mb-8">
-            <!-- Queue bar -->
-            <div class="px-6 py-5 flex items-center justify-between gap-4">
-              <div class="flex items-center gap-4">
-                <div class="flex items-center gap-2">
-                  <div class="flex gap-0.5">
-                    <div v-for="i in totalPlayers" :key="i"
-                      class="w-2 h-6 rounded-sm transition-colors"
-                      :class="i <= queue.queueCount.value ? 'bg-primary' : 'bg-accent'"
-                    />
-                  </div>
-                  <span class="font-mono text-lg font-bold tabular-nums ml-2">{{ queue.queueCount.value }}<span class="text-muted-foreground font-normal">/{{ totalPlayers }}</span></span>
+              <!-- Players in Queue grid -->
+              <div v-if="selectedPool" class="card p-5">
+                <div class="flex items-center justify-between mb-4">
+                  <h3 class="text-sm font-semibold">{{ t('queuePlayersInQueue') }}</h3>
+                  <span class="text-[11px] text-muted-foreground tabular-nums">{{ queue.queuePlayers.value.length }}/{{ totalPlayers }}</span>
                 </div>
-              </div>
-              <div>
-                <button v-if="!queue.inQueue.value"
-                  class="btn-primary px-8 py-2.5 text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
-                  :disabled="isBanned"
-                  @click="handleJoin">
-                  {{ t('queueJoin') }}
-                </button>
-                <button v-else
-                  class="relative px-8 py-2.5 rounded-lg text-sm font-semibold border border-primary/30 text-primary bg-primary/5 hover:bg-primary/{{ totalPlayers }} transition-colors flex items-center gap-2"
-                  @click="handleLeave">
-                  <Loader2 class="w-4 h-4 animate-spin" />
-                  {{ t('queueSearching') }}...
-                  <span class="text-primary/60 ml-1">{{ t('queueLeave') }}</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- Error -->
-            <div v-if="queue.queueError.value" class="px-6 pb-4">
-              <div class="px-3 py-2 rounded-lg bg-destructive/{{ totalPlayers }} text-destructive text-sm">
-                {{ queue.queueError.value }}
-              </div>
-            </div>
-
-            <!-- Queued players list -->
-            <div v-if="queue.inQueue.value && queue.queuePlayers.value.length > 0" class="px-6 pb-5 pt-0">
-              <div class="border-t border-border/30 pt-4">
-                <div class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">{{ t('queueInQueue') }}</div>
-                <div class="flex flex-wrap gap-2">
+                <div v-if="queue.queuePlayers.value.length === 0" class="text-xs text-muted-foreground text-center py-8">
+                  {{ t('queueEmptyPool') }}
+                </div>
+                <div v-else class="grid grid-cols-4 gap-4">
                   <div v-for="p in queue.queuePlayers.value" :key="p.playerId"
-                    class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-accent/60 text-sm">
-                    <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-5 h-5 rounded-full" />
-                    <span class="font-medium">{{ p.name }}</span>
+                    class="flex flex-col items-center gap-1.5 min-w-0">
+                    <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-14 h-14 rounded-lg object-cover" />
+                    <div v-else class="w-14 h-14 rounded-lg bg-accent flex items-center justify-center">
+                      <Users class="w-6 h-6 text-muted-foreground/40" />
+                    </div>
+                    <span class="text-xs font-medium truncate max-w-full">{{ p.name }}</span>
                     <span class="text-[10px] text-muted-foreground tabular-nums">{{ p.mmr }}</span>
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
 
-          <!-- Pool Chat -->
-          <div v-if="selectedPool" class="card overflow-hidden mb-8">
-            <div class="px-5 py-3 border-b border-border/30 flex items-center gap-2">
-              <MessageSquare class="w-4 h-4 text-muted-foreground" />
-              <span class="text-sm font-semibold">{{ t('queueChat') }}</span>
-              <span class="text-[10px] text-muted-foreground ml-auto">{{ t('queueChatHint') }}</span>
-            </div>
-            <div ref="chatScroll" class="px-5 py-3 max-h-64 min-h-[8rem] overflow-y-auto flex flex-col gap-2">
-              <div v-if="queue.chatMessages.value.length === 0" class="text-xs text-muted-foreground text-center py-6">
-                {{ t('queueChatEmpty') }}
+              <!-- Recent Matches -->
+              <div v-if="queue.queueHistory.value.length > 0">
+                <h2 class="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">{{ t('queueRecentMatches') }}</h2>
+                <div class="flex flex-col gap-2">
+                  <router-link v-for="qm in pagedHistory" :key="qm.id"
+                    :to="{ name: 'queue-match', params: { id: qm.id } }"
+                    class="card px-5 py-3.5 flex items-center gap-4 hover:bg-accent/30 transition-colors cursor-pointer">
+                    <div class="flex items-center gap-2.5 flex-1 min-w-0">
+                      <img v-if="qm.captain1_avatar" :src="qm.captain1_avatar" class="w-7 h-7 rounded-full" />
+                      <span class="font-medium text-sm truncate">{{ qm.captain1_display_name || qm.captain1_name }}</span>
+                      <span v-if="teamAvgMmr(qm.team1_players)" class="text-[10px] font-mono text-muted-foreground whitespace-nowrap">
+                        {{ t('avgMmr') }} {{ teamAvgMmr(qm.team1_players) }}
+                      </span>
+                    </div>
+                    <div class="flex flex-col items-center gap-0.5">
+                      <div class="px-3 py-1 rounded bg-accent text-xs font-semibold text-muted-foreground">VS</div>
+                      <span v-if="qm.status === 'completed' && qm.completed_at" class="text-[10px] text-muted-foreground whitespace-nowrap">
+                        {{ formatRelativeTime(qm.completed_at) }}
+                      </span>
+                    </div>
+                    <div class="flex items-center gap-2.5 flex-1 min-w-0 justify-end">
+                      <span v-if="teamAvgMmr(qm.team2_players)" class="text-[10px] font-mono text-muted-foreground whitespace-nowrap">
+                        {{ t('avgMmr') }} {{ teamAvgMmr(qm.team2_players) }}
+                      </span>
+                      <span class="font-medium text-sm truncate">{{ qm.captain2_display_name || qm.captain2_name }}</span>
+                      <img v-if="qm.captain2_avatar" :src="qm.captain2_avatar" class="w-7 h-7 rounded-full" />
+                    </div>
+                    <span class="text-[10px] font-semibold px-2.5 py-1 rounded-full"
+                      :class="qm.status === 'completed' ? 'bg-green-500/10 text-green-500' : qm.status === 'live' ? 'bg-amber-500/10 text-amber-500' : 'bg-accent text-muted-foreground'">
+                      {{ qm.status === 'completed' ? t('matchCompleted') : qm.status === 'live' ? t('matchLive') : qm.status }}
+                    </span>
+                  </router-link>
+                </div>
+                <div v-if="totalHistoryPages > 1" class="flex items-center justify-center gap-2 mt-3">
+                  <button
+                    type="button"
+                    class="px-2.5 py-1.5 rounded-md bg-accent/40 border border-border/40 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-accent/60 transition-colors"
+                    :disabled="historyPage <= 1"
+                    @click="historyPage--"
+                  >‹</button>
+                  <span class="text-xs text-muted-foreground tabular-nums">{{ historyPage }} / {{ totalHistoryPages }}</span>
+                  <button
+                    type="button"
+                    class="px-2.5 py-1.5 rounded-md bg-accent/40 border border-border/40 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-accent/60 transition-colors"
+                    :disabled="historyPage >= totalHistoryPages"
+                    @click="historyPage++"
+                  >›</button>
+                </div>
               </div>
-              <div v-for="m in queue.chatMessages.value" :key="m.id" class="flex items-start gap-2.5">
-                <img v-if="m.avatarUrl" :src="m.avatarUrl" class="w-6 h-6 rounded-full mt-0.5 shrink-0" />
-                <div v-else class="w-6 h-6 rounded-full bg-accent shrink-0" />
-                <div class="flex-1 min-w-0">
-                  <div class="flex items-baseline gap-2">
-                    <span class="text-xs font-semibold truncate">{{ m.name }}</span>
-                    <span class="text-[10px] text-muted-foreground tabular-nums">{{ new Date(m.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}</span>
+            </div>
+
+            <!-- Right column: Pool Chat -->
+            <div class="flex flex-col gap-6 min-w-0">
+              <div v-if="selectedPool" class="card overflow-hidden flex flex-col" style="max-height: calc(100vh - 220px); min-height: 400px;">
+                <div class="px-5 py-3 border-b border-border/30 flex items-center gap-2 shrink-0">
+                  <MessageSquare class="w-4 h-4 text-muted-foreground" />
+                  <span class="text-sm font-semibold">{{ t('queueChat') }}</span>
+                  <span class="text-[10px] text-muted-foreground ml-auto">{{ t('queueChatHint') }}</span>
+                </div>
+                <div ref="chatScroll" class="px-5 py-3 flex-1 overflow-y-auto flex flex-col gap-2">
+                  <div v-if="queue.chatMessages.value.length === 0" class="text-xs text-muted-foreground text-center py-6">
+                    {{ t('queueChatEmpty') }}
                   </div>
-                  <div class="text-sm break-words whitespace-pre-wrap">{{ m.text }}</div>
+                  <div v-for="m in queue.chatMessages.value" :key="m.id" class="flex items-start gap-2.5">
+                    <img v-if="m.avatarUrl" :src="m.avatarUrl" class="w-6 h-6 rounded-full mt-0.5 shrink-0" />
+                    <div v-else class="w-6 h-6 rounded-full bg-accent shrink-0" />
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-baseline gap-2">
+                        <span class="text-xs font-semibold truncate">{{ m.name }}</span>
+                        <span class="text-[10px] text-muted-foreground tabular-nums">{{ new Date(m.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}</span>
+                      </div>
+                      <div class="text-sm break-words whitespace-pre-wrap">{{ m.text }}</div>
+                    </div>
+                  </div>
                 </div>
+                <form class="px-5 py-3 border-t border-border/30 flex items-center gap-2 shrink-0" @submit.prevent="sendChat">
+                  <input
+                    v-model="chatInput"
+                    type="text"
+                    maxlength="300"
+                    :placeholder="t('queueChatPlaceholder')"
+                    class="flex-1 min-w-0 bg-accent/40 border border-border/40 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40"
+                  />
+                  <button
+                    type="submit"
+                    :disabled="!canSendChat"
+                    class="btn-primary px-3 py-2 text-sm flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                  >
+                    <Send class="w-3.5 h-3.5" />
+                    <span v-if="chatCooldownLeft > 0" class="tabular-nums">{{ Math.ceil(chatCooldownLeft / 1000) }}s</span>
+                    <span v-else>{{ t('queueChatSend') }}</span>
+                  </button>
+                </form>
               </div>
-            </div>
-            <form class="px-5 py-3 border-t border-border/30 flex items-center gap-2" @submit.prevent="sendChat">
-              <input
-                v-model="chatInput"
-                type="text"
-                maxlength="300"
-                :placeholder="t('queueChatPlaceholder')"
-                class="flex-1 bg-accent/40 border border-border/40 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40"
-              />
-              <button
-                type="submit"
-                :disabled="!canSendChat"
-                class="btn-primary px-3 py-2 text-sm flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <Send class="w-3.5 h-3.5" />
-                <span v-if="chatCooldownLeft > 0" class="tabular-nums">{{ Math.ceil(chatCooldownLeft / 1000) }}s</span>
-                <span v-else>{{ t('queueChatSend') }}</span>
-              </button>
-            </form>
-          </div>
-
-          <!-- Recent Matches -->
-          <div v-if="queue.queueHistory.value.length > 0">
-            <h2 class="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">{{ t('queueRecentMatches') }}</h2>
-            <div class="flex flex-col gap-2">
-              <router-link v-for="qm in pagedHistory" :key="qm.id"
-                :to="{ name: 'queue-match', params: { id: qm.id } }"
-                class="card px-5 py-3.5 flex items-center gap-4 hover:bg-accent/30 transition-colors cursor-pointer">
-                <div class="flex items-center gap-2.5 flex-1 min-w-0">
-                  <img v-if="qm.captain1_avatar" :src="qm.captain1_avatar" class="w-7 h-7 rounded-full" />
-                  <span class="font-medium text-sm truncate">{{ qm.captain1_display_name || qm.captain1_name }}</span>
-                  <span v-if="teamAvgMmr(qm.team1_players)" class="text-[10px] font-mono text-muted-foreground whitespace-nowrap">
-                    {{ t('avgMmr') }} {{ teamAvgMmr(qm.team1_players) }}
-                  </span>
-                </div>
-                <div class="flex flex-col items-center gap-0.5">
-                  <div class="px-3 py-1 rounded bg-accent text-xs font-semibold text-muted-foreground">VS</div>
-                  <span v-if="qm.status === 'completed' && qm.completed_at" class="text-[10px] text-muted-foreground whitespace-nowrap">
-                    {{ formatRelativeTime(qm.completed_at) }}
-                  </span>
-                </div>
-                <div class="flex items-center gap-2.5 flex-1 min-w-0 justify-end">
-                  <span v-if="teamAvgMmr(qm.team2_players)" class="text-[10px] font-mono text-muted-foreground whitespace-nowrap">
-                    {{ t('avgMmr') }} {{ teamAvgMmr(qm.team2_players) }}
-                  </span>
-                  <span class="font-medium text-sm truncate">{{ qm.captain2_display_name || qm.captain2_name }}</span>
-                  <img v-if="qm.captain2_avatar" :src="qm.captain2_avatar" class="w-7 h-7 rounded-full" />
-                </div>
-                <span class="text-[10px] font-semibold px-2.5 py-1 rounded-full"
-                  :class="qm.status === 'completed' ? 'bg-green-500/{{ totalPlayers }} text-green-500' : qm.status === 'live' ? 'bg-amber-500/{{ totalPlayers }} text-amber-500' : 'bg-accent text-muted-foreground'">
-                  {{ qm.status === 'completed' ? t('matchCompleted') : qm.status === 'live' ? t('matchLive') : qm.status }}
-                </span>
-              </router-link>
-            </div>
-            <div v-if="totalHistoryPages > 1" class="flex items-center justify-center gap-2 mt-3">
-              <button
-                type="button"
-                class="px-2.5 py-1.5 rounded-md bg-accent/40 border border-border/40 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-accent/60 transition-colors"
-                :disabled="historyPage <= 1"
-                @click="historyPage--"
-              >‹</button>
-              <span class="text-xs text-muted-foreground tabular-nums">{{ historyPage }} / {{ totalHistoryPages }}</span>
-              <button
-                type="button"
-                class="px-2.5 py-1.5 rounded-md bg-accent/40 border border-border/40 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-accent/60 transition-colors"
-                :disabled="historyPage >= totalHistoryPages"
-                @click="historyPage++"
-              >›</button>
             </div>
           </div>
         </template>
