@@ -1125,7 +1125,7 @@ export default {
   queueNeedMoreToStart: '{n} more to start',
   queueEmptyPool: 'No one in queue yet',
   queuePlayerStatsTooltip: 'Last 10 games in this pool',
-  queuePlayerCardOpenProfile: 'Open profile in new tab',
+  queuePlayerCardOpenProfile: 'Open profile',
   queueMatchDetails: 'Match Details',
   queueGames: 'Games',
   queueGameNumber: 'Game {n}',

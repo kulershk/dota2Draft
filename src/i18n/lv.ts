@@ -1117,7 +1117,7 @@ export default {
   queueNeedMoreToStart: 'Vēl {n} līdz sākumam',
   queueEmptyPool: 'Rindā vēl neviena nav',
   queuePlayerStatsTooltip: 'Pēdējās 10 spēles šajā pūlā',
-  queuePlayerCardOpenProfile: 'Atvērt profilu jaunā cilnē',
+  queuePlayerCardOpenProfile: 'Atvērt profilu',
   queueMatchDetails: 'Spēles detaļas',
   queueGames: 'Spēles',
   queueGameNumber: 'Spēle {n}',

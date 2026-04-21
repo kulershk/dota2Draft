@@ -578,8 +578,6 @@ onUnmounted(() => {
                   <router-link
                     v-for="p in queue.queuePlayers.value" :key="p.playerId"
                     :to="{ name: 'player-profile', params: { id: p.playerId } }"
-                    target="_blank"
-                    rel="noopener"
                     class="flex flex-col items-center gap-1 min-w-0 p-2 -m-2 rounded-lg hover:bg-accent/40 transition-colors"
                     :title="t('queuePlayerCardOpenProfile')"
                   >
