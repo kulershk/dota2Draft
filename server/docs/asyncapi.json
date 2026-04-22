@@ -838,6 +838,18 @@
         }
       }
     },
+    "queue:poolCounts": {
+      "subscribe": {
+        "summary": "Broadcast to all connected sockets: current queue size per pool. Fired on every join/leave so pool-selector badges stay in sync even for pools the client hasn't subscribed to.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "additionalProperties": { "type": "integer", "description": "Queue size for the pool keyed by this property name (pool id)" },
+            "description": "Object keyed by pool id (as string), value is the number of players currently waiting in that pool."
+          }
+        }
+      }
+    },
     "queue:getMyState": {
       "publish": {
         "summary": "Ask the server for this socket's current queue/match state. Used on app boot and page reload to restore the overlay and rejoin rooms.",

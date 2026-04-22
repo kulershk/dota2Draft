@@ -21,6 +21,7 @@ export interface QueuePool {
   lobby_server_region: number
   lobby_game_mode: number
   lobby_league_id: number
+  queue_count?: number
 }
 
 export interface QueuePickState {
@@ -82,6 +83,10 @@ const chatRateLimitedUntil = ref(0)
 export interface QueuePlayerStats { wins: number; losses: number }
 const playerStats = ref<Record<number, QueuePlayerStats>>({})
 
+// Per-pool queue size, broadcast by the server on every change so tab badges
+// stay in sync even for pools the user hasn't selected.
+const poolCounts = ref<Record<number, number>>({})
+
 let socketInitialized = false
 
 function initSocket() {
@@ -91,10 +96,15 @@ function initSocket() {
   const socket = getSocket()
 
   socket.on('queue:updated', (data: { poolId: number; count: number; players: QueuePlayer[] }) => {
+    poolCounts.value = { ...poolCounts.value, [data.poolId]: data.count }
     if (data.poolId === currentPoolId.value) {
       queueCount.value = data.count
       queuePlayers.value = data.players
     }
+  })
+
+  socket.on('queue:poolCounts', (counts: Record<number, number>) => {
+    poolCounts.value = counts || {}
   })
 
   socket.on('queue:matchFound', (data: QueueMatchFound) => {
@@ -228,6 +238,11 @@ export function useQueueStore() {
   async function fetchPools() {
     try {
       pools.value = await api.getQueuePools()
+      // Seed per-pool counts from the REST snapshot so badges are populated
+      // before the first socket broadcast arrives.
+      const seeded: Record<number, number> = {}
+      for (const p of pools.value) seeded[p.id] = (p as any).queue_count || 0
+      poolCounts.value = { ...seeded, ...poolCounts.value }
     } catch {
       pools.value = []
     }
@@ -323,6 +338,7 @@ export function useQueueStore() {
     chatMessages,
     chatRateLimitedUntil,
     playerStats,
+    poolCounts,
 
     fetchPools,
     joinQueue,

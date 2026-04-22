@@ -387,6 +387,11 @@ function broadcastQueueUpdate(io, poolId) {
     count: getPoolQueueCount(poolId),
     players: getPoolQueuePlayers(poolId),
   })
+  // Broadcast aggregate counts so every client (even those not subscribed to
+  // this specific pool's room) can update their pool-selector badges.
+  const counts = {}
+  for (const [pid, q] of poolQueues) counts[pid] = q.size
+  io.emit('queue:poolCounts', counts)
 }
 
 // Public: kick a player from whatever queue they're in. Used by admin routes.

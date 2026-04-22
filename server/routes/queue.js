@@ -14,6 +14,7 @@ export default function createQueueRouter(io) {
   router.get('/api/queue/pools', async (req, res) => {
     try {
       const pools = await query('SELECT * FROM queue_pools WHERE enabled = true ORDER BY id')
+      for (const p of pools) p.queue_count = poolQueues.get(p.id)?.size || 0
       res.json(pools)
     } catch (e) {
       res.status(500).json({ error: e.message })

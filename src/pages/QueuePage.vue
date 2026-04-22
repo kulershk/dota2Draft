@@ -230,7 +230,13 @@ onUnmounted(() => {
             @click="selectPool(pool.id)"
           >
             <Shield class="w-3.5 h-3.5" />
-            {{ pool.name }}
+            <span>{{ pool.name }}</span>
+            <span class="text-[10px] font-semibold tabular-nums px-1.5 py-0.5 rounded-full min-w-[1.25rem] text-center"
+              :class="selectedPoolId === pool.id
+                ? 'bg-primary/15 text-primary'
+                : ((queue.poolCounts.value[pool.id] || 0) > 0 ? 'bg-accent text-foreground' : 'bg-accent/50 text-muted-foreground')">
+              {{ queue.poolCounts.value[pool.id] || 0 }}
+            </span>
           </button>
         </div>
       </div>

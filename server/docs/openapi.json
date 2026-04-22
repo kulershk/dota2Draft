@@ -218,7 +218,8 @@
           "lobby_timeout_minutes": { "type": "integer" },
           "xp_win": { "type": "integer" },
           "xp_participate": { "type": "integer" },
-          "created_at": { "type": "string", "format": "date-time" }
+          "created_at": { "type": "string", "format": "date-time" },
+          "queue_count": { "type": "integer", "description": "Number of players currently waiting in this pool. Included on the public /api/queue/pools listing for pool-selector badges; not persisted in the DB." }
         }
       },
       "QueuePoolInput": {
