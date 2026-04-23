@@ -191,8 +191,11 @@ function initSocket() {
     }
     // Auto-hide the failed banner after a few seconds
     setTimeout(() => { readyCheckFailed.value = null }, 6000)
-    // If they were requeued, inQueue stays true (server put them back); otherwise reset
-    if (!data.requeued) {
+    // readyCheck arrival had set inQueue=false. On requeue the server put us
+    // back at the front of the same pool, so flip it back to true.
+    if (data.requeued) {
+      inQueue.value = true
+    } else {
       inQueue.value = false
       currentPoolName.value = null
     }
