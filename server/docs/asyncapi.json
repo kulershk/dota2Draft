@@ -1076,6 +1076,43 @@
           }
         }
       }
+    },
+    "queue:setRolePreferences": {
+      "publish": {
+        "summary": "Participant in a queue match sets (or updates) their ordered role preferences. Server validates roles against ['carry','mid','offlane','support','hard_support'], dedupes, persists on queue_matches.role_preferences, and broadcasts queue:rolePreferencesUpdate to the queue-match room.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "queueMatchId": { "type": "integer" },
+              "roles": {
+                "type": "array",
+                "description": "Ordered, deduped array of role keys. Index 0 = 1st choice, index 1 = 2nd, etc. Empty array clears the player's preferences.",
+                "items": { "type": "string", "enum": ["carry", "mid", "offlane", "support", "hard_support"] }
+              }
+            },
+            "required": ["queueMatchId", "roles"]
+          }
+        }
+      }
+    },
+    "queue:rolePreferencesUpdate": {
+      "subscribe": {
+        "summary": "Broadcast to queue-match:${queueMatchId}: one participant's role preferences changed. Client should merge into its rolePreferences map keyed by playerId.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "queueMatchId": { "type": "integer" },
+              "playerId": { "type": "integer" },
+              "roles": {
+                "type": "array",
+                "items": { "type": "string", "enum": ["carry", "mid", "offlane", "support", "hard_support"] }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

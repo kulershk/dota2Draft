@@ -725,11 +725,13 @@ export async function initDb() {
       team1_players JSONB DEFAULT '[]',
       team2_players JSONB DEFAULT '[]',
       all_player_ids JSONB DEFAULT '[]',
+      role_preferences JSONB DEFAULT '{}',
       status TEXT NOT NULL DEFAULT 'picking',
       created_at TIMESTAMP DEFAULT NOW(),
       completed_at TIMESTAMP DEFAULT NULL
     )
   `)
+  try { await execute(`ALTER TABLE queue_matches ADD COLUMN role_preferences JSONB DEFAULT '{}'`) } catch {}
 
   // Cancel any queue matches that were in picking state when server restarted
   try { await execute(`UPDATE queue_matches SET status = 'cancelled' WHERE status = 'picking'`) } catch {}

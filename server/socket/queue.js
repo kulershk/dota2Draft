@@ -190,6 +190,35 @@ export function registerQueueHandlers(socket, io) {
     resolveReadyCheck(rc.id, io, { reason: 'declined' })
   })
 
+  // ── Player: set their role preferences for this queue match ──
+  // Any participant (captain or not) can signal roles they want to play,
+  // in ranked order. Captains see these to inform their picks.
+  socket.on('queue:setRolePreferences', async ({ queueMatchId, roles }) => {
+    const playerId = socketPlayers.get(socket.id)
+    if (!playerId) return
+    const match = activeQueueMatches.get(queueMatchId)
+    if (!match) return
+    if (!match.allPlayers.some(p => p.playerId === playerId)) return
+
+    const cleaned = sanitizeRoles(roles)
+    match.rolePreferences[playerId] = cleaned
+
+    try {
+      await execute(
+        'UPDATE queue_matches SET role_preferences = $1 WHERE id = $2',
+        [JSON.stringify(match.rolePreferences), queueMatchId]
+      )
+    } catch (e) {
+      console.error('[Queue] Failed to persist role preferences:', e.message)
+    }
+
+    io.to(`queue-match:${queueMatchId}`).emit('queue:rolePreferencesUpdate', {
+      queueMatchId,
+      playerId,
+      roles: cleaned,
+    })
+  })
+
   // ── Captain pick ──
   socket.on('queue:pick', async ({ queueMatchId, playerId: pickedPlayerId }) => {
     const playerId = socketPlayers.get(socket.id)
@@ -762,6 +791,8 @@ async function startQueueMatch(poolId, io, preselectedPlayers = null, preselecte
     pickTimer,
     pickTimerEnd: null,
     status: 'picking',
+    // playerId -> ordered array of role keys (carry, mid, offlane, support, hard_support)
+    rolePreferences: {},
   }
   activeQueueMatches.set(queueMatchId, match)
 
@@ -957,7 +988,24 @@ function buildMatchFoundPayload(match) {
     pickOrder: match.pickOrder,
     teamSize: match.teamSize,
     pickTimer: match.pickTimer,
+    rolePreferences: match.rolePreferences || {},
   }
+}
+
+const VALID_ROLES = ['carry', 'mid', 'offlane', 'support', 'hard_support']
+function sanitizeRoles(input) {
+  if (!Array.isArray(input)) return []
+  const seen = new Set()
+  const out = []
+  for (const r of input) {
+    if (typeof r !== 'string') continue
+    if (!VALID_ROLES.includes(r)) continue
+    if (seen.has(r)) continue
+    seen.add(r)
+    out.push(r)
+    if (out.length >= VALID_ROLES.length) break
+  }
+  return out
 }
 
 function buildPickStatePayload(match) {

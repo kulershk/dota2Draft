@@ -43,7 +43,11 @@ export interface QueueMatchFound {
   availablePlayers: QueuePlayer[]
   pickOrder: number[]
   pickTimer: number
+  rolePreferences?: Record<number, string[]>
 }
+
+export const QUEUE_ROLES = ['carry', 'mid', 'offlane', 'support', 'hard_support'] as const
+export type QueueRole = typeof QUEUE_ROLES[number]
 
 const pools = ref<QueuePool[]>([])
 const inQueue = ref(false)
@@ -72,6 +76,9 @@ export interface QueueReadyCheck {
 }
 const readyCheck = ref<QueueReadyCheck | null>(null)
 const readyCheckFailed = ref<{ reason: 'declined' | 'timeout'; requeued: boolean; banMinutes: number } | null>(null)
+
+// playerId → ordered array of role keys for the active queue match
+const rolePreferences = ref<Record<number, string[]>>({})
 
 const queueHistory = ref<any[]>([])
 
@@ -129,7 +136,13 @@ function initSocket() {
     cancelled.value = null
     readyCheck.value = null
     readyCheckFailed.value = null
+    rolePreferences.value = data.rolePreferences || {}
     inQueue.value = false
+  })
+
+  socket.on('queue:rolePreferencesUpdate', (data: { queueMatchId: number; playerId: number; roles: string[] }) => {
+    if (!activeMatch.value || activeMatch.value.queueMatchId !== data.queueMatchId) return
+    rolePreferences.value = { ...rolePreferences.value, [data.playerId]: data.roles }
   })
 
   socket.on('queue:readyCheck', (data: {
@@ -405,6 +418,23 @@ export function useQueueStore() {
     cancelled.value = null
   }
 
+  function setRolePreferences(roles: string[]) {
+    if (!activeMatch.value) return
+    getSocket().emit('queue:setRolePreferences', {
+      queueMatchId: activeMatch.value.queueMatchId,
+      roles,
+    })
+  }
+
+  function toggleRolePreference(role: string, currentUserId: number | null) {
+    if (!currentUserId || !activeMatch.value) return
+    const current = rolePreferences.value[currentUserId] || []
+    const idx = current.indexOf(role)
+    const next = idx >= 0 ? current.filter(r => r !== role) : [...current, role]
+    rolePreferences.value = { ...rolePreferences.value, [currentUserId]: next }
+    setRolePreferences(next)
+  }
+
   function acceptReadyCheck() {
     const rc = readyCheck.value
     if (!rc || rc.myStatus !== 'pending') return
@@ -440,6 +470,7 @@ export function useQueueStore() {
     poolCounts,
     readyCheck,
     readyCheckFailed,
+    rolePreferences,
 
     fetchPools,
     joinQueue,
@@ -453,5 +484,7 @@ export function useQueueStore() {
     sendChat,
     acceptReadyCheck,
     declineReadyCheck,
+    setRolePreferences,
+    toggleRolePreference,
   }
 }
