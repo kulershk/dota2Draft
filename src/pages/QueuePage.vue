@@ -210,6 +210,38 @@ onUnmounted(() => {
 
 <template>
   <div class="flex flex-col flex-1">
+    <!-- Ready-check failure banner -->
+    <div
+      v-if="queue.readyCheckFailed.value"
+      class="max-w-[1200px] mx-auto w-full px-4 md:px-8 pt-4"
+    >
+      <div class="card overflow-hidden border border-destructive/40">
+        <div class="h-1 bg-destructive" />
+        <div class="px-5 py-3 flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg bg-destructive/15 flex items-center justify-center shrink-0">
+            <X class="w-4 h-4 text-destructive" />
+          </div>
+          <div class="flex-1 text-sm">
+            <template v-if="queue.readyCheckFailed.value.requeued">
+              {{ t('queueReadyCheckRequeued') }}
+            </template>
+            <template v-else-if="queue.readyCheckFailed.value.reason === 'declined'">
+              {{ t('queueReadyCheckFailedDeclined') }}
+              <template v-if="queue.readyCheckFailed.value.banMinutes > 0">
+                {{ t('queueReadyCheckBanSuffix', { mins: queue.readyCheckFailed.value.banMinutes }) }}
+              </template>
+            </template>
+            <template v-else>
+              {{ t('queueReadyCheckFailedTimeout') }}
+              <template v-if="queue.readyCheckFailed.value.banMinutes > 0">
+                {{ t('queueReadyCheckBanSuffix', { mins: queue.readyCheckFailed.value.banMinutes }) }}
+              </template>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Slim page header -->
     <div class="max-w-[1200px] mx-auto w-full px-4 md:px-8 pt-6 pb-4">
       <h1 class="text-2xl font-bold">{{ t('queue') }}</h1>

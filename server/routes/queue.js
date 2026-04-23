@@ -202,6 +202,7 @@ export default function createQueueRouter(io) {
       lobby_auto_assign_teams, lobby_penalty_radiant, lobby_penalty_dire,
       lobby_series_type, lobby_timeout_minutes,
       xp_win, xp_participate,
+      accept_timer, decline_ban_minutes,
     } = req.body
 
     if (!name) return res.status(400).json({ error: 'Name is required' })
@@ -215,8 +216,9 @@ export default function createQueueRouter(io) {
           lobby_pause_setting, lobby_selection_priority, lobby_cm_pick,
           lobby_auto_assign_teams, lobby_penalty_radiant, lobby_penalty_dire,
           lobby_series_type, lobby_timeout_minutes,
-          xp_win, xp_participate
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+          xp_win, xp_participate,
+          accept_timer, decline_ban_minutes
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
         RETURNING *
       `, [
         name, enabled !== false, min_mmr || 0, max_mmr || 0,
@@ -227,6 +229,7 @@ export default function createQueueRouter(io) {
         lobby_auto_assign_teams !== false, lobby_penalty_radiant || 0, lobby_penalty_dire || 0,
         lobby_series_type || 0, lobby_timeout_minutes || 10,
         xp_win ?? 15, xp_participate ?? 5,
+        accept_timer ?? 20, decline_ban_minutes ?? 5,
       ])
       res.status(201).json(pool)
     } catch (e) {
@@ -252,6 +255,7 @@ export default function createQueueRouter(io) {
         'lobby_auto_assign_teams', 'lobby_penalty_radiant', 'lobby_penalty_dire',
         'lobby_series_type', 'lobby_timeout_minutes',
         'xp_win', 'xp_participate',
+        'accept_timer', 'decline_ban_minutes',
       ]
       const setClauses = []
       const values = []
@@ -342,6 +346,20 @@ export default function createQueueRouter(io) {
 
     const qmId = Number(req.params.id)
     try {
+      // Refuse cancel once the bot has started the match and left the lobby.
+      // match_lobbies.status flips to 'completed' on game_started — past that
+      // point, the Dota match is running on its own and there's nothing to cancel.
+      const qmRow = await queryOne('SELECT match_id FROM queue_matches WHERE id = $1', [qmId])
+      if (qmRow?.match_id) {
+        const latestLobby = await queryOne(
+          'SELECT status FROM match_lobbies WHERE match_id = $1 ORDER BY id DESC LIMIT 1',
+          [qmRow.match_id]
+        )
+        if (latestLobby?.status === 'completed') {
+          return res.status(409).json({ error: 'Match already started — bot has left the lobby' })
+        }
+      }
+
       const match = activeQueueMatches.get(qmId)
       if (match) {
         // Cancel in-memory match (picking / lobby_creating / live)
@@ -392,6 +410,13 @@ export default function createQueueRouter(io) {
       if (!qm.match_id) return res.status(400).json({ error: 'No match row linked to this queue match yet' })
       if (qm.status === 'cancelled' || qm.status === 'completed') {
         return res.status(409).json({ error: `Queue match is ${qm.status}` })
+      }
+      const latestLobby = await queryOne(
+        'SELECT status FROM match_lobbies WHERE match_id = $1 ORDER BY id DESC LIMIT 1',
+        [qm.match_id]
+      )
+      if (latestLobby?.status === 'completed') {
+        return res.status(409).json({ error: 'Match already started — bot has left the lobby' })
       }
       await botPool.adminRetryQueueLobby(qm.match_id)
       // Make sure queue_matches is flagged live so the usual flow resumes

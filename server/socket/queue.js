@@ -3,6 +3,7 @@ import { socketPlayers } from './state.js'
 import {
   poolQueues, activeQueueMatches, queuePickTimers,
   playerInQueue, playerInMatch,
+  pendingReadyChecks, playerInReadyCheck, nextReadyCheckId,
   getPoolQueue, getPoolQueueCount, getPoolQueuePlayers, clearPickTimer,
 } from './queueState.js'
 import { botPool } from '../services/botPool.js'
@@ -86,6 +87,7 @@ export function registerQueueHandlers(socket, io) {
       // Check not already in queue or active match
       if (playerInQueue.has(playerId)) return socket.emit('queue:error', { message: 'Already in a queue' })
       if (playerInMatch.has(playerId)) return socket.emit('queue:error', { message: 'Already in an active match' })
+      if (playerInReadyCheck.has(playerId)) return socket.emit('queue:error', { message: 'Ready check in progress — accept or decline first' })
 
       // Also check the DB — in-memory state is wiped on server restart, so a
       // player whose queue match is still picking/lobby/live in the DB must
@@ -122,9 +124,10 @@ export function registerQueueHandlers(socket, io) {
       // Broadcast updated queue
       broadcastQueueUpdate(io, poolId)
 
-      // Check if enough players
+      // Check if enough players — start ready check instead of going straight
+      // into picking. Players must Accept within pool.accept_timer seconds.
       if (q.size >= totalPlayers) {
-        await startQueueMatch(poolId, io)
+        await startReadyCheck(poolId, io)
       }
     } catch (e) {
       console.error('[Queue] Join error:', e.message)
@@ -142,6 +145,49 @@ export function registerQueueHandlers(socket, io) {
 
     removeFromQueue(playerId, poolId, socket)
     broadcastQueueUpdate(io, poolId)
+  })
+
+  // ── Ready check: accept ──
+  socket.on('queue:accept', ({ readyCheckId }) => {
+    const playerId = socketPlayers.get(socket.id)
+    if (!playerId) return
+    const rc = pendingReadyChecks.get(Number(readyCheckId))
+    if (!rc) return
+    if (!rc.players.some(p => p.playerId === playerId)) return
+    if (rc.declined.has(playerId)) return // already declined, can't flip
+    rc.accepted.add(playerId)
+
+    io.to(`ready-check:${rc.id}`).emit('queue:readyCheckUpdate', {
+      readyCheckId: rc.id,
+      acceptedIds: [...rc.accepted],
+      declinedIds: [...rc.declined],
+      expectedCount: rc.players.length,
+    })
+
+    if (rc.accepted.size >= rc.players.length) {
+      resolveReadyCheck(rc.id, io, { reason: 'all_accepted' })
+    }
+  })
+
+  // ── Ready check: decline ──
+  socket.on('queue:decline', ({ readyCheckId }) => {
+    const playerId = socketPlayers.get(socket.id)
+    if (!playerId) return
+    const rc = pendingReadyChecks.get(Number(readyCheckId))
+    if (!rc) return
+    if (!rc.players.some(p => p.playerId === playerId)) return
+    rc.declined.add(playerId)
+    rc.accepted.delete(playerId)
+
+    io.to(`ready-check:${rc.id}`).emit('queue:readyCheckUpdate', {
+      readyCheckId: rc.id,
+      acceptedIds: [...rc.accepted],
+      declinedIds: [...rc.declined],
+      expectedCount: rc.players.length,
+    })
+
+    // Any decline → end immediately, don't waste other players' time
+    resolveReadyCheck(rc.id, io, { reason: 'declined' })
   })
 
   // ── Captain pick ──
@@ -244,6 +290,29 @@ export function registerQueueHandlers(socket, io) {
         }
       }
     }
+
+    // Rehydrate ready-check state on reload so the Accept modal comes back up
+    const rcId = playerInReadyCheck.get(playerId)
+    if (rcId) {
+      const rc = pendingReadyChecks.get(rcId)
+      if (rc) {
+        socket.join(`ready-check:${rcId}`)
+        socket.emit('queue:readyCheck', {
+          readyCheckId: rc.id,
+          poolId: rc.poolId,
+          players: rc.players,
+          acceptTimerEnd: rc.acceptTimerEnd,
+          acceptTimerSeconds: rc.acceptTimerSeconds,
+          expectedCount: rc.players.length,
+        })
+        socket.emit('queue:readyCheckUpdate', {
+          readyCheckId: rc.id,
+          acceptedIds: [...rc.accepted],
+          declinedIds: [...rc.declined],
+          expectedCount: rc.players.length,
+        })
+      }
+    }
   })
 
   // ── Chat send ──
@@ -306,6 +375,31 @@ export function registerQueueHandlers(socket, io) {
       count: getPoolQueueCount(poolId),
       players: getPoolQueuePlayers(poolId),
     })
+
+    // Rehydrate ready-check state too
+    if (playerId) {
+      const rcId = playerInReadyCheck.get(playerId)
+      if (rcId) {
+        const rc = pendingReadyChecks.get(rcId)
+        if (rc) {
+          socket.join(`ready-check:${rcId}`)
+          socket.emit('queue:readyCheck', {
+            readyCheckId: rc.id,
+            poolId: rc.poolId,
+            players: rc.players,
+            acceptTimerEnd: rc.acceptTimerEnd,
+            acceptTimerSeconds: rc.acceptTimerSeconds,
+            expectedCount: rc.players.length,
+          })
+          socket.emit('queue:readyCheckUpdate', {
+            readyCheckId: rc.id,
+            acceptedIds: [...rc.accepted],
+            declinedIds: [...rc.declined],
+            expectedCount: rc.players.length,
+          })
+        }
+      }
+    }
 
     // If player is in an active match, re-send appropriate state
     if (playerId && playerInMatch.has(playerId)) {
@@ -421,25 +515,201 @@ export function kickPlayerFromQueue(io, playerId, reason = null) {
   return true
 }
 
-async function startQueueMatch(poolId, io) {
+// Start a ready check for a full pool: pull the top N players out of the pool
+// queue, emit queue:readyCheck to each, and start the accept timer. Only once
+// all N players click Accept does startQueueMatch run (picking phase).
+async function startReadyCheck(poolId, io) {
   const q = getPoolQueue(poolId)
   const pool = await queryOne('SELECT * FROM queue_pools WHERE id = $1', [poolId])
   const teamSize = pool?.team_size || 5
   const totalPlayers = teamSize * 2
-
   if (q.size < totalPlayers) return
 
-  // Take players from queue
+  // Pull top N players out of the queue (oldest first — Map insertion order)
   const players = []
-  for (const [pid, info] of q) {
+  for (const [, info] of q) {
     players.push(info)
     if (players.length >= totalPlayers) break
   }
 
-  // Remove them from queue
+  // Move from in-queue → in-ready-check
   for (const p of players) {
     q.delete(p.playerId)
     playerInQueue.delete(p.playerId)
+  }
+
+  const id = nextReadyCheckId()
+  const acceptTimerSeconds = pool?.accept_timer || 20
+  const declineBanMinutes = Math.max(0, pool?.decline_ban_minutes || 0)
+  const acceptTimerEnd = Date.now() + acceptTimerSeconds * 1000
+
+  const rc = {
+    id,
+    poolId,
+    pool,
+    players,
+    accepted: new Set(),
+    declined: new Set(),
+    acceptTimerEnd,
+    acceptTimerSeconds,
+    declineBanMinutes,
+    timeoutHandle: null,
+  }
+  pendingReadyChecks.set(id, rc)
+  for (const p of players) {
+    playerInReadyCheck.set(p.playerId, id)
+  }
+
+  // Join all players' sockets to the ready-check room
+  joinPlayersToRoom(io, players, `ready-check:${id}`)
+
+  io.to(`ready-check:${id}`).emit('queue:readyCheck', {
+    readyCheckId: id,
+    poolId,
+    players,
+    acceptTimerEnd,
+    acceptTimerSeconds,
+    expectedCount: players.length,
+  })
+
+  broadcastQueueUpdate(io, poolId)
+
+  rc.timeoutHandle = setTimeout(() => {
+    resolveReadyCheck(id, io, { reason: 'timeout' })
+  }, acceptTimerSeconds * 1000)
+}
+
+// Resolve a ready check in one of three ways:
+//   all_accepted → promote to picking via startQueueMatch(pool, players)
+//   declined / timeout → non-accepters are kicked (+ optional ban),
+//                        accepters are re-queued to preserve their wait time
+async function resolveReadyCheck(id, io, { reason }) {
+  const rc = pendingReadyChecks.get(id)
+  if (!rc) return
+  pendingReadyChecks.delete(id)
+  if (rc.timeoutHandle) { clearTimeout(rc.timeoutHandle); rc.timeoutHandle = null }
+
+  for (const p of rc.players) {
+    if (playerInReadyCheck.get(p.playerId) === id) playerInReadyCheck.delete(p.playerId)
+  }
+
+  if (reason === 'all_accepted') {
+    io.to(`ready-check:${id}`).emit('queue:readyCheckPassed', { readyCheckId: id })
+    // Leave ready-check room on every player socket (will join match room next)
+    for (const [socketId, pid] of socketPlayers) {
+      if (rc.players.some(p => p.playerId === pid)) {
+        const s = io.sockets.sockets.get(socketId)
+        if (s) s.leave(`ready-check:${id}`)
+      }
+    }
+    await startQueueMatch(rc.poolId, io, rc.players, rc.pool)
+    return
+  }
+
+  // Failure path: work out accepters vs non-accepters
+  const acceptedPlayers = rc.players.filter(p => rc.accepted.has(p.playerId))
+  const failedPlayers = rc.players.filter(p => !rc.accepted.has(p.playerId))
+
+  // Ban non-accepters (decline OR timeout) if the pool has a ban configured
+  if (rc.declineBanMinutes > 0 && failedPlayers.length > 0) {
+    const reasonText = reason === 'declined' ? 'Declined ready check' : 'Did not accept ready check in time'
+    try {
+      await execute(
+        `INSERT INTO queue_bans (player_id, banned_until, reason, banned_by)
+         SELECT unnest($1::int[]), NOW() + ($2 || ' minutes')::interval, $3, NULL
+         ON CONFLICT (player_id) DO UPDATE
+           SET banned_until = GREATEST(COALESCE(queue_bans.banned_until, NOW()), EXCLUDED.banned_until),
+               reason = EXCLUDED.reason`,
+        [failedPlayers.map(p => p.playerId), rc.declineBanMinutes, reasonText]
+      )
+    } catch (e) {
+      console.error('[Queue] Failed to record decline bans:', e.message)
+    }
+  }
+
+  // Notify failed players (kicked out of queue — they need to re-queue manually
+  // once the ban expires). Leave the ready-check room.
+  for (const p of failedPlayers) {
+    for (const [socketId, pid] of socketPlayers) {
+      if (pid !== p.playerId) continue
+      const s = io.sockets.sockets.get(socketId)
+      if (!s) continue
+      s.leave(`ready-check:${id}`)
+      s.emit('queue:readyCheckFailed', {
+        readyCheckId: id,
+        reason,
+        requeued: false,
+        banMinutes: rc.declineBanMinutes || 0,
+      })
+    }
+  }
+
+  // Accepters go back to the front of the queue so they don't lose wait time.
+  // Rebuild the pool queue with accepters prepended, then existing entries.
+  if (acceptedPlayers.length > 0) {
+    const pool = await queryOne('SELECT * FROM queue_pools WHERE id = $1', [rc.poolId])
+    if (pool?.enabled) {
+      const q = getPoolQueue(rc.poolId)
+      const existing = [...q.values()]
+      q.clear()
+      for (const p of acceptedPlayers) {
+        // Skip if they've since joined a different queue/match somehow
+        if (playerInQueue.has(p.playerId) || playerInMatch.has(p.playerId) || playerInReadyCheck.has(p.playerId)) continue
+        q.set(p.playerId, p)
+        playerInQueue.set(p.playerId, rc.poolId)
+      }
+      for (const info of existing) {
+        if (!q.has(info.playerId)) q.set(info.playerId, info)
+      }
+    }
+    for (const p of acceptedPlayers) {
+      for (const [socketId, pid] of socketPlayers) {
+        if (pid !== p.playerId) continue
+        const s = io.sockets.sockets.get(socketId)
+        if (!s) continue
+        s.leave(`ready-check:${id}`)
+        s.emit('queue:readyCheckFailed', {
+          readyCheckId: id,
+          reason,
+          requeued: true,
+          banMinutes: 0,
+        })
+      }
+    }
+  }
+
+  broadcastQueueUpdate(io, rc.poolId)
+
+  // If the pool is still full (enough in queue to start another check), kick one off
+  const q = getPoolQueue(rc.poolId)
+  const pool = rc.pool || await queryOne('SELECT * FROM queue_pools WHERE id = $1', [rc.poolId])
+  const totalPlayers = (pool?.team_size || 5) * 2
+  if (q.size >= totalPlayers) {
+    await startReadyCheck(rc.poolId, io)
+  }
+}
+
+async function startQueueMatch(poolId, io, preselectedPlayers = null, preselectedPool = null) {
+  const pool = preselectedPool || await queryOne('SELECT * FROM queue_pools WHERE id = $1', [poolId])
+  const teamSize = pool?.team_size || 5
+  const totalPlayers = teamSize * 2
+
+  let players
+  if (preselectedPlayers) {
+    // Came from a passed ready check — players are already removed from queue
+    players = preselectedPlayers.slice(0, totalPlayers)
+  } else {
+    const q = getPoolQueue(poolId)
+    if (q.size < totalPlayers) return
+    players = []
+    for (const [, info] of q) {
+      players.push(info)
+      if (players.length >= totalPlayers) break
+    }
+    for (const p of players) {
+      q.delete(p.playerId)
+      playerInQueue.delete(p.playerId)
+    }
   }
 
   // Sort by MMR descending — top 2 are captains.

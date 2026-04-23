@@ -1688,10 +1688,11 @@
       "post": {
         "tags": ["Queue"],
         "summary": "Admin: cancel a queue match",
-        "description": "Cancels an active queue match. Notifies all players via socket, cleans up in-memory state, and sets DB status to cancelled. Requires manage_competitions permission.",
+        "description": "Cancels an active queue match. Notifies all players via socket, cleans up in-memory state, and sets DB status to cancelled. Refuses once the latest match_lobbies row is 'completed' (bot has left the lobby after game_started) — at that point the Dota match is running on its own. Requires manage_competitions permission.",
         "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
         "responses": {
-          "200": { "description": "Match cancelled" }
+          "200": { "description": "Match cancelled" },
+          "409": { "description": "Match already started — bot has left the lobby" }
         }
       }
     },
@@ -1807,13 +1808,13 @@
         "post": {
           "tags": ["Queue"],
           "summary": "Manually retry lobby creation for a queue match",
-          "description": "Admin-only. Marks any in-flight match_lobbies row for this match as errored, frees its bot, and dispatches a fresh create_lobby on a different available bot. Bypasses the automatic 3-attempt cap.",
+          "description": "Admin-only. Marks any in-flight match_lobbies row for this match as errored, frees its bot, and dispatches a fresh create_lobby on a different available bot. Bypasses the automatic 3-attempt cap. Refuses once the latest match_lobbies row is 'completed' (bot has left the lobby after game_started).",
           "security": [{ "bearerAuth": [] }],
           "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
           "responses": {
             "200": { "description": "Retry dispatched" },
             "404": { "description": "Queue match not found" },
-            "409": { "description": "Queue match is cancelled or completed" },
+            "409": { "description": "Queue match is cancelled/completed, or bot has already left the lobby" },
             "500": { "description": "No alternate bot available, or dispatch failed" }
           }
         }

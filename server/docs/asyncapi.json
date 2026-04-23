@@ -985,6 +985,97 @@
           }
         }
       }
+    },
+    "queue:readyCheck": {
+      "subscribe": {
+        "summary": "Broadcast to ready-check:${id}: a full pool has been pulled into a ready check. Client should show the Match Found modal with an Accept/Decline prompt and countdown to acceptTimerEnd.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "readyCheckId": { "type": "integer" },
+              "poolId": { "type": "integer" },
+              "players": { "type": "array", "items": { "type": "object" } },
+              "acceptTimerEnd": { "type": "integer", "description": "Epoch ms deadline to Accept" },
+              "acceptTimerSeconds": { "type": "integer", "description": "Configured accept window for this pool" },
+              "expectedCount": { "type": "integer" }
+            }
+          }
+        }
+      }
+    },
+    "queue:readyCheckUpdate": {
+      "subscribe": {
+        "summary": "Broadcast to ready-check:${id}: accept/decline lists changed. Sent every time any player clicks Accept or Decline.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "readyCheckId": { "type": "integer" },
+              "acceptedIds": { "type": "array", "items": { "type": "integer" } },
+              "declinedIds": { "type": "array", "items": { "type": "integer" } },
+              "expectedCount": { "type": "integer" }
+            }
+          }
+        }
+      }
+    },
+    "queue:readyCheckPassed": {
+      "subscribe": {
+        "summary": "Broadcast to ready-check:${id}: all players accepted; picking is starting. queue:matchFound will follow immediately.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "readyCheckId": { "type": "integer" }
+            }
+          }
+        }
+      }
+    },
+    "queue:readyCheckFailed": {
+      "subscribe": {
+        "summary": "Private: ready check ended without everyone accepting. reason='declined' if a player clicked Decline, 'timeout' if the window expired. requeued=true means this player accepted and was put back at the front of the pool queue; requeued=false means they were kicked out and (optionally) banned from queue for banMinutes.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "readyCheckId": { "type": "integer" },
+              "reason": { "type": "string", "enum": ["declined", "timeout"] },
+              "requeued": { "type": "boolean" },
+              "banMinutes": { "type": "integer" }
+            }
+          }
+        }
+      }
+    },
+    "queue:accept": {
+      "publish": {
+        "summary": "Player accepts a ready check. Once all expected players have accepted, the server transitions to picking (queue:matchFound fires).",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "readyCheckId": { "type": "integer" }
+            },
+            "required": ["readyCheckId"]
+          }
+        }
+      }
+    },
+    "queue:decline": {
+      "publish": {
+        "summary": "Player declines a ready check. Immediately ends the check for everyone — accepters are requeued, decliners are kicked (with optional queue ban per pool config).",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "readyCheckId": { "type": "integer" }
+            },
+            "required": ["readyCheckId"]
+          }
+        }
+      }
     }
   }
 }

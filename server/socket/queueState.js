@@ -15,6 +15,18 @@ export const playerInQueue = new Map()
 // playerId -> queueMatchId (prevent queue while in pick/lobby)
 export const playerInMatch = new Map()
 
+// readyCheckId -> { id, poolId, players, accepted:Set, declined:Set,
+//                   acceptTimerEnd, timeoutHandle, acceptTimerSeconds,
+//                   declineBanMinutes }
+// Holds matches waiting for all N players to click Accept before picking starts.
+export const pendingReadyChecks = new Map()
+
+// playerId -> readyCheckId (third gate alongside playerInQueue / playerInMatch)
+export const playerInReadyCheck = new Map()
+
+let readyCheckSeq = 0
+export function nextReadyCheckId() { return ++readyCheckSeq }
+
 // Pick order: captain 1 picks first, then alternating 1-2-2-1-1-2-2-1
 export const PICK_ORDER = [1, 2, 2, 1, 1, 2, 2, 1]
 

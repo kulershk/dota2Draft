@@ -55,6 +55,8 @@ const form = ref<Record<string, any>>({
   team_size: 5,
   xp_win: 15,
   xp_participate: 5,
+  accept_timer: 20,
+  decline_ban_minutes: 5,
 })
 
 function resetForm() {
@@ -66,6 +68,7 @@ function resetForm() {
     lobby_penalty_radiant: 0, lobby_penalty_dire: 0,
     lobby_series_type: 0, lobby_timeout_minutes: 10,
     xp_win: 15, xp_participate: 5,
+    accept_timer: 20, decline_ban_minutes: 5,
   }
 }
 
@@ -317,14 +320,16 @@ onUnmounted(() => {
             <div class="flex items-center gap-1.5">
               <button
                 class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-primary hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                :title="t('queueAdminRetryLobbyHint')"
-                :disabled="retryingLobby === qm.id"
+                :title="qm.lobby_status === 'completed' ? t('queueAdminMatchInProgress') : t('queueAdminRetryLobbyHint')"
+                :disabled="retryingLobby === qm.id || qm.lobby_status === 'completed'"
                 @click="retryLobby(qm.id)"
               >
                 <RefreshCw class="w-3.5 h-3.5" :class="retryingLobby === qm.id ? 'animate-spin' : ''" /> {{ t('queueAdminRetryLobby') }}
               </button>
               <button
-                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-destructive hover:bg-destructive/10 transition-colors"
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                :title="qm.lobby_status === 'completed' ? t('queueAdminMatchInProgress') : ''"
+                :disabled="qm.lobby_status === 'completed'"
                 @click="cancelMatch(qm.id)"
               >
                 <Ban class="w-3.5 h-3.5" /> {{ t('cancel') }}
@@ -528,6 +533,14 @@ onUnmounted(() => {
         <div class="flex flex-col gap-1">
           <label class="text-xs text-muted-foreground">{{ t('queuePickTimer') }} (s)</label>
           <input class="input-field" type="number" v-model.number="form.pick_timer" />
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-muted-foreground">{{ t('queueAcceptTimer') }} (s)</label>
+          <input class="input-field" type="number" v-model.number="form.accept_timer" />
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-muted-foreground">{{ t('queueDeclineBanMinutes') }} (min, 0 = {{ t('queueAdminBanDisabled') }})</label>
+          <input class="input-field" type="number" min="0" v-model.number="form.decline_ban_minutes" />
         </div>
         <div class="flex flex-col gap-1">
           <label class="text-xs text-muted-foreground">{{ t('queueBestOf') }}</label>

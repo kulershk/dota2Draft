@@ -9,6 +9,7 @@ import { useApi } from '@/composables/useApi'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 import AppFooter from '@/components/common/AppFooter.vue'
 import QueueStatusOverlay from '@/components/common/QueueStatusOverlay.vue'
+import ReadyCheckModal from '@/components/common/ReadyCheckModal.vue'
 import InputGroup from '@/components/common/InputGroup.vue'
 import { setLocale } from '@/i18n'
 import { getSocket } from '@/composables/useSocket'
@@ -458,6 +459,9 @@ async function handleClaimAdmin() {
 
     <!-- Global queue status overlay (hidden while on /queue) -->
     <QueueStatusOverlay />
+
+    <!-- Global ready-check modal (visible on any route) -->
+    <ReadyCheckModal />
 
     <!-- Claim Admin Modal -->
     <ModalOverlay :show="showClaimAdmin" @close="showClaimAdmin = false">

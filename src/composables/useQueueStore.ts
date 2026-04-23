@@ -59,6 +59,20 @@ const lobbyInfo = ref<{ matchId: number; gameName: string; password: string; exp
 const queueError = ref<string | null>(null)
 const cancelled = ref<string | null>(null)
 
+export interface QueueReadyCheck {
+  readyCheckId: number
+  poolId: number
+  players: QueuePlayer[]
+  acceptTimerEnd: number
+  acceptTimerSeconds: number
+  expectedCount: number
+  acceptedIds: number[]
+  declinedIds: number[]
+  myStatus: 'pending' | 'accepted' | 'declined'
+}
+const readyCheck = ref<QueueReadyCheck | null>(null)
+const readyCheckFailed = ref<{ reason: 'declined' | 'timeout'; requeued: boolean; banMinutes: number } | null>(null)
+
 const queueHistory = ref<any[]>([])
 
 export interface QueueBanInfo {
@@ -113,7 +127,75 @@ function initSocket() {
     teamsFormed.value = null
     lobbyInfo.value = null
     cancelled.value = null
+    readyCheck.value = null
+    readyCheckFailed.value = null
     inQueue.value = false
+  })
+
+  socket.on('queue:readyCheck', (data: {
+    readyCheckId: number
+    poolId: number
+    players: QueuePlayer[]
+    acceptTimerEnd: number
+    acceptTimerSeconds: number
+    expectedCount: number
+  }) => {
+    readyCheck.value = {
+      readyCheckId: data.readyCheckId,
+      poolId: data.poolId,
+      players: data.players,
+      acceptTimerEnd: data.acceptTimerEnd,
+      acceptTimerSeconds: data.acceptTimerSeconds,
+      expectedCount: data.expectedCount,
+      acceptedIds: [],
+      declinedIds: [],
+      myStatus: 'pending',
+    }
+    readyCheckFailed.value = null
+    inQueue.value = false
+    cancelled.value = null
+  })
+
+  socket.on('queue:readyCheckUpdate', (data: {
+    readyCheckId: number
+    acceptedIds: number[]
+    declinedIds: number[]
+    expectedCount: number
+  }) => {
+    if (!readyCheck.value || readyCheck.value.readyCheckId !== data.readyCheckId) return
+    readyCheck.value = {
+      ...readyCheck.value,
+      acceptedIds: data.acceptedIds,
+      declinedIds: data.declinedIds,
+      expectedCount: data.expectedCount,
+    }
+  })
+
+  socket.on('queue:readyCheckPassed', (_data: { readyCheckId: number }) => {
+    // Clear the ready-check modal — queue:matchFound will arrive next and
+    // take over with the pick-phase UI.
+    readyCheck.value = null
+  })
+
+  socket.on('queue:readyCheckFailed', (data: {
+    readyCheckId: number
+    reason: 'declined' | 'timeout'
+    requeued: boolean
+    banMinutes: number
+  }) => {
+    readyCheck.value = null
+    readyCheckFailed.value = {
+      reason: data.reason,
+      requeued: data.requeued,
+      banMinutes: data.banMinutes,
+    }
+    // Auto-hide the failed banner after a few seconds
+    setTimeout(() => { readyCheckFailed.value = null }, 6000)
+    // If they were requeued, inQueue stays true (server put them back); otherwise reset
+    if (!data.requeued) {
+      inQueue.value = false
+      currentPoolName.value = null
+    }
   })
 
   socket.on('queue:pickState', (data: QueuePickState) => {
@@ -320,6 +402,20 @@ export function useQueueStore() {
     cancelled.value = null
   }
 
+  function acceptReadyCheck() {
+    const rc = readyCheck.value
+    if (!rc || rc.myStatus !== 'pending') return
+    readyCheck.value = { ...rc, myStatus: 'accepted' }
+    getSocket().emit('queue:accept', { readyCheckId: rc.readyCheckId })
+  }
+
+  function declineReadyCheck() {
+    const rc = readyCheck.value
+    if (!rc || rc.myStatus !== 'pending') return
+    readyCheck.value = { ...rc, myStatus: 'declined' }
+    getSocket().emit('queue:decline', { readyCheckId: rc.readyCheckId })
+  }
+
   return {
     pools,
     inQueue,
@@ -339,6 +435,8 @@ export function useQueueStore() {
     chatRateLimitedUntil,
     playerStats,
     poolCounts,
+    readyCheck,
+    readyCheckFailed,
 
     fetchPools,
     joinQueue,
@@ -350,5 +448,7 @@ export function useQueueStore() {
     fetchPlayerStats,
     resetMatchState,
     sendChat,
+    acceptReadyCheck,
+    declineReadyCheck,
   }
 }

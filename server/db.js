@@ -670,6 +670,8 @@ export async function initDb() {
       team_size INTEGER DEFAULT 5,
       xp_win INTEGER DEFAULT 15,
       xp_participate INTEGER DEFAULT 5,
+      accept_timer INTEGER DEFAULT 20,
+      decline_ban_minutes INTEGER DEFAULT 5,
       created_at TIMESTAMP DEFAULT NOW()
     )
   `)
@@ -681,6 +683,8 @@ export async function initDb() {
   try { await execute('ALTER TABLE queue_pools ADD COLUMN lobby_auto_assign_teams BOOLEAN DEFAULT TRUE') } catch {}
   try { await execute('ALTER TABLE queue_pools ADD COLUMN lobby_penalty_radiant INTEGER DEFAULT 0') } catch {}
   try { await execute('ALTER TABLE queue_pools ADD COLUMN lobby_penalty_dire INTEGER DEFAULT 0') } catch {}
+  try { await execute('ALTER TABLE queue_pools ADD COLUMN accept_timer INTEGER DEFAULT 20') } catch {}
+  try { await execute('ALTER TABLE queue_pools ADD COLUMN decline_ban_minutes INTEGER DEFAULT 5') } catch {}
 
   // Drop FK constraints on winner_captain_id so queue matches can store player IDs
   try { await execute('ALTER TABLE match_games DROP CONSTRAINT IF EXISTS match_games_winner_captain_id_fkey') } catch {}
