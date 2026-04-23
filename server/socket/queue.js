@@ -606,12 +606,19 @@ async function resolveReadyCheck(id, io, { reason }) {
     return
   }
 
-  // Failure path: work out accepters vs non-accepters
-  const acceptedPlayers = rc.players.filter(p => rc.accepted.has(p.playerId))
-  const failedPlayers = rc.players.filter(p => !rc.accepted.has(p.playerId))
+  // Failure path: only punish players whose own action (or inaction) caused it.
+  //   declined: end fired immediately when someone clicked Decline — only the
+  //             decliners are at fault. Everyone else (including still-pending
+  //             players who hadn't had time to click yet) gets requeued.
+  //   timeout:  accept window expired — anyone who didn't accept is at fault.
+  const bannedPlayers = reason === 'declined'
+    ? rc.players.filter(p => rc.declined.has(p.playerId))
+    : rc.players.filter(p => !rc.accepted.has(p.playerId))
+  const bannedIds = new Set(bannedPlayers.map(p => p.playerId))
+  const requeuedPlayers = rc.players.filter(p => !bannedIds.has(p.playerId))
 
-  // Ban non-accepters (decline OR timeout) if the pool has a ban configured
-  if (rc.declineBanMinutes > 0 && failedPlayers.length > 0) {
+  // Ban the at-fault players if the pool has a ban configured
+  if (rc.declineBanMinutes > 0 && bannedPlayers.length > 0) {
     const reasonText = reason === 'declined' ? 'Declined ready check' : 'Did not accept ready check in time'
     try {
       await execute(
@@ -620,16 +627,16 @@ async function resolveReadyCheck(id, io, { reason }) {
          ON CONFLICT (player_id) DO UPDATE
            SET banned_until = GREATEST(COALESCE(queue_bans.banned_until, NOW()), EXCLUDED.banned_until),
                reason = EXCLUDED.reason`,
-        [failedPlayers.map(p => p.playerId), rc.declineBanMinutes, reasonText]
+        [bannedPlayers.map(p => p.playerId), rc.declineBanMinutes, reasonText]
       )
     } catch (e) {
       console.error('[Queue] Failed to record decline bans:', e.message)
     }
   }
 
-  // Notify failed players (kicked out of queue — they need to re-queue manually
+  // Notify banned players (kicked out of queue — they need to re-queue manually
   // once the ban expires). Leave the ready-check room.
-  for (const p of failedPlayers) {
+  for (const p of bannedPlayers) {
     for (const [socketId, pid] of socketPlayers) {
       if (pid !== p.playerId) continue
       const s = io.sockets.sockets.get(socketId)
@@ -644,15 +651,15 @@ async function resolveReadyCheck(id, io, { reason }) {
     }
   }
 
-  // Accepters go back to the front of the queue so they don't lose wait time.
-  // Rebuild the pool queue with accepters prepended, then existing entries.
-  if (acceptedPlayers.length > 0) {
+  // Non-banned players go back to the front of the queue so they don't lose
+  // wait time. Rebuild the pool queue with them prepended, then existing entries.
+  if (requeuedPlayers.length > 0) {
     const pool = await queryOne('SELECT * FROM queue_pools WHERE id = $1', [rc.poolId])
     if (pool?.enabled) {
       const q = getPoolQueue(rc.poolId)
       const existing = [...q.values()]
       q.clear()
-      for (const p of acceptedPlayers) {
+      for (const p of requeuedPlayers) {
         // Skip if they've since joined a different queue/match somehow
         if (playerInQueue.has(p.playerId) || playerInMatch.has(p.playerId) || playerInReadyCheck.has(p.playerId)) continue
         q.set(p.playerId, p)
@@ -662,7 +669,7 @@ async function resolveReadyCheck(id, io, { reason }) {
         if (!q.has(info.playerId)) q.set(info.playerId, info)
       }
     }
-    for (const p of acceptedPlayers) {
+    for (const p of requeuedPlayers) {
       for (const [socketId, pid] of socketPlayers) {
         if (pid !== p.playerId) continue
         const s = io.sockets.sockets.get(socketId)
