@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { Clock, Users, Swords, X, Check, Loader2, Shield, ChevronRight, Timer, Send, MessageSquare, Ban, Target } from 'lucide-vue-next'
+import { Clock, Users, Swords, X, Check, Loader2, Shield, ChevronRight, Timer, Send, MessageSquare, Ban, Target, Copy, Eye, EyeOff, Hourglass } from 'lucide-vue-next'
 import { useQueueStore, type QueuePlayer, QUEUE_ROLES } from '@/composables/useQueueStore'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { getServerNow } from '@/composables/useSocket'
@@ -127,6 +127,25 @@ function handleLeave() {
 function handlePick(playerId: number) {
   if (!queue.activeMatch.value) return
   queue.pickPlayer(queue.activeMatch.value.queueMatchId, playerId)
+}
+
+const passwordVisible = ref(false)
+const copiedKey = ref<string | null>(null)
+async function copyToClipboard(key: string, text: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+    copiedKey.value = key
+    setTimeout(() => { if (copiedKey.value === key) copiedKey.value = null }, 1500)
+  } catch {}
+}
+function isInLobby(steamId: string | undefined): boolean {
+  if (!steamId) return false
+  return queue.lobbyPlayersJoined.value.includes(steamId)
+}
+const joinedCount = computed(() => queue.lobbyPlayersJoined.value.length)
+function topRoleOf(playerId: number): string | null {
+  const prefs = queue.rolePreferences.value[playerId]
+  return (prefs && prefs.length) ? prefs[0] : null
 }
 
 // Queue ban — banner + live countdown
@@ -336,77 +355,173 @@ onUnmounted(() => {
           </div>
 
           <!-- Lobby Created -->
-          <div v-else-if="queue.lobbyInfo.value" class="card overflow-hidden">
-            <!-- Green accent bar -->
-            <div class="h-1 bg-green-500"></div>
+          <div v-else-if="queue.lobbyInfo.value" class="flex flex-col gap-4">
 
-            <!-- Header -->
-            <div class="px-6 py-4 border-b border-border/30 flex items-center justify-between">
-              <div class="flex items-center gap-3">
-                <Check class="w-5 h-5 text-green-500" />
-                <span class="text-lg font-bold">{{ t('queueLobbyCreated') }}</span>
-                <span class="text-xs font-semibold bg-green-500/15 text-green-500 px-2.5 py-1 rounded-full">
-                  {{ t('queueYouAreInvited') }}
-                </span>
-              </div>
-              <div v-if="lobbyTimeLeft != null && lobbyTimeLeft > 0" class="flex items-center gap-2">
-                <Timer class="w-4 h-4" :class="lobbyTimeLeft < 60000 ? 'text-destructive' : 'text-muted-foreground'" />
-                <span class="font-mono font-bold text-xl tabular-nums" :class="lobbyTimeLeft < 60000 ? 'text-destructive' : 'text-foreground'">
-                  {{ formatLobbyTimer(lobbyTimeLeft) }}
-                </span>
+            <!-- Hero header -->
+            <div class="flex items-start justify-between gap-6 flex-wrap">
+              <div>
+                <div class="flex items-center gap-3 mb-1">
+                  <h2 class="text-3xl font-bold tracking-tight">{{ t('queueLobbyReady') }}</h2>
+                  <span class="text-[10px] font-bold tracking-wider bg-green-500/15 text-green-400 border border-green-500/30 px-2.5 py-1 rounded-full flex items-center gap-1.5">
+                    <Check class="w-3 h-3" /> {{ t('queueLobbyReadyBadge') }}
+                  </span>
+                </div>
+                <p class="text-sm text-muted-foreground">{{ t('queueLobbyReadyHint') }}</p>
               </div>
             </div>
 
-            <!-- Lobby info -->
-            <div class="px-6 py-4 border-b border-border/30 flex items-center justify-center gap-8 bg-accent/30">
-              <div class="flex items-center gap-2">
-                <span class="text-xs text-muted-foreground">{{ t('queueLobbyName') }}:</span>
-                <span class="font-mono font-bold text-sm">{{ queue.lobbyInfo.value.gameName }}</span>
+            <!-- Phase bar -->
+            <div class="card px-5 py-4 flex items-center gap-6 flex-wrap">
+              <div class="flex items-center gap-3 flex-1 min-w-[220px]">
+                <div class="w-9 h-9 rounded-lg bg-green-500/15 border border-green-500/30 flex items-center justify-center shrink-0">
+                  <Check class="w-4 h-4 text-green-400" />
+                </div>
+                <div class="flex flex-col">
+                  <span class="text-[10px] font-bold tracking-[0.1em] text-green-400">{{ t('queueLobbyCreatedPhase') }}</span>
+                  <span class="text-xs text-muted-foreground">{{ t('queueLobbyWaitingForPlayers') }}</span>
+                </div>
               </div>
-              <div class="flex items-center gap-2">
-                <span class="text-xs text-muted-foreground">{{ t('queueLobbyPassword') }}:</span>
-                <span class="font-mono font-bold text-sm select-all">{{ queue.lobbyInfo.value.password }}</span>
+              <div class="flex items-center gap-3">
+                <div class="flex flex-col items-end">
+                  <span class="text-[10px] font-bold tracking-[0.1em] text-muted-foreground">{{ t('queueLobbyJoined') }}</span>
+                  <span class="font-mono text-sm font-bold tabular-nums">{{ joinedCount }} <span class="text-muted-foreground">/ {{ totalPlayers }}</span> <span class="text-xs text-muted-foreground font-normal">{{ t('queueLobbyJoinedSuffix') }}</span></span>
+                </div>
+              </div>
+              <div v-if="lobbyTimeLeft != null && lobbyTimeLeft > 0" class="flex items-center gap-2 border-l border-border/30 pl-6">
+                <Hourglass class="w-4 h-4" :class="lobbyTimeLeft < 60000 ? 'text-destructive' : 'text-amber-400'" />
+                <div class="flex flex-col items-end">
+                  <span class="text-[10px] font-bold tracking-[0.1em] text-muted-foreground">{{ t('queueLobbyExpiresIn') }}</span>
+                  <span class="font-mono font-bold text-xl tabular-nums leading-tight" :class="lobbyTimeLeft < 60000 ? 'text-destructive' : 'text-amber-400'">
+                    {{ formatLobbyTimer(lobbyTimeLeft) }}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Credentials -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div class="card p-5 flex flex-col gap-3">
+                <div class="text-[10px] font-bold tracking-[0.1em] text-muted-foreground">{{ t('queueLobbyName') }}</div>
+                <div class="flex items-center gap-3">
+                  <span class="font-mono font-bold text-lg flex-1 truncate select-all">{{ queue.lobbyInfo.value.gameName }}</span>
+                  <button
+                    class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-accent hover:bg-accent/70 transition-colors"
+                    @click="copyToClipboard('name', queue.lobbyInfo.value.gameName)"
+                  >
+                    <Check v-if="copiedKey === 'name'" class="w-3.5 h-3.5 text-green-400" />
+                    <Copy v-else class="w-3.5 h-3.5" />
+                    {{ copiedKey === 'name' ? t('queueCopied') : t('queueCopy') }}
+                  </button>
+                </div>
+              </div>
+              <div class="card p-5 flex flex-col gap-3">
+                <div class="text-[10px] font-bold tracking-[0.1em] text-muted-foreground">{{ t('queueLobbyPassword') }}</div>
+                <div class="flex items-center gap-3">
+                  <span class="font-mono font-bold text-lg flex-1 truncate select-all tracking-widest">
+                    {{ passwordVisible ? queue.lobbyInfo.value.password : '•'.repeat(queue.lobbyInfo.value.password.length) }}
+                  </span>
+                  <button
+                    class="p-1.5 rounded-lg hover:bg-accent transition-colors"
+                    :title="passwordVisible ? t('queueHidePassword') : t('queueShowPassword')"
+                    @click="passwordVisible = !passwordVisible"
+                  >
+                    <EyeOff v-if="passwordVisible" class="w-4 h-4 text-muted-foreground" />
+                    <Eye v-else class="w-4 h-4 text-muted-foreground" />
+                  </button>
+                  <button
+                    class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-accent hover:bg-accent/70 transition-colors"
+                    @click="copyToClipboard('pass', queue.lobbyInfo.value.password)"
+                  >
+                    <Check v-if="copiedKey === 'pass'" class="w-3.5 h-3.5 text-green-400" />
+                    <Copy v-else class="w-3.5 h-3.5" />
+                    {{ copiedKey === 'pass' ? t('queueCopied') : t('queueCopy') }}
+                  </button>
+                </div>
               </div>
             </div>
 
             <!-- Teams -->
-            <div class="grid grid-cols-2 min-h-[200px]">
-              <!-- Team 1 (Radiant) -->
-              <div class="p-5 border-r border-border/30">
-                <div class="flex items-center gap-2 mb-4">
-                  <div class="w-2.5 h-2.5 rounded-full bg-green-500"></div>
-                  <span class="text-sm font-bold text-green-400 uppercase tracking-wider">{{ t('queueRadiant') }}</span>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <!-- Radiant -->
+              <div class="card overflow-hidden">
+                <div class="h-1 bg-green-500" />
+                <div class="px-5 py-4 border-b border-border/30 flex items-center justify-between gap-3">
+                  <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-green-500/15 border border-green-500/30 flex items-center justify-center">
+                      <Shield class="w-4 h-4 text-green-400" />
+                    </div>
+                    <div class="flex flex-col">
+                      <span class="text-[10px] font-bold tracking-[0.1em] text-green-400">{{ t('queueRadiant') }}</span>
+                      <span class="text-xs font-semibold">{{ queue.teamsFormed.value?.team1?.[0]?.name || '—' }}'s team</span>
+                    </div>
+                  </div>
+                  <span class="text-[10px] font-bold tracking-wider bg-green-500/15 text-green-400 border border-green-500/30 px-2 py-1 rounded-full">
+                    {{ (queue.teamsFormed.value?.team1 || []).filter(p => isInLobby(p.steamId)).length }}/{{ teamSize }} {{ t('queueLobbyInLobby') }}
+                  </span>
                 </div>
-                <div class="flex flex-col gap-1">
+                <div class="flex flex-col">
                   <div v-for="(p, idx) in (queue.teamsFormed.value?.team1 || [])" :key="p.playerId"
-                    class="flex items-center gap-2.5 px-3 py-2 rounded-lg"
-                    :class="idx === 0 ? 'bg-green-500/8 border border-green-500/15' : 'bg-accent/50'">
-                    <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-7 h-7 rounded-full" :class="idx === 0 ? 'ring-2 ring-green-500/30' : ''" />
+                    class="px-4 py-2.5 flex items-center gap-3 border-b border-border/20 last:border-b-0"
+                    :class="isInLobby(p.steamId) ? '' : 'opacity-80'">
+                    <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-8 h-8 rounded-full" :class="idx === 0 ? 'ring-2 ring-green-500/40' : ''" />
                     <div class="flex-1 min-w-0">
-                      <div class="text-sm font-semibold truncate">{{ p.name }}</div>
+                      <div class="flex items-center gap-2">
+                        <span class="text-sm font-semibold truncate">{{ p.name }}</span>
+                        <span v-if="idx === 0" class="text-[9px] font-bold text-green-400 bg-green-500/15 px-1.5 py-0.5 rounded">CPT</span>
+                        <span v-if="topRoleOf(p.playerId)" class="text-[9px] font-bold text-purple-300 bg-purple-500/15 border border-purple-500/30 px-1.5 py-0.5 rounded">
+                          {{ t('queueRoleShort_' + topRoleOf(p.playerId)) }}
+                        </span>
+                      </div>
                       <div class="text-[10px] text-muted-foreground">{{ p.mmr }} MMR</div>
                     </div>
-                    <span v-if="idx === 0" class="text-[10px] font-bold text-green-400 bg-green-500/10 px-2 py-0.5 rounded">CPT</span>
+                    <span v-if="isInLobby(p.steamId)" class="text-[10px] font-bold tracking-wider text-green-400 bg-green-500/10 px-2 py-1 rounded-full flex items-center gap-1">
+                      <Check class="w-3 h-3" /> {{ t('queueLobbyInLobby') }}
+                    </span>
+                    <span v-else class="text-[10px] font-semibold text-muted-foreground bg-accent/60 px-2 py-1 rounded-full flex items-center gap-1">
+                      <Loader2 class="w-3 h-3 animate-spin" /> {{ t('queueLobbyNotReady') }}
+                    </span>
                   </div>
                 </div>
               </div>
 
-              <!-- Team 2 (Dire) -->
-              <div class="p-5">
-                <div class="flex items-center gap-2 mb-4">
-                  <div class="w-2.5 h-2.5 rounded-full bg-red-500"></div>
-                  <span class="text-sm font-bold text-red-400 uppercase tracking-wider">{{ t('queueDire') }}</span>
+              <!-- Dire -->
+              <div class="card overflow-hidden">
+                <div class="h-1 bg-red-500" />
+                <div class="px-5 py-4 border-b border-border/30 flex items-center justify-between gap-3">
+                  <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-red-500/15 border border-red-500/30 flex items-center justify-center">
+                      <Shield class="w-4 h-4 text-red-400" />
+                    </div>
+                    <div class="flex flex-col">
+                      <span class="text-[10px] font-bold tracking-[0.1em] text-red-400">{{ t('queueDire') }}</span>
+                      <span class="text-xs font-semibold">{{ queue.teamsFormed.value?.team2?.[0]?.name || '—' }}'s team</span>
+                    </div>
+                  </div>
+                  <span class="text-[10px] font-bold tracking-wider bg-red-500/15 text-red-400 border border-red-500/30 px-2 py-1 rounded-full">
+                    {{ (queue.teamsFormed.value?.team2 || []).filter(p => isInLobby(p.steamId)).length }}/{{ teamSize }} {{ t('queueLobbyInLobby') }}
+                  </span>
                 </div>
-                <div class="flex flex-col gap-1">
+                <div class="flex flex-col">
                   <div v-for="(p, idx) in (queue.teamsFormed.value?.team2 || [])" :key="p.playerId"
-                    class="flex items-center gap-2.5 px-3 py-2 rounded-lg"
-                    :class="idx === 0 ? 'bg-red-500/8 border border-red-500/15' : 'bg-accent/50'">
-                    <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-7 h-7 rounded-full" :class="idx === 0 ? 'ring-2 ring-red-500/30' : ''" />
+                    class="px-4 py-2.5 flex items-center gap-3 border-b border-border/20 last:border-b-0"
+                    :class="isInLobby(p.steamId) ? '' : 'opacity-80'">
+                    <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-8 h-8 rounded-full" :class="idx === 0 ? 'ring-2 ring-red-500/40' : ''" />
                     <div class="flex-1 min-w-0">
-                      <div class="text-sm font-semibold truncate">{{ p.name }}</div>
+                      <div class="flex items-center gap-2">
+                        <span class="text-sm font-semibold truncate">{{ p.name }}</span>
+                        <span v-if="idx === 0" class="text-[9px] font-bold text-red-400 bg-red-500/15 px-1.5 py-0.5 rounded">CPT</span>
+                        <span v-if="topRoleOf(p.playerId)" class="text-[9px] font-bold text-purple-300 bg-purple-500/15 border border-purple-500/30 px-1.5 py-0.5 rounded">
+                          {{ t('queueRoleShort_' + topRoleOf(p.playerId)) }}
+                        </span>
+                      </div>
                       <div class="text-[10px] text-muted-foreground">{{ p.mmr }} MMR</div>
                     </div>
-                    <span v-if="idx === 0" class="text-[10px] font-bold text-red-400 bg-red-500/10 px-2 py-0.5 rounded">CPT</span>
+                    <span v-if="isInLobby(p.steamId)" class="text-[10px] font-bold tracking-wider text-green-400 bg-green-500/10 px-2 py-1 rounded-full flex items-center gap-1">
+                      <Check class="w-3 h-3" /> {{ t('queueLobbyInLobby') }}
+                    </span>
+                    <span v-else class="text-[10px] font-semibold text-muted-foreground bg-accent/60 px-2 py-1 rounded-full flex items-center gap-1">
+                      <Loader2 class="w-3 h-3 animate-spin" /> {{ t('queueLobbyNotReady') }}
+                    </span>
                   </div>
                 </div>
               </div>

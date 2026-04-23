@@ -60,6 +60,7 @@ const activeMatch = ref<QueueMatchFound | null>(null)
 const pickState = ref<QueuePickState | null>(null)
 const teamsFormed = ref<{ team1: QueuePlayer[]; team2: QueuePlayer[] } | null>(null)
 const lobbyInfo = ref<{ matchId: number; gameName: string; password: string; expiresAt: number } | null>(null)
+const lobbyPlayersJoined = ref<string[]>([])
 const queueError = ref<string | null>(null)
 const cancelled = ref<string | null>(null)
 
@@ -234,8 +235,16 @@ function initSocket() {
     teamsFormed.value = { team1: data.team1, team2: data.team2 }
   })
 
-  socket.on('queue:lobbyCreated', (data: { queueMatchId: number; matchId: number; lobbyInfo: { gameName: string; password: string }; lobbyExpiresAt?: number }) => {
+  socket.on('queue:lobbyCreated', (data: { queueMatchId: number; matchId: number; lobbyInfo: { gameName: string; password: string }; lobbyExpiresAt?: number; playersJoined?: string[] }) => {
     lobbyInfo.value = { matchId: data.matchId, gameName: data.lobbyInfo.gameName, password: data.lobbyInfo.password, expiresAt: data.lobbyExpiresAt || 0 }
+    lobbyPlayersJoined.value = data.playersJoined || []
+  })
+
+  socket.on('lobby:statusUpdate', (data: { matchId: number; gameNumber: number; status: string; playersJoined?: string[] }) => {
+    if (!lobbyInfo.value || lobbyInfo.value.matchId !== data.matchId) return
+    if (Array.isArray(data.playersJoined)) {
+      lobbyPlayersJoined.value = data.playersJoined
+    }
   })
 
   socket.on('queue:lobbyRetrying', (data: { matchId: number; gameNumber: number; attempt: number; maxAttempts: number; lobbyInfo: { gameName: string; password: string } }) => {
@@ -257,6 +266,7 @@ function initSocket() {
     pickState.value = null
     teamsFormed.value = null
     lobbyInfo.value = null
+    lobbyPlayersJoined.value = []
   })
 
   socket.on('queue:kicked', (data: { poolId: number; reason: string }) => {
@@ -460,6 +470,7 @@ export function useQueueStore() {
     pickState,
     teamsFormed,
     lobbyInfo,
+    lobbyPlayersJoined,
     queueError,
     cancelled,
     queueHistory,

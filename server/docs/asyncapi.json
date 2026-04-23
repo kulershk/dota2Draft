@@ -1096,6 +1096,52 @@
         }
       }
     },
+    "queue:lobbyCreated": {
+      "subscribe": {
+        "summary": "Broadcast to queue-match:${queueMatchId}: the Dota 2 lobby was created and is awaiting players. Client shows the Lobby Ready screen with credentials. Includes the initial players_joined snapshot (usually empty immediately after create).",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "queueMatchId": { "type": "integer" },
+              "matchId": { "type": "integer" },
+              "lobbyInfo": {
+                "type": "object",
+                "properties": {
+                  "gameName": { "type": "string" },
+                  "password": { "type": "string" }
+                }
+              },
+              "lobbyExpiresAt": { "type": "integer", "description": "Epoch ms when the lobby auto-cancels if not enough players join" },
+              "playersJoined": {
+                "type": "array",
+                "description": "Steam IDs of players currently in the Dota lobby",
+                "items": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "lobby:statusUpdate": {
+      "subscribe": {
+        "summary": "Broadcast to the lobby's rooms (queue-match or comp+match): the Go bot reported a change in lobby status or player-joined list. Client merges playersJoined into its state to render per-player 'In lobby / Not joined yet' badges.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "matchId": { "type": "integer" },
+              "gameNumber": { "type": "integer" },
+              "status": { "type": "string", "enum": ["creating", "waiting", "launching", "active", "completed", "error", "cancelled"] },
+              "playersJoined": {
+                "type": "array",
+                "items": { "type": "string", "description": "Steam ID" }
+              }
+            }
+          }
+        }
+      }
+    },
     "queue:rolePreferencesUpdate": {
       "subscribe": {
         "summary": "Broadcast to queue-match:${queueMatchId}: one participant's role preferences changed. Client should merge into its rolePreferences map keyed by playerId.",

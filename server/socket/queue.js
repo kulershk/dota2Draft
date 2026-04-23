@@ -456,11 +456,15 @@ export function registerQueueHandlers(socket, io) {
               if (lobby) {
                 const timeoutMs = (match.pool?.lobby_timeout_minutes || 10) * 60 * 1000
                 const expiresAt = match.lobbyExpiresAt || (new Date(lobby.created_at).getTime() + timeoutMs)
+                const playersJoined = Array.isArray(lobby.players_joined)
+                  ? lobby.players_joined
+                  : (typeof lobby.players_joined === 'string' ? JSON.parse(lobby.players_joined) : [])
                 socket.emit('queue:lobbyCreated', {
                   queueMatchId: qmId,
                   matchId: qm.match_id,
                   lobbyInfo: { gameName: lobby.game_name, password: lobby.password },
                   lobbyExpiresAt: expiresAt,
+                  playersJoined,
                 })
               }
             }
