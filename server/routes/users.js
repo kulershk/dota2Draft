@@ -175,16 +175,30 @@ router.get('/api/players/:id/profile', async (req, res) => {
     }
   }
 
-  // Top 3 most played heroes (from match stats, using Steam32/Steam64 conversion)
+  // Top heroes + lifetime stats (from match stats). All queries exclude cancelled matches
+  // and hidden matches so the numbers stay consistent with the match history list.
   let topHeroes = []
   let stats = null
   if (player.steam_id) {
     const steam32 = (BigInt(player.steam_id) - 76561197960265728n).toString()
+
+    // Shared filter: valid (non-cancelled, non-hidden) matches
+    const validMatchJoin = `
+      JOIN match_games g ON g.id = s.match_game_id
+      JOIN matches m ON m.id = g.match_id
+    `
+    const validMatchWhere = `
+      m.hidden = false
+      AND m.status IS DISTINCT FROM 'cancelled'
+      AND NOT EXISTS (SELECT 1 FROM queue_matches qmX WHERE qmX.match_id = m.id AND qmX.status = 'cancelled')
+    `
+
     topHeroes = await query(`
-      SELECT hero_id, COUNT(*) AS games, SUM(win) AS wins
-      FROM match_game_player_stats
-      WHERE account_id = $1 AND hero_id > 0
-      GROUP BY hero_id
+      SELECT s.hero_id, COUNT(*) AS games, SUM(s.win) AS wins
+      FROM match_game_player_stats s
+      ${validMatchJoin}
+      WHERE s.account_id = $1 AND s.hero_id > 0 AND ${validMatchWhere}
+      GROUP BY s.hero_id
       ORDER BY games DESC, wins DESC
       LIMIT 5
     `, [steam32])
@@ -193,18 +207,19 @@ router.get('/api/players/:id/profile', async (req, res) => {
     const agg = await queryOne(`
       SELECT
         COUNT(*)::int AS matches_total,
-        COALESCE(SUM(win), 0)::int AS wins_total,
-        COALESCE(SUM(duration_seconds), 0)::int AS total_duration
-      FROM match_game_player_stats
-      WHERE account_id = $1
+        COALESCE(SUM(s.win), 0)::int AS wins_total,
+        COALESCE(SUM(s.duration_seconds), 0)::int AS total_duration
+      FROM match_game_player_stats s
+      ${validMatchJoin}
+      WHERE s.account_id = $1 AND ${validMatchWhere}
     `, [steam32])
 
     // Last 10 games for KDA averages + streak walk
     const recent = await query(`
       SELECT s.kills, s.deaths, s.assists, s.win, g.start_time, g.created_at
       FROM match_game_player_stats s
-      JOIN match_games g ON g.id = s.match_game_id
-      WHERE s.account_id = $1
+      ${validMatchJoin}
+      WHERE s.account_id = $1 AND ${validMatchWhere}
       ORDER BY g.start_time DESC NULLS LAST, g.created_at DESC
       LIMIT 50
     `, [steam32])
@@ -235,8 +250,8 @@ router.get('/api/players/:id/profile', async (req, res) => {
     const lastLossRow = await queryOne(`
       SELECT COALESCE(to_timestamp(g.start_time), g.created_at) AS ts
       FROM match_game_player_stats s
-      JOIN match_games g ON g.id = s.match_game_id
-      WHERE s.account_id = $1 AND s.win = 0
+      ${validMatchJoin}
+      WHERE s.account_id = $1 AND s.win = 0 AND ${validMatchWhere}
       ORDER BY g.start_time DESC NULLS LAST, g.created_at DESC
       LIMIT 1
     `, [steam32])
