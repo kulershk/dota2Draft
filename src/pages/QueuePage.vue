@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { Clock, Users, Swords, X, Check, Loader2, Shield, ShieldCheck, ChevronRight, Timer, Send, MessageSquare, Ban, Target, Copy, Eye, EyeOff, Hourglass, ListOrdered, User, UserPlus, Plus, Info, Crown } from 'lucide-vue-next'
+import { Clock, Users, Swords, X, Check, Loader2, Shield, ShieldCheck, ChevronRight, Timer, Send, MessageSquare, Ban, Target, Copy, Eye, EyeOff, Hourglass, ListOrdered, UserPlus, Plus, Info, Crown } from 'lucide-vue-next'
 import { useQueueStore, type QueuePlayer, QUEUE_ROLES } from '@/composables/useQueueStore'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { getServerNow } from '@/composables/useSocket'
@@ -147,15 +147,6 @@ function topRoleOf(playerId: number): string | null {
   const prefs = queue.rolePreferences.value[playerId]
   return (prefs && prefs.length) ? prefs[0] : null
 }
-
-// Available pool filter (during pick phase)
-type PoolFilter = 'all' | typeof QUEUE_ROLES[number]
-const poolFilter = ref<PoolFilter>('all')
-const filteredAvailable = computed(() => {
-  const list = queue.pickState.value?.availablePlayers || []
-  if (poolFilter.value === 'all') return list
-  return list.filter(p => (queue.rolePreferences.value[p.playerId] || []).includes(poolFilter.value as string))
-})
 
 function winratePct(s: { wins: number; losses: number }): number {
   const total = (s?.wins || 0) + (s?.losses || 0)
@@ -731,6 +722,30 @@ onUnmounted(() => {
               </div>
             </div>
 
+            <!-- My role preferences (only for participants) -->
+            <div v-if="iAmParticipant"
+              class="px-5 py-3 border-b border-border/30 flex items-center gap-3 flex-wrap bg-purple-500/5">
+              <div class="flex items-center gap-2 shrink-0">
+                <Target class="w-3.5 h-3.5 text-purple-400" />
+                <span class="text-[10px] font-bold tracking-[0.1em] text-purple-400">{{ t('queueYourRolePref') }}</span>
+              </div>
+              <div class="flex items-center gap-1.5 flex-wrap flex-1">
+                <button v-for="role in QUEUE_ROLES" :key="role"
+                  type="button"
+                  class="rounded-full px-2.5 py-1 text-[10px] font-bold transition-colors border"
+                  :class="myRoleRank(role)
+                    ? 'bg-purple-500 border-purple-500 text-white'
+                    : 'border-border text-muted-foreground hover:border-purple-500/50 hover:text-foreground'"
+                  @click="queue.toggleRolePreference(role, currentUserId)">
+                  <template v-if="myRoleRank(role)">{{ myRoleRank(role) }}· </template>{{ t('queueRole_' + role) }}
+                </button>
+              </div>
+              <span v-if="myPrefs.length > 0"
+                class="flex items-center gap-1 text-[9px] font-bold tracking-wider text-green-400 bg-green-500/15 px-2 py-1 rounded-full shrink-0">
+                <Check class="w-3 h-3" /> {{ t('queueRolePrefSaved') }}
+              </span>
+            </div>
+
             <div class="grid grid-cols-[1fr_minmax(380px,420px)_1fr] min-h-[340px]">
               <!-- Team 1 (Radiant) -->
               <div class="flex flex-col">
@@ -832,7 +847,7 @@ onUnmounted(() => {
                 </div>
               </div>
 
-              <!-- Available Pool (center column, redesigned per Pencil) -->
+              <!-- Available Pool (center column, compact redesign per Pencil) -->
               <div class="border-x border-border/30 flex flex-col">
                 <!-- Pool header -->
                 <div class="px-5 py-4 border-b border-border/30 flex items-center justify-between gap-3">
@@ -850,156 +865,61 @@ onUnmounted(() => {
                   </span>
                 </div>
 
-                <!-- My role preferences (only for participants) -->
-                <div v-if="iAmParticipant" class="p-4">
-                  <div class="rounded-xl border border-purple-500/40 bg-card p-4 flex flex-col gap-3 my-role-prefs-card">
-                    <div class="flex items-center justify-between gap-2 flex-wrap">
-                      <div class="flex items-center gap-2.5 min-w-0">
-                        <div class="w-8 h-8 rounded-lg bg-purple-500/15 border border-purple-500/30 flex items-center justify-center shrink-0">
-                          <Target class="w-3.5 h-3.5 text-purple-400" />
-                        </div>
-                        <div class="flex flex-col min-w-0">
-                          <span class="text-[10px] font-bold tracking-[0.1em] text-purple-400">{{ t('queueYourRolePref') }}</span>
-                          <span class="text-[11px] text-muted-foreground truncate">{{ t('queueYourRolePrefHint') }}</span>
-                        </div>
-                      </div>
-                      <span v-if="myPrefs.length > 0" class="flex items-center gap-1 text-[10px] font-bold tracking-wider text-green-400 bg-green-500/15 px-2 py-1 rounded-full">
-                        <Check class="w-3 h-3" /> {{ t('queueRolePrefSaved') }}
-                      </span>
-                    </div>
-                    <div class="flex items-center gap-1.5 flex-wrap">
-                      <button
-                        v-for="role in QUEUE_ROLES" :key="role"
-                        type="button"
-                        class="rounded-full px-3 py-1.5 text-[11px] font-bold transition-colors border"
-                        :class="myRoleRank(role)
-                          ? 'bg-purple-500 border-purple-500 text-white'
-                          : 'border-border text-muted-foreground hover:border-purple-500/50 hover:text-foreground'"
-                        @click="queue.toggleRolePreference(role, currentUserId)"
-                      >
-                        <template v-if="myRoleRank(role)">{{ myRoleRank(role) }}· </template>{{ t('queueRole_' + role) }}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Pool filter chips -->
-                <div class="px-5 py-3 border-y border-border/30 flex items-center gap-2 flex-wrap">
-                  <button type="button"
-                    class="rounded-full px-3 py-1.5 text-[11px] font-bold transition-colors flex items-center gap-1.5"
-                    :class="poolFilter === 'all'
-                      ? 'bg-cyan-400 text-background'
-                      : 'border border-border text-muted-foreground hover:text-foreground'"
-                    @click="poolFilter = 'all'">
-                    {{ t('queueFilterAll') }}
-                    <span class="text-[10px] font-mono px-1.5 rounded-full"
-                      :class="poolFilter === 'all' ? 'bg-background/20' : 'bg-accent'">
-                      {{ filteredAvailable.length }}
-                    </span>
-                  </button>
-                  <button v-for="role in QUEUE_ROLES" :key="role"
-                    type="button"
-                    class="rounded-full px-3 py-1.5 text-[11px] font-bold transition-colors border"
-                    :class="poolFilter === role
-                      ? 'bg-purple-500 border-purple-500 text-white'
-                      : 'border-border text-muted-foreground hover:text-foreground'"
-                    @click="poolFilter = role">
-                    {{ t('queueRoleShort_' + role) }}
-                  </button>
-                </div>
-
-                <!-- Pool list -->
-                <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-3 min-h-[200px]">
-                  <div v-if="filteredAvailable.length === 0"
+                <!-- Pool list (compact single-row cards) -->
+                <div class="flex-1 overflow-y-auto p-3 flex flex-col gap-2 min-h-[200px]">
+                  <div v-if="queue.pickState.value.availablePlayers.length === 0"
                     class="text-center text-xs text-muted-foreground py-8">
                     {{ t('queueNoPlayersInFilter') }}
                   </div>
-                  <div v-for="(p, i) in filteredAvailable" :key="p.playerId"
-                    class="rounded-xl bg-background border overflow-hidden transition-all"
+                  <div v-for="(p, i) in queue.pickState.value.availablePlayers" :key="p.playerId"
+                    class="rounded-xl bg-background border flex items-center gap-3 px-3.5 py-2.5 transition-all"
                     :class="isMyTurn && i === 0
                       ? 'border-cyan-500/30 pool-card--highlight'
                       : 'border-border'">
-                    <!-- Top: avatar + name + meta -->
-                    <div class="px-4 py-3 flex items-center gap-3">
-                      <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-12 h-12 rounded-full object-cover ring-2 ring-cyan-500/40" />
-                      <div v-else class="w-12 h-12 rounded-full bg-cyan-500/20 ring-2 ring-cyan-500 flex items-center justify-center shrink-0">
-                        <span class="text-cyan-400 text-lg font-bold">{{ (p.name || '?')[0].toUpperCase() }}</span>
-                      </div>
-                      <div class="flex flex-col flex-1 min-w-0 gap-1">
-                        <div class="flex items-center gap-2 min-w-0">
-                          <span class="text-sm font-bold truncate">{{ p.name }}</span>
-                          <span class="flex items-center gap-1 text-[9px] font-bold text-green-400 bg-green-500/15 px-1.5 py-0.5 rounded shrink-0">
-                            <span class="w-1 h-1 rounded-full bg-green-500" />
-                            {{ t('queueReady') }}
+                    <!-- Avatar (36px) -->
+                    <img v-if="p.avatarUrl" :src="p.avatarUrl"
+                      class="w-9 h-9 rounded-full object-cover shrink-0"
+                      :class="isMyTurn && i === 0 ? 'ring-2 ring-cyan-500' : 'ring-1 ring-cyan-500/40'" />
+                    <div v-else class="w-9 h-9 rounded-full bg-cyan-500/20 flex items-center justify-center shrink-0"
+                      :class="isMyTurn && i === 0 ? 'ring-2 ring-cyan-500' : 'ring-1 ring-cyan-500/40'">
+                      <span class="text-cyan-400 text-sm font-bold">{{ (p.name || '?')[0].toUpperCase() }}</span>
+                    </div>
+
+                    <!-- Info: name + meta row -->
+                    <div class="flex flex-col gap-0.5 flex-1 min-w-0">
+                      <span class="text-[13px] font-bold truncate">{{ p.name }}</span>
+                      <div class="flex items-center gap-1.5 flex-wrap">
+                        <span class="text-[10px] font-mono font-bold text-slate-300 tabular-nums">{{ p.mmr }}</span>
+                        <span class="text-[9px] font-mono font-semibold text-muted-foreground/60">MMR</span>
+                        <template v-if="(queue.rolePreferences.value[p.playerId] || []).length > 0">
+                          <span class="w-0.5 h-0.5 rounded-full bg-muted-foreground/40 mx-0.5"></span>
+                          <span v-for="role in (queue.rolePreferences.value[p.playerId] || []).slice(0, 2)" :key="role"
+                            class="text-[9px] font-bold font-mono px-1.5 py-0.5 rounded uppercase"
+                            :class="roleBadgeClass(role)">
+                            {{ t('queueRoleShort_' + role) }}
                           </span>
-                        </div>
-                        <div class="flex items-center gap-2 text-[11px] text-muted-foreground font-mono font-semibold flex-wrap">
-                          <span>{{ p.mmr }} MMR</span>
-                          <template v-for="(role, idx) in (queue.rolePreferences.value[p.playerId] || []).slice(0, 2)" :key="role">
-                            <span class="w-0.5 h-0.5 rounded-full bg-muted-foreground/40 self-center"></span>
-                            <span class="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider"
-                              :class="roleBadgeClass(role)">
-                              {{ t('queueRoleShort_' + role) }}<template v-if="idx === 0 && (queue.rolePreferences.value[p.playerId] || []).length > 1"></template>
-                            </span>
-                          </template>
-                        </div>
+                        </template>
                       </div>
                     </div>
 
-                    <!-- Stats divider -->
+                    <!-- WR mini stack -->
                     <div v-if="queue.playerStats.value[p.playerId] && (queue.playerStats.value[p.playerId].wins + queue.playerStats.value[p.playerId].losses) > 0"
-                      class="px-3.5 py-2.5 border-y border-border/60 flex items-center gap-2">
-                      <div class="flex flex-col items-center flex-1 gap-0.5">
-                        <span class="text-[9px] font-bold tracking-wider text-muted-foreground/60 font-mono">{{ t('queueWinRate') }}</span>
-                        <span class="text-[13px] font-bold font-mono"
-                          :class="winrateClass(queue.playerStats.value[p.playerId])">
-                          {{ winratePct(queue.playerStats.value[p.playerId]) }}%
-                        </span>
-                      </div>
-                      <div class="w-px h-6 bg-border" />
-                      <div class="flex flex-col items-center flex-1 gap-0.5">
-                        <span class="text-[9px] font-bold tracking-wider text-muted-foreground/60 font-mono">{{ t('queueLast10') }}</span>
-                        <span class="text-[13px] font-mono font-bold flex items-center gap-1">
-                          <span class="text-green-400">{{ queue.playerStats.value[p.playerId].wins }}</span>
-                          <span class="text-muted-foreground/60">/</span>
-                          <span class="text-red-400">{{ queue.playerStats.value[p.playerId].losses }}</span>
-                        </span>
-                      </div>
-                    </div>
-
-                    <!-- Wants row -->
-                    <div v-if="(queue.rolePreferences.value[p.playerId] || []).length > 0"
-                      class="px-3.5 py-2 border-b border-border/60 flex items-center gap-1.5 flex-wrap">
-                      <span class="text-[9px] font-bold tracking-wider text-purple-400 font-mono mr-1">{{ t('queueWants') }}</span>
-                      <span v-for="(role, rank) in queue.rolePreferences.value[p.playerId]" :key="role"
-                        class="rounded-full text-[10px] font-bold px-2 py-0.5"
-                        :class="rank < 2
-                          ? 'bg-purple-500/20 border border-purple-500/60 text-purple-300'
-                          : 'bg-accent text-muted-foreground'">
-                        <template v-if="rank < 2">{{ rank + 1 }}· </template>{{ t('queueRoleShort_' + role) }}
+                      class="flex flex-col items-center shrink-0">
+                      <span class="text-[8px] font-bold tracking-wider text-muted-foreground/60 font-mono">{{ t('queueWinRateShort') }}</span>
+                      <span class="text-[13px] font-mono font-bold leading-none"
+                        :class="winrateClass(queue.playerStats.value[p.playerId])">
+                        {{ winratePct(queue.playerStats.value[p.playerId]) }}%
                       </span>
                     </div>
 
-                    <!-- Actions -->
-                    <div class="px-3.5 py-2.5 flex items-center justify-between gap-3">
-                      <router-link :to="{ name: 'player-profile', params: { id: p.playerId } }"
-                        target="_blank"
-                        class="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-                        @click.stop>
-                        <User class="w-3 h-3" />
-                        {{ t('queueViewProfile') }}
-                      </router-link>
-                      <button v-if="isMyTurn"
-                        type="button"
-                        class="pool-pick-btn flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[12px] font-bold text-background transition-all"
-                        @click="handlePick(p.playerId)">
-                        <Plus class="w-3 h-3" />
-                        {{ t('queuePickPlayer') }}
-                      </button>
-                      <span v-else class="text-[11px] text-muted-foreground/60 italic">
-                        {{ t('queueWaitingForPick') }}
-                      </span>
-                    </div>
+                    <!-- Pick button -->
+                    <button v-if="isMyTurn"
+                      type="button"
+                      class="pool-pick-btn flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[12px] font-bold text-background shrink-0"
+                      @click="handlePick(p.playerId)">
+                      <Plus class="w-3 h-3" />
+                      {{ t('queuePickShort') }}
+                    </button>
                   </div>
                 </div>
 
