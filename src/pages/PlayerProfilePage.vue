@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { User, Trophy, Swords, Tv, Calendar, Medal, MessageCircle, Shield, Star, ChevronLeft, ChevronRight } from 'lucide-vue-next'
+import { User, Trophy, Swords, Tv, Medal, MessageCircle, Star, ChevronLeft, ChevronRight, Percent, Target, Flame, Clock, Award, Zap } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -101,6 +101,47 @@ function placementBg(n: number) {
   if (n === 3) return 'bg-amber-700/10 border-amber-700/20'
   return 'bg-accent border-border'
 }
+
+// Stats formatting helpers
+const stats = computed(() => profile.value?.stats || null)
+const winRatePct = computed(() => stats.value ? (stats.value.win_rate * 100) : null)
+
+function fmtHours(n: number | null | undefined) {
+  if (!n && n !== 0) return '—'
+  if (n >= 100) return Math.round(n).toLocaleString()
+  return n.toFixed(1)
+}
+
+function fmtDuration(seconds: number | null | undefined) {
+  if (!seconds) return '—'
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return `${m}:${String(s).padStart(2, '0')}`
+}
+
+function kdaString(ps: any): string {
+  if (!ps) return '—'
+  return `${ps.kills ?? 0} / ${ps.deaths ?? 0} / ${ps.assists ?? 0}`
+}
+
+const streakLabel = computed(() => {
+  const s = stats.value?.current_streak
+  if (!s || !s.type || s.count === 0) return null
+  return `${s.count}${s.type}`
+})
+
+const streakClass = computed(() => {
+  const s = stats.value?.current_streak
+  if (!s || !s.type || s.count === 0) return 'text-muted-foreground'
+  return s.type === 'W' ? 'text-green-500' : 'text-red-500'
+})
+
+const streakBadge = computed(() => {
+  const s = stats.value?.current_streak
+  if (!s || !s.type || s.count === 0) return null
+  if (s.count >= 3) return s.type === 'W' ? t('profileStreakHot') : t('profileStreakCold')
+  return null
+})
 </script>
 
 <template>
@@ -109,31 +150,34 @@ function placementBg(n: number) {
     <div v-else-if="error" class="text-center py-12 text-muted-foreground">{{ t('playerNotFound') }}</div>
 
     <template v-else-if="profile">
-      <!-- Player header + Top heroes side by side -->
-      <div class="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-5">
-      <div class="card p-6">
-        <div class="flex items-start gap-4">
-          <img v-if="profile.avatar_url" :src="profile.avatar_url" class="w-16 h-16 rounded-full" />
-          <div v-else class="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-            <User class="w-8 h-8 text-primary" />
+      <!-- Hero strip: avatar + name/bio/mmr blocks -->
+      <div class="card p-5 md:p-6 relative overflow-hidden">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center gap-5">
+          <!-- Gradient-ring avatar -->
+          <div class="shrink-0 relative">
+            <div class="p-1 rounded-full bg-gradient-to-br from-primary via-primary/60 to-purple-500 shadow-[0_10px_40px_-8px_rgba(34,211,238,0.4)]">
+              <img v-if="profile.avatar_url" :src="profile.avatar_url" class="w-24 h-24 md:w-32 md:h-32 rounded-full block" />
+              <div v-else class="w-24 h-24 md:w-32 md:h-32 rounded-full bg-background flex items-center justify-center">
+                <User class="w-10 h-10 text-primary" />
+              </div>
+            </div>
           </div>
-          <div class="flex-1 min-w-0">
+
+          <!-- Info column -->
+          <div class="flex-1 min-w-0 w-full flex flex-col gap-3">
+            <!-- Name row -->
             <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0">
-                <h1 class="text-2xl font-bold text-foreground truncate">{{ profile.name }}</h1>
+              <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-2">
+                  <h1 class="text-2xl md:text-3xl font-extrabold text-foreground tracking-tight truncate">{{ profile.name }}</h1>
+                  <span class="text-xs text-muted-foreground">· {{ t('memberSince') }} {{ formatDate(profile.created_at) }}</span>
+                </div>
                 <div class="flex flex-wrap items-center gap-2 mt-1.5">
                   <LevelBadge :level="profile.level || 1" size="md" />
                   <span class="text-xs font-semibold text-primary">{{ t('levelN', { n: profile.level || 1 }) }}</span>
                   <div v-if="profile.roles?.length" class="flex flex-wrap gap-1">
                     <RoleBadge v-for="role in sortedRoles(profile.roles)" :key="role" :role="role" />
                   </div>
-                  <MmrDisplay v-if="profile.mmr" :mmr="profile.mmr" />
-                  <div v-if="profile.favorite_position" class="flex items-center gap-1" :title="`${profile.favorite_position.games}/${profile.favorite_position.total} games`">
-                    <PositionIcon :position="profile.favorite_position.position" />
-                  </div>
-                </div>
-                <div class="mt-1.5 max-w-[240px]">
-                  <XpProgressBar :current="profile.level_progress || 0" />
                 </div>
               </div>
               <!-- External links -->
@@ -168,80 +212,114 @@ function placementBg(n: number) {
                 </a>
               </div>
             </div>
-            <div class="flex flex-wrap items-center gap-2 mt-2 text-xs text-muted-foreground">
-              <span class="flex items-center gap-1">
-                <Calendar class="w-3.5 h-3.5" />
-                {{ t('memberSince') }} {{ formatDate(profile.created_at) }}
-              </span>
+
+            <!-- Socials + bio -->
+            <div v-if="profile.twitch_username || profile.discord_username" class="flex flex-wrap items-center gap-2">
               <a v-if="profile.twitch_username"
                 :href="`https://twitch.tv/${profile.twitch_username}`"
                 target="_blank" rel="noopener"
                 class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#9146FF]/10 border border-[#9146FF]/20 text-[#9146FF] hover:bg-[#9146FF]/20 transition-colors"
               >
                 <Tv class="w-3.5 h-3.5" />
-                <span class="font-medium">{{ profile.twitch_username }}</span>
+                <span class="text-xs font-medium">{{ profile.twitch_username }}</span>
               </a>
               <span v-if="profile.discord_username"
                 class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#5865F2]/10 border border-[#5865F2]/20 text-[#5865F2]"
               >
                 <MessageCircle class="w-3.5 h-3.5" />
-                <span class="font-medium">{{ profile.discord_username }}</span>
+                <span class="text-xs font-medium">{{ profile.discord_username }}</span>
               </span>
             </div>
-            <p v-if="profile.info" class="text-sm text-muted-foreground mt-2">{{ profile.info }}</p>
-          </div>
-        </div>
-      </div>
+            <p v-if="profile.info" class="text-sm text-muted-foreground">{{ profile.info }}</p>
 
-      <!-- Top heroes (right column) -->
-      <div v-if="profile.top_heroes?.length" class="card self-start">
-        <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
-          <Shield class="w-5 h-5 text-foreground" />
-          <span class="text-sm font-semibold text-foreground">{{ t('topHeroes') }}</span>
-        </div>
-        <div class="p-4 flex flex-col gap-3">
-          <div v-for="hero in profile.top_heroes" :key="hero.hero_id" class="flex items-center gap-3 p-3 rounded-lg bg-accent/50 border border-border/50">
-            <img v-if="dota.heroImg(hero.hero_id)" :src="dota.heroImg(hero.hero_id)" :alt="dota.heroName(hero.hero_id)"
-              class="w-16 h-9 rounded object-cover border border-border/30 shrink-0" />
-            <div class="min-w-0 flex-1">
-              <p class="text-sm font-semibold text-foreground truncate">{{ dota.heroName(hero.hero_id) || `Hero #${hero.hero_id}` }}</p>
-              <p class="text-xs text-muted-foreground">
-                {{ hero.games }} {{ hero.games === 1 ? t('gamesSingular') : t('gamesPlural') }}
-                <span class="text-green-500 ml-1">{{ hero.wins }}W</span>
-                <span class="text-red-500 ml-0.5">{{ hero.games - hero.wins }}L</span>
-              </p>
-              <div class="mt-1 h-1 rounded-full bg-border/50 overflow-hidden">
-                <div class="h-full rounded-full bg-green-500" :style="{ width: `${hero.games > 0 ? (hero.wins / hero.games * 100) : 0}%` }"></div>
+            <!-- MMR / Level / Favorite Role blocks -->
+            <div class="flex flex-wrap items-end gap-x-6 gap-y-3 pt-2 border-t border-border/60">
+              <div v-if="profile.mmr" class="flex flex-col gap-1">
+                <span class="text-[10px] font-mono font-bold tracking-[0.2em] text-muted-foreground">MMR</span>
+                <span class="text-2xl md:text-3xl font-extrabold font-mono text-primary leading-none">{{ profile.mmr.toLocaleString() }}</span>
+              </div>
+              <div class="h-10 w-px bg-border" v-if="profile.mmr"></div>
+              <div class="flex flex-col gap-1">
+                <span class="text-[10px] font-mono font-bold tracking-[0.2em] text-muted-foreground">LEVEL</span>
+                <div class="flex items-baseline gap-2">
+                  <span class="text-2xl md:text-3xl font-extrabold font-mono text-foreground leading-none">{{ profile.level || 1 }}</span>
+                  <div class="w-20"><XpProgressBar :current="profile.level_progress || 0" /></div>
+                </div>
+              </div>
+              <div v-if="profile.favorite_position" class="h-10 w-px bg-border"></div>
+              <div v-if="profile.favorite_position" class="flex flex-col gap-1">
+                <span class="text-[10px] font-mono font-bold tracking-[0.2em] text-muted-foreground">{{ t('profileFavRole').toUpperCase() }}</span>
+                <div class="flex items-center gap-2">
+                  <PositionIcon :position="profile.favorite_position.position" />
+                  <span class="text-sm font-bold text-foreground">{{ profile.favorite_position.games }}/{{ profile.favorite_position.total }}</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
-      </div>
 
-      <!-- Tournament placements -->
-      <div v-if="profile.tournament_results.length > 0" class="card">
-        <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
-          <Medal class="w-5 h-5 text-foreground" />
-          <span class="text-sm font-semibold text-foreground">{{ t('tournamentPlacements') }}</span>
-        </div>
-        <div class="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div
-            v-for="(result, idx) in profile.tournament_results" :key="idx"
-            class="flex items-center gap-3 p-3 rounded-lg border"
-            :class="placementBg(result.placement)"
-          >
-            <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg shrink-0" :class="placementClass(result.placement)">
-              {{ result.placement === 1 ? '🥇' : result.placement === 2 ? '🥈' : result.placement === 3 ? '🥉' : `#${result.placement}` }}
-            </div>
-            <div class="min-w-0 flex-1">
-              <p class="text-sm font-semibold text-foreground truncate">{{ result.competition_name }}</p>
-              <p class="text-xs text-muted-foreground truncate">{{ result.team }} &middot; {{ result.stage_name }}</p>
-            </div>
-            <span class="text-xs font-medium shrink-0" :class="placementClass(result.placement)">
-              {{ placementLabel(result.placement) }}
-            </span>
+      <!-- Stats strip: 5 mini cards (2→3→5 cols) -->
+      <div v-if="stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <!-- Win rate -->
+        <div class="card p-4 flex flex-col gap-1.5">
+          <div class="flex items-center gap-1.5">
+            <Percent class="w-3.5 h-3.5 text-green-500" />
+            <span class="text-[10px] font-mono font-bold tracking-[0.2em] text-muted-foreground">{{ t('profileWinRate').toUpperCase() }}</span>
           </div>
+          <div class="flex items-baseline gap-1">
+            <span class="text-2xl font-extrabold font-mono text-foreground leading-none">{{ winRatePct !== null ? winRatePct.toFixed(1) : '—' }}</span>
+            <span class="text-sm font-mono font-bold text-muted-foreground">%</span>
+          </div>
+          <span class="text-[11px] text-muted-foreground">{{ stats.wins_total }}W · {{ stats.matches_total - stats.wins_total }}L</span>
+        </div>
+
+        <!-- Matches -->
+        <div class="card p-4 flex flex-col gap-1.5">
+          <div class="flex items-center gap-1.5">
+            <Swords class="w-3.5 h-3.5 text-orange-500" />
+            <span class="text-[10px] font-mono font-bold tracking-[0.2em] text-muted-foreground">{{ t('profileMatches').toUpperCase() }}</span>
+          </div>
+          <span class="text-2xl font-extrabold font-mono text-foreground leading-none">{{ stats.matches_total.toLocaleString() }}</span>
+          <span class="text-[11px] text-muted-foreground">&nbsp;</span>
+        </div>
+
+        <!-- KDA last 10 -->
+        <div class="card p-4 flex flex-col gap-1.5">
+          <div class="flex items-center gap-1.5">
+            <Target class="w-3.5 h-3.5 text-purple-400" />
+            <span class="text-[10px] font-mono font-bold tracking-[0.2em] text-muted-foreground">{{ t('profileKdaLast10').toUpperCase() }}</span>
+          </div>
+          <span class="text-2xl font-extrabold font-mono text-foreground leading-none">{{ stats.kda_sample_size > 0 ? stats.avg_kda_last10.toFixed(2) : '—' }}</span>
+          <span class="text-[11px] text-muted-foreground truncate">
+            {{ stats.kda_sample_size > 0 ? t('profileAvgKdaHint', { k: stats.avg_k_last10, d: stats.avg_d_last10, a: stats.avg_a_last10 }) : '&nbsp;' }}
+          </span>
+        </div>
+
+        <!-- Streak -->
+        <div class="card p-4 flex flex-col gap-1.5">
+          <div class="flex items-center gap-1.5">
+            <Flame class="w-3.5 h-3.5 text-red-500" />
+            <span class="text-[10px] font-mono font-bold tracking-[0.2em] text-muted-foreground">{{ t('profileStreak').toUpperCase() }}</span>
+          </div>
+          <div class="flex items-baseline gap-2">
+            <span class="text-2xl font-extrabold font-mono leading-none" :class="streakClass">{{ streakLabel || t('profileNoStreak') }}</span>
+          </div>
+          <span v-if="streakBadge" class="text-[11px] font-mono font-bold" :class="streakClass">{{ streakBadge }}</span>
+          <span v-else class="text-[11px] text-muted-foreground">&nbsp;</span>
+        </div>
+
+        <!-- Time played -->
+        <div class="card p-4 flex flex-col gap-1.5">
+          <div class="flex items-center gap-1.5">
+            <Clock class="w-3.5 h-3.5 text-primary" />
+            <span class="text-[10px] font-mono font-bold tracking-[0.2em] text-muted-foreground">{{ t('profileHoursPlayed').toUpperCase() }}</span>
+          </div>
+          <div class="flex items-baseline gap-1">
+            <span class="text-2xl font-extrabold font-mono text-foreground leading-none">{{ fmtHours(stats.hours_played) }}</span>
+            <span class="text-sm font-mono font-bold text-muted-foreground">{{ t('profileHoursSuffix') }}</span>
+          </div>
+          <span class="text-[11px] text-muted-foreground">&nbsp;</span>
         </div>
       </div>
 
@@ -254,46 +332,71 @@ function placementBg(n: number) {
         </div>
         <div v-if="matchLoading && matchHistory.length === 0" class="p-6 text-center text-sm text-muted-foreground">{{ t('loading') }}</div>
         <div v-else-if="matchHistory.length === 0" class="p-6 text-center text-sm text-muted-foreground">{{ t('noMatches') }}</div>
-        <div v-else class="divide-y divide-border">
+        <div v-else class="flex flex-col">
+          <!-- Column headers -->
+          <div class="hidden md:grid px-4 py-2 gap-3 text-[10px] font-mono font-bold tracking-[0.2em] text-muted-foreground/70 border-b border-border/50"
+               style="grid-template-columns: 56px 1fr 90px 80px 1fr 70px 80px">
+            <span>{{ t('profileResult').toUpperCase() }}</span>
+            <span>{{ t('profileHero').toUpperCase() }}</span>
+            <span class="text-center">{{ t('profileKdaShort') }}</span>
+            <span class="text-center">{{ t('profileScoreShort').toUpperCase() }}</span>
+            <span>{{ t('profileModeShort').toUpperCase() }}</span>
+            <span class="text-right">{{ t('profileDurationShort').toUpperCase() }}</span>
+            <span class="text-right">{{ t('profileDateShort').toUpperCase() }}</span>
+          </div>
+
+          <!-- Rows -->
           <component
             :is="m.type === 'queue' && m.queueMatchId ? 'router-link' : m.type === 'competition' && m.competitionId ? 'router-link' : 'div'"
             v-for="m in matchHistory"
             :key="(m.type === 'queue' ? 'q' : 'c') + m.id"
             :to="m.type === 'queue' ? { name: 'queue-match', params: { id: m.queueMatchId } } : { name: 'comp-match', params: { compId: m.competitionId, matchId: m.id } }"
-            class="flex items-center gap-3 px-4 py-3 hover:bg-accent/30 transition-colors"
+            class="flex flex-wrap md:grid items-center gap-3 px-4 py-2.5 border-l-[3px] border-b border-border/50 last:border-b-0 hover:bg-accent/30 transition-colors"
+            :class="m.status !== 'completed' ? 'border-l-muted-foreground/30' : m.won ? 'border-l-green-500/60' : 'border-l-red-500/60'"
+            style="grid-template-columns: 56px 1fr 90px 80px 1fr 70px 80px"
           >
-            <!-- Result indicator -->
-            <div class="w-1.5 h-8 rounded-full shrink-0" :class="m.status !== 'completed' ? 'bg-muted-foreground/30' : m.won ? 'bg-green-500' : 'bg-red-500'" />
+            <!-- Result chip -->
+            <span class="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[10px] font-mono font-bold w-14"
+                  :class="m.status !== 'completed' ? 'bg-muted/30 text-muted-foreground' : m.won ? 'bg-green-500/15 text-green-500' : 'bg-red-500/15 text-red-500'">
+              {{ m.status !== 'completed' ? '—' : m.won ? t('profileWin') : t('profileLoss') }}
+            </span>
 
-            <!-- Team 1 -->
-            <div class="flex items-center gap-2 flex-1 min-w-0 justify-end">
-              <span class="text-sm truncate" :class="m.status === 'completed' && m.winnerCaptainId === m.team1.captainId ? 'font-bold text-foreground' : 'text-muted-foreground'">
-                {{ m.team1.name || 'TBD' }}
-              </span>
-              <img v-if="m.team1.avatar" :src="m.team1.avatar" class="w-6 h-6 rounded-full shrink-0" />
+            <!-- Hero + teams -->
+            <div class="flex items-center gap-2 min-w-0 flex-1">
+              <img v-if="m.playerStats?.hero_id && dota.heroImg(m.playerStats.hero_id)"
+                   :src="dota.heroImg(m.playerStats.hero_id)"
+                   :alt="dota.heroName(m.playerStats.hero_id)"
+                   class="w-10 h-6 rounded object-cover border border-border/30 shrink-0" />
+              <div v-else class="w-10 h-6 rounded bg-accent/50 border border-border/30 shrink-0" />
+              <div class="flex flex-col min-w-0">
+                <span v-if="m.playerStats?.hero_id" class="text-xs font-semibold text-foreground truncate">{{ dota.heroName(m.playerStats.hero_id) }}</span>
+                <span class="text-[11px] text-muted-foreground truncate">
+                  {{ m.team1.name || 'TBD' }} <span class="opacity-50">vs</span> {{ m.team2.name || 'TBD' }}
+                </span>
+              </div>
             </div>
+
+            <!-- KDA -->
+            <span class="text-xs font-mono font-bold text-foreground text-center tabular-nums">{{ kdaString(m.playerStats) }}</span>
 
             <!-- Score -->
-            <div class="flex items-center gap-1.5 shrink-0 px-2">
-              <span class="text-sm font-mono font-bold" :class="m.status === 'completed' && m.winnerCaptainId === m.team1.captainId ? 'text-foreground' : 'text-muted-foreground'">{{ m.score1 ?? '-' }}</span>
-              <span class="text-xs text-muted-foreground">:</span>
-              <span class="text-sm font-mono font-bold" :class="m.status === 'completed' && m.winnerCaptainId === m.team2.captainId ? 'text-foreground' : 'text-muted-foreground'">{{ m.score2 ?? '-' }}</span>
-            </div>
+            <span class="text-xs font-mono font-bold text-muted-foreground text-center tabular-nums">
+              <span :class="m.status === 'completed' && m.winnerCaptainId === m.team1.captainId ? 'text-foreground' : ''">{{ m.score1 ?? '-' }}</span>
+              <span class="opacity-50">–</span>
+              <span :class="m.status === 'completed' && m.winnerCaptainId === m.team2.captainId ? 'text-foreground' : ''">{{ m.score2 ?? '-' }}</span>
+            </span>
 
-            <!-- Team 2 -->
-            <div class="flex items-center gap-2 flex-1 min-w-0">
-              <img v-if="m.team2.avatar" :src="m.team2.avatar" class="w-6 h-6 rounded-full shrink-0" />
-              <span class="text-sm truncate" :class="m.status === 'completed' && m.winnerCaptainId === m.team2.captainId ? 'font-bold text-foreground' : 'text-muted-foreground'">
-                {{ m.team2.name || 'TBD' }}
-              </span>
-            </div>
+            <!-- Mode -->
+            <span class="text-[11px] text-muted-foreground truncate">
+              <span v-if="m.type === 'queue'">{{ m.poolName || t('queueTitle') }}</span>
+              <span v-else>{{ m.competitionName }}</span>
+            </span>
 
-            <!-- Meta -->
-            <div class="flex items-center gap-2 shrink-0 text-right">
-              <span v-if="m.type === 'queue'" class="text-[10px] px-1.5 py-0.5 rounded bg-accent text-muted-foreground">{{ m.poolName || 'Queue' }}</span>
-              <span v-else class="text-[10px] px-1.5 py-0.5 rounded bg-accent text-muted-foreground truncate max-w-[120px]">{{ m.competitionName }}</span>
-              <span class="text-[10px] text-muted-foreground tabular-nums w-[70px]">{{ formatDate(m.date) }}</span>
-            </div>
+            <!-- Duration -->
+            <span class="text-[11px] font-mono text-muted-foreground text-right tabular-nums">{{ fmtDuration(m.playerStats?.duration) }}</span>
+
+            <!-- Date -->
+            <span class="text-[11px] font-mono text-muted-foreground text-right tabular-nums">{{ formatDate(m.date) }}</span>
           </component>
         </div>
         <!-- Pagination -->
@@ -308,12 +411,70 @@ function placementBg(n: number) {
         </div>
       </div>
 
+      <!-- Top heroes + Tournament placements (side by side) -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <!-- Top heroes -->
+        <div v-if="profile.top_heroes?.length" class="card">
+          <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
+            <Star class="w-5 h-5 text-yellow-500" />
+            <span class="text-sm font-semibold text-foreground">{{ t('topHeroes') }}</span>
+          </div>
+          <div class="p-3 flex flex-col gap-2">
+            <div v-for="(hero, idx) in profile.top_heroes" :key="hero.hero_id" class="flex items-center gap-3 p-2.5 rounded-lg bg-accent/30 border border-border/50">
+              <span class="w-5 h-5 rounded flex items-center justify-center text-[10px] font-mono font-bold bg-yellow-500/10 border border-yellow-500/30 text-yellow-500 shrink-0">{{ idx + 1 }}</span>
+              <img v-if="dota.heroImg(hero.hero_id)" :src="dota.heroImg(hero.hero_id)" :alt="dota.heroName(hero.hero_id)"
+                class="w-12 h-7 rounded object-cover border border-primary/30 shrink-0" />
+              <div class="min-w-0 flex-1">
+                <p class="text-sm font-semibold text-foreground truncate">{{ dota.heroName(hero.hero_id) || `Hero #${hero.hero_id}` }}</p>
+                <div class="flex items-center gap-2 mt-0.5">
+                  <div class="flex-1 h-1 rounded-full bg-border/50 overflow-hidden">
+                    <div class="h-full rounded-full bg-green-500" :style="{ width: `${hero.games > 0 ? (hero.wins / hero.games * 100) : 0}%` }"></div>
+                  </div>
+                  <span class="text-[10px] font-mono text-muted-foreground shrink-0">{{ hero.games }}g</span>
+                </div>
+              </div>
+              <div class="flex flex-col items-end text-right shrink-0">
+                <span class="text-xs font-mono font-bold text-green-500">{{ hero.wins }}W</span>
+                <span class="text-[10px] font-mono text-muted-foreground">{{ hero.games - hero.wins }}L</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tournament placements -->
+        <div v-if="profile.tournament_results?.length > 0" class="card">
+          <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
+            <Medal class="w-5 h-5 text-primary" />
+            <span class="text-sm font-semibold text-foreground">{{ t('tournamentPlacements') }}</span>
+            <span class="ml-auto text-xs font-mono text-muted-foreground">{{ profile.tournament_results.length }}</span>
+          </div>
+          <div class="p-3 flex flex-col gap-2">
+            <div
+              v-for="(result, idx) in profile.tournament_results" :key="idx"
+              class="flex items-center gap-3 p-2.5 rounded-lg border-l-[3px]"
+              :class="placementBg(result.placement)"
+            >
+              <div class="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-base shrink-0" :class="placementClass(result.placement)">
+                {{ result.placement === 1 ? '🥇' : result.placement === 2 ? '🥈' : result.placement === 3 ? '🥉' : `#${result.placement}` }}
+              </div>
+              <div class="min-w-0 flex-1">
+                <p class="text-sm font-semibold text-foreground truncate">{{ result.competition_name }}</p>
+                <p class="text-xs text-muted-foreground truncate">{{ result.team }} · {{ result.stage_name }}</p>
+              </div>
+              <span class="text-xs font-medium shrink-0" :class="placementClass(result.placement)">
+                {{ placementLabel(result.placement) }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- XP History + Competition History side by side -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <!-- XP History -->
         <div v-if="xpLog.length > 0" class="card flex flex-col">
           <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
-            <Star class="w-5 h-5 text-foreground" />
+            <Zap class="w-5 h-5 text-purple-400" />
             <span class="text-sm font-semibold text-foreground">{{ t('xpHistory') }}</span>
             <span class="text-xs font-mono text-muted-foreground ml-auto">{{ t('xpTotal') }}: {{ (profile.total_xp || 0).toLocaleString() }}</span>
           </div>
@@ -345,8 +506,9 @@ function placementBg(n: number) {
         <!-- Competition history -->
         <div class="card flex flex-col">
           <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
-            <Swords class="w-5 h-5 text-foreground" />
-            <span class="text-sm font-semibold text-foreground">{{ t('competitionHistory') }} ({{ profile.competitions.length }})</span>
+            <Award class="w-5 h-5 text-yellow-500" />
+            <span class="text-sm font-semibold text-foreground">{{ t('competitionHistory') }}</span>
+            <span class="text-xs font-mono text-muted-foreground ml-auto">{{ profile.competitions.length }}</span>
           </div>
           <div v-if="profile.competitions.length === 0" class="p-6 text-center text-sm text-muted-foreground flex-1 flex items-center justify-center">
             {{ t('noCompetitions') }}

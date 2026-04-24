@@ -10,6 +10,7 @@ import ModalOverlay from '@/components/common/ModalOverlay.vue'
 import AppFooter from '@/components/common/AppFooter.vue'
 import QueueStatusOverlay from '@/components/common/QueueStatusOverlay.vue'
 import ReadyCheckModal from '@/components/common/ReadyCheckModal.vue'
+import UpdateAvailableModal from '@/components/common/UpdateAvailableModal.vue'
 import InputGroup from '@/components/common/InputGroup.vue'
 import { setLocale } from '@/i18n'
 import { getSocket } from '@/composables/useSocket'
@@ -462,6 +463,9 @@ async function handleClaimAdmin() {
 
     <!-- Global ready-check modal (visible on any route) -->
     <ReadyCheckModal />
+
+    <!-- Global update-available modal (shown when server version changes mid-session) -->
+    <UpdateAvailableModal />
 
     <!-- Claim Admin Modal -->
     <ModalOverlay :show="showClaimAdmin" @close="showClaimAdmin = false">

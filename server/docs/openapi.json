@@ -254,6 +254,27 @@
     }
   },
   "paths": {
+    "/api/version": {
+      "get": {
+        "tags": ["System"],
+        "summary": "Get running app version",
+        "description": "Returns the deploy-time version token from server/.version. Clients poll this every 30s to detect new deploys and prompt users to refresh.",
+        "responses": {
+          "200": {
+            "description": "Current app version",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "version": { "type": "string" } },
+                  "required": ["version"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/bots/avatar": {
       "post": {
         "tags": ["Admin"],
@@ -1311,8 +1332,115 @@
       "get": {
         "tags": ["Users"],
         "summary": "Get public player profile",
+        "description": "Returns player info, competition history, tournament placements, top heroes, and lifetime stats aggregated from match_game_player_stats.",
         "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
-        "responses": { "200": { "description": "Player profile with competition history and tournament results" } }
+        "responses": {
+          "200": {
+            "description": "Player profile with competition history, tournament results, and stats block",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "integer" },
+                    "name": { "type": "string" },
+                    "steam_id": { "type": "string", "nullable": true },
+                    "avatar_url": { "type": "string", "nullable": true },
+                    "roles": { "type": "array", "items": { "type": "string" } },
+                    "mmr": { "type": "integer", "nullable": true },
+                    "total_xp": { "type": "integer" },
+                    "level": { "type": "integer" },
+                    "level_progress": { "type": "integer" },
+                    "favorite_position": { "type": "object", "nullable": true },
+                    "top_heroes": { "type": "array", "items": { "type": "object" } },
+                    "competitions": { "type": "array", "items": { "type": "object" } },
+                    "tournament_results": { "type": "array", "items": { "type": "object" } },
+                    "stats": {
+                      "type": "object",
+                      "nullable": true,
+                      "description": "Lifetime aggregates from match_game_player_stats. Null if player has no steam_id.",
+                      "properties": {
+                        "matches_total": { "type": "integer" },
+                        "wins_total": { "type": "integer" },
+                        "win_rate": { "type": "number", "description": "0..1" },
+                        "avg_kda_last10": { "type": "number" },
+                        "avg_k_last10": { "type": "number" },
+                        "avg_d_last10": { "type": "number" },
+                        "avg_a_last10": { "type": "number" },
+                        "kda_sample_size": { "type": "integer", "description": "Actual number of games used (up to 10)" },
+                        "current_streak": {
+                          "type": "object",
+                          "properties": {
+                            "type": { "type": "string", "enum": ["W", "L"], "nullable": true },
+                            "count": { "type": "integer" }
+                          }
+                        },
+                        "hours_played": { "type": "number" },
+                        "last_loss_at": { "type": "string", "format": "date-time", "nullable": true }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/players/{id}/matches": {
+      "get": {
+        "tags": ["Users"],
+        "summary": "Get player match history",
+        "description": "Returns paginated match history (competition + queue matches) enriched with per-match hero, KDA, and duration from match_game_player_stats when available.",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20, "maximum": 50 } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "default": 0 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated match rows with total count",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "integer" },
+                          "type": { "type": "string", "enum": ["competition", "queue"] },
+                          "status": { "type": "string" },
+                          "score1": { "type": "integer", "nullable": true },
+                          "score2": { "type": "integer", "nullable": true },
+                          "team1": { "type": "object" },
+                          "team2": { "type": "object" },
+                          "won": { "type": "boolean", "nullable": true },
+                          "date": { "type": "string", "format": "date-time" },
+                          "playerStats": {
+                            "type": "object",
+                            "nullable": true,
+                            "description": "Per-player stats aggregated across games in this match. Null when match is unparsed or player has no steam_id.",
+                            "properties": {
+                              "hero_id": { "type": "integer", "nullable": true },
+                              "kills": { "type": "integer" },
+                              "deaths": { "type": "integer" },
+                              "assists": { "type": "integer" },
+                              "duration": { "type": "integer", "description": "Total seconds across all games in the match" }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "total": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/players/{id}/xp-log": {

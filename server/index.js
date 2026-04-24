@@ -71,6 +71,12 @@ app.use(express.static(staticPath, {
 }))
 app.use('/uploads', express.static(uploadsDir))
 
+// App version — written by deploy workflow into server/.version. Changes every deploy.
+const APP_VERSION = (() => {
+  try { return readFileSync(join(__dirname, '.version'), 'utf-8').trim() } catch { return 'dev' }
+})()
+app.get('/api/version', (req, res) => res.json({ version: APP_VERSION }))
+
 // API Docs
 const openApiSpec = JSON.parse(readFileSync(join(__dirname, 'docs', 'openapi.json'), 'utf-8'))
 app.get('/api/docs/openapi.json', (req, res) => res.json(openApiSpec))

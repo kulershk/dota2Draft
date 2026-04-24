@@ -176,8 +176,9 @@ router.get('/api/players/:id/profile', async (req, res) => {
 
   // Top 3 most played heroes (from match stats, using Steam32/Steam64 conversion)
   let topHeroes = []
+  let stats = null
   if (player.steam_id) {
-    const steam32 = BigInt(player.steam_id) - 76561197960265728n
+    const steam32 = (BigInt(player.steam_id) - 76561197960265728n).toString()
     topHeroes = await query(`
       SELECT hero_id, COUNT(*) AS games, SUM(win) AS wins
       FROM match_game_player_stats
@@ -185,7 +186,73 @@ router.get('/api/players/:id/profile', async (req, res) => {
       GROUP BY hero_id
       ORDER BY games DESC, wins DESC
       LIMIT 3
-    `, [steam32.toString()])
+    `, [steam32])
+
+    // Lifetime aggregates
+    const agg = await queryOne(`
+      SELECT
+        COUNT(*)::int AS matches_total,
+        COALESCE(SUM(win), 0)::int AS wins_total,
+        COALESCE(SUM(duration_seconds), 0)::int AS total_duration
+      FROM match_game_player_stats
+      WHERE account_id = $1
+    `, [steam32])
+
+    // Last 10 games for KDA averages + streak walk
+    const recent = await query(`
+      SELECT s.kills, s.deaths, s.assists, s.win, g.start_time, g.created_at
+      FROM match_game_player_stats s
+      JOIN match_games g ON g.id = s.match_game_id
+      WHERE s.account_id = $1
+      ORDER BY g.start_time DESC NULLS LAST, g.created_at DESC
+      LIMIT 50
+    `, [steam32])
+
+    const last10 = recent.slice(0, 10)
+    const n10 = last10.length || 1
+    const sumK = last10.reduce((a, r) => a + (r.kills || 0), 0)
+    const sumD = last10.reduce((a, r) => a + (r.deaths || 0), 0)
+    const sumA = last10.reduce((a, r) => a + (r.assists || 0), 0)
+    const avgK = sumK / n10
+    const avgD = sumD / n10
+    const avgA = sumA / n10
+    const kdaLast10 = (sumK + sumA) / Math.max(sumD, 1)
+
+    // Current streak: walk from most recent, counting consecutive same-result games
+    let streakCount = 0
+    let streakType = null
+    if (recent.length > 0) {
+      streakType = recent[0].win === 1 ? 'W' : 'L'
+      for (const r of recent) {
+        const t = r.win === 1 ? 'W' : 'L'
+        if (t === streakType) streakCount++
+        else break
+      }
+    }
+
+    // Last loss timestamp
+    const lastLossRow = await queryOne(`
+      SELECT COALESCE(to_timestamp(g.start_time), g.created_at) AS ts
+      FROM match_game_player_stats s
+      JOIN match_games g ON g.id = s.match_game_id
+      WHERE s.account_id = $1 AND s.win = 0
+      ORDER BY g.start_time DESC NULLS LAST, g.created_at DESC
+      LIMIT 1
+    `, [steam32])
+
+    stats = {
+      matches_total: agg.matches_total,
+      wins_total: agg.wins_total,
+      win_rate: agg.matches_total > 0 ? agg.wins_total / agg.matches_total : 0,
+      avg_kda_last10: Number(kdaLast10.toFixed(2)),
+      avg_k_last10: Number(avgK.toFixed(1)),
+      avg_d_last10: Number(avgD.toFixed(1)),
+      avg_a_last10: Number(avgA.toFixed(1)),
+      kda_sample_size: last10.length,
+      current_streak: { type: streakType, count: streakCount },
+      hours_played: Number((agg.total_duration / 3600).toFixed(1)),
+      last_loss_at: lastLossRow?.ts || null,
+    }
   }
 
   res.json({
@@ -226,6 +293,7 @@ router.get('/api/players/:id/profile', async (req, res) => {
       games: Number(h.games),
       wins: Number(h.wins),
     })),
+    stats,
   })
 })
 
@@ -327,7 +395,40 @@ router.get('/api/players/:id/matches', async (req, res) => {
       }
     }
 
-    res.json({ rows: all.slice(offset, offset + limit), total: all.length })
+    const paged = all.slice(offset, offset + limit)
+
+    // Enrich paged rows with per-match hero + KDA + duration from match_game_player_stats
+    if (player.steam_id && paged.length > 0) {
+      const steam32 = (BigInt(player.steam_id) - 76561197960265728n).toString()
+      const matchIds = paged.map(m => m.id).filter(Boolean)
+      if (matchIds.length > 0) {
+        const statRows = await query(`
+          SELECT g.match_id,
+                 SUM(s.kills)::int AS kills,
+                 SUM(s.deaths)::int AS deaths,
+                 SUM(s.assists)::int AS assists,
+                 SUM(s.duration_seconds)::int AS duration,
+                 (array_agg(s.hero_id ORDER BY g.game_number))[1] AS hero_id
+          FROM match_game_player_stats s
+          JOIN match_games g ON g.id = s.match_game_id
+          WHERE s.account_id = $1 AND g.match_id = ANY($2::int[])
+          GROUP BY g.match_id
+        `, [steam32, matchIds])
+        const byMatch = new Map(statRows.map(r => [r.match_id, r]))
+        for (const m of paged) {
+          const s = byMatch.get(m.id)
+          m.playerStats = s ? {
+            hero_id: s.hero_id || null,
+            kills: s.kills,
+            deaths: s.deaths,
+            assists: s.assists,
+            duration: s.duration,
+          } : null
+        }
+      }
+    }
+
+    res.json({ rows: paged, total: all.length })
   } catch (e) {
     console.error('Match history error:', e)
     res.status(500).json({ error: 'Failed to load match history' })

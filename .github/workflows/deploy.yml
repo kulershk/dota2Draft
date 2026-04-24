@@ -17,6 +17,8 @@ jobs:
           script: |
             cd /var/www/dota2Draft
             git pull origin main
+            # Stamp a fresh version token so clients can detect the new deploy and prompt users to refresh.
+            echo "$(date +%s)-$(openssl rand -hex 4)" > server/.version
             curl -s -X POST http://localhost:3000/api/deploy-status \
               -H "Content-Type: application/json" \
               -H "X-Deploy-Token: ${{ secrets.DEPLOY_TOKEN }}" \
