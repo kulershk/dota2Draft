@@ -1115,8 +1115,15 @@
               "lobbyExpiresAt": { "type": "integer", "description": "Epoch ms when the lobby auto-cancels if not enough players join" },
               "playersJoined": {
                 "type": "array",
-                "description": "Steam IDs of players currently in the Dota lobby",
-                "items": { "type": "string" }
+                "description": "Players currently in the Dota lobby. Each entry is an object with steamId/name/team as reported by the Go bot.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "steamId": { "type": "string" },
+                    "name": { "type": "string" },
+                    "team": { "type": "string", "enum": ["radiant", "dire"] }
+                  }
+                }
               }
             }
           }
@@ -1135,7 +1142,15 @@
               "status": { "type": "string", "enum": ["creating", "waiting", "launching", "active", "completed", "error", "cancelled"] },
               "playersJoined": {
                 "type": "array",
-                "items": { "type": "string", "description": "Steam ID" }
+                "description": "Players currently in the Dota lobby. Each entry is an object with steamId/name/team as reported by the Go bot.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "steamId": { "type": "string" },
+                    "name": { "type": "string" },
+                    "team": { "type": "string", "enum": ["radiant", "dire"] }
+                  }
+                }
               }
             }
           }

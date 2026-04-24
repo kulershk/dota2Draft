@@ -111,6 +111,16 @@ const poolCounts = ref<Record<number, number>>({})
 
 let socketInitialized = false
 
+// The Go bot reports `playersJoined` as `LobbyPlayer` objects ({steamId, name, team}),
+// but older code paths (and a future server change) may send plain steamId strings.
+// Normalize to a flat string[] of steamIds so isInLobby(steamId) works either way.
+function normalizeJoined(list: Array<string | { steamId: string }> | undefined | null): string[] {
+  if (!Array.isArray(list)) return []
+  return list
+    .map(p => (typeof p === 'string' ? p : (p && typeof p.steamId === 'string' ? p.steamId : '')))
+    .filter(Boolean)
+}
+
 function initSocket() {
   if (socketInitialized) return
   socketInitialized = true
@@ -235,15 +245,15 @@ function initSocket() {
     teamsFormed.value = { team1: data.team1, team2: data.team2 }
   })
 
-  socket.on('queue:lobbyCreated', (data: { queueMatchId: number; matchId: number; lobbyInfo: { gameName: string; password: string }; lobbyExpiresAt?: number; playersJoined?: string[] }) => {
+  socket.on('queue:lobbyCreated', (data: { queueMatchId: number; matchId: number; lobbyInfo: { gameName: string; password: string }; lobbyExpiresAt?: number; playersJoined?: Array<string | { steamId: string }> }) => {
     lobbyInfo.value = { matchId: data.matchId, gameName: data.lobbyInfo.gameName, password: data.lobbyInfo.password, expiresAt: data.lobbyExpiresAt || 0 }
-    lobbyPlayersJoined.value = data.playersJoined || []
+    lobbyPlayersJoined.value = normalizeJoined(data.playersJoined)
   })
 
-  socket.on('lobby:statusUpdate', (data: { matchId: number; gameNumber: number; status: string; playersJoined?: string[] }) => {
+  socket.on('lobby:statusUpdate', (data: { matchId: number; gameNumber: number; status: string; playersJoined?: Array<string | { steamId: string }> }) => {
     if (!lobbyInfo.value || lobbyInfo.value.matchId !== data.matchId) return
     if (Array.isArray(data.playersJoined)) {
-      lobbyPlayersJoined.value = data.playersJoined
+      lobbyPlayersJoined.value = normalizeJoined(data.playersJoined)
     }
   })
 

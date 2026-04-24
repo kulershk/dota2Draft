@@ -316,6 +316,35 @@ export function registerQueueHandlers(socket, io) {
           const team1 = [match.captain1, ...match.captain1Picks]
           const team2 = [match.captain2, ...match.captain2Picks]
           socket.emit('queue:teamsFormed', { queueMatchId: inMatchId, team1, team2 })
+
+          // If the lobby has already been created (status=live) or even just
+          // exists in the DB while we're still flipping match.status from
+          // lobby_creating to live, send queue:lobbyCreated too. Without this,
+          // a refresh during/after lobby creation lands the user on a stuck
+          // "Creating lobby…" spinner until they navigate away and back.
+          try {
+            const qm = await queryOne('SELECT match_id FROM queue_matches WHERE id = $1', [inMatchId])
+            if (qm?.match_id) {
+              const lobby = await queryOne(
+                "SELECT game_name, password, created_at, players_joined FROM match_lobbies WHERE match_id = $1 ORDER BY id DESC LIMIT 1",
+                [qm.match_id]
+              )
+              if (lobby) {
+                const timeoutMs = (match.pool?.lobby_timeout_minutes || 10) * 60 * 1000
+                const expiresAt = match.lobbyExpiresAt || (new Date(lobby.created_at).getTime() + timeoutMs)
+                const playersJoined = Array.isArray(lobby.players_joined)
+                  ? lobby.players_joined
+                  : (typeof lobby.players_joined === 'string' ? JSON.parse(lobby.players_joined) : [])
+                socket.emit('queue:lobbyCreated', {
+                  queueMatchId: inMatchId,
+                  matchId: qm.match_id,
+                  lobbyInfo: { gameName: lobby.game_name, password: lobby.password },
+                  lobbyExpiresAt: expiresAt,
+                  playersJoined,
+                })
+              }
+            }
+          } catch {}
         }
       }
     }
@@ -446,27 +475,29 @@ export function registerQueueHandlers(socket, io) {
           const team2 = [match.captain2, ...match.captain2Picks]
           socket.emit('queue:teamsFormed', { queueMatchId: qmId, team1, team2 })
 
-          if (match.status === 'live') {
-            const qm = await queryOne('SELECT match_id FROM queue_matches WHERE id = $1', [qmId])
-            if (qm?.match_id) {
-              const lobby = await queryOne(
-                "SELECT game_name, password, created_at FROM match_lobbies WHERE match_id = $1 ORDER BY id DESC LIMIT 1",
-                [qm.match_id]
-              )
-              if (lobby) {
-                const timeoutMs = (match.pool?.lobby_timeout_minutes || 10) * 60 * 1000
-                const expiresAt = match.lobbyExpiresAt || (new Date(lobby.created_at).getTime() + timeoutMs)
-                const playersJoined = Array.isArray(lobby.players_joined)
-                  ? lobby.players_joined
-                  : (typeof lobby.players_joined === 'string' ? JSON.parse(lobby.players_joined) : [])
-                socket.emit('queue:lobbyCreated', {
-                  queueMatchId: qmId,
-                  matchId: qm.match_id,
-                  lobbyInfo: { gameName: lobby.game_name, password: lobby.password },
-                  lobbyExpiresAt: expiresAt,
-                  playersJoined,
-                })
-              }
+          // Send queue:lobbyCreated whenever a lobby row exists, not only when
+          // match.status flipped to 'live'. The server briefly reports
+          // 'lobby_creating' between the lobby being inserted and status being
+          // updated; a refresh in that window must still rehydrate the lobby UI.
+          const qm = await queryOne('SELECT match_id FROM queue_matches WHERE id = $1', [qmId])
+          if (qm?.match_id) {
+            const lobby = await queryOne(
+              "SELECT game_name, password, created_at, players_joined FROM match_lobbies WHERE match_id = $1 ORDER BY id DESC LIMIT 1",
+              [qm.match_id]
+            )
+            if (lobby) {
+              const timeoutMs = (match.pool?.lobby_timeout_minutes || 10) * 60 * 1000
+              const expiresAt = match.lobbyExpiresAt || (new Date(lobby.created_at).getTime() + timeoutMs)
+              const playersJoined = Array.isArray(lobby.players_joined)
+                ? lobby.players_joined
+                : (typeof lobby.players_joined === 'string' ? JSON.parse(lobby.players_joined) : [])
+              socket.emit('queue:lobbyCreated', {
+                queueMatchId: qmId,
+                matchId: qm.match_id,
+                lobbyInfo: { gameName: lobby.game_name, password: lobby.password },
+                lobbyExpiresAt: expiresAt,
+                playersJoined,
+              })
             }
           }
         }
