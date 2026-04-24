@@ -977,6 +977,8 @@ export default {
   profileWin: 'WIN',
   profileLoss: 'LOSS',
   profileTie: 'TIE',
+  profileNoStats: 'No stats',
+  showingNofM: 'Showing {n} of {m}',
   versionUpdateTitle: 'New version available',
   versionUpdateDesc: 'The site was updated. Refresh the page to load the latest version.',
   versionUpdateRefresh: 'Refresh page',

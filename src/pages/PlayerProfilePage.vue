@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { User, Trophy, Swords, Tv, Medal, MessageCircle, Star, ChevronLeft, ChevronRight, Percent, Target, Flame, Clock, Award, Zap } from 'lucide-vue-next'
+import { User, Trophy, Swords, Tv, Medal, MessageCircle, Star, ChevronLeft, ChevronRight, Percent, Target, Flame, Clock, Award, Zap, Check, X } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -81,6 +81,20 @@ function formatDate(dateStr: string) {
   return fmtDateOnly(new Date(dateStr))
 }
 
+function formatRelative(dateStr: string): string {
+  const d = new Date(dateStr).getTime()
+  if (!d) return '—'
+  const diff = Date.now() - d
+  const m = Math.floor(diff / 60_000)
+  if (m < 1) return t('justNow') as string
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  const days = Math.floor(h / 24)
+  if (days < 30) return `${days}d ago`
+  return fmtDateOnly(new Date(dateStr))
+}
+
 function placementLabel(n: number) {
   if (n === 1) return t('placementFirst')
   if (n === 2) return t('placementSecond')
@@ -145,7 +159,7 @@ const streakBadge = computed(() => {
 </script>
 
 <template>
-  <div class="p-4 md:p-8 flex flex-col gap-5 md:gap-6 max-w-[900px] mx-auto w-full">
+  <div class="p-4 md:p-8 flex flex-col gap-5 md:gap-6 max-w-[1440px] mx-auto w-full">
     <div v-if="loading" class="text-center py-12 text-muted-foreground">{{ t('loading') }}</div>
     <div v-else-if="error" class="text-center py-12 text-muted-foreground">{{ t('playerNotFound') }}</div>
 
@@ -323,230 +337,244 @@ const streakBadge = computed(() => {
         </div>
       </div>
 
-      <!-- Match History (full width) -->
-      <div class="card flex flex-col">
-        <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
-          <Swords class="w-5 h-5 text-foreground" />
-          <span class="text-sm font-semibold text-foreground">{{ t('matchHistory') }}</span>
-          <span class="text-xs font-mono text-muted-foreground ml-auto">{{ matchTotal }} {{ t('matches') }}</span>
-        </div>
-        <div v-if="matchLoading && matchHistory.length === 0" class="p-6 text-center text-sm text-muted-foreground">{{ t('loading') }}</div>
-        <div v-else-if="matchHistory.length === 0" class="p-6 text-center text-sm text-muted-foreground">{{ t('noMatches') }}</div>
-        <div v-else class="flex flex-col">
-          <!-- Column headers -->
-          <div class="hidden md:grid px-4 py-2 gap-3 text-[10px] font-mono font-bold tracking-[0.2em] text-muted-foreground/70 border-b border-border/50"
-               style="grid-template-columns: 56px 1fr 90px 80px 1fr 70px 80px">
-            <span>{{ t('profileResult').toUpperCase() }}</span>
-            <span>{{ t('profileHero').toUpperCase() }}</span>
-            <span class="text-center">{{ t('profileKdaShort') }}</span>
-            <span class="text-center">{{ t('profileScoreShort').toUpperCase() }}</span>
-            <span>{{ t('profileModeShort').toUpperCase() }}</span>
-            <span class="text-right">{{ t('profileDurationShort').toUpperCase() }}</span>
-            <span class="text-right">{{ t('profileDateShort').toUpperCase() }}</span>
+      <!-- Body: 2-col grid with 420px right sidebar -->
+      <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_420px] gap-5 md:gap-6">
+        <!-- Main column: match history + XP + comp history -->
+        <div class="flex flex-col gap-5 md:gap-6 min-w-0">
+          <!-- Match History -->
+          <div class="card flex flex-col">
+            <div class="flex items-center gap-2 px-5 py-4 border-b border-border">
+              <Swords class="w-5 h-5 text-primary" />
+              <span class="text-sm font-bold text-foreground">{{ t('matchHistory') }}</span>
+              <span class="text-xs font-mono text-muted-foreground">· {{ matchTotal }} {{ t('matches') }}</span>
+            </div>
+            <div v-if="matchLoading && matchHistory.length === 0" class="p-6 text-center text-sm text-muted-foreground">{{ t('loading') }}</div>
+            <div v-else-if="matchHistory.length === 0" class="p-6 text-center text-sm text-muted-foreground">{{ t('noMatches') }}</div>
+            <div v-else class="p-3">
+              <!-- Column headers -->
+              <div class="hidden lg:grid px-3.5 py-2 gap-3 text-[10px] font-mono font-bold tracking-[0.2em] text-muted-foreground/60"
+                   style="grid-template-columns: 72px 180px 100px 100px minmax(0,1fr) 80px 90px">
+                <span>{{ t('profileResult').toUpperCase() }}</span>
+                <span>{{ t('profileHero').toUpperCase() }}</span>
+                <span class="text-center">{{ t('profileKdaShort') }}</span>
+                <span class="text-center">{{ t('profileScoreShort').toUpperCase() }}</span>
+                <span>{{ t('profileModeShort').toUpperCase() }}</span>
+                <span class="text-right">{{ t('profileDurationShort').toUpperCase() }}</span>
+                <span class="text-right">{{ t('profileDateShort').toUpperCase() }}</span>
+              </div>
+
+              <!-- Rows -->
+              <div class="flex flex-col gap-1">
+                <component
+                  :is="m.type === 'queue' && m.queueMatchId ? 'router-link' : m.type === 'competition' && m.competitionId ? 'router-link' : 'div'"
+                  v-for="m in matchHistory"
+                  :key="(m.type === 'queue' ? 'q' : 'c') + m.id"
+                  :to="m.type === 'queue' ? { name: 'queue-match', params: { id: m.queueMatchId } } : { name: 'comp-match', params: { compId: m.competitionId, matchId: m.id } }"
+                  class="flex flex-wrap lg:grid items-center gap-3 px-3.5 py-2.5 rounded-lg bg-[color-mix(in_srgb,var(--card)_60%,black)] border-l-[3px] hover:bg-accent/40 transition-colors"
+                  :class="m.status !== 'completed' ? 'border-l-muted-foreground/30' : m.won ? 'border-l-green-500/60' : 'border-l-red-500/60'"
+                  style="grid-template-columns: 72px 180px 100px 100px minmax(0,1fr) 80px 90px"
+                >
+                  <!-- 1. Result chip -->
+                  <span class="inline-flex items-center justify-center gap-1.5 w-[72px] px-2.5 py-1 rounded-md text-[11px] font-mono font-extrabold tracking-wider"
+                        :class="m.status !== 'completed' ? 'bg-muted/30 text-muted-foreground' : m.won ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'">
+                    <Check v-if="m.status === 'completed' && m.won" class="w-3 h-3" />
+                    <X v-else-if="m.status === 'completed' && !m.won" class="w-3 h-3" />
+                    {{ m.status !== 'completed' ? '—' : m.won ? t('profileWin') : t('profileLoss') }}
+                  </span>
+
+                  <!-- 2. Hero block (180px): portrait + name + subtitle -->
+                  <div class="flex items-center gap-2.5 min-w-0 lg:w-[180px]">
+                    <img v-if="m.playerStats?.hero_id && dota.heroImg(m.playerStats.hero_id)"
+                         :src="dota.heroImg(m.playerStats.hero_id)"
+                         :alt="dota.heroName(m.playerStats.hero_id)"
+                         class="w-12 h-8 rounded object-cover border border-primary/40 shrink-0" />
+                    <div v-else class="w-12 h-8 rounded bg-accent/50 border border-border/40 shrink-0 flex items-center justify-center">
+                      <Swords class="w-3.5 h-3.5 text-muted-foreground" />
+                    </div>
+                    <div class="flex flex-col min-w-0 gap-0.5">
+                      <span v-if="m.playerStats?.hero_id" class="text-xs font-bold text-foreground truncate leading-tight">{{ dota.heroName(m.playerStats.hero_id) }}</span>
+                      <span v-else class="text-xs font-bold text-muted-foreground truncate leading-tight">{{ t('profileNoStats') }}</span>
+                      <span class="text-[10px] text-muted-foreground truncate leading-tight">
+                        {{ m.team1.name || 'TBD' }} <span class="opacity-50">vs</span> {{ m.team2.name || 'TBD' }}
+                      </span>
+                    </div>
+                  </div>
+
+                  <!-- 3. KDA (100px center) -->
+                  <span class="text-xs font-mono font-bold text-foreground text-center tabular-nums lg:w-[100px]">{{ kdaString(m.playerStats) }}</span>
+
+                  <!-- 4. Score (100px center) -->
+                  <span class="text-xs font-mono font-bold text-muted-foreground text-center tabular-nums lg:w-[100px]">
+                    <span :class="m.status === 'completed' && m.winnerCaptainId === m.team1.captainId ? 'text-foreground' : ''">{{ m.score1 ?? '-' }}</span>
+                    <span class="opacity-50 mx-1">–</span>
+                    <span :class="m.status === 'completed' && m.winnerCaptainId === m.team2.captainId ? 'text-foreground' : ''">{{ m.score2 ?? '-' }}</span>
+                  </span>
+
+                  <!-- 5. Mode (fill) -->
+                  <span class="text-xs text-muted-foreground truncate">
+                    <span v-if="m.type === 'queue'">{{ m.poolName || t('queueTitle') }}</span>
+                    <span v-else>{{ m.competitionName }}</span>
+                  </span>
+
+                  <!-- 6. Duration (80px right) -->
+                  <span class="text-xs font-mono font-semibold text-muted-foreground text-right tabular-nums lg:w-[80px]">{{ fmtDuration(m.playerStats?.duration) }}</span>
+
+                  <!-- 7. Date (90px right, relative) -->
+                  <span class="text-xs font-mono font-semibold text-muted-foreground/70 text-right tabular-nums lg:w-[90px]">{{ formatRelative(m.date) }}</span>
+                </component>
+              </div>
+            </div>
+            <!-- Pagination -->
+            <div v-if="matchTotalPages > 1" class="flex items-center justify-between px-5 py-3 border-t border-border">
+              <span class="text-xs text-muted-foreground">{{ t('showingNofM', { n: Math.min(matchHistory.length, MATCH_PAGE_SIZE), m: matchTotal }) }}</span>
+              <div class="flex items-center gap-2">
+                <button class="p-1 rounded hover:bg-accent disabled:opacity-30" :disabled="matchPage <= 0" @click="prevMatchPage">
+                  <ChevronLeft class="w-4 h-4 text-muted-foreground" />
+                </button>
+                <span class="text-xs text-muted-foreground font-mono">{{ matchPage + 1 }} / {{ matchTotalPages }}</span>
+                <button class="p-1 rounded hover:bg-accent disabled:opacity-30" :disabled="matchPage + 1 >= matchTotalPages" @click="nextMatchPage">
+                  <ChevronRight class="w-4 h-4 text-muted-foreground" />
+                </button>
+              </div>
+            </div>
           </div>
 
-          <!-- Rows -->
-          <component
-            :is="m.type === 'queue' && m.queueMatchId ? 'router-link' : m.type === 'competition' && m.competitionId ? 'router-link' : 'div'"
-            v-for="m in matchHistory"
-            :key="(m.type === 'queue' ? 'q' : 'c') + m.id"
-            :to="m.type === 'queue' ? { name: 'queue-match', params: { id: m.queueMatchId } } : { name: 'comp-match', params: { compId: m.competitionId, matchId: m.id } }"
-            class="flex flex-wrap md:grid items-center gap-3 px-4 py-2.5 border-l-[3px] border-b border-border/50 last:border-b-0 hover:bg-accent/30 transition-colors"
-            :class="m.status !== 'completed' ? 'border-l-muted-foreground/30' : m.won ? 'border-l-green-500/60' : 'border-l-red-500/60'"
-            style="grid-template-columns: 56px 1fr 90px 80px 1fr 70px 80px"
-          >
-            <!-- Result chip -->
-            <span class="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[10px] font-mono font-bold w-14"
-                  :class="m.status !== 'completed' ? 'bg-muted/30 text-muted-foreground' : m.won ? 'bg-green-500/15 text-green-500' : 'bg-red-500/15 text-red-500'">
-              {{ m.status !== 'completed' ? '—' : m.won ? t('profileWin') : t('profileLoss') }}
-            </span>
+          <!-- XP History + Competition History -->
+          <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+            <!-- XP History -->
+            <div v-if="xpLog.length > 0" class="card flex flex-col">
+              <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
+                <Zap class="w-5 h-5 text-purple-400" />
+                <span class="text-sm font-semibold text-foreground">{{ t('xpHistory') }}</span>
+                <span class="text-xs font-mono text-muted-foreground ml-auto">{{ t('xpTotal') }}: {{ (profile.total_xp || 0).toLocaleString() }}</span>
+              </div>
+              <div class="divide-y divide-border flex-1">
+                <div v-for="log in pagedXpLog" :key="log.created_at" class="flex items-center gap-3 px-4 py-2.5">
+                  <span class="text-sm font-bold font-mono text-primary shrink-0">+{{ log.amount }}</span>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-sm text-foreground truncate">{{ t(`xpReason_${log.reason}`) }}</p>
+                    <p v-if="log.detail" class="text-xs text-muted-foreground truncate">{{ log.detail }}</p>
+                  </div>
+                  <div class="text-right shrink-0">
+                    <p v-if="log.competition_name" class="text-xs text-muted-foreground truncate max-w-[140px]">{{ log.competition_name }}</p>
+                    <p class="text-[10px] text-text-tertiary">{{ fmtDateTime(new Date(log.created_at)) }}</p>
+                  </div>
+                </div>
+              </div>
+              <div v-if="xpTotalPages > 1" class="flex items-center justify-between px-4 py-2 border-t border-border">
+                <button class="p-1 rounded hover:bg-accent disabled:opacity-30" :disabled="xpPage <= 1" @click="xpPage--">
+                  <ChevronLeft class="w-4 h-4 text-muted-foreground" />
+                </button>
+                <span class="text-xs text-muted-foreground font-mono">{{ xpPage }} / {{ xpTotalPages }}</span>
+                <button class="p-1 rounded hover:bg-accent disabled:opacity-30" :disabled="xpPage >= xpTotalPages" @click="xpPage++">
+                  <ChevronRight class="w-4 h-4 text-muted-foreground" />
+                </button>
+              </div>
+            </div>
 
-            <!-- Hero + teams -->
-            <div class="flex items-center gap-2 min-w-0 flex-1">
-              <img v-if="m.playerStats?.hero_id && dota.heroImg(m.playerStats.hero_id)"
-                   :src="dota.heroImg(m.playerStats.hero_id)"
-                   :alt="dota.heroName(m.playerStats.hero_id)"
-                   class="w-10 h-6 rounded object-cover border border-border/30 shrink-0" />
-              <div v-else class="w-10 h-6 rounded bg-accent/50 border border-border/30 shrink-0" />
-              <div class="flex flex-col min-w-0">
-                <span v-if="m.playerStats?.hero_id" class="text-xs font-semibold text-foreground truncate">{{ dota.heroName(m.playerStats.hero_id) }}</span>
-                <span class="text-[11px] text-muted-foreground truncate">
-                  {{ m.team1.name || 'TBD' }} <span class="opacity-50">vs</span> {{ m.team2.name || 'TBD' }}
+            <!-- Competition history -->
+            <div class="card flex flex-col">
+              <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
+                <Award class="w-5 h-5 text-yellow-500" />
+                <span class="text-sm font-semibold text-foreground">{{ t('competitionHistory') }}</span>
+                <span class="text-xs font-mono text-muted-foreground ml-auto">{{ profile.competitions.length }}</span>
+              </div>
+              <div v-if="profile.competitions.length === 0" class="p-6 text-center text-sm text-muted-foreground flex-1 flex items-center justify-center">
+                {{ t('noCompetitions') }}
+              </div>
+              <div v-else class="divide-y divide-border flex-1">
+                <div v-for="comp in pagedCompetitions" :key="comp.competition_id" class="flex items-center gap-3 px-4 py-3">
+                  <div class="flex-1 min-w-0">
+                    <router-link
+                      :to="{ name: 'comp-info', params: { compId: comp.competition_id } }"
+                      class="text-sm font-medium text-foreground hover:text-primary transition-colors truncate block"
+                    >{{ comp.competition_name }}</router-link>
+                    <div class="flex flex-wrap items-center gap-2 mt-1">
+                      <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
+                        :class="comp.was_captain ? 'bg-primary/10 text-primary' : 'bg-accent text-muted-foreground'">
+                        <Trophy v-if="comp.was_captain" class="w-3 h-3 mr-0.5" />
+                        {{ comp.was_captain ? t('wasCaptain') : t('wasPlayer') }}
+                      </span>
+                      <span v-if="comp.captain_team" class="text-xs text-muted-foreground">{{ comp.captain_team }}</span>
+                      <span v-if="comp.drafted && comp.drafted_by_team" class="text-xs text-muted-foreground">
+                        {{ t('draftedBy') }} {{ comp.drafted_by_team }}
+                      </span>
+                      <span v-if="comp.draft_price" class="text-xs font-mono text-primary font-semibold">{{ comp.draft_price }}g</span>
+                    </div>
+                  </div>
+                  <div class="shrink-0">
+                    <MmrDisplay v-if="comp.mmr" :mmr="comp.mmr" size="sm" />
+                  </div>
+                </div>
+              </div>
+              <div v-if="compTotalPages > 1" class="flex items-center justify-between px-4 py-2 border-t border-border">
+                <button class="p-1 rounded hover:bg-accent disabled:opacity-30" :disabled="compPage <= 1" @click="compPage--">
+                  <ChevronLeft class="w-4 h-4 text-muted-foreground" />
+                </button>
+                <span class="text-xs text-muted-foreground font-mono">{{ compPage }} / {{ compTotalPages }}</span>
+                <button class="p-1 rounded hover:bg-accent disabled:opacity-30" :disabled="compPage >= compTotalPages" @click="compPage++">
+                  <ChevronRight class="w-4 h-4 text-muted-foreground" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right sidebar: top heroes + tournaments (420px) -->
+        <div class="flex flex-col gap-5 md:gap-6">
+          <!-- Top heroes -->
+          <div v-if="profile.top_heroes?.length" class="card">
+            <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
+              <Star class="w-5 h-5 text-yellow-500" />
+              <span class="text-sm font-bold text-foreground">{{ t('topHeroes') }}</span>
+            </div>
+            <div class="p-3 flex flex-col gap-2">
+              <div v-for="(hero, idx) in profile.top_heroes" :key="hero.hero_id" class="flex items-center gap-3 p-2.5 rounded-lg bg-accent/30 border border-border/50">
+                <span class="w-5 h-5 rounded flex items-center justify-center text-[10px] font-mono font-bold bg-yellow-500/10 border border-yellow-500/30 text-yellow-500 shrink-0">{{ idx + 1 }}</span>
+                <img v-if="dota.heroImg(hero.hero_id)" :src="dota.heroImg(hero.hero_id)" :alt="dota.heroName(hero.hero_id)"
+                  class="w-12 h-7 rounded object-cover border border-primary/30 shrink-0" />
+                <div class="min-w-0 flex-1">
+                  <p class="text-sm font-semibold text-foreground truncate">{{ dota.heroName(hero.hero_id) || `Hero #${hero.hero_id}` }}</p>
+                  <div class="flex items-center gap-2 mt-0.5">
+                    <div class="flex-1 h-1 rounded-full bg-border/50 overflow-hidden">
+                      <div class="h-full rounded-full bg-green-500" :style="{ width: `${hero.games > 0 ? (hero.wins / hero.games * 100) : 0}%` }"></div>
+                    </div>
+                    <span class="text-[10px] font-mono text-muted-foreground shrink-0">{{ hero.games }}g</span>
+                  </div>
+                </div>
+                <div class="flex flex-col items-end text-right shrink-0">
+                  <span class="text-xs font-mono font-bold text-green-500">{{ hero.wins }}W</span>
+                  <span class="text-[10px] font-mono text-muted-foreground">{{ hero.games - hero.wins }}L</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tournament placements -->
+          <div v-if="profile.tournament_results?.length > 0" class="card">
+            <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
+              <Medal class="w-5 h-5 text-primary" />
+              <span class="text-sm font-bold text-foreground">{{ t('tournamentPlacements') }}</span>
+              <span class="ml-auto text-xs font-mono text-muted-foreground">{{ profile.tournament_results.length }}</span>
+            </div>
+            <div class="p-3 flex flex-col gap-2">
+              <div
+                v-for="(result, idx) in profile.tournament_results" :key="idx"
+                class="flex items-center gap-3 p-2.5 rounded-lg border-l-[3px]"
+                :class="placementBg(result.placement)"
+              >
+                <div class="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-base shrink-0" :class="placementClass(result.placement)">
+                  {{ result.placement === 1 ? '🥇' : result.placement === 2 ? '🥈' : result.placement === 3 ? '🥉' : `#${result.placement}` }}
+                </div>
+                <div class="min-w-0 flex-1">
+                  <p class="text-sm font-semibold text-foreground truncate">{{ result.competition_name }}</p>
+                  <p class="text-xs text-muted-foreground truncate">{{ result.team }} · {{ result.stage_name }}</p>
+                </div>
+                <span class="text-xs font-medium shrink-0" :class="placementClass(result.placement)">
+                  {{ placementLabel(result.placement) }}
                 </span>
               </div>
             </div>
-
-            <!-- KDA -->
-            <span class="text-xs font-mono font-bold text-foreground text-center tabular-nums">{{ kdaString(m.playerStats) }}</span>
-
-            <!-- Score -->
-            <span class="text-xs font-mono font-bold text-muted-foreground text-center tabular-nums">
-              <span :class="m.status === 'completed' && m.winnerCaptainId === m.team1.captainId ? 'text-foreground' : ''">{{ m.score1 ?? '-' }}</span>
-              <span class="opacity-50">–</span>
-              <span :class="m.status === 'completed' && m.winnerCaptainId === m.team2.captainId ? 'text-foreground' : ''">{{ m.score2 ?? '-' }}</span>
-            </span>
-
-            <!-- Mode -->
-            <span class="text-[11px] text-muted-foreground truncate">
-              <span v-if="m.type === 'queue'">{{ m.poolName || t('queueTitle') }}</span>
-              <span v-else>{{ m.competitionName }}</span>
-            </span>
-
-            <!-- Duration -->
-            <span class="text-[11px] font-mono text-muted-foreground text-right tabular-nums">{{ fmtDuration(m.playerStats?.duration) }}</span>
-
-            <!-- Date -->
-            <span class="text-[11px] font-mono text-muted-foreground text-right tabular-nums">{{ formatDate(m.date) }}</span>
-          </component>
-        </div>
-        <!-- Pagination -->
-        <div v-if="matchTotalPages > 1" class="flex items-center justify-between px-4 py-2 border-t border-border">
-          <button class="p-1 rounded hover:bg-accent disabled:opacity-30" :disabled="matchPage <= 0" @click="prevMatchPage">
-            <ChevronLeft class="w-4 h-4 text-muted-foreground" />
-          </button>
-          <span class="text-xs text-muted-foreground font-mono">{{ matchPage + 1 }} / {{ matchTotalPages }}</span>
-          <button class="p-1 rounded hover:bg-accent disabled:opacity-30" :disabled="matchPage + 1 >= matchTotalPages" @click="nextMatchPage">
-            <ChevronRight class="w-4 h-4 text-muted-foreground" />
-          </button>
-        </div>
-      </div>
-
-      <!-- Top heroes + Tournament placements (side by side) -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <!-- Top heroes -->
-        <div v-if="profile.top_heroes?.length" class="card">
-          <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
-            <Star class="w-5 h-5 text-yellow-500" />
-            <span class="text-sm font-semibold text-foreground">{{ t('topHeroes') }}</span>
-          </div>
-          <div class="p-3 flex flex-col gap-2">
-            <div v-for="(hero, idx) in profile.top_heroes" :key="hero.hero_id" class="flex items-center gap-3 p-2.5 rounded-lg bg-accent/30 border border-border/50">
-              <span class="w-5 h-5 rounded flex items-center justify-center text-[10px] font-mono font-bold bg-yellow-500/10 border border-yellow-500/30 text-yellow-500 shrink-0">{{ idx + 1 }}</span>
-              <img v-if="dota.heroImg(hero.hero_id)" :src="dota.heroImg(hero.hero_id)" :alt="dota.heroName(hero.hero_id)"
-                class="w-12 h-7 rounded object-cover border border-primary/30 shrink-0" />
-              <div class="min-w-0 flex-1">
-                <p class="text-sm font-semibold text-foreground truncate">{{ dota.heroName(hero.hero_id) || `Hero #${hero.hero_id}` }}</p>
-                <div class="flex items-center gap-2 mt-0.5">
-                  <div class="flex-1 h-1 rounded-full bg-border/50 overflow-hidden">
-                    <div class="h-full rounded-full bg-green-500" :style="{ width: `${hero.games > 0 ? (hero.wins / hero.games * 100) : 0}%` }"></div>
-                  </div>
-                  <span class="text-[10px] font-mono text-muted-foreground shrink-0">{{ hero.games }}g</span>
-                </div>
-              </div>
-              <div class="flex flex-col items-end text-right shrink-0">
-                <span class="text-xs font-mono font-bold text-green-500">{{ hero.wins }}W</span>
-                <span class="text-[10px] font-mono text-muted-foreground">{{ hero.games - hero.wins }}L</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Tournament placements -->
-        <div v-if="profile.tournament_results?.length > 0" class="card">
-          <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
-            <Medal class="w-5 h-5 text-primary" />
-            <span class="text-sm font-semibold text-foreground">{{ t('tournamentPlacements') }}</span>
-            <span class="ml-auto text-xs font-mono text-muted-foreground">{{ profile.tournament_results.length }}</span>
-          </div>
-          <div class="p-3 flex flex-col gap-2">
-            <div
-              v-for="(result, idx) in profile.tournament_results" :key="idx"
-              class="flex items-center gap-3 p-2.5 rounded-lg border-l-[3px]"
-              :class="placementBg(result.placement)"
-            >
-              <div class="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-base shrink-0" :class="placementClass(result.placement)">
-                {{ result.placement === 1 ? '🥇' : result.placement === 2 ? '🥈' : result.placement === 3 ? '🥉' : `#${result.placement}` }}
-              </div>
-              <div class="min-w-0 flex-1">
-                <p class="text-sm font-semibold text-foreground truncate">{{ result.competition_name }}</p>
-                <p class="text-xs text-muted-foreground truncate">{{ result.team }} · {{ result.stage_name }}</p>
-              </div>
-              <span class="text-xs font-medium shrink-0" :class="placementClass(result.placement)">
-                {{ placementLabel(result.placement) }}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- XP History + Competition History side by side -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <!-- XP History -->
-        <div v-if="xpLog.length > 0" class="card flex flex-col">
-          <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
-            <Zap class="w-5 h-5 text-purple-400" />
-            <span class="text-sm font-semibold text-foreground">{{ t('xpHistory') }}</span>
-            <span class="text-xs font-mono text-muted-foreground ml-auto">{{ t('xpTotal') }}: {{ (profile.total_xp || 0).toLocaleString() }}</span>
-          </div>
-          <div class="divide-y divide-border flex-1">
-            <div v-for="log in pagedXpLog" :key="log.created_at" class="flex items-center gap-3 px-4 py-2.5">
-              <span class="text-sm font-bold font-mono text-primary shrink-0">+{{ log.amount }}</span>
-              <div class="flex-1 min-w-0">
-                <p class="text-sm text-foreground truncate">{{ t(`xpReason_${log.reason}`) }}</p>
-                <p v-if="log.detail" class="text-xs text-muted-foreground truncate">{{ log.detail }}</p>
-              </div>
-              <div class="text-right shrink-0">
-                <p v-if="log.competition_name" class="text-xs text-muted-foreground truncate max-w-[140px]">{{ log.competition_name }}</p>
-                <p class="text-[10px] text-text-tertiary">{{ fmtDateTime(new Date(log.created_at)) }}</p>
-              </div>
-            </div>
-          </div>
-          <!-- Pagination -->
-          <div v-if="xpTotalPages > 1" class="flex items-center justify-between px-4 py-2 border-t border-border">
-            <button class="p-1 rounded hover:bg-accent disabled:opacity-30" :disabled="xpPage <= 1" @click="xpPage--">
-              <ChevronLeft class="w-4 h-4 text-muted-foreground" />
-            </button>
-            <span class="text-xs text-muted-foreground font-mono">{{ xpPage }} / {{ xpTotalPages }}</span>
-            <button class="p-1 rounded hover:bg-accent disabled:opacity-30" :disabled="xpPage >= xpTotalPages" @click="xpPage++">
-              <ChevronRight class="w-4 h-4 text-muted-foreground" />
-            </button>
-          </div>
-        </div>
-
-        <!-- Competition history -->
-        <div class="card flex flex-col">
-          <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
-            <Award class="w-5 h-5 text-yellow-500" />
-            <span class="text-sm font-semibold text-foreground">{{ t('competitionHistory') }}</span>
-            <span class="text-xs font-mono text-muted-foreground ml-auto">{{ profile.competitions.length }}</span>
-          </div>
-          <div v-if="profile.competitions.length === 0" class="p-6 text-center text-sm text-muted-foreground flex-1 flex items-center justify-center">
-            {{ t('noCompetitions') }}
-          </div>
-          <div v-else class="divide-y divide-border flex-1">
-            <div v-for="comp in pagedCompetitions" :key="comp.competition_id" class="flex items-center gap-3 px-4 py-3">
-              <div class="flex-1 min-w-0">
-                <router-link
-                  :to="{ name: 'comp-info', params: { compId: comp.competition_id } }"
-                  class="text-sm font-medium text-foreground hover:text-primary transition-colors truncate block"
-                >{{ comp.competition_name }}</router-link>
-                <div class="flex flex-wrap items-center gap-2 mt-1">
-                  <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
-                    :class="comp.was_captain ? 'bg-primary/10 text-primary' : 'bg-accent text-muted-foreground'">
-                    <Trophy v-if="comp.was_captain" class="w-3 h-3 mr-0.5" />
-                    {{ comp.was_captain ? t('wasCaptain') : t('wasPlayer') }}
-                  </span>
-                  <span v-if="comp.captain_team" class="text-xs text-muted-foreground">{{ comp.captain_team }}</span>
-                  <span v-if="comp.drafted && comp.drafted_by_team" class="text-xs text-muted-foreground">
-                    {{ t('draftedBy') }} {{ comp.drafted_by_team }}
-                  </span>
-                  <span v-if="comp.draft_price" class="text-xs font-mono text-primary font-semibold">{{ comp.draft_price }}g</span>
-                </div>
-              </div>
-              <div class="shrink-0">
-                <MmrDisplay v-if="comp.mmr" :mmr="comp.mmr" size="sm" />
-              </div>
-            </div>
-          </div>
-          <!-- Pagination -->
-          <div v-if="compTotalPages > 1" class="flex items-center justify-between px-4 py-2 border-t border-border">
-            <button class="p-1 rounded hover:bg-accent disabled:opacity-30" :disabled="compPage <= 1" @click="compPage--">
-              <ChevronLeft class="w-4 h-4 text-muted-foreground" />
-            </button>
-            <span class="text-xs text-muted-foreground font-mono">{{ compPage }} / {{ compTotalPages }}</span>
-            <button class="p-1 rounded hover:bg-accent disabled:opacity-30" :disabled="compPage >= compTotalPages" @click="compPage++">
-              <ChevronRight class="w-4 h-4 text-muted-foreground" />
-            </button>
           </div>
         </div>
       </div>

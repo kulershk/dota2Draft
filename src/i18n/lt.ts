@@ -969,6 +969,8 @@ export default {
   profileWin: 'PERG.',
   profileLoss: 'PRAL.',
   profileTie: 'LYGIOS',
+  profileNoStats: 'Nėra duomenų',
+  showingNofM: 'Rodoma {n} iš {m}',
   versionUpdateTitle: 'Yra nauja versija',
   versionUpdateDesc: 'Svetainė buvo atnaujinta. Atnaujinkite puslapį, kad įkeltumėte naujausią versiją.',
   versionUpdateRefresh: 'Atnaujinti puslapį',
