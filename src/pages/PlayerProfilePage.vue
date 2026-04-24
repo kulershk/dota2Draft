@@ -356,7 +356,7 @@ const streakBadge = computed(() => {
       </div>
 
       <!-- Body: 2-col grid with 420px right sidebar -->
-      <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_420px] gap-5 md:gap-6">
+      <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-5 md:gap-6">
         <!-- Main column: match history + XP + comp history -->
         <div class="flex flex-col gap-5 md:gap-6 min-w-0">
           <!-- Match History -->
