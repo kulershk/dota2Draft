@@ -10,9 +10,10 @@ import MmrDisplay from '@/components/common/MmrDisplay.vue'
 import LevelBadge from '@/components/common/LevelBadge.vue'
 import XpProgressBar from '@/components/common/XpProgressBar.vue'
 import PositionIcon from '@/components/common/PositionIcon.vue'
+import RankBadge from '@/components/common/RankBadge.vue'
 import { sortedRoles } from '@/utils/roles'
 import { fmtDateOnly, fmtDateTime } from '@/utils/format'
-import { mmrToRank } from '@/utils/rank'
+import { getRank } from '@/utils/ranks'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -143,7 +144,7 @@ function formatMonthYear(dateStr: string): string {
 // Stats formatting helpers
 const stats = computed(() => profile.value?.stats || null)
 const winRatePct = computed(() => stats.value ? (stats.value.win_rate * 100) : null)
-const rank = computed(() => mmrToRank(profile.value?.mmr))
+const rank = computed(() => profile.value?.mmr != null ? getRank(profile.value.mmr) : null)
 
 function fmtHours(n: number | null | undefined) {
   if (!n && n !== 0) return '—'
@@ -276,9 +277,7 @@ const streakBadge = computed(() => {
               <div v-if="rank" class="flex flex-col gap-1">
                 <span class="text-[10px] font-mono font-bold tracking-[0.2em] text-muted-foreground">RANK</span>
                 <div class="flex items-center gap-2">
-                  <div class="w-7 h-7 rounded-lg flex items-center justify-center border" :class="[rank.bgClass, rank.borderClass]">
-                    <Award class="w-4 h-4" :class="rank.color" />
-                  </div>
+                  <RankBadge :mmr="profile.mmr" size="md" />
                   <span class="text-lg md:text-xl font-extrabold font-mono leading-none" :class="rank.color">{{ rank.label }}</span>
                 </div>
               </div>
