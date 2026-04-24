@@ -186,7 +186,7 @@ router.get('/api/players/:id/profile', async (req, res) => {
       WHERE account_id = $1 AND hero_id > 0
       GROUP BY hero_id
       ORDER BY games DESC, wins DESC
-      LIMIT 3
+      LIMIT 5
     `, [steam32])
 
     // Lifetime aggregates

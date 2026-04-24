@@ -545,26 +545,26 @@ const streakBadge = computed(() => {
           <!-- Top heroes -->
           <div v-if="profile.top_heroes?.length" class="card">
             <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
-              <Star class="w-5 h-5 text-yellow-500" />
+              <Star class="w-4 h-4 text-yellow-500" />
               <span class="text-sm font-bold text-foreground">{{ t('topHeroes') }}</span>
             </div>
-            <div class="p-3 flex flex-col gap-2">
-              <div v-for="(hero, idx) in profile.top_heroes" :key="hero.hero_id" class="flex items-center gap-3 p-2.5 rounded-lg bg-accent/30 border border-border/50">
-                <span class="w-5 h-5 rounded flex items-center justify-center text-[10px] font-mono font-bold bg-yellow-500/10 border border-yellow-500/30 text-yellow-500 shrink-0">{{ idx + 1 }}</span>
+            <div class="p-2 flex flex-col gap-1">
+              <div v-for="(hero, idx) in profile.top_heroes" :key="hero.hero_id" class="flex items-center gap-2.5 px-2 py-1.5 rounded-md bg-muted border border-border/50">
+                <span class="w-4 h-4 rounded flex items-center justify-center text-[9px] font-mono font-bold bg-yellow-500/10 border border-yellow-500/30 text-yellow-500 shrink-0">{{ idx + 1 }}</span>
                 <img v-if="dota.heroImg(hero.hero_id)" :src="dota.heroImg(hero.hero_id)" :alt="dota.heroName(hero.hero_id)"
-                  class="w-12 h-7 rounded object-cover border border-primary/30 shrink-0" />
+                  class="w-8 h-8 rounded object-cover border border-primary/30 shrink-0" />
                 <div class="min-w-0 flex-1">
-                  <p class="text-sm font-semibold text-foreground truncate">{{ dota.heroName(hero.hero_id) || `Hero #${hero.hero_id}` }}</p>
-                  <div class="flex items-center gap-2 mt-0.5">
+                  <p class="text-xs font-semibold text-foreground truncate leading-tight">{{ dota.heroName(hero.hero_id) || `Hero #${hero.hero_id}` }}</p>
+                  <div class="flex items-center gap-1.5 mt-1">
                     <div class="flex-1 h-1 rounded-full bg-border/50 overflow-hidden">
                       <div class="h-full rounded-full bg-green-500" :style="{ width: `${hero.games > 0 ? (hero.wins / hero.games * 100) : 0}%` }"></div>
                     </div>
-                    <span class="text-[10px] font-mono text-muted-foreground shrink-0">{{ hero.games }}g</span>
+                    <span class="text-[9px] font-mono text-muted-foreground shrink-0">{{ hero.games }}g</span>
                   </div>
                 </div>
-                <div class="flex flex-col items-end text-right shrink-0">
-                  <span class="text-xs font-mono font-bold text-green-500">{{ hero.wins }}W</span>
-                  <span class="text-[10px] font-mono text-muted-foreground">{{ hero.games - hero.wins }}L</span>
+                <div class="flex items-baseline gap-1 shrink-0 font-mono text-[10px] font-bold">
+                  <span class="text-green-500">{{ hero.wins }}W</span>
+                  <span class="text-muted-foreground">· {{ hero.games - hero.wins }}L</span>
                 </div>
               </div>
             </div>
