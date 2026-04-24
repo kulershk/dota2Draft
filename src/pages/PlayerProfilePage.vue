@@ -133,11 +133,6 @@ function fmtDuration(seconds: number | null | undefined) {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-function kdaString(ps: any): string {
-  if (!ps) return '—'
-  return `${ps.kills ?? 0} / ${ps.deaths ?? 0} / ${ps.assists ?? 0}`
-}
-
 const streakLabel = computed(() => {
   const s = stats.value?.current_streak
   if (!s || !s.type || s.count === 0) return null
@@ -366,61 +361,63 @@ const streakBadge = computed(() => {
               <!-- Rows -->
               <div class="flex flex-col gap-1">
                 <component
-                  :is="m.type === 'queue' && m.queueMatchId ? 'router-link' : m.type === 'competition' && m.competitionId ? 'router-link' : 'div'"
-                  v-for="m in matchHistory"
-                  :key="(m.type === 'queue' ? 'q' : 'c') + m.id"
-                  :to="m.type === 'queue' ? { name: 'queue-match', params: { id: m.queueMatchId } } : { name: 'comp-match', params: { compId: m.competitionId, matchId: m.id } }"
-                  class="flex flex-wrap lg:grid items-center gap-3 px-3.5 py-2.5 rounded-lg bg-[color-mix(in_srgb,var(--card)_60%,black)] border-l-[3px] hover:bg-accent/40 transition-colors"
-                  :class="m.status !== 'completed' ? 'border-l-muted-foreground/30' : m.won ? 'border-l-green-500/60' : 'border-l-red-500/60'"
-                  style="grid-template-columns: 72px 180px 100px 100px minmax(0,1fr) 80px 90px"
+                  :is="g.type === 'queue' && g.queueMatchId ? 'router-link' : g.type === 'competition' && g.competitionId ? 'router-link' : 'div'"
+                  v-for="g in matchHistory"
+                  :key="g.gameId"
+                  :to="g.type === 'queue' ? { name: 'queue-match', params: { id: g.queueMatchId } } : { name: 'comp-match', params: { compId: g.competitionId, matchId: g.matchId } }"
+                  class="flex flex-wrap lg:grid items-center gap-3 px-3.5 py-2.5 rounded-lg border-l-[3px] hover:bg-accent/40 transition-colors"
+                  :class="g.won ? 'border-l-green-500/60' : 'border-l-red-500/60'"
+                  style="grid-template-columns: 72px 180px 100px 100px minmax(0,1fr) 80px 90px; background: #0B1220"
                 >
                   <!-- 1. Result chip -->
                   <span class="inline-flex items-center justify-center gap-1.5 w-[72px] px-2.5 py-1 rounded-md text-[11px] font-mono font-extrabold tracking-wider"
-                        :class="m.status !== 'completed' ? 'bg-muted/30 text-muted-foreground' : m.won ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'">
-                    <Check v-if="m.status === 'completed' && m.won" class="w-3 h-3" />
-                    <X v-else-if="m.status === 'completed' && !m.won" class="w-3 h-3" />
-                    {{ m.status !== 'completed' ? '—' : m.won ? t('profileWin') : t('profileLoss') }}
+                        :class="g.won ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'">
+                    <Check v-if="g.won" class="w-3 h-3" />
+                    <X v-else class="w-3 h-3" />
+                    {{ g.won ? t('profileWin') : t('profileLoss') }}
                   </span>
 
-                  <!-- 2. Hero block (180px): portrait + name + subtitle -->
+                  <!-- 2. Hero block (180px): square portrait + name + subtitle -->
                   <div class="flex items-center gap-2.5 min-w-0 lg:w-[180px]">
-                    <img v-if="m.playerStats?.hero_id && dota.heroImg(m.playerStats.hero_id)"
-                         :src="dota.heroImg(m.playerStats.hero_id)"
-                         :alt="dota.heroName(m.playerStats.hero_id)"
-                         class="w-12 h-8 rounded object-cover border border-primary/40 shrink-0" />
-                    <div v-else class="w-12 h-8 rounded bg-accent/50 border border-border/40 shrink-0 flex items-center justify-center">
+                    <img v-if="g.heroId && dota.heroImg(g.heroId)"
+                         :src="dota.heroImg(g.heroId)"
+                         :alt="dota.heroName(g.heroId)"
+                         class="w-8 h-8 rounded object-cover border border-primary/40 shrink-0" />
+                    <div v-else class="w-8 h-8 rounded bg-accent/50 border border-border/40 shrink-0 flex items-center justify-center">
                       <Swords class="w-3.5 h-3.5 text-muted-foreground" />
                     </div>
                     <div class="flex flex-col min-w-0 gap-0.5">
-                      <span v-if="m.playerStats?.hero_id" class="text-xs font-bold text-foreground truncate leading-tight">{{ dota.heroName(m.playerStats.hero_id) }}</span>
+                      <span v-if="g.heroId" class="text-xs font-bold text-foreground truncate leading-tight">{{ dota.heroName(g.heroId) }}</span>
                       <span v-else class="text-xs font-bold text-muted-foreground truncate leading-tight">{{ t('profileNoStats') }}</span>
-                      <span class="text-[10px] text-muted-foreground truncate leading-tight">
-                        {{ m.team1.name || 'TBD' }} <span class="opacity-50">vs</span> {{ m.team2.name || 'TBD' }}
+                      <span class="text-[10px] text-muted-foreground truncate leading-tight font-mono">
+                        {{ g.isRadiant ? 'Radiant' : 'Dire' }}
                       </span>
                     </div>
                   </div>
 
                   <!-- 3. KDA (100px center) -->
-                  <span class="text-xs font-mono font-bold text-foreground text-center tabular-nums lg:w-[100px]">{{ kdaString(m.playerStats) }}</span>
+                  <span class="text-xs font-mono font-bold text-foreground text-center tabular-nums lg:w-[100px]">
+                    {{ g.kills }} / {{ g.deaths }} / {{ g.assists }}
+                  </span>
 
-                  <!-- 4. Score (100px center) -->
-                  <span class="text-xs font-mono font-bold text-muted-foreground text-center tabular-nums lg:w-[100px]">
-                    <span :class="m.status === 'completed' && m.winnerCaptainId === m.team1.captainId ? 'text-foreground' : ''">{{ m.score1 ?? '-' }}</span>
+                  <!-- 4. Score (100px center) — player's side on the left -->
+                  <span class="text-xs font-mono font-bold text-center tabular-nums lg:w-[100px]">
+                    <span :class="g.won ? 'text-foreground' : 'text-muted-foreground'">{{ g.isRadiant ? g.radiantKills : g.direKills }}</span>
                     <span class="opacity-50 mx-1">–</span>
-                    <span :class="m.status === 'completed' && m.winnerCaptainId === m.team2.captainId ? 'text-foreground' : ''">{{ m.score2 ?? '-' }}</span>
+                    <span :class="!g.won ? 'text-foreground' : 'text-muted-foreground'">{{ g.isRadiant ? g.direKills : g.radiantKills }}</span>
                   </span>
 
                   <!-- 5. Mode (fill) -->
                   <span class="text-xs text-muted-foreground truncate">
-                    <span v-if="m.type === 'queue'">{{ m.poolName || t('queueTitle') }}</span>
-                    <span v-else>{{ m.competitionName }}</span>
+                    <span v-if="g.type === 'queue'">{{ g.poolName || t('queueTitle') }}</span>
+                    <span v-else>{{ g.competitionName }}</span>
                   </span>
 
                   <!-- 6. Duration (80px right) -->
-                  <span class="text-xs font-mono font-semibold text-muted-foreground text-right tabular-nums lg:w-[80px]">{{ fmtDuration(m.playerStats?.duration) }}</span>
+                  <span class="text-xs font-mono font-semibold text-muted-foreground text-right tabular-nums lg:w-[80px]">{{ fmtDuration(g.duration) }}</span>
 
                   <!-- 7. Date (90px right, relative) -->
-                  <span class="text-xs font-mono font-semibold text-muted-foreground/70 text-right tabular-nums lg:w-[90px]">{{ formatRelative(m.date) }}</span>
+                  <span class="text-xs font-mono font-semibold text-muted-foreground/70 text-right tabular-nums lg:w-[90px]">{{ formatRelative(g.date) }}</span>
                 </component>
               </div>
             </div>

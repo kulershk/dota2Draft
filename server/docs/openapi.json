@@ -1390,8 +1390,8 @@
     "/api/players/{id}/matches": {
       "get": {
         "tags": ["Users"],
-        "summary": "Get player match history",
-        "description": "Returns paginated match history (competition + queue matches) enriched with per-match hero, KDA, and duration from match_game_player_stats when available.",
+        "summary": "Get player game history",
+        "description": "Returns paginated per-game rows (one row per parsed match_game). Each row includes the player's hero, KDA, duration, win/loss, and per-side kill totals (radiant_kills / dire_kills) used as the in-game score. Empty list when the player has no steam_id.",
         "parameters": [
           { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } },
           { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20, "maximum": 50 } },
@@ -1399,7 +1399,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Paginated match rows with total count",
+            "description": "Paginated game rows with total count",
             "content": {
               "application/json": {
                 "schema": {
@@ -1410,27 +1410,24 @@
                       "items": {
                         "type": "object",
                         "properties": {
-                          "id": { "type": "integer" },
+                          "gameId": { "type": "integer" },
+                          "matchId": { "type": "integer" },
+                          "gameNumber": { "type": "integer" },
+                          "queueMatchId": { "type": "integer", "nullable": true },
+                          "competitionId": { "type": "integer", "nullable": true },
+                          "competitionName": { "type": "string", "nullable": true },
+                          "poolName": { "type": "string", "nullable": true },
                           "type": { "type": "string", "enum": ["competition", "queue"] },
-                          "status": { "type": "string" },
-                          "score1": { "type": "integer", "nullable": true },
-                          "score2": { "type": "integer", "nullable": true },
-                          "team1": { "type": "object" },
-                          "team2": { "type": "object" },
-                          "won": { "type": "boolean", "nullable": true },
-                          "date": { "type": "string", "format": "date-time" },
-                          "playerStats": {
-                            "type": "object",
-                            "nullable": true,
-                            "description": "Per-player stats aggregated across games in this match. Null when match is unparsed or player has no steam_id.",
-                            "properties": {
-                              "hero_id": { "type": "integer", "nullable": true },
-                              "kills": { "type": "integer" },
-                              "deaths": { "type": "integer" },
-                              "assists": { "type": "integer" },
-                              "duration": { "type": "integer", "description": "Total seconds across all games in the match" }
-                            }
-                          }
+                          "heroId": { "type": "integer", "nullable": true },
+                          "kills": { "type": "integer" },
+                          "deaths": { "type": "integer" },
+                          "assists": { "type": "integer" },
+                          "duration": { "type": "integer", "description": "Seconds" },
+                          "isRadiant": { "type": "boolean" },
+                          "won": { "type": "boolean" },
+                          "radiantKills": { "type": "integer" },
+                          "direKills": { "type": "integer" },
+                          "date": { "type": "string", "format": "date-time" }
                         }
                       }
                     },
