@@ -57,10 +57,10 @@ const filteredMatches = computed(() => {
       const tb = b.scheduled_at ? new Date(b.scheduled_at).getTime() : Infinity
       return ta - tb
     }
-    // Within completed: most recent first
+    // Within completed: most recent by last game finished, fall back to scheduled_at
     if (a.status === 'completed') {
-      const ta = a.scheduled_at ? new Date(a.scheduled_at).getTime() : 0
-      const tb = b.scheduled_at ? new Date(b.scheduled_at).getTime() : 0
+      const ta = a.last_game_at ? new Date(a.last_game_at).getTime() : (a.scheduled_at ? new Date(a.scheduled_at).getTime() : 0)
+      const tb = b.last_game_at ? new Date(b.last_game_at).getTime() : (b.scheduled_at ? new Date(b.scheduled_at).getTime() : 0)
       return tb - ta
     }
     return 0

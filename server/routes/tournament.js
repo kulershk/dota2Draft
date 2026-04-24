@@ -111,7 +111,11 @@ export default function createTournamentRouter(io) {
           m.winner_captain_id, m.group_name, m.stage,
           c.name AS competition_name,
           t1.team AS team1_name, COALESCE(p1.avatar_url, '') AS team1_avatar, t1.banner_url AS team1_banner,
-          t2.team AS team2_name, COALESCE(p2.avatar_url, '') AS team2_avatar, t2.banner_url AS team2_banner
+          t2.team AS team2_name, COALESCE(p2.avatar_url, '') AS team2_avatar, t2.banner_url AS team2_banner,
+          (
+            SELECT COALESCE(MAX(to_timestamp(g.start_time)), MAX(g.created_at))
+            FROM match_games g WHERE g.match_id = m.id
+          ) AS last_game_at
         FROM matches m
         JOIN competitions c ON c.id = m.competition_id
         LEFT JOIN captains t1 ON t1.id = m.team1_captain_id
