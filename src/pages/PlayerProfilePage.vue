@@ -177,7 +177,7 @@ const streakBadge = computed(() => {
 </script>
 
 <template>
-  <div class="p-4 md:p-8 flex flex-col gap-5 md:gap-6 max-w-[1440px] mx-auto w-full">
+  <div class="p-4 md:p-8 flex flex-col gap-5 md:gap-6 max-w-[1200px] mx-auto w-full">
     <div v-if="loading" class="text-center py-12 text-muted-foreground">{{ t('loading') }}</div>
     <div v-else-if="error" class="text-center py-12 text-muted-foreground">{{ t('playerNotFound') }}</div>
 
