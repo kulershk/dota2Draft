@@ -323,8 +323,12 @@ router.get('/api/players/:id/matches', async (req, res) => {
 
   try {
     // Participation filter — player was captain of a team in the match, drafted into a team, or a queue participant.
+    // Excludes cancelled matches (both competition-level and queue-level).
     const participationFilter = `
-      m.hidden = false AND (
+      m.hidden = false
+      AND m.status IS DISTINCT FROM 'cancelled'
+      AND NOT EXISTS (SELECT 1 FROM queue_matches qmX WHERE qmX.match_id = m.id AND qmX.status = 'cancelled')
+      AND (
         EXISTS (
           SELECT 1 FROM captains cap
           WHERE cap.player_id = $1 AND cap.id IN (m.team1_captain_id, m.team2_captain_id)
