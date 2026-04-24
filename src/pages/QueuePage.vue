@@ -676,6 +676,42 @@ onUnmounted(() => {
             </div>
           </div>
 
+          <!-- Pick Order strip (own bar above the pick card, steps centered) -->
+          <div v-if="(queue.activeMatch.value.pickOrder || []).length > 0"
+            class="card mb-4 px-5 py-3 flex items-center gap-4 flex-wrap">
+            <div class="flex items-center gap-2 shrink-0">
+              <ListOrdered class="w-3.5 h-3.5 text-muted-foreground" />
+              <span class="text-[10px] font-bold tracking-[0.15em] text-muted-foreground">{{ t('queuePickOrder') }}</span>
+            </div>
+            <div class="flex items-center justify-center gap-1.5 flex-wrap flex-1 min-w-0">
+              <template v-for="(cap, i) in queue.activeMatch.value.pickOrder" :key="i">
+                <div v-if="i > 0" class="w-3 h-px bg-border/60 shrink-0" />
+                <div class="flex items-center justify-center rounded-lg shrink-0 transition-all"
+                  :class="[
+                    i === queue.pickState.value.pickIndex ? 'w-10 h-10 font-bold' : 'w-8 h-8',
+                    i < queue.pickState.value.pickIndex
+                      ? (cap === 1 ? 'bg-green-500/15 border border-green-500/30 text-green-400' : 'bg-red-500/15 border border-red-500/30 text-red-400')
+                      : i === queue.pickState.value.pickIndex
+                        ? (cap === 1 ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' : 'bg-red-500 text-white shadow-lg shadow-red-500/30')
+                        : 'bg-accent/30 border border-border text-muted-foreground'
+                  ]">
+                  <Check v-if="i < queue.pickState.value.pickIndex" class="w-3.5 h-3.5" />
+                  <span v-else class="font-mono text-xs">{{ i + 1 }}</span>
+                </div>
+              </template>
+            </div>
+            <div class="flex items-center gap-3 shrink-0">
+              <span class="flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-green-500" />
+                <span class="text-[10px] text-muted-foreground">{{ t('queueRadiant') }}</span>
+              </span>
+              <span class="flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-red-500" />
+                <span class="text-[10px] text-muted-foreground">{{ t('queueDire') }}</span>
+              </span>
+            </div>
+          </div>
+
           <div class="card overflow-hidden">
             <!-- Timer bar -->
             <div class="h-1 bg-accent relative overflow-hidden">
@@ -684,42 +720,6 @@ onUnmounted(() => {
                 :class="pickTimeLeft && pickTimeLeft < 5000 ? 'bg-destructive' : 'bg-primary'"
                 :style="{ width: timerPercent + '%' }"
               />
-            </div>
-
-            <!-- Pick Order strip -->
-            <div v-if="(queue.activeMatch.value.pickOrder || []).length > 0"
-              class="px-6 py-3 border-b border-border/30 flex items-center gap-4 flex-wrap">
-              <div class="flex items-center gap-2 shrink-0">
-                <ListOrdered class="w-3.5 h-3.5 text-muted-foreground" />
-                <span class="text-[10px] font-bold tracking-[0.15em] text-muted-foreground">{{ t('queuePickOrder') }}</span>
-              </div>
-              <div class="flex items-center gap-1.5 flex-wrap flex-1 min-w-0">
-                <template v-for="(cap, i) in queue.activeMatch.value.pickOrder" :key="i">
-                  <div v-if="i > 0" class="w-3 h-px bg-border/60 shrink-0" />
-                  <div class="flex items-center justify-center rounded-lg shrink-0 transition-all"
-                    :class="[
-                      i === queue.pickState.value.pickIndex ? 'w-10 h-10 font-bold' : 'w-8 h-8',
-                      i < queue.pickState.value.pickIndex
-                        ? (cap === 1 ? 'bg-green-500/15 border border-green-500/30 text-green-400' : 'bg-red-500/15 border border-red-500/30 text-red-400')
-                        : i === queue.pickState.value.pickIndex
-                          ? (cap === 1 ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' : 'bg-red-500 text-white shadow-lg shadow-red-500/30')
-                          : 'bg-accent/30 border border-border text-muted-foreground'
-                    ]">
-                    <Check v-if="i < queue.pickState.value.pickIndex" class="w-3.5 h-3.5" />
-                    <span v-else class="font-mono text-xs">{{ i + 1 }}</span>
-                  </div>
-                </template>
-              </div>
-              <div class="flex items-center gap-3 shrink-0">
-                <span class="flex items-center gap-1.5">
-                  <span class="w-2 h-2 rounded-full bg-green-500" />
-                  <span class="text-[10px] text-muted-foreground">{{ t('queueRadiant') }}</span>
-                </span>
-                <span class="flex items-center gap-1.5">
-                  <span class="w-2 h-2 rounded-full bg-red-500" />
-                  <span class="text-[10px] text-muted-foreground">{{ t('queueDire') }}</span>
-                </span>
-              </div>
             </div>
 
             <!-- My role preferences (only for participants) -->
