@@ -504,18 +504,18 @@ onUnmounted(() => {
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <!-- Radiant -->
               <div class="card overflow-hidden">
-                <div class="h-1 bg-green-500" />
+                <div class="h-1 bg-cyan-500" />
                 <div class="px-5 py-4 border-b border-border/30 flex items-center justify-between gap-3">
                   <div class="flex items-center gap-2.5">
-                    <div class="w-8 h-8 rounded-lg bg-green-500/15 border border-green-500/30 flex items-center justify-center">
-                      <Shield class="w-4 h-4 text-green-400" />
+                    <div class="w-8 h-8 rounded-lg bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center">
+                      <Shield class="w-4 h-4 text-cyan-400" />
                     </div>
                     <div class="flex flex-col">
-                      <span class="text-[10px] font-bold tracking-[0.1em] text-green-400">{{ t('queueRadiant') }}</span>
+                      <span class="text-[10px] font-bold tracking-[0.1em] text-cyan-400">{{ t('queueRadiant') }}</span>
                       <span class="text-xs font-semibold">{{ queue.teamsFormed.value?.team1?.[0]?.name || '—' }}'s team</span>
                     </div>
                   </div>
-                  <span class="text-[10px] font-bold tracking-wider bg-green-500/15 text-green-400 border border-green-500/30 px-2 py-1 rounded-full">
+                  <span class="text-[10px] font-bold tracking-wider bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 px-2 py-1 rounded-full">
                     {{ (queue.teamsFormed.value?.team1 || []).filter(p => isInLobby(p.steamId)).length }}/{{ teamSize }} {{ t('queueLobbyInLobby') }}
                   </span>
                 </div>
@@ -523,11 +523,11 @@ onUnmounted(() => {
                   <div v-for="(p, idx) in (queue.teamsFormed.value?.team1 || [])" :key="p.playerId"
                     class="px-4 py-2.5 flex items-center gap-3 border-b border-border/20 last:border-b-0"
                     :class="isInLobby(p.steamId) ? '' : 'opacity-80'">
-                    <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-8 h-8 rounded-full" :class="idx === 0 ? 'ring-2 ring-green-500/40' : ''" />
+                    <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-8 h-8 rounded-full" :class="idx === 0 ? 'ring-2 ring-cyan-500/40' : ''" />
                     <div class="flex-1 min-w-0">
                       <div class="flex items-center gap-2">
                         <span class="text-sm font-semibold truncate">{{ p.name }}</span>
-                        <span v-if="idx === 0" class="text-[9px] font-bold text-green-400 bg-green-500/15 px-1.5 py-0.5 rounded">CPT</span>
+                        <span v-if="idx === 0" class="text-[9px] font-bold text-cyan-400 bg-cyan-500/15 px-1.5 py-0.5 rounded">CPT</span>
                         <span v-if="topRoleOf(p.playerId)" class="text-[9px] font-bold text-purple-300 bg-purple-500/15 border border-purple-500/30 px-1.5 py-0.5 rounded">
                           {{ t('queueRoleShort_' + topRoleOf(p.playerId)) }}
                         </span>
@@ -629,13 +629,13 @@ onUnmounted(() => {
                 <img v-if="currentPickerCaptain.avatarUrl" :src="currentPickerCaptain.avatarUrl"
                   class="w-11 h-11 rounded-full object-cover ring-2"
                   :class="[
-                    queue.pickState.value.currentPicker === 1 ? 'ring-green-500' : 'ring-red-500',
-                    queue.pickState.value.currentPicker === 1 ? 'phase-active-glow-green' : 'phase-active-glow-red',
+                    queue.pickState.value.currentPicker === 1 ? 'ring-cyan-500' : 'ring-red-500',
+                    queue.pickState.value.currentPicker === 1 ? 'phase-active-glow-cyan' : 'phase-active-glow-red',
                   ]" />
                 <div v-else class="w-11 h-11 rounded-full bg-accent ring-2 flex items-center justify-center"
-                  :class="queue.pickState.value.currentPicker === 1 ? 'ring-green-500' : 'ring-red-500'">
+                  :class="queue.pickState.value.currentPicker === 1 ? 'ring-cyan-500' : 'ring-red-500'">
                   <span class="text-base font-bold"
-                    :class="queue.pickState.value.currentPicker === 1 ? 'text-green-400' : 'text-red-400'">
+                    :class="queue.pickState.value.currentPicker === 1 ? 'text-cyan-400' : 'text-red-400'">
                     {{ (currentPickerCaptain.name || '?')[0].toUpperCase() }}
                   </span>
                 </div>
@@ -769,17 +769,17 @@ onUnmounted(() => {
                 <!-- Header -->
                 <div class="px-5 py-4 border-b border-border/30 flex items-center justify-between gap-2 flex-wrap">
                   <div class="flex items-center gap-3 min-w-0">
-                    <div class="w-10 h-10 rounded-lg bg-green-500/15 border border-green-500/30 flex items-center justify-center shrink-0"
-                      :class="queue.pickState.value.currentPicker === 1 ? 'ring-2 ring-green-500/40' : ''">
-                      <ShieldCheck class="w-5 h-5 text-green-400" />
+                    <div class="w-10 h-10 rounded-lg bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center shrink-0"
+                      :class="queue.pickState.value.currentPicker === 1 ? 'ring-2 ring-cyan-500/40' : ''">
+                      <ShieldCheck class="w-5 h-5 text-cyan-400" />
                     </div>
                     <div class="flex flex-col min-w-0">
-                      <span class="text-[10px] font-bold tracking-[0.1em] text-green-400">{{ t('queueRadiant') }}</span>
+                      <span class="text-[10px] font-bold tracking-[0.1em] text-cyan-400">{{ t('queueRadiant') }}</span>
                       <span class="text-[13px] font-semibold truncate">{{ t('queueTeamOf', { name: queue.activeMatch.value.captain1.name }) }}</span>
                     </div>
                   </div>
                   <div class="flex items-center gap-1.5 shrink-0">
-                    <span class="text-[10px] font-mono font-bold bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full whitespace-nowrap">
+                    <span class="text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded-full whitespace-nowrap">
                       {{ teamFilledCount(queue.pickState.value.captain1Picks) }}/{{ teamSize }} {{ t('queueTeamPicked') }}
                     </span>
                     <span v-if="teamAvgMmrAll(queue.activeMatch.value.captain1, queue.pickState.value.captain1Picks)"
@@ -792,11 +792,11 @@ onUnmounted(() => {
                 <!-- List -->
                 <div class="p-4 flex flex-col gap-2.5 flex-1">
                   <!-- Captain -->
-                  <div class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-background border-l-2 border-green-500">
+                  <div class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-background border-l-2 border-cyan-500">
                     <img v-if="queue.activeMatch.value.captain1.avatarUrl" :src="queue.activeMatch.value.captain1.avatarUrl"
-                      class="w-9 h-9 rounded-full object-cover ring-1 ring-green-500" />
-                    <div v-else class="w-9 h-9 rounded-full bg-green-500/20 ring-1 ring-green-500 flex items-center justify-center shrink-0">
-                      <span class="text-green-400 text-sm font-bold">{{ (queue.activeMatch.value.captain1.name || '?')[0].toUpperCase() }}</span>
+                      class="w-9 h-9 rounded-full object-cover ring-1 ring-cyan-500" />
+                    <div v-else class="w-9 h-9 rounded-full bg-cyan-500/20 ring-1 ring-cyan-500 flex items-center justify-center shrink-0">
+                      <span class="text-cyan-400 text-sm font-bold">{{ (queue.activeMatch.value.captain1.name || '?')[0].toUpperCase() }}</span>
                     </div>
                     <div class="flex flex-col flex-1 min-w-0 gap-1">
                       <div class="flex items-center gap-1.5 min-w-0">
@@ -815,15 +815,15 @@ onUnmounted(() => {
                         <span class="text-[11px] text-muted-foreground font-mono">· {{ queue.activeMatch.value.captain1.mmr }} MMR</span>
                       </div>
                     </div>
-                    <Check class="w-3.5 h-3.5 text-green-400 shrink-0" />
+                    <Check class="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                   </div>
 
                   <!-- Picked players -->
                   <div v-for="p in queue.pickState.value.captain1Picks" :key="p.playerId"
-                    class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-background border-l-2 border-green-500">
-                    <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-9 h-9 rounded-full object-cover ring-1 ring-green-500/40" />
-                    <div v-else class="w-9 h-9 rounded-full bg-green-500/20 ring-1 ring-green-500/40 flex items-center justify-center shrink-0">
-                      <span class="text-green-400 text-sm font-bold">{{ (p.name || '?')[0].toUpperCase() }}</span>
+                    class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-background border-l-2 border-cyan-500">
+                    <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-9 h-9 rounded-full object-cover ring-1 ring-cyan-500/40" />
+                    <div v-else class="w-9 h-9 rounded-full bg-cyan-500/20 ring-1 ring-cyan-500/40 flex items-center justify-center shrink-0">
+                      <span class="text-cyan-400 text-sm font-bold">{{ (p.name || '?')[0].toUpperCase() }}</span>
                     </div>
                     <div class="flex flex-col flex-1 min-w-0 gap-1">
                       <span class="text-[13px] font-semibold truncate">{{ p.name }}</span>
@@ -836,7 +836,7 @@ onUnmounted(() => {
                         <span class="text-[11px] text-muted-foreground font-mono">· {{ p.mmr }} MMR</span>
                       </div>
                     </div>
-                    <Check class="w-3.5 h-3.5 text-green-400 shrink-0" />
+                    <Check class="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                   </div>
 
                   <!-- Empty slots -->
@@ -858,7 +858,7 @@ onUnmounted(() => {
                     </template>
                   </span>
                   <div class="w-[120px] h-1 rounded-full bg-accent overflow-hidden shrink-0">
-                    <div class="h-full bg-green-500 transition-all duration-500"
+                    <div class="h-full bg-cyan-500 transition-all duration-500"
                       :style="{ width: ((teamFilledCount(queue.pickState.value.captain1Picks) / teamSize) * 100) + '%' }" />
                   </div>
                 </div>
@@ -1308,8 +1308,8 @@ onUnmounted(() => {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
 }
-.phase-active-glow-green {
-  box-shadow: 0 0 16px rgba(34, 197, 94, 0.45);
+.phase-active-glow-cyan {
+  box-shadow: 0 0 16px rgba(34, 211, 238, 0.45);
 }
 .phase-active-glow-red {
   box-shadow: 0 0 16px rgba(239, 68, 68, 0.45);
