@@ -365,9 +365,9 @@ const streakBadge = computed(() => {
                   v-for="g in matchHistory"
                   :key="g.gameId"
                   :to="g.type === 'queue' ? { name: 'queue-match', params: { id: g.queueMatchId } } : { name: 'comp-match', params: { compId: g.competitionId, matchId: g.matchId } }"
-                  class="flex flex-wrap lg:grid items-center gap-3 px-3.5 py-2.5 rounded-lg border-l-[3px] hover:bg-accent/40 transition-colors"
+                  class="flex flex-wrap lg:grid items-center gap-3 px-3.5 py-2.5 rounded-lg border-l-[3px] bg-muted hover:bg-accent transition-colors"
                   :class="g.won ? 'border-l-green-500/60' : 'border-l-red-500/60'"
-                  style="grid-template-columns: 72px 180px 100px 100px minmax(0,1fr) 80px 90px; background: #0B1220"
+                  style="grid-template-columns: 72px 180px 100px 100px minmax(0,1fr) 80px 90px"
                 >
                   <!-- 1. Result chip -->
                   <span class="inline-flex items-center justify-center gap-1.5 w-[72px] px-2.5 py-1 rounded-md text-[11px] font-mono font-extrabold tracking-wider"
