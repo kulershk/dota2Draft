@@ -976,6 +976,7 @@ export default {
   eventsLabel: 'turnīri',
   profileInNCompetitions: '{n} sacensībās',
   profileXpThisWeek: 'XP šonedēļ',
+  profileTopTeammates: 'Biežākie komandas biedri',
   versionUpdateTitle: 'Pieejama jauna versija',
   versionUpdateDesc: 'Vietne tika atjaunināta. Atsvaidzini lapu, lai ielādētu jaunāko versiju.',
   versionUpdateRefresh: 'Atsvaidzināt lapu',

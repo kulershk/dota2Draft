@@ -984,6 +984,7 @@ export default {
   eventsLabel: 'events',
   profileInNCompetitions: 'In {n} competitions',
   profileXpThisWeek: 'XP this week',
+  profileTopTeammates: 'Top teammates',
   versionUpdateTitle: 'New version available',
   versionUpdateDesc: 'The site was updated. Refresh the page to load the latest version.',
   versionUpdateRefresh: 'Refresh page',

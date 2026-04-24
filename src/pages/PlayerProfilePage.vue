@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { User, Trophy, Swords, Tv, Medal, MessageCircle, Star, ChevronLeft, ChevronRight, Percent, Target, Flame, Clock, Award, Zap, Check, X, Flag } from 'lucide-vue-next'
+import { User, Trophy, Swords, Tv, Medal, MessageCircle, Star, ChevronLeft, ChevronRight, Percent, Target, Flame, Clock, Award, Zap, Check, X, Flag, Users } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -594,6 +594,41 @@ const streakBadge = computed(() => {
                   <span class="text-muted-foreground">· {{ hero.games - hero.wins }}L</span>
                 </div>
               </div>
+            </div>
+          </div>
+
+          <!-- Top teammates -->
+          <div v-if="profile.top_teammates?.length" class="card">
+            <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
+              <Users class="w-4 h-4 text-primary" />
+              <span class="text-sm font-bold text-foreground">{{ t('profileTopTeammates') }}</span>
+            </div>
+            <div class="p-2 flex flex-col gap-1">
+              <component
+                :is="mate.player_id ? 'router-link' : 'div'"
+                v-for="(mate, idx) in profile.top_teammates" :key="idx"
+                :to="mate.player_id ? { name: 'player-profile', params: { id: mate.player_id } } : undefined"
+                class="flex items-center gap-2.5 px-2 py-1.5 rounded-md bg-muted border border-border/50"
+                :class="mate.player_id ? 'hover:border-primary/30 transition-colors' : ''"
+              >
+                <img v-if="mate.avatar_url" :src="mate.avatar_url" class="w-8 h-8 rounded-full shrink-0" />
+                <div v-else class="w-8 h-8 rounded-full bg-accent flex items-center justify-center shrink-0">
+                  <User class="w-4 h-4 text-muted-foreground" />
+                </div>
+                <div class="min-w-0 flex-1">
+                  <p class="text-xs font-semibold text-foreground truncate leading-tight">{{ mate.name }}</p>
+                  <div class="flex items-center gap-1.5 mt-1">
+                    <div class="flex-1 h-1 rounded-full bg-border/50 overflow-hidden">
+                      <div class="h-full rounded-full bg-green-500" :style="{ width: `${mate.games > 0 ? (mate.wins / mate.games * 100) : 0}%` }"></div>
+                    </div>
+                    <span class="text-[9px] font-mono text-muted-foreground shrink-0">{{ mate.games }}g</span>
+                  </div>
+                </div>
+                <div class="flex items-baseline gap-1 shrink-0 font-mono text-[10px] font-bold">
+                  <span class="text-green-500">{{ mate.wins }}W</span>
+                  <span class="text-muted-foreground">· {{ mate.games - mate.wins }}L</span>
+                </div>
+              </component>
             </div>
           </div>
 

@@ -178,6 +178,7 @@ router.get('/api/players/:id/profile', async (req, res) => {
   // Top heroes + lifetime stats (from match stats). All queries exclude cancelled matches
   // and hidden matches so the numbers stay consistent with the match history list.
   let topHeroes = []
+  let topTeammates = []
   let stats = null
   if (player.steam_id) {
     const steam32 = (BigInt(player.steam_id) - 76561197960265728n).toString()
@@ -199,6 +200,33 @@ router.get('/api/players/:id/profile', async (req, res) => {
       ${validMatchJoin}
       WHERE s.account_id = $1 AND s.hero_id > 0 AND ${validMatchWhere}
       GROUP BY s.hero_id
+      ORDER BY games DESC, wins DESC
+      LIMIT 5
+    `, [steam32])
+
+    // Top 5 teammates — other players on the same side in the same games.
+    // steam64 = steam32 + 76561197960265728; players.steam_id is TEXT so we cast.
+    topTeammates = await query(`
+      SELECT
+        s2.account_id AS teammate_account_id,
+        p.id AS teammate_player_id,
+        COALESCE(p.display_name, p.name, MIN(s2.player_name)) AS teammate_name,
+        p.avatar_url,
+        COUNT(*)::int AS games,
+        COALESCE(SUM(s1.win), 0)::int AS wins
+      FROM match_game_player_stats s1
+      JOIN match_game_player_stats s2
+        ON s2.match_game_id = s1.match_game_id
+        AND s2.account_id <> s1.account_id
+        AND s2.is_radiant = s1.is_radiant
+      ${validMatchJoin.replace('s.match_game_id', 's1.match_game_id')}
+      LEFT JOIN players p
+        ON p.steam_id = (s2.account_id + 76561197960265728)::text
+      WHERE s1.account_id = $1
+        AND s2.account_id <> 0
+        AND ${validMatchWhere}
+      GROUP BY s2.account_id, p.id, p.display_name, p.name, p.avatar_url
+      HAVING COUNT(*) >= 2
       ORDER BY games DESC, wins DESC
       LIMIT 5
     `, [steam32])
@@ -316,6 +344,13 @@ router.get('/api/players/:id/profile', async (req, res) => {
       hero_id: h.hero_id,
       games: Number(h.games),
       wins: Number(h.wins),
+    })),
+    top_teammates: topTeammates.map(t => ({
+      player_id: t.teammate_player_id || null,
+      name: t.teammate_name || 'Unknown',
+      avatar_url: t.avatar_url || null,
+      games: t.games,
+      wins: t.wins,
     })),
     stats,
   })

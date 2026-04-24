@@ -976,6 +976,7 @@ export default {
   eventsLabel: 'turnyrai',
   profileInNCompetitions: '{n} varžybose',
   profileXpThisWeek: 'XP šią savaitę',
+  profileTopTeammates: 'Dažniausi komandos draugai',
   versionUpdateTitle: 'Yra nauja versija',
   versionUpdateDesc: 'Svetainė buvo atnaujinta. Atnaujinkite puslapį, kad įkeltumėte naujausią versiją.',
   versionUpdateRefresh: 'Atnaujinti puslapį',
