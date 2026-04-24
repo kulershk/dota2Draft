@@ -980,6 +980,8 @@ export default {
   profileNoStats: 'No stats',
   showingNofM: 'Showing {n} of {m}',
   eventsLabel: 'events',
+  profileInNCompetitions: 'In {n} competitions',
+  profileXpThisWeek: 'XP this week',
   versionUpdateTitle: 'New version available',
   versionUpdateDesc: 'The site was updated. Refresh the page to load the latest version.',
   versionUpdateRefresh: 'Refresh page',

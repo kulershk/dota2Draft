@@ -12,6 +12,7 @@ import XpProgressBar from '@/components/common/XpProgressBar.vue'
 import PositionIcon from '@/components/common/PositionIcon.vue'
 import { sortedRoles } from '@/utils/roles'
 import { fmtDateOnly, fmtDateTime } from '@/utils/format'
+import { mmrToRank } from '@/utils/rank'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -142,6 +143,7 @@ function formatMonthYear(dateStr: string): string {
 // Stats formatting helpers
 const stats = computed(() => profile.value?.stats || null)
 const winRatePct = computed(() => stats.value ? (stats.value.win_rate * 100) : null)
+const rank = computed(() => mmrToRank(profile.value?.mmr))
 
 function fmtHours(n: number | null | undefined) {
   if (!n && n !== 0) return '—'
@@ -264,13 +266,23 @@ const streakBadge = computed(() => {
             </div>
             <p v-if="profile.info" class="text-sm text-muted-foreground">{{ profile.info }}</p>
 
-            <!-- MMR / Level / Favorite Role blocks -->
+            <!-- MMR / Rank / Level / Favorite Role blocks -->
             <div class="flex flex-wrap items-end gap-x-6 gap-y-3 pt-2 border-t border-border/60">
               <div v-if="profile.mmr" class="flex flex-col gap-1">
                 <span class="text-[10px] font-mono font-bold tracking-[0.2em] text-muted-foreground">MMR</span>
                 <span class="text-2xl md:text-3xl font-extrabold font-mono text-primary leading-none">{{ profile.mmr.toLocaleString() }}</span>
               </div>
-              <div class="h-10 w-px bg-border" v-if="profile.mmr"></div>
+              <div class="h-10 w-px bg-border" v-if="profile.mmr && rank"></div>
+              <div v-if="rank" class="flex flex-col gap-1">
+                <span class="text-[10px] font-mono font-bold tracking-[0.2em] text-muted-foreground">RANK</span>
+                <div class="flex items-center gap-2">
+                  <div class="w-7 h-7 rounded-lg flex items-center justify-center border" :class="[rank.bgClass, rank.borderClass]">
+                    <Award class="w-4 h-4" :class="rank.color" />
+                  </div>
+                  <span class="text-lg md:text-xl font-extrabold font-mono leading-none" :class="rank.color">{{ rank.label }}</span>
+                </div>
+              </div>
+              <div class="h-10 w-px bg-border"></div>
               <div class="flex flex-col gap-1">
                 <span class="text-[10px] font-mono font-bold tracking-[0.2em] text-muted-foreground">LEVEL</span>
                 <div class="flex items-baseline gap-2">
@@ -313,7 +325,7 @@ const streakBadge = computed(() => {
             <span class="text-[10px] font-mono font-bold tracking-[0.2em] text-muted-foreground">{{ t('profileMatches').toUpperCase() }}</span>
           </div>
           <span class="text-2xl font-extrabold font-mono text-foreground leading-none">{{ stats.matches_total.toLocaleString() }}</span>
-          <span class="text-[11px] text-muted-foreground">&nbsp;</span>
+          <span class="text-[11px] text-muted-foreground truncate">{{ t('profileInNCompetitions', { n: profile.competitions?.length || 0 }) }}</span>
         </div>
 
         <!-- KDA last 10 -->
@@ -351,7 +363,9 @@ const streakBadge = computed(() => {
             <span class="text-2xl font-extrabold font-mono text-foreground leading-none">{{ fmtHours(stats.hours_played) }}</span>
             <span class="text-sm font-mono font-bold text-muted-foreground">{{ t('profileHoursSuffix') }}</span>
           </div>
-          <span class="text-[11px] text-muted-foreground">&nbsp;</span>
+          <span class="text-[11px] text-muted-foreground truncate">
+            <span class="font-mono font-bold text-purple-400">+{{ (stats.xp_this_week || 0).toLocaleString() }}</span> {{ t('profileXpThisWeek') }}
+          </span>
         </div>
       </div>
 

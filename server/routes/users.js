@@ -241,6 +241,13 @@ router.get('/api/players/:id/profile', async (req, res) => {
       LIMIT 1
     `, [steam32])
 
+    // XP earned in last 7 days
+    const xpWeekRow = await queryOne(`
+      SELECT COALESCE(SUM(amount), 0)::int AS xp
+      FROM xp_log
+      WHERE player_id = $1 AND created_at >= NOW() - INTERVAL '7 days'
+    `, [playerId])
+
     stats = {
       matches_total: agg.matches_total,
       wins_total: agg.wins_total,
@@ -253,6 +260,7 @@ router.get('/api/players/:id/profile', async (req, res) => {
       current_streak: { type: streakType, count: streakCount },
       hours_played: Number((agg.total_duration / 3600).toFixed(1)),
       last_loss_at: lastLossRow?.ts || null,
+      xp_this_week: xpWeekRow?.xp || 0,
     }
   }
 
