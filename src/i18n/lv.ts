@@ -970,6 +970,8 @@ export default {
   profileLoss: 'ZAUD.',
   profileTie: 'NEIZŠ.',
   profileNoStats: 'Nav datu',
+  profileParsing: 'Apstrādā…',
+  profileMatchId: 'Spēle {id}',
   showingNofM: 'Rāda {n} no {m}',
   eventsLabel: 'turnīri',
   profileInNCompetitions: '{n} sacensībās',

@@ -306,7 +306,8 @@ router.get('/api/players/:id/profile', async (req, res) => {
   })
 })
 
-// Player match history — one row per parsed match_game (not per match). Rows are hero-centric.
+// Player match history — one row per match_game the player participated in (as captain, drafted, or queue participant).
+// LEFT JOIN match_game_player_stats so unparsed games still appear (with null hero/KDA and a parsed=false flag).
 router.get('/api/players/:id/matches', async (req, res) => {
   const playerId = Number(req.params.id)
   const limit = Math.min(Number(req.query.limit) || 20, 50)
@@ -315,19 +316,39 @@ router.get('/api/players/:id/matches', async (req, res) => {
   const player = await queryOne('SELECT id, steam_id FROM players WHERE id = $1', [playerId])
   if (!player) return res.status(404).json({ error: 'Player not found' })
 
-  if (!player.steam_id) return res.json({ rows: [], total: 0 })
+  const steam32 = player.steam_id
+    ? (BigInt(player.steam_id) - 76561197960265728n).toString()
+    : null
+  const playerIdJson = JSON.stringify([playerId])
 
   try {
-    const steam32 = (BigInt(player.steam_id) - 76561197960265728n).toString()
+    // Participation filter — player was captain of a team in the match, drafted into a team, or a queue participant.
+    const participationFilter = `
+      m.hidden = false AND (
+        EXISTS (
+          SELECT 1 FROM captains cap
+          WHERE cap.player_id = $1 AND cap.id IN (m.team1_captain_id, m.team2_captain_id)
+        )
+        OR EXISTS (
+          SELECT 1 FROM competition_players cp
+          WHERE cp.player_id = $1 AND cp.competition_id = m.competition_id
+            AND cp.drafted_by IN (m.team1_captain_id, m.team2_captain_id)
+        )
+        OR EXISTS (
+          SELECT 1 FROM queue_matches qm2
+          WHERE qm2.match_id = m.id AND qm2.all_player_ids @> $2::jsonb
+        )
+      )
+    `
 
     const totalRow = await queryOne(`
       SELECT COUNT(*)::int AS total
-      FROM match_game_player_stats s
-      JOIN match_games g ON g.id = s.match_game_id
+      FROM match_games g
       JOIN matches m ON m.id = g.match_id
-      WHERE s.account_id = $1 AND m.hidden = false
-    `, [steam32])
+      WHERE ${participationFilter}
+    `, [playerId, playerIdJson])
 
+    // Player's team captain per match (so we can derive win/loss even when stats are missing)
     const rows = await query(`
       SELECT
         g.id AS game_id,
@@ -336,6 +357,19 @@ router.get('/api/players/:id/matches', async (req, res) => {
         g.start_time,
         g.created_at AS game_created_at,
         g.duration_minutes,
+        g.winner_captain_id AS game_winner_captain_id,
+        g.parsed,
+        g.dotabuff_id,
+        m.competition_id,
+        m.winner_captain_id AS match_winner_captain_id,
+        m.team1_captain_id,
+        m.team2_captain_id,
+        c.name AS competition_name,
+        qm.id AS queue_match_id,
+        qm.captain1_player_id AS q_captain1_player_id,
+        qm.captain2_player_id AS q_captain2_player_id,
+        qp.name AS pool_name,
+        -- Player's stat row (null if unparsed)
         s.hero_id,
         s.kills,
         s.deaths,
@@ -343,44 +377,72 @@ router.get('/api/players/:id/matches', async (req, res) => {
         s.duration_seconds,
         s.is_radiant,
         s.win,
-        m.competition_id,
-        c.name AS competition_name,
-        qm.id AS queue_match_id,
-        qp.name AS pool_name,
         COALESCE((SELECT SUM(ms.kills)::int FROM match_game_player_stats ms WHERE ms.match_game_id = g.id AND ms.is_radiant = true), 0) AS radiant_kills,
         COALESCE((SELECT SUM(ms.kills)::int FROM match_game_player_stats ms WHERE ms.match_game_id = g.id AND ms.is_radiant = false), 0) AS dire_kills,
-        COALESCE(to_timestamp(g.start_time), g.created_at) AS played_at
-      FROM match_game_player_stats s
-      JOIN match_games g ON g.id = s.match_game_id
+        COALESCE(to_timestamp(g.start_time), g.created_at) AS played_at,
+        -- Player's team in this match (captain id they belong to), used for win derivation when stats are missing
+        (
+          SELECT cap.id FROM captains cap
+          WHERE cap.player_id = $1 AND cap.id IN (m.team1_captain_id, m.team2_captain_id)
+          LIMIT 1
+        ) AS player_as_captain_id,
+        (
+          SELECT cp.drafted_by FROM competition_players cp
+          WHERE cp.player_id = $1 AND cp.competition_id = m.competition_id
+            AND cp.drafted_by IN (m.team1_captain_id, m.team2_captain_id)
+          LIMIT 1
+        ) AS player_drafted_by_captain_id
+      FROM match_games g
       JOIN matches m ON m.id = g.match_id
       LEFT JOIN competitions c ON c.id = m.competition_id
       LEFT JOIN queue_matches qm ON qm.match_id = m.id
       LEFT JOIN queue_pools qp ON qp.id = qm.pool_id
-      WHERE s.account_id = $1 AND m.hidden = false
+      LEFT JOIN match_game_player_stats s
+        ON s.match_game_id = g.id AND ($3::bigint IS NOT NULL AND s.account_id = $3::bigint)
+      WHERE ${participationFilter}
       ORDER BY played_at DESC
-      LIMIT $2 OFFSET $3
-    `, [steam32, limit, offset])
+      LIMIT $4 OFFSET $5
+    `, [playerId, playerIdJson, steam32, limit, offset])
 
-    const shaped = rows.map(r => ({
-      gameId: r.game_id,
-      matchId: r.match_id,
-      gameNumber: r.game_number,
-      queueMatchId: r.queue_match_id,
-      competitionId: r.competition_id,
-      competitionName: r.competition_name,
-      poolName: r.pool_name,
-      type: r.queue_match_id ? 'queue' : 'competition',
-      heroId: r.hero_id || null,
-      kills: r.kills,
-      deaths: r.deaths,
-      assists: r.assists,
-      duration: r.duration_seconds,
-      isRadiant: r.is_radiant,
-      won: r.win === 1,
-      radiantKills: r.radiant_kills,
-      direKills: r.dire_kills,
-      date: r.played_at,
-    }))
+    const shaped = rows.map(r => {
+      // Derive win/loss. Prefer the player's own stat row; fall back to match winner + their team.
+      let won = null
+      if (r.win != null) {
+        won = r.win === 1
+      } else if (r.game_winner_captain_id || r.match_winner_captain_id) {
+        const winner = r.game_winner_captain_id || r.match_winner_captain_id
+        const playerTeamCap = r.player_as_captain_id || r.player_drafted_by_captain_id
+        if (playerTeamCap) won = winner === playerTeamCap
+        else if (r.queue_match_id) {
+          // Queue match: player's "team" is whichever captain's list they're in. Simpler fallback —
+          // we don't have the per-match team membership here without another query, so leave null.
+          won = null
+        }
+      }
+
+      return {
+        gameId: r.game_id,
+        matchId: r.match_id,
+        gameNumber: r.game_number,
+        queueMatchId: r.queue_match_id,
+        competitionId: r.competition_id,
+        competitionName: r.competition_name,
+        poolName: r.pool_name,
+        type: r.queue_match_id ? 'queue' : 'competition',
+        parsed: !!r.parsed && r.hero_id != null,
+        dotabuffId: r.dotabuff_id || null,
+        heroId: r.hero_id || null,
+        kills: r.kills,
+        deaths: r.deaths,
+        assists: r.assists,
+        duration: r.duration_seconds || (r.duration_minutes ? r.duration_minutes * 60 : null),
+        isRadiant: r.is_radiant,
+        won,
+        radiantKills: r.radiant_kills,
+        direKills: r.dire_kills,
+        date: r.played_at,
+      }
+    })
 
     res.json({ rows: shaped, total: totalRow?.total || 0 })
   } catch (e) {

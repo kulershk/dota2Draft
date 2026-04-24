@@ -402,15 +402,15 @@ const streakBadge = computed(() => {
                   :key="g.gameId"
                   :to="g.type === 'queue' ? { name: 'queue-match', params: { id: g.queueMatchId } } : { name: 'comp-match', params: { compId: g.competitionId, matchId: g.matchId } }"
                   class="flex flex-wrap lg:grid items-center gap-3 px-3.5 py-2.5 rounded-lg border-l-[3px] bg-muted hover:bg-accent transition-colors"
-                  :class="g.won ? 'border-l-green-500/60' : 'border-l-red-500/60'"
+                  :class="g.won === true ? 'border-l-green-500/60' : g.won === false ? 'border-l-red-500/60' : 'border-l-border'"
                   style="grid-template-columns: 72px 180px 100px 100px minmax(0,1fr) 80px 90px"
                 >
                   <!-- 1. Result chip -->
                   <span class="inline-flex items-center justify-center gap-1.5 w-[72px] px-2.5 py-1 rounded-md text-[11px] font-mono font-extrabold tracking-wider"
-                        :class="g.won ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'">
-                    <Check v-if="g.won" class="w-3 h-3" />
-                    <X v-else class="w-3 h-3" />
-                    {{ g.won ? t('profileWin') : t('profileLoss') }}
+                        :class="g.won === true ? 'bg-green-500/15 text-green-400' : g.won === false ? 'bg-red-500/15 text-red-400' : 'bg-muted-foreground/10 text-muted-foreground'">
+                    <Check v-if="g.won === true" class="w-3 h-3" />
+                    <X v-else-if="g.won === false" class="w-3 h-3" />
+                    {{ g.won === true ? t('profileWin') : g.won === false ? t('profileLoss') : '—' }}
                   </span>
 
                   <!-- 2. Hero block (180px): square portrait + name + subtitle -->
@@ -424,23 +424,30 @@ const streakBadge = computed(() => {
                     </div>
                     <div class="flex flex-col min-w-0 gap-0.5">
                       <span v-if="g.heroId" class="text-xs font-bold text-foreground truncate leading-tight">{{ dota.heroName(g.heroId) }}</span>
-                      <span v-else class="text-xs font-bold text-muted-foreground truncate leading-tight">{{ t('profileNoStats') }}</span>
+                      <span v-else class="text-xs font-bold text-muted-foreground truncate leading-tight">{{ g.dotabuffId ? t('profileParsing') : t('profileNoStats') }}</span>
                       <span class="text-[10px] text-muted-foreground truncate leading-tight font-mono">
-                        {{ g.isRadiant ? 'Radiant' : 'Dire' }}
+                        <template v-if="g.parsed">{{ g.isRadiant ? 'Radiant' : 'Dire' }}</template>
+                        <template v-else-if="g.dotabuffId">{{ t('profileMatchId', { id: g.dotabuffId }) }}</template>
+                        <template v-else>—</template>
                       </span>
                     </div>
                   </div>
 
                   <!-- 3. KDA (100px center) -->
-                  <span class="text-xs font-mono font-bold text-foreground text-center tabular-nums lg:w-[100px]">
-                    {{ g.kills }} / {{ g.deaths }} / {{ g.assists }}
+                  <span class="text-xs font-mono font-bold text-center tabular-nums lg:w-[100px]"
+                        :class="g.parsed ? 'text-foreground' : 'text-muted-foreground/50'">
+                    <template v-if="g.parsed">{{ g.kills }} / {{ g.deaths }} / {{ g.assists }}</template>
+                    <template v-else>— / — / —</template>
                   </span>
 
                   <!-- 4. Score (100px center) — player's side on the left -->
                   <span class="text-xs font-mono font-bold text-center tabular-nums lg:w-[100px]">
-                    <span :class="g.won ? 'text-foreground' : 'text-muted-foreground'">{{ g.isRadiant ? g.radiantKills : g.direKills }}</span>
-                    <span class="opacity-50 mx-1">–</span>
-                    <span :class="!g.won ? 'text-foreground' : 'text-muted-foreground'">{{ g.isRadiant ? g.direKills : g.radiantKills }}</span>
+                    <template v-if="g.parsed">
+                      <span :class="g.won ? 'text-foreground' : 'text-muted-foreground'">{{ g.isRadiant ? g.radiantKills : g.direKills }}</span>
+                      <span class="opacity-50 mx-1">–</span>
+                      <span :class="!g.won ? 'text-foreground' : 'text-muted-foreground'">{{ g.isRadiant ? g.direKills : g.radiantKills }}</span>
+                    </template>
+                    <span v-else class="text-muted-foreground/50">—</span>
                   </span>
 
                   <!-- 5. Mode (fill) -->

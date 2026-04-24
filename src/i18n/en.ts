@@ -978,6 +978,8 @@ export default {
   profileLoss: 'LOSS',
   profileTie: 'TIE',
   profileNoStats: 'No stats',
+  profileParsing: 'Parsing…',
+  profileMatchId: 'Match {id}',
   showingNofM: 'Showing {n} of {m}',
   eventsLabel: 'events',
   profileInNCompetitions: 'In {n} competitions',

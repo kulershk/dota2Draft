@@ -970,6 +970,8 @@ export default {
   profileLoss: 'PRAL.',
   profileTie: 'LYGIOS',
   profileNoStats: 'Nėra duomenų',
+  profileParsing: 'Apdorojama…',
+  profileMatchId: 'Žaidimas {id}',
   showingNofM: 'Rodoma {n} iš {m}',
   eventsLabel: 'turnyrai',
   profileInNCompetitions: '{n} varžybose',
