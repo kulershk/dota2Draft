@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { Clock, Users, Swords, X, Check, Loader2, Shield, ChevronRight, Timer, Send, MessageSquare, Ban, Target, Copy, Eye, EyeOff, Hourglass } from 'lucide-vue-next'
+import { Clock, Users, Swords, X, Check, Loader2, Shield, ShieldCheck, ChevronRight, Timer, Send, MessageSquare, Ban, Target, Copy, Eye, EyeOff, Hourglass, ListOrdered, User, UserPlus, Plus, Info, Crown } from 'lucide-vue-next'
 import { useQueueStore, type QueuePlayer, QUEUE_ROLES } from '@/composables/useQueueStore'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { getServerNow } from '@/composables/useSocket'
@@ -147,6 +147,75 @@ function topRoleOf(playerId: number): string | null {
   const prefs = queue.rolePreferences.value[playerId]
   return (prefs && prefs.length) ? prefs[0] : null
 }
+
+// Available pool filter (during pick phase)
+type PoolFilter = 'all' | typeof QUEUE_ROLES[number]
+const poolFilter = ref<PoolFilter>('all')
+const filteredAvailable = computed(() => {
+  const list = queue.pickState.value?.availablePlayers || []
+  if (poolFilter.value === 'all') return list
+  return list.filter(p => (queue.rolePreferences.value[p.playerId] || []).includes(poolFilter.value as string))
+})
+
+function winratePct(s: { wins: number; losses: number }): number {
+  const total = (s?.wins || 0) + (s?.losses || 0)
+  if (!total) return 0
+  return Math.round(((s.wins || 0) / total) * 100)
+}
+function winrateClass(s: { wins: number; losses: number }): string {
+  const pct = winratePct(s)
+  if (pct >= 60) return 'text-green-400'
+  if (pct >= 45) return 'text-amber-400'
+  return 'text-red-400'
+}
+function roleBadgeClass(role: string): string {
+  switch (role) {
+    case 'carry': return 'bg-green-500/20 text-green-400'
+    case 'mid': return 'bg-blue-500/20 text-blue-400'
+    case 'offlane': return 'bg-orange-500/20 text-orange-400'
+    case 'support': return 'bg-purple-500/20 text-purple-400'
+    case 'hard_support': return 'bg-pink-500/20 text-pink-400'
+    default: return 'bg-accent text-muted-foreground'
+  }
+}
+
+// Team panel helpers (pick phase)
+function teamFilledCount(picks: QueuePlayer[] | undefined | null): number {
+  return 1 + (picks?.length || 0) // captain + drafted picks
+}
+function teamAvgMmrAll(captain: QueuePlayer | undefined | null, picks: QueuePlayer[] | undefined | null): number {
+  const all = [captain, ...(picks || [])].filter(Boolean) as QueuePlayer[]
+  const withMmr = all.filter(p => Number(p.mmr) > 0)
+  if (!withMmr.length) return 0
+  return Math.round(withMmr.reduce((s, p) => s + Number(p.mmr), 0) / withMmr.length)
+}
+function teamRolesCoveredText(captain: QueuePlayer | undefined | null, picks: QueuePlayer[] | undefined | null): string {
+  const all = [captain, ...(picks || [])].filter(Boolean) as QueuePlayer[]
+  const seen = new Set<string>()
+  for (const p of all) {
+    const top = (queue.rolePreferences.value[p.playerId] || [])[0]
+    if (top) seen.add(top)
+  }
+  if (!seen.size) return ''
+  return [...seen].map(r => t('queueRoleShort_' + r)).join(', ')
+}
+
+// Fetch stats during pick phase too — the existing watcher is gated on inQueue
+// (which flips to false once a match is found), so without this the available
+// pool cards would have no win-rate / last-10 numbers.
+watch(
+  () => [
+    !!queue.activeMatch.value,
+    selectedPoolId.value,
+    (queue.pickState.value?.availablePlayers || []).map(p => p.playerId).sort((a, b) => a - b).join(','),
+  ] as const,
+  ([inMatch, poolId, ids]) => {
+    if (!inMatch || !poolId || !ids) return
+    const idList = ids.split(',').map(Number).filter(Boolean)
+    if (idList.length > 0) queue.fetchPlayerStats(poolId, idList)
+  },
+  { immediate: true }
+)
 
 // Queue ban — banner + live countdown
 const banRemainingMs = computed(() => {
@@ -535,7 +604,88 @@ onUnmounted(() => {
           </div>
 
           <!-- Pick Phase -->
-          <div v-else-if="queue.pickState.value" class="card overflow-hidden">
+          <template v-else-if="queue.pickState.value">
+
+          <!-- Phase Status Bar (full-width sub-header above the pick card) -->
+          <div class="card mb-4 px-5 py-4 flex items-center gap-4 flex-wrap">
+            <!-- Phase label + round subtitle -->
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-12 h-12 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center shrink-0">
+                <Swords class="w-5 h-5 text-cyan-400" />
+              </div>
+              <div class="flex flex-col gap-0.5 min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="text-[11px] font-bold tracking-[0.15em] text-cyan-400">{{ t('queuePickPhase').toUpperCase() }}</span>
+                  <span class="flex items-center gap-1 text-[9px] font-bold text-green-400 bg-green-500/15 px-1.5 py-0.5 rounded-full">
+                    <span class="w-1 h-1 rounded-full bg-green-500 phase-live-dot" />
+                    {{ t('queueLive') }}
+                  </span>
+                </div>
+                <span class="text-[15px] font-bold truncate">
+                  {{ t('queueRoundOf', { current: queue.pickState.value.pickIndex + 1, total: queue.activeMatch.value.pickOrder.length }) }}
+                  ·
+                  {{ queue.pickState.value.currentPicker === 1 ? t('queueRadiantCaptainPicks') : t('queueDireCaptainPicks') }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Divider -->
+            <div class="w-px h-10 bg-border hidden md:block" />
+
+            <!-- Active Picker -->
+            <div v-if="currentPickerCaptain" class="flex items-center gap-3 min-w-0">
+              <div class="relative shrink-0">
+                <img v-if="currentPickerCaptain.avatarUrl" :src="currentPickerCaptain.avatarUrl"
+                  class="w-11 h-11 rounded-full object-cover ring-2"
+                  :class="[
+                    queue.pickState.value.currentPicker === 1 ? 'ring-green-500' : 'ring-red-500',
+                    queue.pickState.value.currentPicker === 1 ? 'phase-active-glow-green' : 'phase-active-glow-red',
+                  ]" />
+                <div v-else class="w-11 h-11 rounded-full bg-accent ring-2 flex items-center justify-center"
+                  :class="queue.pickState.value.currentPicker === 1 ? 'ring-green-500' : 'ring-red-500'">
+                  <span class="text-base font-bold"
+                    :class="queue.pickState.value.currentPicker === 1 ? 'text-green-400' : 'text-red-400'">
+                    {{ (currentPickerCaptain.name || '?')[0].toUpperCase() }}
+                  </span>
+                </div>
+              </div>
+              <div class="flex flex-col gap-0.5 min-w-0">
+                <span class="text-[10px] font-bold tracking-[0.1em] text-muted-foreground">{{ t('queuePickingNow') }}</span>
+                <div class="flex items-center gap-2 min-w-0">
+                  <span class="text-[15px] font-bold truncate">{{ currentPickerCaptain.name }}</span>
+                  <span class="flex items-center gap-1 text-[9px] font-bold text-amber-400 bg-amber-500/15 px-1.5 py-0.5 rounded shrink-0">
+                    <Crown class="w-2.5 h-2.5" />
+                    CPT · {{ queue.pickState.value.currentPicker === 1 ? t('queueRadiant') : t('queueDire') }}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Spacer -->
+            <div class="flex-1" />
+
+            <!-- Timer card -->
+            <div v-if="pickTimeLeft != null"
+              class="flex items-center gap-3 px-4 py-2 rounded-lg border shrink-0"
+              :class="pickTimeLeft < 5000 ? 'bg-destructive/10 border-destructive/30' : 'bg-amber-500/10 border-amber-500/30'">
+              <Timer class="w-4 h-4" :class="pickTimeLeft < 5000 ? 'text-destructive' : 'text-amber-400'" />
+              <div class="flex flex-col items-end gap-0.5">
+                <span class="text-[9px] font-bold tracking-[0.1em] text-muted-foreground">{{ t('queueTimeLeft') }}</span>
+                <span class="text-[20px] font-mono font-bold leading-none tabular-nums"
+                  :class="pickTimeLeft < 5000 ? 'text-destructive' : 'text-amber-400'">
+                  {{ formatTimer(pickTimeLeft) }}
+                </span>
+              </div>
+            </div>
+
+            <!-- "Your turn" emphasis (only when it's the viewer's turn) -->
+            <div v-if="isMyTurn"
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold bg-primary/15 text-primary phase-your-turn-pulse">
+              {{ t('queueYourTurn') }}
+            </div>
+          </div>
+
+          <div class="card overflow-hidden">
             <!-- Timer bar -->
             <div class="h-1 bg-accent relative overflow-hidden">
               <div
@@ -545,163 +695,423 @@ onUnmounted(() => {
               />
             </div>
 
-            <!-- Header -->
-            <div class="px-6 py-4 border-b border-border/30 flex items-center justify-between">
-              <div class="flex items-center gap-3">
-                <span class="text-lg font-bold">{{ t('queuePickPhase') }}</span>
-                <span v-if="isMyTurn" class="text-xs font-semibold bg-primary/15 text-primary px-2.5 py-1 rounded-full animate-pulse">
-                  {{ t('queueYourTurn') }}
-                </span>
-                <span v-else-if="currentPickerCaptain" class="flex items-center gap-2 text-xs font-semibold px-2.5 py-1 rounded-full"
-                  :class="queue.pickState.value.currentPicker === 1 ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'">
-                  <img v-if="currentPickerCaptain.avatarUrl" :src="currentPickerCaptain.avatarUrl" class="w-4 h-4 rounded-full" />
-                  <span>{{ currentPickerCaptain.name }} {{ t('queuePicking') }}</span>
-                </span>
-                <span v-else class="text-xs text-muted-foreground">
-                  {{ t('queueWaitingForPick') }}
-                </span>
+            <!-- Pick Order strip -->
+            <div v-if="(queue.activeMatch.value.pickOrder || []).length > 0"
+              class="px-6 py-3 border-b border-border/30 flex items-center gap-4 flex-wrap">
+              <div class="flex items-center gap-2 shrink-0">
+                <ListOrdered class="w-3.5 h-3.5 text-muted-foreground" />
+                <span class="text-[10px] font-bold tracking-[0.15em] text-muted-foreground">{{ t('queuePickOrder') }}</span>
               </div>
-              <div v-if="pickTimeLeft != null" class="flex items-center gap-2">
-                <Timer class="w-4 h-4" :class="pickTimeLeft < 5000 ? 'text-destructive' : 'text-muted-foreground'" />
-                <span class="font-mono font-bold text-xl tabular-nums" :class="pickTimeLeft < 5000 ? 'text-destructive' : 'text-foreground'">
-                  {{ formatTimer(pickTimeLeft) }}
+              <div class="flex items-center gap-1.5 flex-wrap flex-1 min-w-0">
+                <template v-for="(cap, i) in queue.activeMatch.value.pickOrder" :key="i">
+                  <div v-if="i > 0" class="w-3 h-px bg-border/60 shrink-0" />
+                  <div class="flex items-center justify-center rounded-lg shrink-0 transition-all"
+                    :class="[
+                      i === queue.pickState.value.pickIndex ? 'w-10 h-10 font-bold' : 'w-8 h-8',
+                      i < queue.pickState.value.pickIndex
+                        ? (cap === 1 ? 'bg-green-500/15 border border-green-500/30 text-green-400' : 'bg-red-500/15 border border-red-500/30 text-red-400')
+                        : i === queue.pickState.value.pickIndex
+                          ? (cap === 1 ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' : 'bg-red-500 text-white shadow-lg shadow-red-500/30')
+                          : 'bg-accent/30 border border-border text-muted-foreground'
+                    ]">
+                    <Check v-if="i < queue.pickState.value.pickIndex" class="w-3.5 h-3.5" />
+                    <span v-else class="font-mono text-xs">{{ i + 1 }}</span>
+                  </div>
+                </template>
+              </div>
+              <div class="flex items-center gap-3 shrink-0">
+                <span class="flex items-center gap-1.5">
+                  <span class="w-2 h-2 rounded-full bg-green-500" />
+                  <span class="text-[10px] text-muted-foreground">{{ t('queueRadiant') }}</span>
+                </span>
+                <span class="flex items-center gap-1.5">
+                  <span class="w-2 h-2 rounded-full bg-red-500" />
+                  <span class="text-[10px] text-muted-foreground">{{ t('queueDire') }}</span>
                 </span>
               </div>
             </div>
 
-            <!-- Your Role Preference (visible to every participant) -->
-            <div v-if="iAmParticipant" class="px-6 py-4 border-b border-border/30 flex items-center gap-4 flex-wrap bg-purple-500/5">
-              <div class="flex items-center gap-2.5 min-w-[220px]">
-                <div class="w-8 h-8 rounded-lg bg-purple-500/15 border border-purple-500/30 flex items-center justify-center shrink-0">
-                  <Target class="w-3.5 h-3.5 text-purple-400" />
-                </div>
-                <div class="flex flex-col">
-                  <span class="text-[10px] font-bold tracking-[0.1em] text-purple-400">{{ t('queueYourRolePref') }}</span>
-                  <span class="text-[11px] text-muted-foreground">{{ t('queueYourRolePrefHint') }}</span>
-                </div>
-              </div>
-              <div class="flex items-center gap-1.5 flex-wrap flex-1">
-                <button
-                  v-for="role in QUEUE_ROLES" :key="role"
-                  type="button"
-                  class="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold transition-colors border"
-                  :class="myRoleRank(role)
-                    ? 'bg-purple-500 border-purple-500 text-white'
-                    : 'border-border/60 text-muted-foreground hover:border-purple-500/50 hover:text-foreground'"
-                  @click="queue.toggleRolePreference(role, currentUserId)"
-                >
-                  <span v-if="myRoleRank(role)" class="inline-flex items-center justify-center min-w-[14px] text-[10px]">{{ myRoleRank(role) }}·</span>
-                  {{ t('queueRole_' + role) }}
-                </button>
-              </div>
-              <span v-if="myPrefs.length > 0" class="text-[10px] font-bold tracking-wider text-green-400 flex items-center gap-1">
-                <Check class="w-3 h-3" /> {{ t('queueRolePrefSaved') }}
-              </span>
-            </div>
-
-            <div class="grid grid-cols-[1fr_auto_1fr] min-h-[340px]">
+            <div class="grid grid-cols-[1fr_minmax(380px,420px)_1fr] min-h-[340px]">
               <!-- Team 1 (Radiant) -->
-              <div class="p-5">
-                <div class="flex items-center gap-2 mb-4">
-                  <div class="w-2.5 h-2.5 rounded-full" :class="queue.pickState.value.currentPicker === 1 ? 'bg-green-500 animate-pulse' : 'bg-muted-foreground/20'"></div>
-                  <span class="text-sm font-bold text-green-400 uppercase tracking-wider">{{ t('queueRadiant') }}</span>
-                </div>
-                <!-- Captain -->
-                <div class="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-green-500/8 border border-green-500/15 mb-3">
-                  <img v-if="queue.activeMatch.value.captain1.avatarUrl" :src="queue.activeMatch.value.captain1.avatarUrl" class="w-7 h-7 rounded-full ring-2 ring-green-500/30" />
-                  <div class="flex-1 min-w-0">
-                    <div class="text-sm font-semibold truncate">{{ queue.activeMatch.value.captain1.name }}</div>
-                    <div class="text-[10px] text-muted-foreground">{{ queue.activeMatch.value.captain1.mmr }} MMR</div>
+              <div class="flex flex-col">
+                <!-- Header -->
+                <div class="px-5 py-4 border-b border-border/30 flex items-center justify-between gap-2 flex-wrap">
+                  <div class="flex items-center gap-3 min-w-0">
+                    <div class="w-10 h-10 rounded-lg bg-green-500/15 border border-green-500/30 flex items-center justify-center shrink-0"
+                      :class="queue.pickState.value.currentPicker === 1 ? 'ring-2 ring-green-500/40' : ''">
+                      <ShieldCheck class="w-5 h-5 text-green-400" />
+                    </div>
+                    <div class="flex flex-col min-w-0">
+                      <span class="text-[10px] font-bold tracking-[0.1em] text-green-400">{{ t('queueRadiant') }}</span>
+                      <span class="text-[13px] font-semibold truncate">{{ t('queueTeamOf', { name: queue.activeMatch.value.captain1.name }) }}</span>
+                    </div>
                   </div>
-                  <span class="text-[10px] font-bold text-green-400 bg-green-500/{{ totalPlayers }} px-2 py-0.5 rounded">CPT</span>
+                  <div class="flex items-center gap-1.5 shrink-0">
+                    <span class="text-[10px] font-mono font-bold bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full whitespace-nowrap">
+                      {{ teamFilledCount(queue.pickState.value.captain1Picks) }}/{{ teamSize }} {{ t('queueTeamPicked') }}
+                    </span>
+                    <span v-if="teamAvgMmrAll(queue.activeMatch.value.captain1, queue.pickState.value.captain1Picks)"
+                      class="text-[10px] font-mono font-bold bg-accent text-muted-foreground px-2 py-0.5 rounded-full whitespace-nowrap">
+                      avg {{ teamAvgMmrAll(queue.activeMatch.value.captain1, queue.pickState.value.captain1Picks) }}
+                    </span>
+                  </div>
                 </div>
-                <!-- Picked players -->
-                <div class="flex flex-col gap-1">
+
+                <!-- List -->
+                <div class="p-4 flex flex-col gap-2.5 flex-1">
+                  <!-- Captain -->
+                  <div class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-background border-l-2 border-green-500">
+                    <img v-if="queue.activeMatch.value.captain1.avatarUrl" :src="queue.activeMatch.value.captain1.avatarUrl"
+                      class="w-9 h-9 rounded-full object-cover ring-1 ring-green-500" />
+                    <div v-else class="w-9 h-9 rounded-full bg-green-500/20 ring-1 ring-green-500 flex items-center justify-center shrink-0">
+                      <span class="text-green-400 text-sm font-bold">{{ (queue.activeMatch.value.captain1.name || '?')[0].toUpperCase() }}</span>
+                    </div>
+                    <div class="flex flex-col flex-1 min-w-0 gap-1">
+                      <div class="flex items-center gap-1.5 min-w-0">
+                        <span class="text-[13px] font-semibold truncate">{{ queue.activeMatch.value.captain1.name }}</span>
+                        <span class="flex items-center gap-1 text-[9px] font-bold text-amber-400 bg-amber-500/15 px-1.5 py-0.5 rounded shrink-0">
+                          <Crown class="w-2.5 h-2.5" />
+                          CPT
+                        </span>
+                      </div>
+                      <div class="flex items-center gap-1.5 flex-wrap">
+                        <span v-if="topRoleOf(queue.activeMatch.value.captain1.playerId)"
+                          class="text-[10px] font-bold rounded px-1.5 py-0.5 uppercase tracking-wider"
+                          :class="roleBadgeClass(topRoleOf(queue.activeMatch.value.captain1.playerId)!)">
+                          {{ t('queueRoleShort_' + topRoleOf(queue.activeMatch.value.captain1.playerId)) }}
+                        </span>
+                        <span class="text-[11px] text-muted-foreground font-mono">· {{ queue.activeMatch.value.captain1.mmr }} MMR</span>
+                      </div>
+                    </div>
+                    <Check class="w-3.5 h-3.5 text-green-400 shrink-0" />
+                  </div>
+
+                  <!-- Picked players -->
                   <div v-for="p in queue.pickState.value.captain1Picks" :key="p.playerId"
-                    class="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-accent/50">
-                    <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-6 h-6 rounded-full" />
-                    <span class="text-sm font-medium flex-1 truncate">{{ p.name }}</span>
-                    <span class="text-[10px] text-muted-foreground tabular-nums">{{ p.mmr }}</span>
+                    class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-background border-l-2 border-green-500">
+                    <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-9 h-9 rounded-full object-cover ring-1 ring-green-500/40" />
+                    <div v-else class="w-9 h-9 rounded-full bg-green-500/20 ring-1 ring-green-500/40 flex items-center justify-center shrink-0">
+                      <span class="text-green-400 text-sm font-bold">{{ (p.name || '?')[0].toUpperCase() }}</span>
+                    </div>
+                    <div class="flex flex-col flex-1 min-w-0 gap-1">
+                      <span class="text-[13px] font-semibold truncate">{{ p.name }}</span>
+                      <div class="flex items-center gap-1.5 flex-wrap">
+                        <span v-if="topRoleOf(p.playerId)"
+                          class="text-[10px] font-bold rounded px-1.5 py-0.5 uppercase tracking-wider"
+                          :class="roleBadgeClass(topRoleOf(p.playerId)!)">
+                          {{ t('queueRoleShort_' + topRoleOf(p.playerId)) }}
+                        </span>
+                        <span class="text-[11px] text-muted-foreground font-mono">· {{ p.mmr }} MMR</span>
+                      </div>
+                    </div>
+                    <Check class="w-3.5 h-3.5 text-green-400 shrink-0" />
                   </div>
+
                   <!-- Empty slots -->
                   <div v-for="i in (emptySlots - queue.pickState.value.captain1Picks.length)" :key="'e1-' + i"
-                    class="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-dashed border-border/40">
-                    <div class="w-6 h-6 rounded-full bg-accent/50"></div>
-                    <span class="text-sm text-muted-foreground/30">---</span>
+                    class="flex items-center justify-center gap-2 px-3 py-3 rounded-lg border border-border">
+                    <UserPlus class="w-3 h-3 text-muted-foreground/60" />
+                    <span class="text-[12px] text-muted-foreground/60 font-medium">{{ t('queueTeamSlotWaiting') }}</span>
+                  </div>
+                </div>
+
+                <!-- Footer -->
+                <div class="px-5 py-3 border-t border-border/30 flex items-center justify-between gap-3">
+                  <span class="text-[10px] text-muted-foreground truncate">
+                    <template v-if="teamRolesCoveredText(queue.activeMatch.value.captain1, queue.pickState.value.captain1Picks)">
+                      {{ t('queueRolesCovered') }}: {{ teamRolesCoveredText(queue.activeMatch.value.captain1, queue.pickState.value.captain1Picks) }}
+                    </template>
+                    <template v-else>
+                      {{ t('queueRolesNone') }}
+                    </template>
+                  </span>
+                  <div class="w-[120px] h-1 rounded-full bg-accent overflow-hidden shrink-0">
+                    <div class="h-full bg-green-500 transition-all duration-500"
+                      :style="{ width: ((teamFilledCount(queue.pickState.value.captain1Picks) / teamSize) * 100) + '%' }" />
                   </div>
                 </div>
               </div>
 
-              <!-- Available Players (center column) -->
-              <div class="border-x border-border/30 p-5 min-w-[220px]">
-                <div class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-4 text-center">
-                  {{ t('queueAvailablePlayers') }}
-                </div>
-                <div class="flex flex-col gap-1">
-                  <button
-                    v-for="p in queue.pickState.value.availablePlayers" :key="p.playerId"
-                    class="flex flex-col gap-1.5 px-3 py-2.5 rounded-lg text-sm transition-all text-left"
-                    :class="isMyTurn
-                      ? 'hover:bg-primary/{{ totalPlayers }} hover:ring-1 hover:ring-primary/30 cursor-pointer'
-                      : 'cursor-default opacity-60'"
-                    :disabled="!isMyTurn"
-                    @click="isMyTurn && handlePick(p.playerId)"
-                  >
-                    <div class="flex items-center gap-2.5 w-full">
-                      <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-6 h-6 rounded-full" />
-                      <span class="font-medium flex-1 truncate">{{ p.name }}</span>
-                      <span class="text-[10px] text-muted-foreground tabular-nums">{{ p.mmr }}</span>
-                      <ChevronRight v-if="isMyTurn" class="w-3.5 h-3.5 text-muted-foreground/50" />
+              <!-- Available Pool (center column, redesigned per Pencil) -->
+              <div class="border-x border-border/30 flex flex-col">
+                <!-- Pool header -->
+                <div class="px-5 py-4 border-b border-border/30 flex items-center justify-between gap-3">
+                  <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-lg bg-purple-500/15 border border-purple-500/30 flex items-center justify-center shrink-0">
+                      <Users class="w-4 h-4 text-purple-400" />
                     </div>
-                    <div v-if="(queue.rolePreferences.value[p.playerId] || []).length > 0" class="flex items-center gap-1 flex-wrap pl-8">
-                      <span class="text-[9px] font-bold tracking-wider text-purple-400">{{ t('queueWants') }}</span>
-                      <span
-                        v-for="(role, rank) in queue.rolePreferences.value[p.playerId]" :key="role"
-                        class="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
-                        :class="rank < 3
-                          ? 'bg-purple-500/20 border border-purple-500/50 text-purple-300'
-                          : 'bg-accent text-muted-foreground'"
-                      >
-                        <template v-if="rank < 3">{{ rank + 1 }}· </template>{{ t('queueRoleShort_' + role) }}
+                    <div class="flex flex-col">
+                      <span class="text-[10px] font-bold tracking-[0.1em] text-purple-400">{{ t('queueAvailablePool') }}</span>
+                      <span class="text-[11px] text-muted-foreground">{{ t('queueAvailablePoolHint') }}</span>
+                    </div>
+                  </div>
+                  <span class="text-[11px] font-mono font-bold text-purple-400 bg-purple-500/15 px-2.5 py-1 rounded-full whitespace-nowrap">
+                    {{ queue.pickState.value.availablePlayers.length }} {{ t('queueLeft') }}
+                  </span>
+                </div>
+
+                <!-- My role preferences (only for participants) -->
+                <div v-if="iAmParticipant" class="p-4">
+                  <div class="rounded-xl border border-purple-500/40 bg-card p-4 flex flex-col gap-3 my-role-prefs-card">
+                    <div class="flex items-center justify-between gap-2 flex-wrap">
+                      <div class="flex items-center gap-2.5 min-w-0">
+                        <div class="w-8 h-8 rounded-lg bg-purple-500/15 border border-purple-500/30 flex items-center justify-center shrink-0">
+                          <Target class="w-3.5 h-3.5 text-purple-400" />
+                        </div>
+                        <div class="flex flex-col min-w-0">
+                          <span class="text-[10px] font-bold tracking-[0.1em] text-purple-400">{{ t('queueYourRolePref') }}</span>
+                          <span class="text-[11px] text-muted-foreground truncate">{{ t('queueYourRolePrefHint') }}</span>
+                        </div>
+                      </div>
+                      <span v-if="myPrefs.length > 0" class="flex items-center gap-1 text-[10px] font-bold tracking-wider text-green-400 bg-green-500/15 px-2 py-1 rounded-full">
+                        <Check class="w-3 h-3" /> {{ t('queueRolePrefSaved') }}
                       </span>
                     </div>
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        v-for="role in QUEUE_ROLES" :key="role"
+                        type="button"
+                        class="rounded-full px-3 py-1.5 text-[11px] font-bold transition-colors border"
+                        :class="myRoleRank(role)
+                          ? 'bg-purple-500 border-purple-500 text-white'
+                          : 'border-border text-muted-foreground hover:border-purple-500/50 hover:text-foreground'"
+                        @click="queue.toggleRolePreference(role, currentUserId)"
+                      >
+                        <template v-if="myRoleRank(role)">{{ myRoleRank(role) }}· </template>{{ t('queueRole_' + role) }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Pool filter chips -->
+                <div class="px-5 py-3 border-y border-border/30 flex items-center gap-2 flex-wrap">
+                  <button type="button"
+                    class="rounded-full px-3 py-1.5 text-[11px] font-bold transition-colors flex items-center gap-1.5"
+                    :class="poolFilter === 'all'
+                      ? 'bg-cyan-400 text-background'
+                      : 'border border-border text-muted-foreground hover:text-foreground'"
+                    @click="poolFilter = 'all'">
+                    {{ t('queueFilterAll') }}
+                    <span class="text-[10px] font-mono px-1.5 rounded-full"
+                      :class="poolFilter === 'all' ? 'bg-background/20' : 'bg-accent'">
+                      {{ filteredAvailable.length }}
+                    </span>
                   </button>
+                  <button v-for="role in QUEUE_ROLES" :key="role"
+                    type="button"
+                    class="rounded-full px-3 py-1.5 text-[11px] font-bold transition-colors border"
+                    :class="poolFilter === role
+                      ? 'bg-purple-500 border-purple-500 text-white'
+                      : 'border-border text-muted-foreground hover:text-foreground'"
+                    @click="poolFilter = role">
+                    {{ t('queueRoleShort_' + role) }}
+                  </button>
+                </div>
+
+                <!-- Pool list -->
+                <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-3 min-h-[200px]">
+                  <div v-if="filteredAvailable.length === 0"
+                    class="text-center text-xs text-muted-foreground py-8">
+                    {{ t('queueNoPlayersInFilter') }}
+                  </div>
+                  <div v-for="(p, i) in filteredAvailable" :key="p.playerId"
+                    class="rounded-xl bg-background border overflow-hidden transition-all"
+                    :class="isMyTurn && i === 0
+                      ? 'border-cyan-500/30 pool-card--highlight'
+                      : 'border-border'">
+                    <!-- Top: avatar + name + meta -->
+                    <div class="px-4 py-3 flex items-center gap-3">
+                      <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-12 h-12 rounded-full object-cover ring-2 ring-cyan-500/40" />
+                      <div v-else class="w-12 h-12 rounded-full bg-cyan-500/20 ring-2 ring-cyan-500 flex items-center justify-center shrink-0">
+                        <span class="text-cyan-400 text-lg font-bold">{{ (p.name || '?')[0].toUpperCase() }}</span>
+                      </div>
+                      <div class="flex flex-col flex-1 min-w-0 gap-1">
+                        <div class="flex items-center gap-2 min-w-0">
+                          <span class="text-sm font-bold truncate">{{ p.name }}</span>
+                          <span class="flex items-center gap-1 text-[9px] font-bold text-green-400 bg-green-500/15 px-1.5 py-0.5 rounded shrink-0">
+                            <span class="w-1 h-1 rounded-full bg-green-500" />
+                            {{ t('queueReady') }}
+                          </span>
+                        </div>
+                        <div class="flex items-center gap-2 text-[11px] text-muted-foreground font-mono font-semibold flex-wrap">
+                          <span>{{ p.mmr }} MMR</span>
+                          <template v-for="(role, idx) in (queue.rolePreferences.value[p.playerId] || []).slice(0, 2)" :key="role">
+                            <span class="w-0.5 h-0.5 rounded-full bg-muted-foreground/40 self-center"></span>
+                            <span class="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider"
+                              :class="roleBadgeClass(role)">
+                              {{ t('queueRoleShort_' + role) }}<template v-if="idx === 0 && (queue.rolePreferences.value[p.playerId] || []).length > 1"></template>
+                            </span>
+                          </template>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Stats divider -->
+                    <div v-if="queue.playerStats.value[p.playerId] && (queue.playerStats.value[p.playerId].wins + queue.playerStats.value[p.playerId].losses) > 0"
+                      class="px-3.5 py-2.5 border-y border-border/60 flex items-center gap-2">
+                      <div class="flex flex-col items-center flex-1 gap-0.5">
+                        <span class="text-[9px] font-bold tracking-wider text-muted-foreground/60 font-mono">{{ t('queueWinRate') }}</span>
+                        <span class="text-[13px] font-bold font-mono"
+                          :class="winrateClass(queue.playerStats.value[p.playerId])">
+                          {{ winratePct(queue.playerStats.value[p.playerId]) }}%
+                        </span>
+                      </div>
+                      <div class="w-px h-6 bg-border" />
+                      <div class="flex flex-col items-center flex-1 gap-0.5">
+                        <span class="text-[9px] font-bold tracking-wider text-muted-foreground/60 font-mono">{{ t('queueLast10') }}</span>
+                        <span class="text-[13px] font-mono font-bold flex items-center gap-1">
+                          <span class="text-green-400">{{ queue.playerStats.value[p.playerId].wins }}</span>
+                          <span class="text-muted-foreground/60">/</span>
+                          <span class="text-red-400">{{ queue.playerStats.value[p.playerId].losses }}</span>
+                        </span>
+                      </div>
+                    </div>
+
+                    <!-- Wants row -->
+                    <div v-if="(queue.rolePreferences.value[p.playerId] || []).length > 0"
+                      class="px-3.5 py-2 border-b border-border/60 flex items-center gap-1.5 flex-wrap">
+                      <span class="text-[9px] font-bold tracking-wider text-purple-400 font-mono mr-1">{{ t('queueWants') }}</span>
+                      <span v-for="(role, rank) in queue.rolePreferences.value[p.playerId]" :key="role"
+                        class="rounded-full text-[10px] font-bold px-2 py-0.5"
+                        :class="rank < 2
+                          ? 'bg-purple-500/20 border border-purple-500/60 text-purple-300'
+                          : 'bg-accent text-muted-foreground'">
+                        <template v-if="rank < 2">{{ rank + 1 }}· </template>{{ t('queueRoleShort_' + role) }}
+                      </span>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="px-3.5 py-2.5 flex items-center justify-between gap-3">
+                      <router-link :to="{ name: 'player-profile', params: { id: p.playerId } }"
+                        target="_blank"
+                        class="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                        @click.stop>
+                        <User class="w-3 h-3" />
+                        {{ t('queueViewProfile') }}
+                      </router-link>
+                      <button v-if="isMyTurn"
+                        type="button"
+                        class="pool-pick-btn flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[12px] font-bold text-background transition-all"
+                        @click="handlePick(p.playerId)">
+                        <Plus class="w-3 h-3" />
+                        {{ t('queuePickPlayer') }}
+                      </button>
+                      <span v-else class="text-[11px] text-muted-foreground/60 italic">
+                        {{ t('queueWaitingForPick') }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Footer hint -->
+                <div class="px-5 py-3 border-t border-border/30 flex items-center gap-2">
+                  <Info class="w-3 h-3 text-muted-foreground shrink-0" />
+                  <span class="text-[11px] text-muted-foreground">{{ t('queueAutoAssignHint') }}</span>
                 </div>
               </div>
 
               <!-- Team 2 (Dire) -->
-              <div class="p-5">
-                <div class="flex items-center gap-2 mb-4">
-                  <div class="w-2.5 h-2.5 rounded-full" :class="queue.pickState.value.currentPicker === 2 ? 'bg-red-500 animate-pulse' : 'bg-muted-foreground/20'"></div>
-                  <span class="text-sm font-bold text-red-400 uppercase tracking-wider">{{ t('queueDire') }}</span>
-                </div>
-                <!-- Captain -->
-                <div class="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-red-500/8 border border-red-500/15 mb-3">
-                  <img v-if="queue.activeMatch.value.captain2.avatarUrl" :src="queue.activeMatch.value.captain2.avatarUrl" class="w-7 h-7 rounded-full ring-2 ring-red-500/30" />
-                  <div class="flex-1 min-w-0">
-                    <div class="text-sm font-semibold truncate">{{ queue.activeMatch.value.captain2.name }}</div>
-                    <div class="text-[10px] text-muted-foreground">{{ queue.activeMatch.value.captain2.mmr }} MMR</div>
+              <div class="flex flex-col">
+                <!-- Header -->
+                <div class="px-5 py-4 border-b border-border/30 flex items-center justify-between gap-2 flex-wrap">
+                  <div class="flex items-center gap-3 min-w-0">
+                    <div class="w-10 h-10 rounded-lg bg-red-500/15 border border-red-500/30 flex items-center justify-center shrink-0"
+                      :class="queue.pickState.value.currentPicker === 2 ? 'ring-2 ring-red-500/40' : ''">
+                      <ShieldCheck class="w-5 h-5 text-red-400" />
+                    </div>
+                    <div class="flex flex-col min-w-0">
+                      <span class="text-[10px] font-bold tracking-[0.1em] text-red-400">{{ t('queueDire') }}</span>
+                      <span class="text-[13px] font-semibold truncate">{{ t('queueTeamOf', { name: queue.activeMatch.value.captain2.name }) }}</span>
+                    </div>
                   </div>
-                  <span class="text-[10px] font-bold text-red-400 bg-red-500/{{ totalPlayers }} px-2 py-0.5 rounded">CPT</span>
+                  <div class="flex items-center gap-1.5 shrink-0">
+                    <span class="text-[10px] font-mono font-bold bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full whitespace-nowrap">
+                      {{ teamFilledCount(queue.pickState.value.captain2Picks) }}/{{ teamSize }} {{ t('queueTeamPicked') }}
+                    </span>
+                    <span v-if="teamAvgMmrAll(queue.activeMatch.value.captain2, queue.pickState.value.captain2Picks)"
+                      class="text-[10px] font-mono font-bold bg-accent text-muted-foreground px-2 py-0.5 rounded-full whitespace-nowrap">
+                      avg {{ teamAvgMmrAll(queue.activeMatch.value.captain2, queue.pickState.value.captain2Picks) }}
+                    </span>
+                  </div>
                 </div>
-                <!-- Picked players -->
-                <div class="flex flex-col gap-1">
+
+                <!-- List -->
+                <div class="p-4 flex flex-col gap-2.5 flex-1">
+                  <!-- Captain -->
+                  <div class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-background border-l-2 border-red-500">
+                    <img v-if="queue.activeMatch.value.captain2.avatarUrl" :src="queue.activeMatch.value.captain2.avatarUrl"
+                      class="w-9 h-9 rounded-full object-cover ring-1 ring-red-500" />
+                    <div v-else class="w-9 h-9 rounded-full bg-red-500/20 ring-1 ring-red-500 flex items-center justify-center shrink-0">
+                      <span class="text-red-400 text-sm font-bold">{{ (queue.activeMatch.value.captain2.name || '?')[0].toUpperCase() }}</span>
+                    </div>
+                    <div class="flex flex-col flex-1 min-w-0 gap-1">
+                      <div class="flex items-center gap-1.5 min-w-0">
+                        <span class="text-[13px] font-semibold truncate">{{ queue.activeMatch.value.captain2.name }}</span>
+                        <span class="flex items-center gap-1 text-[9px] font-bold text-amber-400 bg-amber-500/15 px-1.5 py-0.5 rounded shrink-0">
+                          <Crown class="w-2.5 h-2.5" />
+                          CPT
+                        </span>
+                      </div>
+                      <div class="flex items-center gap-1.5 flex-wrap">
+                        <span v-if="topRoleOf(queue.activeMatch.value.captain2.playerId)"
+                          class="text-[10px] font-bold rounded px-1.5 py-0.5 uppercase tracking-wider"
+                          :class="roleBadgeClass(topRoleOf(queue.activeMatch.value.captain2.playerId)!)">
+                          {{ t('queueRoleShort_' + topRoleOf(queue.activeMatch.value.captain2.playerId)) }}
+                        </span>
+                        <span class="text-[11px] text-muted-foreground font-mono">· {{ queue.activeMatch.value.captain2.mmr }} MMR</span>
+                      </div>
+                    </div>
+                    <Check class="w-3.5 h-3.5 text-red-400 shrink-0" />
+                  </div>
+
+                  <!-- Picked players -->
                   <div v-for="p in queue.pickState.value.captain2Picks" :key="p.playerId"
-                    class="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-accent/50">
-                    <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-6 h-6 rounded-full" />
-                    <span class="text-sm font-medium flex-1 truncate">{{ p.name }}</span>
-                    <span class="text-[10px] text-muted-foreground tabular-nums">{{ p.mmr }}</span>
+                    class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-background border-l-2 border-red-500">
+                    <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-9 h-9 rounded-full object-cover ring-1 ring-red-500/40" />
+                    <div v-else class="w-9 h-9 rounded-full bg-red-500/20 ring-1 ring-red-500/40 flex items-center justify-center shrink-0">
+                      <span class="text-red-400 text-sm font-bold">{{ (p.name || '?')[0].toUpperCase() }}</span>
+                    </div>
+                    <div class="flex flex-col flex-1 min-w-0 gap-1">
+                      <span class="text-[13px] font-semibold truncate">{{ p.name }}</span>
+                      <div class="flex items-center gap-1.5 flex-wrap">
+                        <span v-if="topRoleOf(p.playerId)"
+                          class="text-[10px] font-bold rounded px-1.5 py-0.5 uppercase tracking-wider"
+                          :class="roleBadgeClass(topRoleOf(p.playerId)!)">
+                          {{ t('queueRoleShort_' + topRoleOf(p.playerId)) }}
+                        </span>
+                        <span class="text-[11px] text-muted-foreground font-mono">· {{ p.mmr }} MMR</span>
+                      </div>
+                    </div>
+                    <Check class="w-3.5 h-3.5 text-red-400 shrink-0" />
                   </div>
+
                   <!-- Empty slots -->
                   <div v-for="i in (emptySlots - queue.pickState.value.captain2Picks.length)" :key="'e2-' + i"
-                    class="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-dashed border-border/40">
-                    <div class="w-6 h-6 rounded-full bg-accent/50"></div>
-                    <span class="text-sm text-muted-foreground/30">---</span>
+                    class="flex items-center justify-center gap-2 px-3 py-3 rounded-lg border border-border">
+                    <UserPlus class="w-3 h-3 text-muted-foreground/60" />
+                    <span class="text-[12px] text-muted-foreground/60 font-medium">{{ t('queueTeamSlotWaiting') }}</span>
+                  </div>
+                </div>
+
+                <!-- Footer -->
+                <div class="px-5 py-3 border-t border-border/30 flex items-center justify-between gap-3">
+                  <span class="text-[10px] text-muted-foreground truncate">
+                    <template v-if="teamRolesCoveredText(queue.activeMatch.value.captain2, queue.pickState.value.captain2Picks)">
+                      {{ t('queueRolesCovered') }}: {{ teamRolesCoveredText(queue.activeMatch.value.captain2, queue.pickState.value.captain2Picks) }}
+                    </template>
+                    <template v-else>
+                      {{ t('queueRolesNone') }}
+                    </template>
+                  </span>
+                  <div class="w-[120px] h-1 rounded-full bg-accent overflow-hidden shrink-0">
+                    <div class="h-full bg-red-500 transition-all duration-500"
+                      :style="{ width: ((teamFilledCount(queue.pickState.value.captain2Picks) / teamSize) * 100) + '%' }" />
                   </div>
                 </div>
               </div>
             </div>
           </div>
+          </template>
         </template>
 
         <!-- ═══════════════════ QUEUE / IDLE ═══════════════════ -->
@@ -939,3 +1349,39 @@ onUnmounted(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.my-role-prefs-card {
+  box-shadow: 0 0 16px rgba(167, 139, 250, 0.2);
+}
+.pool-card--highlight {
+  box-shadow: 0 0 16px rgba(34, 211, 238, 0.15);
+}
+.pool-pick-btn {
+  background: linear-gradient(180deg, #22D3EE 0%, #0EA5E9 100%);
+  box-shadow: 0 3px 16px rgba(34, 211, 238, 0.4);
+}
+.pool-pick-btn:hover {
+  filter: brightness(1.1);
+}
+.phase-live-dot {
+  animation: phase-live-pulse 1.6s ease-in-out infinite;
+}
+@keyframes phase-live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.phase-active-glow-green {
+  box-shadow: 0 0 16px rgba(34, 197, 94, 0.45);
+}
+.phase-active-glow-red {
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.45);
+}
+.phase-your-turn-pulse {
+  animation: phase-your-turn 1.4s ease-in-out infinite;
+}
+@keyframes phase-your-turn {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.5); }
+  50% { box-shadow: 0 0 0 6px rgba(34, 211, 238, 0); }
+}
+</style>
