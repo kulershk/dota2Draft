@@ -971,6 +971,7 @@ export default {
   profileTie: 'NEIZŠ.',
   profileNoStats: 'Nav datu',
   showingNofM: 'Rāda {n} no {m}',
+  eventsLabel: 'turnīri',
   versionUpdateTitle: 'Pieejama jauna versija',
   versionUpdateDesc: 'Vietne tika atjaunināta. Atsvaidzini lapu, lai ielādētu jaunāko versiju.',
   versionUpdateRefresh: 'Atsvaidzināt lapu',

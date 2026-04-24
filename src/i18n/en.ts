@@ -979,6 +979,7 @@ export default {
   profileTie: 'TIE',
   profileNoStats: 'No stats',
   showingNofM: 'Showing {n} of {m}',
+  eventsLabel: 'events',
   versionUpdateTitle: 'New version available',
   versionUpdateDesc: 'The site was updated. Refresh the page to load the latest version.',
   versionUpdateRefresh: 'Refresh page',

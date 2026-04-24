@@ -971,6 +971,7 @@ export default {
   profileTie: 'LYGIOS',
   profileNoStats: 'Nėra duomenų',
   showingNofM: 'Rodoma {n} iš {m}',
+  eventsLabel: 'turnyrai',
   versionUpdateTitle: 'Yra nauja versija',
   versionUpdateDesc: 'Svetainė buvo atnaujinta. Atnaujinkite puslapį, kad įkeltumėte naujausią versiją.',
   versionUpdateRefresh: 'Atnaujinti puslapį',

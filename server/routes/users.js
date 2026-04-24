@@ -95,7 +95,7 @@ router.get('/api/players/:id/profile', async (req, res) => {
     placements = await query(`
       SELECT
         cap.id AS captain_id, cap.competition_id, c.name AS competition_name,
-        cap.team,
+        cap.team, c.created_at AS competition_created_at,
         ts.tournament_state
       FROM captains cap
       JOIN competitions c ON c.id = cap.competition_id
@@ -169,6 +169,7 @@ router.get('/api/players/:id/profile', async (req, res) => {
           stage_name: stage.name,
           format: stage.format,
           placement,
+          competition_created_at: p.competition_created_at,
         })
       }
     }

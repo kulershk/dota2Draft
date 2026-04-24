@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { User, Trophy, Swords, Tv, Medal, MessageCircle, Star, ChevronLeft, ChevronRight, Percent, Target, Flame, Clock, Award, Zap, Check, X } from 'lucide-vue-next'
+import { User, Trophy, Swords, Tv, Medal, MessageCircle, Star, ChevronLeft, ChevronRight, Percent, Target, Flame, Clock, Award, Zap, Check, X, Flag } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -102,18 +102,41 @@ function placementLabel(n: number) {
   return t('placementN', { n })
 }
 
-function placementClass(n: number) {
-  if (n === 1) return 'text-yellow-500'
-  if (n === 2) return 'text-gray-400'
-  if (n === 3) return 'text-amber-700 dark:text-amber-600'
+// Placement colors sourced from Pencil tournament-placements card:
+//  1st #FACC15 yellow · 2nd #CBD5E1 silver · 3rd #F47222 orange · rest #64748B muted
+function placementRankClass(n: number) {
+  if (n === 1) return 'text-[#FACC15]'
+  if (n === 2) return 'text-[#CBD5E1]'
+  if (n === 3) return 'text-[#F47222]'
+  return 'text-[#CBD5E1]'
+}
+
+function placementBorderClass(n: number) {
+  if (n === 1) return 'border-l-[#FACC15]/30'
+  if (n === 2) return 'border-l-[#CBD5E1]/30'
+  if (n === 3) return 'border-l-[#F47222]/30'
+  return 'border-l-border'
+}
+
+function placementBadgeClass(n: number) {
+  if (n === 1) return 'bg-[#FACC15]/10 border border-[#FACC15]/30'
+  if (n === 2) return 'bg-[#CBD5E1]/10 border border-[#CBD5E1]/30'
+  if (n === 3) return 'bg-[#F47222]/10 border border-[#F47222]/30'
+  return 'bg-[#64748B]/15 border border-[#64748B]/40'
+}
+
+function placementIconClass(n: number) {
+  if (n === 1) return 'text-[#FACC15]'
+  if (n === 2) return 'text-[#CBD5E1]'
+  if (n === 3) return 'text-[#F47222]'
   return 'text-muted-foreground'
 }
 
-function placementBg(n: number) {
-  if (n === 1) return 'bg-yellow-500/10 border-yellow-500/20'
-  if (n === 2) return 'bg-gray-400/10 border-gray-400/20'
-  if (n === 3) return 'bg-amber-700/10 border-amber-700/20'
-  return 'bg-accent border-border'
+function formatMonthYear(dateStr: string): string {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
 }
 
 // Stats formatting helpers
@@ -549,27 +572,40 @@ const streakBadge = computed(() => {
 
           <!-- Tournament placements -->
           <div v-if="profile.tournament_results?.length > 0" class="card">
-            <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
-              <Medal class="w-5 h-5 text-primary" />
+            <div class="flex items-center gap-3 px-5 py-4 border-b border-border">
+              <Trophy class="w-4 h-4 text-primary" />
               <span class="text-sm font-bold text-foreground">{{ t('tournamentPlacements') }}</span>
-              <span class="ml-auto text-xs font-mono text-muted-foreground">{{ profile.tournament_results.length }}</span>
+              <span class="flex-1"></span>
+              <span class="inline-flex items-center rounded px-2 py-0.5 text-[11px] font-mono font-bold bg-primary/10 text-cyan-300">
+                {{ profile.tournament_results.length }} {{ t('eventsLabel') }}
+              </span>
             </div>
             <div class="p-3 flex flex-col gap-2">
               <div
                 v-for="(result, idx) in profile.tournament_results" :key="idx"
-                class="flex items-center gap-3 p-2.5 rounded-lg border-l-[3px]"
-                :class="placementBg(result.placement)"
+                class="flex items-center gap-3 rounded-[10px] bg-muted border-l-[3px] px-3.5 py-3"
+                :class="placementBorderClass(result.placement)"
               >
-                <div class="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-base shrink-0" :class="placementClass(result.placement)">
-                  {{ result.placement === 1 ? '🥇' : result.placement === 2 ? '🥈' : result.placement === 3 ? '🥉' : `#${result.placement}` }}
+                <!-- 36px rounded-square badge -->
+                <div class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+                     :class="placementBadgeClass(result.placement)">
+                  <Award v-if="result.placement === 1" class="w-[18px] h-[18px]" :class="placementIconClass(result.placement)" />
+                  <Medal v-else-if="result.placement === 2 || result.placement === 3" class="w-[18px] h-[18px]" :class="placementIconClass(result.placement)" />
+                  <Flag v-else class="w-[18px] h-[18px]" :class="placementIconClass(result.placement)" />
                 </div>
-                <div class="min-w-0 flex-1">
-                  <p class="text-sm font-semibold text-foreground truncate">{{ result.competition_name }}</p>
-                  <p class="text-xs text-muted-foreground truncate">{{ result.team }} · {{ result.stage_name }}</p>
+                <!-- Info -->
+                <div class="min-w-0 flex-1 flex flex-col gap-0.5">
+                  <p class="text-[13px] font-bold text-foreground truncate leading-tight">{{ result.competition_name }}</p>
+                  <p class="text-[11px] font-medium text-muted-foreground truncate leading-tight">
+                    {{ result.team }} · {{ result.stage_name }}<template v-if="result.competition_created_at"> · {{ formatMonthYear(result.competition_created_at) }}</template>
+                  </p>
                 </div>
-                <span class="text-xs font-medium shrink-0" :class="placementClass(result.placement)">
-                  {{ placementLabel(result.placement) }}
-                </span>
+                <!-- Right rank -->
+                <div class="shrink-0 text-right">
+                  <span class="text-base font-mono font-extrabold tabular-nums leading-none" :class="placementRankClass(result.placement)">
+                    {{ placementLabel(result.placement) }}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
