@@ -476,22 +476,26 @@ const streakBadge = computed(() => {
           <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
             <!-- XP History -->
             <div v-if="xpLog.length > 0" class="card flex flex-col">
-              <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
-                <Zap class="w-5 h-5 text-purple-400" />
-                <span class="text-sm font-semibold text-foreground">{{ t('xpHistory') }}</span>
-                <span class="text-xs font-mono text-muted-foreground ml-auto">{{ t('xpTotal') }}: {{ (profile.total_xp || 0).toLocaleString() }}</span>
+              <div class="flex items-center gap-3 px-5 py-4 border-b border-border">
+                <Zap class="w-4 h-4 text-[#A78BFA]" />
+                <span class="text-sm font-bold text-foreground">{{ t('xpHistory') }}</span>
+                <span class="flex-1"></span>
+                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-mono font-bold bg-[#A78BFA]/10 text-[#A78BFA]">
+                  {{ (profile.total_xp || 0).toLocaleString() }} XP
+                </span>
               </div>
-              <div class="divide-y divide-border flex-1">
-                <div v-for="log in pagedXpLog" :key="log.created_at" class="flex items-center gap-3 px-4 py-2.5">
-                  <span class="text-sm font-bold font-mono text-primary shrink-0">+{{ log.amount }}</span>
+              <div class="p-3 flex flex-col gap-1.5 flex-1">
+                <div v-for="log in pagedXpLog" :key="log.created_at" class="flex items-center gap-3 bg-muted rounded-lg border-l-2 border-[#A78BFA]/60 px-3 py-2">
+                  <div class="w-7 h-7 rounded-md bg-[#A78BFA]/10 border border-[#A78BFA]/30 flex items-center justify-center shrink-0">
+                    <Zap class="w-3.5 h-3.5 text-[#A78BFA]" />
+                  </div>
                   <div class="flex-1 min-w-0">
-                    <p class="text-sm text-foreground truncate">{{ t(`xpReason_${log.reason}`) }}</p>
-                    <p v-if="log.detail" class="text-xs text-muted-foreground truncate">{{ log.detail }}</p>
+                    <p class="text-xs font-semibold text-foreground truncate leading-tight">{{ t(`xpReason_${log.reason}`) }}</p>
+                    <p class="text-[11px] text-muted-foreground truncate leading-tight mt-0.5">
+                      <template v-if="log.competition_name">{{ log.competition_name }} · </template>{{ fmtDateTime(new Date(log.created_at)) }}
+                    </p>
                   </div>
-                  <div class="text-right shrink-0">
-                    <p v-if="log.competition_name" class="text-xs text-muted-foreground truncate max-w-[140px]">{{ log.competition_name }}</p>
-                    <p class="text-[10px] text-text-tertiary">{{ fmtDateTime(new Date(log.created_at)) }}</p>
-                  </div>
+                  <span class="text-sm font-bold font-mono text-green-400 shrink-0">+{{ log.amount }}</span>
                 </div>
               </div>
               <div v-if="xpTotalPages > 1" class="flex items-center justify-between px-4 py-2 border-t border-border">
@@ -507,38 +511,41 @@ const streakBadge = computed(() => {
 
             <!-- Competition history -->
             <div class="card flex flex-col">
-              <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
-                <Award class="w-5 h-5 text-yellow-500" />
-                <span class="text-sm font-semibold text-foreground">{{ t('competitionHistory') }}</span>
-                <span class="text-xs font-mono text-muted-foreground ml-auto">{{ profile.competitions.length }}</span>
+              <div class="flex items-center gap-3 px-5 py-4 border-b border-border">
+                <Award class="w-4 h-4 text-[#FACC15]" />
+                <span class="text-sm font-bold text-foreground">{{ t('competitionHistory') }}</span>
+                <span class="flex-1"></span>
+                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-mono font-bold bg-[#FACC15]/10 text-[#FACC15]">
+                  {{ profile.competitions.length }} {{ t('eventsLabel') }}
+                </span>
               </div>
               <div v-if="profile.competitions.length === 0" class="p-6 text-center text-sm text-muted-foreground flex-1 flex items-center justify-center">
                 {{ t('noCompetitions') }}
               </div>
-              <div v-else class="divide-y divide-border flex-1">
-                <div v-for="comp in pagedCompetitions" :key="comp.competition_id" class="flex items-center gap-3 px-4 py-3">
-                  <div class="flex-1 min-w-0">
-                    <router-link
-                      :to="{ name: 'comp-info', params: { compId: comp.competition_id } }"
-                      class="text-sm font-medium text-foreground hover:text-primary transition-colors truncate block"
-                    >{{ comp.competition_name }}</router-link>
-                    <div class="flex flex-wrap items-center gap-2 mt-1">
-                      <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
-                        :class="comp.was_captain ? 'bg-primary/10 text-primary' : 'bg-accent text-muted-foreground'">
-                        <Trophy v-if="comp.was_captain" class="w-3 h-3 mr-0.5" />
-                        {{ comp.was_captain ? t('wasCaptain') : t('wasPlayer') }}
-                      </span>
-                      <span v-if="comp.captain_team" class="text-xs text-muted-foreground">{{ comp.captain_team }}</span>
-                      <span v-if="comp.drafted && comp.drafted_by_team" class="text-xs text-muted-foreground">
-                        {{ t('draftedBy') }} {{ comp.drafted_by_team }}
-                      </span>
-                      <span v-if="comp.draft_price" class="text-xs font-mono text-primary font-semibold">{{ comp.draft_price }}g</span>
-                    </div>
+              <div v-else class="p-3 flex flex-col gap-1.5 flex-1">
+                <router-link
+                  v-for="comp in pagedCompetitions" :key="comp.competition_id"
+                  :to="{ name: 'comp-info', params: { compId: comp.competition_id } }"
+                  class="flex items-center gap-3 bg-muted rounded-lg border border-border/50 px-3 py-2 hover:border-primary/30 transition-colors"
+                >
+                  <div class="w-7 h-7 rounded-full flex items-center justify-center shrink-0"
+                       :class="comp.was_captain ? 'bg-primary/10 border border-primary/30' : 'bg-[#64748B]/15 border border-[#64748B]/40'">
+                    <Trophy v-if="comp.was_captain" class="w-3.5 h-3.5 text-primary" />
+                    <User v-else class="w-3.5 h-3.5 text-muted-foreground" />
                   </div>
-                  <div class="shrink-0">
+                  <div class="flex-1 min-w-0">
+                    <p class="text-xs font-semibold text-foreground truncate leading-tight">{{ comp.competition_name }}</p>
+                    <p class="text-[11px] text-muted-foreground truncate leading-tight mt-0.5">
+                      <span>{{ comp.was_captain ? t('wasCaptain') : t('wasPlayer') }}</span>
+                      <template v-if="comp.captain_team"> · {{ comp.captain_team }}</template>
+                      <template v-else-if="comp.drafted && comp.drafted_by_team"> · {{ t('draftedBy') }} {{ comp.drafted_by_team }}</template>
+                    </p>
+                  </div>
+                  <div class="flex flex-col items-end gap-0.5 shrink-0">
+                    <span v-if="comp.draft_price" class="text-xs font-mono font-bold text-primary">{{ comp.draft_price }}g</span>
                     <MmrDisplay v-if="comp.mmr" :mmr="comp.mmr" size="sm" />
                   </div>
-                </div>
+                </router-link>
               </div>
               <div v-if="compTotalPages > 1" class="flex items-center justify-between px-4 py-2 border-t border-border">
                 <button class="p-1 rounded hover:bg-accent disabled:opacity-30" :disabled="compPage <= 1" @click="compPage--">
