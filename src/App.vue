@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Gamepad2, Shield, LogOut, Sun, Moon, Menu, X, Home, LogIn, Lock, Globe, Settings, Swords, Info, Radio, ChevronDown, Check, LayoutDashboard, Bell, User, Newspaper, Calendar, Trophy, Medal } from 'lucide-vue-next'
+import { Gamepad2, Shield, ShieldAlert, LogOut, Sun, Moon, Menu, X, Home, LogIn, Lock, Globe, Settings, Swords, Info, Radio, ChevronDown, Check, LayoutDashboard, Bell, User, Newspaper, Calendar, Trophy, Medal } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { onMounted, ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -148,6 +148,21 @@ const mobileMenuOpen = ref(false)
 
 const isLoggedIn = computed(() => !!store.currentUser.value)
 
+// MMR verification nudge banner — shown above the header for any logged-in
+// user whose MMR has never been verified. Dismissible per browser session.
+const MMR_BANNER_KEY = 'mmr_verify_banner_dismissed'
+const mmrBannerDismissed = ref(sessionStorage.getItem(MMR_BANNER_KEY) === '1')
+const showMmrBanner = computed(() =>
+  isLoggedIn.value
+  && !store.currentUser.value?.mmr_verified_at
+  && !mmrBannerDismissed.value
+  && route.path !== '/settings'
+)
+function dismissMmrBanner() {
+  mmrBannerDismissed.value = true
+  sessionStorage.setItem(MMR_BANNER_KEY, '1')
+}
+
 const myMatchCount = ref(0)
 
 async function fetchMyMatchCount() {
@@ -196,6 +211,27 @@ async function handleClaimAdmin() {
 
 <template>
   <div class="flex flex-col h-screen bg-background" @click="showLangMenu = false; showUserMenu = false">
+    <!-- MMR verification nudge — only for logged-in unverified players, dismissible per session -->
+    <div v-if="showMmrBanner" class="bg-amber-500/15 border-b border-amber-500/30">
+      <div class="max-w-[1200px] mx-auto w-full flex items-center gap-3 px-4 md:px-8 py-2">
+        <ShieldAlert class="w-4 h-4 text-amber-400 shrink-0" />
+        <p class="text-xs text-amber-100 flex-1">
+          {{ t('mmrBannerText') }}
+          <router-link to="/settings" class="text-amber-300 font-bold underline hover:text-amber-200 ml-1">
+            {{ t('mmrBannerCta') }}
+          </router-link>
+        </p>
+        <button
+          type="button"
+          class="p-1 rounded hover:bg-amber-500/15 text-amber-400/70 hover:text-amber-300 transition-colors shrink-0"
+          :title="t('dismiss')"
+          @click="dismissMmrBanner"
+        >
+          <X class="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+
     <!-- Top Navigation Bar -->
     <header class="bg-muted border-b border-border" @click="showLangMenu = false; showUserMenu = false">
       <div class="max-w-[1200px] mx-auto w-full flex items-center justify-between px-4 md:px-8 h-14">

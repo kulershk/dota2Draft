@@ -135,6 +135,7 @@ export interface CurrentUser {
   permissions: string[]
   roles: string[]
   mmr: number
+  mmr_verified_at: string | null
   info: string
   total_xp: number
   twitch_username: string | null
