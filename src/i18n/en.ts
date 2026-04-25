@@ -1280,6 +1280,7 @@ export default {
   seasonRankingsCount: 'seasons',
   queuePoolSeason: 'Season',
   queuePoolNoSeason: 'No season — does not affect rankings',
+  queuePoolSeasonLink: 'View season leaderboard',
   serverRegion: 'Server Region',
   gameMode: 'Game Mode',
   leagueId: 'League ID',

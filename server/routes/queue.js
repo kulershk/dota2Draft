@@ -13,7 +13,13 @@ export default function createQueueRouter(io) {
   // ── Public: list enabled pools ──
   router.get('/api/queue/pools', async (req, res) => {
     try {
-      const pools = await query('SELECT * FROM queue_pools WHERE enabled = true ORDER BY id')
+      const pools = await query(`
+        SELECT qp.*, s.name AS season_name, s.slug AS season_slug
+        FROM queue_pools qp
+        LEFT JOIN seasons s ON s.id = qp.season_id
+        WHERE qp.enabled = true
+        ORDER BY qp.id
+      `)
       for (const p of pools) p.queue_count = poolQueues.get(p.id)?.size || 0
       res.json(pools)
     } catch (e) {
@@ -24,7 +30,12 @@ export default function createQueueRouter(io) {
   // ── Public: pool details ──
   router.get('/api/queue/pools/:poolId', async (req, res) => {
     try {
-      const pool = await queryOne('SELECT * FROM queue_pools WHERE id = $1', [req.params.poolId])
+      const pool = await queryOne(`
+        SELECT qp.*, s.name AS season_name, s.slug AS season_slug
+        FROM queue_pools qp
+        LEFT JOIN seasons s ON s.id = qp.season_id
+        WHERE qp.id = $1
+      `, [req.params.poolId])
       if (!pool) return res.status(404).json({ error: 'Pool not found' })
       res.json(pool)
     } catch (e) {

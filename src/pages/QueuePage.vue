@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { Clock, Users, Swords, X, Check, Loader2, Shield, ShieldCheck, ChevronRight, Timer, Send, MessageCircle, Ban, Target, Copy, Eye, EyeOff, Hourglass, ListOrdered, UserPlus, Plus, Info, Crown } from 'lucide-vue-next'
+import { Clock, Users, Swords, X, Check, Loader2, Shield, ShieldCheck, ChevronRight, Timer, Send, MessageCircle, Ban, Target, Copy, Eye, EyeOff, Hourglass, ListOrdered, UserPlus, Plus, Info, Crown, Medal } from 'lucide-vue-next'
 import { useQueueStore, type QueuePlayer, QUEUE_ROLES } from '@/composables/useQueueStore'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { getServerNow } from '@/composables/useSocket'
@@ -1072,7 +1072,18 @@ onUnmounted(() => {
                     <Shield class="w-5 h-5 text-primary" />
                   </div>
                   <div class="flex-1 min-w-0">
-                    <div class="font-bold truncate">{{ selectedPool.name }}</div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <div class="font-bold truncate">{{ selectedPool.name }}</div>
+                      <router-link
+                        v-if="(selectedPool as any).season_slug"
+                        :to="{ name: 'season-leaderboard', params: { slug: (selectedPool as any).season_slug } }"
+                        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[11px] font-bold hover:bg-amber-500/25 transition-colors shrink-0"
+                        :title="t('queuePoolSeasonLink')"
+                      >
+                        <Medal class="w-3 h-3" />
+                        {{ (selectedPool as any).season_name }}
+                      </router-link>
+                    </div>
                     <div class="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
                       <span>{{ teamSize }}v{{ teamSize }}</span>
                       <span v-if="(selectedPool as any).min_mmr || (selectedPool as any).max_mmr">
@@ -1133,7 +1144,7 @@ onUnmounted(() => {
               </div>
 
               <!-- Players in Queue grid (only visible once you've joined) -->
-              <div v-if="selectedPool && queue.inQueue.value" class="card overflow-hidden">
+              <div v-if="selectedPool" class="card overflow-hidden">
                 <div class="flex items-center justify-between px-5 py-4 border-b border-border/40">
                   <div class="flex items-center gap-2.5">
                     <Users class="w-4 h-4 text-primary" />

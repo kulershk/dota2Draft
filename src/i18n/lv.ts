@@ -1272,6 +1272,7 @@ export default {
   seasonRankingsCount: 'sezonas',
   queuePoolSeason: 'Sezona',
   queuePoolNoSeason: 'Bez sezonas — neietekmē reitingus',
+  queuePoolSeasonLink: 'Skatīt sezonas topu',
   serverRegion: 'Servera reģions',
   gameMode: 'Spēles režīms',
   leagueId: 'Līgas ID',

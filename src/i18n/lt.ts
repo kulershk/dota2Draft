@@ -1272,6 +1272,7 @@ export default {
   seasonRankingsCount: 'sezonai',
   queuePoolSeason: 'Sezonas',
   queuePoolNoSeason: 'Be sezono — neturi įtakos reitingams',
+  queuePoolSeasonLink: 'Žiūrėti sezono lentelę',
   serverRegion: 'Serverio regionas',
   gameMode: 'Žaidimo režimas',
   leagueId: 'Lygos ID',
