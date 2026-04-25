@@ -481,5 +481,7 @@ export function useApi() {
       request(`/api/admin/seasons/${id}/adjust`, { method: 'POST', body: JSON.stringify(data) }),
     recomputeSeason: (id: number) =>
       request(`/api/admin/seasons/${id}/recompute`, { method: 'POST' }),
+    backfillSeason: (id: number) =>
+      request(`/api/admin/seasons/${id}/backfill`, { method: 'POST' }),
   }
 }

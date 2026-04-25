@@ -2,7 +2,7 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ArrowLeft, Save, RotateCcw, Trophy, Pencil } from 'lucide-vue-next'
+import { ArrowLeft, Save, RotateCcw, Trophy, Pencil, History } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { toLocalDatetime, localDatetimeToISO } from '@/utils/format'
 
@@ -184,6 +184,18 @@ async function handleRecompute() {
   }
 }
 
+async function handleBackfill() {
+  if (!confirm(t('seasonBackfillConfirm'))) return
+  try {
+    const res = await api.backfillSeason(seasonId.value)
+    alert(t('seasonBackfillDone', { claimed: res.claimed, players: res.players, events: res.events }))
+    if (tab.value === 'leaderboard') await loadLeader()
+    if (tab.value === 'audit') await loadAudit()
+  } catch (e: any) {
+    alert(e.message || 'Backfill failed')
+  }
+}
+
 function openAdjust(row: LeaderRow) {
   adjustPlayer.value = row
   adjustDelta.value = 0
@@ -326,11 +338,17 @@ onMounted(load)
         </div>
       </div>
 
-      <div class="flex items-center justify-between border-t border-border/40 pt-4">
-        <button type="button" class="px-3 py-2 text-sm rounded-md bg-accent/40 hover:bg-accent flex items-center gap-2" @click="handleRecompute">
-          <RotateCcw class="w-4 h-4" />
-          {{ t('seasonRecompute') }}
-        </button>
+      <div class="flex items-center justify-between border-t border-border/40 pt-4 flex-wrap gap-3">
+        <div class="flex items-center gap-2 flex-wrap">
+          <button type="button" class="px-3 py-2 text-sm rounded-md bg-accent/40 hover:bg-accent flex items-center gap-2" @click="handleBackfill" :title="t('seasonBackfillHint')">
+            <History class="w-4 h-4" />
+            {{ t('seasonBackfill') }}
+          </button>
+          <button type="button" class="px-3 py-2 text-sm rounded-md bg-accent/40 hover:bg-accent flex items-center gap-2" @click="handleRecompute">
+            <RotateCcw class="w-4 h-4" />
+            {{ t('seasonRecompute') }}
+          </button>
+        </div>
         <div class="flex items-center gap-3">
           <span v-if="saveMsg" class="text-xs text-muted-foreground">{{ saveMsg }}</span>
           <button type="button" class="btn-primary px-3 py-2 text-sm flex items-center gap-2" :disabled="saving" @click="handleSave">

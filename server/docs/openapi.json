@@ -2073,6 +2073,19 @@
         }
       }
     },
+    "/api/admin/seasons/{id}/backfill": {
+      "post": {
+        "tags": ["Seasons"],
+        "summary": "Admin: claim past completed matches into this season, then recompute",
+        "description": "Sets queue_matches.season_id on previously-orphaned (NULL) completed matches that belong to a pool currently assigned to this season and fall within the season's starts_at..ends_at window (either bound is optional). After claiming, runs a full recompute so the leaderboard reflects the new history. Idempotent — running again with no new orphans is a no-op.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": { "description": "{ ok: true, claimed, players, events }" },
+          "404": { "description": "Not found" }
+        }
+      }
+    },
     "/api/dota/constants": {
       "get": {
         "tags": ["Dota"],
