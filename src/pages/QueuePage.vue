@@ -1221,21 +1221,41 @@ onUnmounted(() => {
 
                     <!-- Score / VS + status -->
                     <div class="flex flex-col items-center shrink-0 gap-1.5 min-w-[140px]">
-                      <div v-if="qm.score1 != null && qm.score2 != null" class="flex items-center gap-2 font-mono font-bold tabular-nums">
-                        <span
-                          class="px-2 py-0.5 rounded text-[11px]"
-                          :class="winnerSide(qm) === 1
-                            ? 'bg-green-500/15 text-green-500'
-                            : (winnerSide(qm) === 2 ? 'bg-red-500/15 text-red-500' : 'bg-accent/40 text-muted-foreground')"
-                        >{{ winnerSide(qm) === 1 ? 'W' : (winnerSide(qm) === 2 ? 'L' : '–') }}</span>
-                        <span class="text-foreground text-sm">{{ qm.score1 }} — {{ qm.score2 }}</span>
-                        <span
-                          class="px-2 py-0.5 rounded text-[11px]"
-                          :class="winnerSide(qm) === 2
-                            ? 'bg-green-500/15 text-green-500'
-                            : (winnerSide(qm) === 1 ? 'bg-red-500/15 text-red-500' : 'bg-accent/40 text-muted-foreground')"
-                        >{{ winnerSide(qm) === 2 ? 'W' : (winnerSide(qm) === 1 ? 'L' : '–') }}</span>
-                      </div>
+                      <!-- Prefer in-game kill totals when available; fall back to games-won. -->
+                      <template v-if="qm.team1_kills != null && qm.team2_kills != null">
+                        <div class="flex items-center gap-2 font-mono font-bold tabular-nums">
+                          <span
+                            class="px-2 py-0.5 rounded text-[11px]"
+                            :class="winnerSide(qm) === 1
+                              ? 'bg-green-500/15 text-green-500'
+                              : (winnerSide(qm) === 2 ? 'bg-red-500/15 text-red-500' : 'bg-accent/40 text-muted-foreground')"
+                          >{{ winnerSide(qm) === 1 ? 'W' : (winnerSide(qm) === 2 ? 'L' : '–') }}</span>
+                          <span class="text-foreground text-sm">{{ qm.team1_kills }} — {{ qm.team2_kills }}</span>
+                          <span
+                            class="px-2 py-0.5 rounded text-[11px]"
+                            :class="winnerSide(qm) === 2
+                              ? 'bg-green-500/15 text-green-500'
+                              : (winnerSide(qm) === 1 ? 'bg-red-500/15 text-red-500' : 'bg-accent/40 text-muted-foreground')"
+                          >{{ winnerSide(qm) === 2 ? 'W' : (winnerSide(qm) === 1 ? 'L' : '–') }}</span>
+                        </div>
+                      </template>
+                      <template v-else-if="qm.score1 != null && qm.score2 != null">
+                        <div class="flex items-center gap-2 font-mono font-bold tabular-nums">
+                          <span
+                            class="px-2 py-0.5 rounded text-[11px]"
+                            :class="winnerSide(qm) === 1
+                              ? 'bg-green-500/15 text-green-500'
+                              : (winnerSide(qm) === 2 ? 'bg-red-500/15 text-red-500' : 'bg-accent/40 text-muted-foreground')"
+                          >{{ winnerSide(qm) === 1 ? 'W' : (winnerSide(qm) === 2 ? 'L' : '–') }}</span>
+                          <span class="text-foreground text-sm">{{ qm.score1 }} — {{ qm.score2 }}</span>
+                          <span
+                            class="px-2 py-0.5 rounded text-[11px]"
+                            :class="winnerSide(qm) === 2
+                              ? 'bg-green-500/15 text-green-500'
+                              : (winnerSide(qm) === 1 ? 'bg-red-500/15 text-red-500' : 'bg-accent/40 text-muted-foreground')"
+                          >{{ winnerSide(qm) === 2 ? 'W' : (winnerSide(qm) === 1 ? 'L' : '–') }}</span>
+                        </div>
+                      </template>
                       <div v-else class="px-3 py-1 rounded bg-accent text-xs font-semibold text-muted-foreground">VS</div>
                       <div class="flex items-center gap-2">
                         <div v-if="qm.completed_at || qm.status === 'live'" class="flex items-center gap-1 text-[10px] text-muted-foreground font-mono whitespace-nowrap">

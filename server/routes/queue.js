@@ -71,6 +71,40 @@ export default function createQueueRouter(io) {
     params.push(limit, offset)
 
     const matches = await query(sql, params)
+
+    // Aggregate per-side kills across all games of each match. m.score1/score2
+    // is the games-won (Bo1=0/1, Bo3=0..2) result; users want the actual
+    // in-game kill count to render in Recent Matches.
+    const matchIds = matches.filter(m => m.match_id).map(m => m.match_id)
+    if (matchIds.length) {
+      const statRows = await query(`
+        SELECT mg.match_id, s.profile_id, s.kills
+        FROM match_game_player_stats s
+        JOIN match_games mg ON mg.id = s.match_game_id
+        WHERE mg.match_id = ANY($1::int[])
+      `, [matchIds])
+      const killsByMatchPlayer = new Map() // matchId -> Map<playerId, totalKills>
+      for (const r of statRows) {
+        if (!r.profile_id) continue
+        let m = killsByMatchPlayer.get(r.match_id)
+        if (!m) { m = new Map(); killsByMatchPlayer.set(r.match_id, m) }
+        m.set(r.profile_id, (m.get(r.profile_id) || 0) + Number(r.kills || 0))
+      }
+      for (const qm of matches) {
+        const km = qm.match_id && killsByMatchPlayer.get(qm.match_id)
+        if (!km) continue
+        const team1Ids = (qm.team1_players || []).map(p => p.playerId)
+        const team2Ids = (qm.team2_players || []).map(p => p.playerId)
+        let t1 = 0, t2 = 0
+        for (const pid of team1Ids) t1 += km.get(pid) || 0
+        for (const pid of team2Ids) t2 += km.get(pid) || 0
+        if (t1 > 0 || t2 > 0) {
+          qm.team1_kills = t1
+          qm.team2_kills = t2
+        }
+      }
+    }
+
     res.json(matches)
   })
 
