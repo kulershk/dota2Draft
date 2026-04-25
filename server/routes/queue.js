@@ -179,7 +179,7 @@ export default function createQueueRouter(io) {
 
   // ── Admin: list all pools ──
   router.get('/api/admin/queue/pools', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_competitions')
+    const admin = await requirePermission(req, res, 'manage_queue_pools')
     if (!admin) return
     try {
       const pools = await query('SELECT * FROM queue_pools ORDER BY id')
@@ -191,7 +191,7 @@ export default function createQueueRouter(io) {
 
   // ── Admin: create pool ──
   router.post('/api/admin/queue/pools', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_competitions')
+    const admin = await requirePermission(req, res, 'manage_queue_pools')
     if (!admin) return
 
     const {
@@ -239,7 +239,7 @@ export default function createQueueRouter(io) {
 
   // ── Admin: update pool ──
   router.put('/api/admin/queue/pools/:id', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_competitions')
+    const admin = await requirePermission(req, res, 'manage_queue_pools')
     if (!admin) return
 
     try {
@@ -280,7 +280,7 @@ export default function createQueueRouter(io) {
 
   // ── Admin: delete pool ──
   router.delete('/api/admin/queue/pools/:id', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_competitions')
+    const admin = await requirePermission(req, res, 'manage_queue_pools')
     if (!admin) return
     try {
       await execute('DELETE FROM queue_pools WHERE id = $1', [req.params.id])
@@ -292,7 +292,7 @@ export default function createQueueRouter(io) {
 
   // ── Admin: list active queue matches ──
   router.get('/api/admin/queue/matches', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_competitions')
+    const admin = await requirePermission(req, res, 'manage_queue_pools')
     if (!admin) return
 
     try {
@@ -341,7 +341,7 @@ export default function createQueueRouter(io) {
 
   // ── Admin: cancel a queue match ──
   router.post('/api/admin/queue/matches/:id/cancel', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_competitions')
+    const admin = await requirePermission(req, res, 'manage_queue_pools')
     if (!admin) return
 
     const qmId = Number(req.params.id)
@@ -401,7 +401,7 @@ export default function createQueueRouter(io) {
 
   // ── Admin: manually retry lobby creation for a queue match ──
   router.post('/api/admin/queue/matches/:id/retry-lobby', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_competitions')
+    const admin = await requirePermission(req, res, 'manage_queue_pools')
     if (!admin) return
     const qmId = Number(req.params.id)
     try {
@@ -430,7 +430,7 @@ export default function createQueueRouter(io) {
 
   // ── Admin: list currently queued players across all pools ──
   router.get('/api/admin/queue/players', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_competitions')
+    const admin = await requirePermission(req, res, 'manage_queue_pools')
     if (!admin) return
     try {
       const out = []
@@ -446,7 +446,7 @@ export default function createQueueRouter(io) {
 
   // ── Admin: kick player from whatever queue they're in ──
   router.post('/api/admin/queue/kick/:playerId', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_competitions')
+    const admin = await requirePermission(req, res, 'manage_queue_pools')
     if (!admin) return
     const playerId = Number(req.params.playerId)
     const reason = req.body?.reason || null
@@ -460,7 +460,7 @@ export default function createQueueRouter(io) {
 
   // ── Admin: list active queue bans ──
   router.get('/api/admin/queue/bans', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_competitions')
+    const admin = await requirePermission(req, res, 'manage_queue_pools')
     if (!admin) return
     try {
       const rows = await query(`
@@ -482,7 +482,7 @@ export default function createQueueRouter(io) {
   // ── Admin: create / update a queue ban ──
   // body: { player_id, duration_minutes (0 or null = permanent), reason }
   router.post('/api/admin/queue/bans', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_competitions')
+    const admin = await requirePermission(req, res, 'manage_queue_pools')
     if (!admin) return
     const { player_id, duration_minutes, reason } = req.body || {}
     const pid = Number(player_id)
@@ -542,7 +542,7 @@ export default function createQueueRouter(io) {
 
   // ── Admin: remove a queue ban ──
   router.delete('/api/admin/queue/bans/:playerId', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_competitions')
+    const admin = await requirePermission(req, res, 'manage_queue_pools')
     if (!admin) return
     const pid = Number(req.params.playerId)
     try {

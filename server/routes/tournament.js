@@ -970,7 +970,7 @@ export default function createTournamentRouter(io) {
 
   // Admin: get all unparsed games across all competitions
   router.get('/api/admin/games/unparsed', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_competitions')
+    const admin = await requirePermission(req, res, 'manage_games')
     if (!admin) return
 
     const games = await query(`
@@ -991,7 +991,7 @@ export default function createTournamentRouter(io) {
 
   // Admin: get all games with dotabuff IDs (for force refetch all)
   router.get('/api/admin/games/all', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_competitions')
+    const admin = await requirePermission(req, res, 'manage_games')
     if (!admin) return
 
     const games = await query(`
@@ -1012,7 +1012,7 @@ export default function createTournamentRouter(io) {
 
   // Admin: refetch a specific game by match_game id
   router.post('/api/admin/games/:gameId/refetch', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_competitions')
+    const admin = await requirePermission(req, res, 'manage_games')
     if (!admin) return
 
     const mg = await queryOne('SELECT id, dotabuff_id, match_id FROM match_games WHERE id = $1', [req.params.gameId])

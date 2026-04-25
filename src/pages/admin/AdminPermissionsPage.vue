@@ -39,6 +39,10 @@ const permLabels: Record<string, string> = {
   manage_players: 'Manage Players',
   manage_auction: 'Manage Auction',
   manage_permissions: 'Manage Permissions',
+  manage_bots: 'Manage Lobby Bots',
+  manage_jobs: 'Manage Background Jobs',
+  manage_games: 'Manage Games',
+  manage_queue_pools: 'Manage Queue Pools',
 }
 
 onMounted(async () => {

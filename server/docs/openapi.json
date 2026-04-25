@@ -1549,7 +1549,7 @@
       "get": {
         "tags": ["Admin"],
         "summary": "Get unparsed games",
-        "description": "Returns games with dotabuff IDs that haven't been fully parsed by OpenDota yet.",
+        "description": "Returns games with dotabuff IDs that haven't been fully parsed by OpenDota yet. Requires manage_games permission.",
         "security": [{ "bearerAuth": [] }],
         "responses": { "200": { "description": "Array of unparsed game objects" } }
       }
@@ -1558,7 +1558,7 @@
       "get": {
         "tags": ["Admin"],
         "summary": "Get all games with match IDs",
-        "description": "Returns all games that have dotabuff IDs, regardless of parse status. Used for force refetch all.",
+        "description": "Returns all games that have dotabuff IDs, regardless of parse status. Used for force refetch all. Requires manage_games permission.",
         "security": [{ "bearerAuth": [] }],
         "responses": { "200": { "description": "Array of game objects" } }
       }
@@ -1567,7 +1567,7 @@
       "post": {
         "tags": ["Admin"],
         "summary": "Refetch stats for a game",
-        "description": "Re-fetches OpenDota stats including picks/bans for a specific match game.",
+        "description": "Re-fetches OpenDota stats including picks/bans for a specific match game. Requires manage_games permission.",
         "security": [{ "bearerAuth": [] }],
         "parameters": [{ "name": "gameId", "in": "path", "required": true, "schema": { "type": "integer" } }],
         "responses": { "200": { "description": "Refetch result with saved count and parsed status" } }
@@ -1767,13 +1767,13 @@
       "get": {
         "tags": ["Queue"],
         "summary": "Admin: list all queue pools",
-        "description": "Returns all queue pools including disabled ones. Requires manage_competitions permission.",
+        "description": "Returns all queue pools including disabled ones. Requires manage_queue_pools permission.",
         "responses": { "200": { "description": "Array of all queue pools", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/QueuePool" } } } } } }
       },
       "post": {
         "tags": ["Queue"],
         "summary": "Admin: create queue pool",
-        "description": "Creates a new queue pool. Requires manage_competitions permission.",
+        "description": "Creates a new queue pool. Requires manage_queue_pools permission.",
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/QueuePoolInput" } } } },
         "responses": {
           "201": { "description": "Created pool", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/QueuePool" } } } },
@@ -1785,7 +1785,7 @@
       "put": {
         "tags": ["Queue"],
         "summary": "Admin: update queue pool",
-        "description": "Updates an existing queue pool. Requires manage_competitions permission. Only provided fields are updated.",
+        "description": "Updates an existing queue pool. Requires manage_queue_pools permission. Only provided fields are updated.",
         "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/QueuePoolInput" } } } },
         "responses": {
@@ -1796,7 +1796,7 @@
       "delete": {
         "tags": ["Queue"],
         "summary": "Admin: delete queue pool",
-        "description": "Deletes a queue pool and cascades to queue_matches. Requires manage_competitions permission.",
+        "description": "Deletes a queue pool and cascades to queue_matches. Requires manage_queue_pools permission.",
         "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
         "responses": { "200": { "description": "Deleted" } }
       }
@@ -1805,7 +1805,7 @@
       "get": {
         "tags": ["Queue"],
         "summary": "Admin: list active queue matches",
-        "description": "Returns all queue matches in picking, lobby_creating, or live status. Enriched with in-memory state and lobby info. Requires manage_competitions permission.",
+        "description": "Returns all queue matches in picking, lobby_creating, or live status. Enriched with in-memory state and lobby info. Requires manage_queue_pools permission.",
         "responses": { "200": { "description": "Array of active queue matches with team rosters and lobby info" } }
       }
     },
@@ -1813,7 +1813,7 @@
       "post": {
         "tags": ["Queue"],
         "summary": "Admin: cancel a queue match",
-        "description": "Cancels an active queue match. Notifies all players via socket, cleans up in-memory state, and sets DB status to cancelled. Refuses once the latest match_lobbies row is 'completed' (bot has left the lobby after game_started) — at that point the Dota match is running on its own. Requires manage_competitions permission.",
+        "description": "Cancels an active queue match. Notifies all players via socket, cleans up in-memory state, and sets DB status to cancelled. Refuses once the latest match_lobbies row is 'completed' (bot has left the lobby after game_started) — at that point the Dota match is running on its own. Requires manage_queue_pools permission.",
         "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
         "responses": {
           "200": { "description": "Match cancelled" },
@@ -1825,7 +1825,7 @@
       "get": {
         "tags": ["Queue"],
         "summary": "Admin: list currently queued players across all pools",
-        "description": "Returns the in-memory queue roster for every pool, each entry decorated with the poolId it's queued in. Requires manage_competitions.",
+        "description": "Returns the in-memory queue roster for every pool, each entry decorated with the poolId it's queued in. Requires manage_queue_pools.",
         "responses": { "200": { "description": "Array of queued players" } }
       }
     },
