@@ -388,7 +388,7 @@ export function registerQueueHandlers(socket, io) {
     }
     lastChatAt.set(playerId, now)
 
-    queryOne('SELECT id, name, display_name, avatar_url FROM players WHERE id = $1', [playerId])
+    queryOne('SELECT id, name, display_name, avatar_url, mmr_verified_at FROM players WHERE id = $1', [playerId])
       .then(p => {
         if (!p) return
         const msg = {
@@ -397,6 +397,7 @@ export function registerQueueHandlers(socket, io) {
           playerId,
           name: p.display_name || p.name,
           avatarUrl: p.avatar_url,
+          mmrVerifiedAt: p.mmr_verified_at || null,
           text: trimmed.slice(0, CHAT_TEXT_MAX),
           ts: now,
         }

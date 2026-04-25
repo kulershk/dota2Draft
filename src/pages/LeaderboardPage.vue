@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Trophy, User } from 'lucide-vue-next'
+import { Trophy, User, BadgeCheck } from 'lucide-vue-next'
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -19,6 +19,7 @@ interface LeaderboardEntry {
   total_xp: number
   level: number
   level_progress: number
+  mmr_verified_at?: string | null
 }
 
 const rows = ref<LeaderboardEntry[]>([])
@@ -110,7 +111,10 @@ async function loadMore() {
                       <User class="w-4 h-4 text-muted-foreground" />
                     </div>
                   </div>
-                  <span class="text-sm font-medium text-foreground truncate">{{ row.name }}</span>
+                  <span class="text-sm font-medium text-foreground truncate flex items-center gap-1">
+                    {{ row.name }}
+                    <BadgeCheck v-if="row.mmr_verified_at" class="w-3.5 h-3.5 text-cyan-400 shrink-0" :title="t('mmrVerifiedTooltip')" />
+                  </span>
                 </div>
               </td>
               <!-- Level -->

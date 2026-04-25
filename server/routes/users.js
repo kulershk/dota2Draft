@@ -212,6 +212,7 @@ router.get('/api/players/:id/profile', async (req, res) => {
         p.id AS teammate_player_id,
         COALESCE(p.display_name, p.name, MIN(s2.player_name)) AS teammate_name,
         p.avatar_url,
+        p.mmr_verified_at AS teammate_mmr_verified_at,
         COUNT(*)::int AS games,
         COALESCE(SUM(s1.win), 0)::int AS wins
       FROM match_game_player_stats s1
@@ -225,7 +226,7 @@ router.get('/api/players/:id/profile', async (req, res) => {
       WHERE s1.account_id = $1
         AND s2.account_id <> 0
         AND ${validMatchWhere}
-      GROUP BY s2.account_id, p.id, p.display_name, p.name, p.avatar_url
+      GROUP BY s2.account_id, p.id, p.display_name, p.name, p.avatar_url, p.mmr_verified_at
       HAVING COUNT(*) >= 2
       ORDER BY games DESC, wins DESC
       LIMIT 5
@@ -349,6 +350,7 @@ router.get('/api/players/:id/profile', async (req, res) => {
       player_id: t.teammate_player_id || null,
       name: t.teammate_name || 'Unknown',
       avatar_url: t.avatar_url || null,
+      mmr_verified_at: t.teammate_mmr_verified_at || null,
       games: t.games,
       wins: t.wins,
     })),

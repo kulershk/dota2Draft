@@ -96,6 +96,7 @@ export interface QueueChatMessage {
   playerId: number
   name: string
   avatarUrl: string | null
+  mmrVerifiedAt?: string | null
   text: string
   ts: number
 }

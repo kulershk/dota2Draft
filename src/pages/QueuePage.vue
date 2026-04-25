@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { Clock, Users, Swords, X, Check, Loader2, Shield, ShieldCheck, ChevronRight, Timer, Send, MessageCircle, Ban, Target, Copy, Eye, EyeOff, Hourglass, ListOrdered, UserPlus, Plus, Info, Crown, Medal } from 'lucide-vue-next'
+import { Clock, Users, Swords, X, Check, Loader2, Shield, ShieldCheck, ChevronRight, Timer, Send, MessageCircle, Ban, Target, Copy, Eye, EyeOff, Hourglass, ListOrdered, UserPlus, Plus, Info, Crown, Medal, BadgeCheck } from 'lucide-vue-next'
 import { useQueueStore, type QueuePlayer, QUEUE_ROLES } from '@/composables/useQueueStore'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { getServerNow } from '@/composables/useSocket'
@@ -1209,9 +1209,10 @@ onUnmounted(() => {
                         </template>
                       </div>
                       <div class="flex flex-col min-w-0">
-                        <span class="text-sm truncate"
+                        <span class="text-sm truncate flex items-center gap-1"
                           :class="winnerSide(qm) === 1 ? 'font-semibold' : (winnerSide(qm) === 2 ? 'text-muted-foreground' : 'font-medium')">
                           {{ qm.captain1_display_name || qm.captain1_name }}
+                          <BadgeCheck v-if="qm.captain1_mmr_verified_at" class="w-3.5 h-3.5 text-cyan-400 shrink-0" :title="t('mmrVerifiedTooltip')" />
                         </span>
                         <span v-if="teamAvgMmr(qm.team1_players)" class="text-[10px] font-mono text-muted-foreground">
                           {{ t('avgMmr') }} {{ teamAvgMmr(qm.team1_players) }}
@@ -1276,9 +1277,10 @@ onUnmounted(() => {
                     <!-- Team 2 (right) -->
                     <div class="flex items-center gap-3 flex-1 min-w-0 justify-end">
                       <div class="flex flex-col items-end min-w-0">
-                        <span class="text-sm truncate"
+                        <span class="text-sm truncate flex items-center gap-1"
                           :class="winnerSide(qm) === 2 ? 'font-semibold' : (winnerSide(qm) === 1 ? 'text-muted-foreground' : 'font-medium')">
                           {{ qm.captain2_display_name || qm.captain2_name }}
+                          <BadgeCheck v-if="qm.captain2_mmr_verified_at" class="w-3.5 h-3.5 text-cyan-400 shrink-0" :title="t('mmrVerifiedTooltip')" />
                         </span>
                         <span v-if="teamAvgMmr(qm.team2_players)" class="text-[10px] font-mono text-muted-foreground">
                           {{ t('avgMmr') }} {{ teamAvgMmr(qm.team2_players) }}
@@ -1327,8 +1329,9 @@ onUnmounted(() => {
                     <img v-if="m.avatarUrl" :src="m.avatarUrl" class="w-[30px] h-[30px] rounded-full shrink-0 object-cover" />
                     <div v-else class="w-[30px] h-[30px] rounded-full bg-accent shrink-0" />
                     <div class="flex-1 min-w-0 flex flex-col gap-0.5">
-                      <div class="flex items-baseline gap-2">
+                      <div class="flex items-baseline gap-1.5">
                         <span class="text-xs font-bold truncate" :class="m.playerId === currentUserId ? 'text-primary' : chatNameColorClass(m.playerId)">{{ m.name }}</span>
+                        <BadgeCheck v-if="m.mmrVerifiedAt" class="w-3 h-3 text-cyan-400 shrink-0 -mb-0.5" :title="t('mmrVerifiedTooltip')" />
                         <span class="text-[10px] text-muted-foreground font-mono tabular-nums">{{ new Date(m.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}</span>
                       </div>
                       <div

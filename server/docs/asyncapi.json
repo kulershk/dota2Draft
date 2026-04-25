@@ -952,6 +952,7 @@
               "playerId": { "type": "integer" },
               "name": { "type": "string" },
               "avatarUrl": { "type": "string", "nullable": true },
+              "mmrVerifiedAt": { "type": "string", "format": "date-time", "nullable": true, "description": "Set if the sender has an admin-approved MMR verification (lets clients render the verified badge)" },
               "text": { "type": "string" },
               "ts": { "type": "integer", "description": "Unix timestamp ms" }
             }

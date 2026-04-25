@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Medal, Trophy, ChevronLeft } from 'lucide-vue-next'
+import { Medal, Trophy, ChevronLeft, BadgeCheck } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { getSocket } from '@/composables/useSocket'
 
@@ -25,6 +25,7 @@ interface LeaderRow {
   name: string
   avatar_url: string | null
   mmr: number
+  mmr_verified_at: string | null
   points: number
   peak_points: number
   games_played: number
@@ -151,6 +152,7 @@ onUnmounted(detachSocket)
                     <img v-if="row.avatar_url" :src="row.avatar_url" class="w-7 h-7 rounded-full object-cover" />
                     <div v-else class="w-7 h-7 rounded-full bg-accent" />
                     <span class="font-semibold">{{ row.display_name }}</span>
+                    <BadgeCheck v-if="row.mmr_verified_at" class="w-4 h-4 text-cyan-400 shrink-0" :title="t('mmrVerifiedTooltip')" />
                     <span class="text-[11px] text-muted-foreground font-mono tabular-nums">{{ row.mmr }} MMR</span>
                   </div>
                 </td>

@@ -629,7 +629,10 @@ const streakBadge = computed(() => {
                   <User class="w-4 h-4 text-muted-foreground" />
                 </div>
                 <div class="min-w-0 flex-1">
-                  <p class="text-xs font-semibold text-foreground truncate leading-tight">{{ mate.name }}</p>
+                  <p class="text-xs font-semibold text-foreground truncate leading-tight flex items-center gap-1">
+                    {{ mate.name }}
+                    <BadgeCheck v-if="mate.mmr_verified_at" class="w-3 h-3 text-cyan-400 shrink-0" :title="t('mmrVerifiedTooltip')" />
+                  </p>
                   <div class="flex items-center gap-1.5 mt-1">
                     <div class="flex-1 h-1 rounded-full bg-border/50 overflow-hidden">
                       <div class="h-full rounded-full bg-green-500" :style="{ width: `${mate.games > 0 ? (mate.wins / mate.games * 100) : 0}%` }"></div>
