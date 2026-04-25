@@ -317,6 +317,7 @@ router.get('/api/players/:id/profile', async (req, res) => {
     avatar_url: player.avatar_url || null,
     roles: JSON.parse(player.roles || '[]'),
     mmr: player.mmr,
+    mmr_verified_at: player.mmr_verified_at || null,
     info: player.info || '',
     total_xp: player.total_xp || 0,
     level: Math.floor((player.total_xp || 0) / 1000) + 1,
