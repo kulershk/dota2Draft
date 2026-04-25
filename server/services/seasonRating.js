@@ -12,6 +12,10 @@ export const SEASON_DEFAULTS = Object.freeze({
   min_points: 0,
   max_points: null,
   min_games_for_leaderboard: 5,
+  // 'mmr'    — team strength = avg of players.mmr (default; uses real Dota skill)
+  // 'points' — team strength = avg of season_rankings.points (self-contained;
+  //            new players use starting_points until they have a rating)
+  strength_basis: 'mmr',
 })
 
 export function withDefaults(settings) {

@@ -60,8 +60,14 @@ export async function applyMatchToSeason({
     )).rows
     const rankById = Object.fromEntries(rankingRows.map(r => [r.player_id, r]))
 
-    const team1Avg = teamAvgMmr(team1PlayerIds.map(id => mmrById[id] || 0))
-    const team2Avg = teamAvgMmr(team2PlayerIds.map(id => mmrById[id] || 0))
+    // Team strength input — either real Dota MMR or season points. Using points
+    // makes the season fully self-contained; using MMR keeps the calc anchored
+    // to actual skill from match #1 of the season.
+    const strengthFor = (pid) => settings.strength_basis === 'points'
+      ? (rankById[pid] ? Number(rankById[pid].points) : settings.starting_points)
+      : (mmrById[pid] || 0)
+    const team1Avg = teamAvgMmr(team1PlayerIds.map(strengthFor))
+    const team2Avg = teamAvgMmr(team2PlayerIds.map(strengthFor))
 
     const updates = []
     const log = []
@@ -224,8 +230,11 @@ export async function recomputeSeasonFromHistory(seasonId) {
       const team1Won = !!m.winner_captain_id && m.winner_captain_id === m.captain1_player_id
       const team2Won = !!m.winner_captain_id && m.winner_captain_id === m.captain2_player_id
       if (!team1Won && !team2Won) continue
-      const t1Avg = teamAvgMmr(t1.map(id => mmrById[id] || 0))
-      const t2Avg = teamAvgMmr(t2.map(id => mmrById[id] || 0))
+      // Strength input: when basis = 'points', use the running points map at
+      // this point in time (so each match sees the standings as they were).
+      const strengthFor = (pid) => cfg.strength_basis === 'points' ? getPts(pid) : (mmrById[pid] || 0)
+      const t1Avg = teamAvgMmr(t1.map(strengthFor))
+      const t2Avg = teamAvgMmr(t2.map(strengthFor))
       for (const pid of t1) {
         const before = getPts(pid)
         const { delta, expected, kUsed } = computeDelta({ teamAvgMmr: t1Avg, oppAvgMmr: t2Avg, won: team1Won, settings: cfg })

@@ -59,6 +59,7 @@ const SETTING_DEFAULTS = {
   min_points: 0,
   max_points: '' as number | '',
   min_games_for_leaderboard: 5,
+  strength_basis: 'mmr' as 'mmr' | 'points',
 }
 
 const { t } = useI18n()
@@ -297,6 +298,16 @@ onMounted(load)
       <div class="border-t border-border/40 pt-4">
         <h3 class="text-sm font-bold mb-1">{{ t('seasonRatingSettings') }}</h3>
         <p class="text-xs text-muted-foreground mb-3">{{ t('seasonRatingSettingsHint') }}</p>
+        <label class="block mb-3">
+          <span class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{{ t('seasonStrengthBasis') }}</span>
+          <select v-model="form.settings.strength_basis" class="mt-1 w-full bg-accent/40 border border-border/40 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40">
+            <option value="mmr">{{ t('seasonStrengthBasis_mmr') }}</option>
+            <option value="points">{{ t('seasonStrengthBasis_points') }}</option>
+          </select>
+          <span class="text-[11px] text-muted-foreground mt-1 block">
+            {{ form.settings.strength_basis === 'points' ? t('seasonStrengthBasisHint_points') : t('seasonStrengthBasisHint_mmr') }}
+          </span>
+        </label>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
           <label class="block">
             <span class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{{ t('seasonStartingPoints') }}</span>

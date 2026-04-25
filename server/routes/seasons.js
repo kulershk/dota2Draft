@@ -14,19 +14,23 @@ function slugify(name) {
     .slice(0, 64)
 }
 
-const SETTING_KEYS = [
+const NUMERIC_SETTING_KEYS = [
   'starting_points', 'k_win', 'k_loss', 'mmr_scale',
   'min_points', 'max_points', 'min_games_for_leaderboard',
 ]
+const STRENGTH_BASIS_VALUES = ['mmr', 'points']
 
 function sanitizeSettings(input) {
   if (!input || typeof input !== 'object') return {}
   const out = {}
-  for (const k of SETTING_KEYS) {
+  for (const k of NUMERIC_SETTING_KEYS) {
     if (input[k] === undefined || input[k] === null) continue
     if (k === 'max_points' && input[k] === '') continue
     const n = Number(input[k])
     if (Number.isFinite(n)) out[k] = n
+  }
+  if (input.strength_basis && STRENGTH_BASIS_VALUES.includes(input.strength_basis)) {
+    out.strength_basis = input.strength_basis
   }
   return out
 }
