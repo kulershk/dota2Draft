@@ -1802,6 +1802,18 @@
         "responses": { "200": { "description": "Deleted" } }
       }
     },
+    "/api/queue/match/{id}": {
+      "get": {
+        "tags": ["Queue"],
+        "summary": "Public: queue match details",
+        "description": "Returns full match info including team rosters, captains, pool, games (with has_stats flag), and — when the match is attached to a season — a `season` object plus per-player season fields: `season_delta`, `points_before`, `points_after` (from season_match_log for this match), and `season_points` / `season_games` / `season_wins` / `season_losses` (current standings).",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": { "description": "Queue match with rosters, games, and optional season block" },
+          "404": { "description": "Queue match not found" }
+        }
+      }
+    },
     "/api/admin/queue/matches": {
       "get": {
         "tags": ["Queue"],

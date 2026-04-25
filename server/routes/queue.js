@@ -141,11 +141,13 @@ export default function createQueueRouter(io) {
       SELECT qm.*,
         p1.name AS captain1_name, COALESCE(p1.display_name, p1.name) AS captain1_display_name, p1.avatar_url AS captain1_avatar, p1.steam_id AS captain1_steam_id,
         p2.name AS captain2_name, COALESCE(p2.display_name, p2.name) AS captain2_display_name, p2.avatar_url AS captain2_avatar, p2.steam_id AS captain2_steam_id,
-        qp.name AS pool_name
+        qp.name AS pool_name,
+        s.id AS season_id_full, s.name AS season_name, s.slug AS season_slug, s.is_active AS season_is_active
       FROM queue_matches qm
       LEFT JOIN players p1 ON p1.id = qm.captain1_player_id
       LEFT JOIN players p2 ON p2.id = qm.captain2_player_id
       LEFT JOIN queue_pools qp ON qp.id = qm.pool_id
+      LEFT JOIN seasons s ON s.id = qm.season_id
       WHERE qm.id = $1
     `, [req.params.id])
     if (!qm) return res.status(404).json({ error: 'Queue match not found' })
@@ -166,7 +168,60 @@ export default function createQueueRouter(io) {
       }
     }
 
-    res.json({ ...qm, games })
+    // Enrich players with season data (rating delta from this match + current standing).
+    // Both lookups gracefully return empty if the match isn't attached to a season.
+    let season = null
+    if (qm.season_id) {
+      season = {
+        id: qm.season_id_full || qm.season_id,
+        name: qm.season_name,
+        slug: qm.season_slug,
+        is_active: !!qm.season_is_active,
+      }
+      const allPlayerIds = [
+        ...((qm.team1_players || []).map(p => p.playerId)),
+        ...((qm.team2_players || []).map(p => p.playerId)),
+      ]
+      if (allPlayerIds.length) {
+        const [logRows, rankRows] = await Promise.all([
+          query(`
+            SELECT player_id, points_before, points_after, delta
+            FROM season_match_log
+            WHERE season_id = $1 AND queue_match_id = $2
+          `, [qm.season_id, qm.id]),
+          query(`
+            SELECT player_id, points, peak_points, games_played, wins, losses
+            FROM season_rankings
+            WHERE season_id = $1 AND player_id = ANY($2::int[])
+          `, [qm.season_id, allPlayerIds]),
+        ])
+        const logByPid = Object.fromEntries(logRows.map(r => [r.player_id, r]))
+        const rankByPid = Object.fromEntries(rankRows.map(r => [r.player_id, r]))
+        const enrich = (p) => {
+          const log = logByPid[p.playerId]
+          const rank = rankByPid[p.playerId]
+          if (log) {
+            p.season_delta = Number(log.delta)
+            p.points_before = Number(log.points_before)
+            p.points_after = Number(log.points_after)
+          }
+          if (rank) {
+            p.season_points = Number(rank.points)
+            p.season_games = rank.games_played
+            p.season_wins = rank.wins
+            p.season_losses = rank.losses
+          }
+        }
+        ;(qm.team1_players || []).forEach(enrich)
+        ;(qm.team2_players || []).forEach(enrich)
+      }
+    }
+    delete qm.season_id_full
+    delete qm.season_name
+    delete qm.season_slug
+    delete qm.season_is_active
+
+    res.json({ ...qm, games, season })
   })
 
   // ── Public: game stats for a queue match ──

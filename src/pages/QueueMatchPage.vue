@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ArrowLeft, ExternalLink, Clock, Trophy, Swords, Loader2, ChevronDown } from 'lucide-vue-next'
+import { ArrowLeft, ExternalLink, Clock, Trophy, Swords, Loader2, ChevronDown, Shield, Medal, Users } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { useDotaConstants } from '@/composables/useDotaConstants'
 import PositionIcon from '@/components/common/PositionIcon.vue'
@@ -22,6 +22,36 @@ const error = ref<string | null>(null)
 const team1 = computed(() => match.value?.team1_players || [])
 const team2 = computed(() => match.value?.team2_players || [])
 const games = computed(() => match.value?.games || [])
+const season = computed(() => match.value?.season || null)
+
+// Show point columns only when (a) season is attached AND (b) at least one
+// player on either team has a recorded delta from this match.
+const hasPointChanges = computed(() => {
+  if (!season.value) return false
+  return [...team1.value, ...team2.value].some((p: any) => Number.isFinite(Number(p?.season_delta)))
+})
+
+const team1Wins = computed(() => games.value.filter((g: any) => gameWinnerTeam(g) === 1).length)
+const team2Wins = computed(() => games.value.filter((g: any) => gameWinnerTeam(g) === 2).length)
+const team1Won = computed(() => team1Wins.value > team2Wins.value)
+const team2Won = computed(() => team2Wins.value > team1Wins.value)
+
+function teamAvgMmr(players: any[]): number {
+  const valid = (players || []).filter((p: any) => Number(p?.mmr) > 0).map((p: any) => Number(p.mmr))
+  if (!valid.length) return 0
+  return Math.round(valid.reduce((s, m) => s + m, 0) / valid.length)
+}
+function teamAvgPoints(players: any[]): number {
+  const valid = (players || []).filter((p: any) => Number.isFinite(Number(p?.season_points))).map((p: any) => Number(p.season_points))
+  if (!valid.length) return 0
+  return Math.round(valid.reduce((s, m) => s + m, 0) / valid.length)
+}
+function fmtSignedDelta(d: number | null | undefined): string {
+  const n = Number(d)
+  if (!Number.isFinite(n)) return ''
+  const r = Math.round(n * 10) / 10
+  return r > 0 ? `+${r}` : String(r)
+}
 
 // Game stats
 const expandedGame = ref<number | null>(null)
@@ -147,6 +177,12 @@ function getDraftPhases(gameNumber: number) {
 onMounted(async () => {
   try {
     match.value = await api.getQueueMatch(Number(route.params.id))
+    // Auto-expand the first game with stats so the user lands directly on detail.
+    const firstWithStats = (match.value?.games || []).find((g: any) => g.has_stats || g.dotabuff_id)
+    if (firstWithStats) {
+      expandedGame.value = firstWithStats.game_number
+      loadStats(firstWithStats.game_number)
+    }
   } catch (e: any) {
     error.value = e.message || 'Match not found'
   }
@@ -156,21 +192,7 @@ onMounted(async () => {
 
 <template>
   <div>
-    <!-- Header -->
-    <div class="border-b border-border/50">
-      <div class="max-w-5xl mx-auto px-4 md:px-8 pt-8 pb-6">
-        <button class="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4" @click="router.push('/queue')">
-          <ArrowLeft class="w-4 h-4" /> {{ t('queueBackToQueue') }}
-        </button>
-        <div class="flex items-center gap-3">
-          <Swords class="w-6 h-6 text-primary" />
-          <h1 class="text-xl md:text-2xl font-bold">{{ t('queueMatchDetails') }}</h1>
-          <span v-if="match" class="text-sm text-muted-foreground">#{{ match.id }}</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="max-w-5xl mx-auto px-4 md:px-8 py-8">
+    <div class="max-w-[1100px] mx-auto px-4 md:px-8 py-6">
       <!-- Loading -->
       <div v-if="loading" class="card px-8 py-16 text-center">
         <Loader2 class="w-8 h-8 text-primary mx-auto animate-spin" />
@@ -184,76 +206,182 @@ onMounted(async () => {
 
       <template v-else-if="match">
 
-        <!-- Match info bar -->
-        <div class="card px-5 py-4 mb-6 flex flex-wrap items-center gap-4">
-          <span class="text-xs font-semibold px-2.5 py-1 rounded" :class="statusColor(match.status)">
-            {{ match.status === 'completed' ? t('matchCompleted') : match.status === 'live' ? t('matchLive') : match.status }}
-          </span>
-          <span v-if="match.pool_name" class="text-sm text-muted-foreground">{{ match.pool_name }}</span>
-          <span class="text-xs text-muted-foreground flex items-center gap-1">
-            <Clock class="w-3 h-3" /> {{ formatDate(match.created_at) }}
-          </span>
-        </div>
+        <!-- Breadcrumb -->
+        <button
+          class="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors mb-3"
+          @click="router.push('/queue')"
+        >
+          <ArrowLeft class="w-3.5 h-3.5 text-primary" />
+          <span class="text-primary font-semibold">{{ t('queueBackToMatches') }}</span>
+          <span v-if="match.pool_name || match.created_at" class="text-muted-foreground">·</span>
+          <span v-if="match.pool_name" class="text-muted-foreground">{{ match.pool_name }}</span>
+          <span v-if="match.pool_name && match.created_at" class="text-muted-foreground/50">·</span>
+          <span v-if="match.created_at" class="text-muted-foreground/80 font-mono">{{ formatDate(match.created_at) }}</span>
+        </button>
 
-        <!-- Teams + Score -->
-        <div class="card overflow-hidden mb-6">
-          <!-- Score header -->
-          <div class="grid grid-cols-[1fr_auto_1fr] items-center px-6 py-5 border-b border-border/30">
+        <!-- Hero card -->
+        <div class="card p-7 mb-5 flex flex-col gap-6">
+          <!-- Meta row -->
+          <div class="flex items-center justify-between flex-wrap gap-3">
             <div class="flex items-center gap-3">
-              <router-link :to="{ name: 'player-profile', params: { id: match.captain1_player_id } }" class="shrink-0 hover:opacity-80 transition-opacity">
-                <img v-if="match.captain1_avatar" :src="match.captain1_avatar" class="w-10 h-10 rounded-full ring-2 ring-green-500/30" />
-              </router-link>
-              <div>
-                <router-link :to="{ name: 'player-profile', params: { id: match.captain1_player_id } }" class="font-bold hover:text-primary transition-colors">
-                  {{ match.captain1_display_name || match.captain1_name }}
-                </router-link>
-                <div class="text-[10px] font-bold text-green-400 uppercase">{{ t('queueRadiant') }}</div>
-              </div>
-            </div>
-            <div class="flex items-center gap-3 px-6">
-              <span class="text-3xl font-bold tabular-nums" :class="games.filter((g: any) => gameWinnerTeam(g) === 1).length > games.filter((g: any) => gameWinnerTeam(g) === 2).length ? 'text-green-400' : 'text-foreground'">
-                {{ games.filter((g: any) => gameWinnerTeam(g) === 1).length }}
+              <Swords class="w-5 h-5 text-primary" />
+              <h1 class="text-lg font-bold">{{ t('queueMatchHash') }}{{ match.id }}</h1>
+              <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded" :class="statusColor(match.status)">
+                {{ match.status === 'completed' ? t('matchCompleted') : match.status === 'live' ? t('matchLive') : match.status }}
               </span>
-              <span class="text-muted-foreground/30 text-xl font-bold">:</span>
-              <span class="text-3xl font-bold tabular-nums" :class="games.filter((g: any) => gameWinnerTeam(g) === 2).length > games.filter((g: any) => gameWinnerTeam(g) === 1).length ? 'text-red-400' : 'text-foreground'">
-                {{ games.filter((g: any) => gameWinnerTeam(g) === 2).length }}
-              </span>
-            </div>
-            <div class="flex items-center gap-3 justify-end">
-              <div class="text-right">
-                <router-link :to="{ name: 'player-profile', params: { id: match.captain2_player_id } }" class="font-bold hover:text-primary transition-colors">
-                  {{ match.captain2_display_name || match.captain2_name }}
-                </router-link>
-                <div class="text-[10px] font-bold text-red-400 uppercase">{{ t('queueDire') }}</div>
-              </div>
-              <router-link :to="{ name: 'player-profile', params: { id: match.captain2_player_id } }" class="shrink-0 hover:opacity-80 transition-opacity">
-                <img v-if="match.captain2_avatar" :src="match.captain2_avatar" class="w-10 h-10 rounded-full ring-2 ring-red-500/30" />
+              <router-link
+                v-if="season"
+                :to="{ name: 'season-leaderboard', params: { slug: season.slug } }"
+                class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[11px] font-bold hover:bg-amber-500/25 transition-colors"
+              >
+                <Medal class="w-3 h-3" />
+                {{ season.name }}
               </router-link>
+            </div>
+            <div class="flex items-center gap-4 text-[11px] text-muted-foreground font-mono">
+              <span class="flex items-center gap-1.5">
+                <Users class="w-3.5 h-3.5" /> {{ team1.length + team2.length }}
+              </span>
+              <span v-if="games.length" class="flex items-center gap-1.5">
+                <Clock class="w-3.5 h-3.5" /> {{ games.length }}{{ games.length === 1 ? ' game' : ' games' }}
+              </span>
             </div>
           </div>
 
-          <!-- Team rosters -->
-          <div class="grid grid-cols-2">
-            <div class="p-5 border-r border-border/30">
-              <div class="flex flex-col gap-1.5">
-                <div v-for="(p, idx) in team1" :key="p.playerId || idx"
-                  class="flex items-center gap-2.5 px-3 py-2 rounded-lg"
-                  :class="idx === 0 ? 'bg-green-500/8 border border-green-500/15' : 'bg-accent/40'">
-                  <UserName :id="p.playerId" :name="p.name" :avatar-url="p.avatarUrl" size="md" class="flex-1 min-w-0" />
-                  <span class="text-[10px] text-muted-foreground tabular-nums">{{ p.mmr }} MMR</span>
-                  <span v-if="idx === 0" class="text-[9px] font-bold text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded">CPT</span>
+          <!-- Score row -->
+          <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-6">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-10 h-10 rounded-lg bg-green-500/15 border border-green-500/30 flex items-center justify-center shrink-0">
+                <Shield class="w-5 h-5 text-green-500" />
+              </div>
+              <div class="min-w-0">
+                <router-link :to="{ name: 'player-profile', params: { id: match.captain1_player_id } }" class="font-bold truncate block hover:text-primary transition-colors">
+                  {{ match.captain1_display_name || match.captain1_name }}
+                </router-link>
+                <div class="text-[10px] font-mono text-muted-foreground tabular-nums">
+                  <span class="text-green-400 font-bold">{{ t('queueRadiant').toUpperCase() }}</span>
+                  <span class="mx-1.5">·</span>
+                  <span>{{ teamAvgMmr(team1) }} MMR</span>
+                  <template v-if="hasPointChanges">
+                    <span class="mx-1.5">·</span>
+                    <span>{{ teamAvgPoints(team1) }} {{ t('seasonPoints').toUpperCase() }}</span>
+                  </template>
                 </div>
               </div>
             </div>
-            <div class="p-5">
-              <div class="flex flex-col gap-1.5">
-                <div v-for="(p, idx) in team2" :key="p.playerId || idx"
-                  class="flex items-center gap-2.5 px-3 py-2 rounded-lg"
-                  :class="idx === 0 ? 'bg-red-500/8 border border-red-500/15' : 'bg-accent/40'">
-                  <UserName :id="p.playerId" :name="p.name" :avatar-url="p.avatarUrl" size="md" class="flex-1 min-w-0" />
-                  <span class="text-[10px] text-muted-foreground tabular-nums">{{ p.mmr }} MMR</span>
-                  <span v-if="idx === 0" class="text-[9px] font-bold text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded">CPT</span>
+            <div class="flex items-center gap-4 px-5 py-3 rounded-2xl bg-[#0A0F1C] border border-border/40">
+              <span class="text-4xl font-bold tabular-nums" :class="team1Won ? 'text-green-400' : 'text-foreground/70'">{{ team1Wins }}</span>
+              <span class="text-muted-foreground/40 text-2xl font-bold">·</span>
+              <span class="text-4xl font-bold tabular-nums" :class="team2Won ? 'text-red-400' : 'text-foreground/70'">{{ team2Wins }}</span>
+            </div>
+            <div class="flex items-center gap-3 min-w-0 justify-end">
+              <div class="min-w-0 text-right">
+                <router-link :to="{ name: 'player-profile', params: { id: match.captain2_player_id } }" class="font-bold truncate block hover:text-primary transition-colors">
+                  {{ match.captain2_display_name || match.captain2_name }}
+                </router-link>
+                <div class="text-[10px] font-mono text-muted-foreground tabular-nums">
+                  <template v-if="hasPointChanges">
+                    <span>{{ teamAvgPoints(team2) }} {{ t('seasonPoints').toUpperCase() }}</span>
+                    <span class="mx-1.5">·</span>
+                  </template>
+                  <span>{{ teamAvgMmr(team2) }} MMR</span>
+                  <span class="mx-1.5">·</span>
+                  <span class="text-red-400 font-bold">{{ t('queueDire').toUpperCase() }}</span>
                 </div>
+              </div>
+              <div class="w-10 h-10 rounded-lg bg-red-500/15 border border-red-500/30 flex items-center justify-center shrink-0">
+                <Shield class="w-5 h-5 text-red-500" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Two team result cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <!-- Radiant -->
+          <div class="card overflow-hidden border-green-500/40">
+            <div class="flex items-center justify-between px-5 py-4 bg-green-500/10 border-b border-green-500/30">
+              <div class="flex items-center gap-2">
+                <Shield class="w-4 h-4 text-green-500" />
+                <span class="font-bold text-sm">{{ match.captain1_display_name || match.captain1_name }}</span>
+                <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ml-1"
+                      :class="team1Won ? 'bg-green-500/15 text-green-500' : 'bg-muted/40 text-muted-foreground'">
+                  {{ team1Won ? t('queueResultVictory') : (team2Won ? t('queueResultDefeat') : t('matchLive')) }}
+                </span>
+              </div>
+            </div>
+            <div class="px-5 py-2.5 grid items-center text-[10px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border/30"
+                 :style="hasPointChanges ? 'grid-template-columns: 1fr 80px 90px 80px;' : 'grid-template-columns: 1fr 100px;'">
+              <span>{{ t('player') }}</span>
+              <span class="text-right">MMR</span>
+              <template v-if="hasPointChanges">
+                <span class="text-right">{{ t('seasonPoints') }}</span>
+                <span class="text-right">{{ t('seasonChange') }}</span>
+              </template>
+            </div>
+            <div>
+              <div v-for="(p, idx) in team1" :key="p.playerId || idx"
+                   class="px-5 py-2.5 grid items-center border-b border-border/20 last:border-b-0 hover:bg-accent/15 transition-colors"
+                   :style="hasPointChanges ? 'grid-template-columns: 1fr 80px 90px 80px;' : 'grid-template-columns: 1fr 100px;'">
+                <div class="flex items-center gap-2 min-w-0">
+                  <UserName :id="p.playerId" :name="p.name" :avatar-url="p.avatarUrl" size="md" class="min-w-0" />
+                  <span v-if="idx === 0" class="text-[9px] font-bold text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded shrink-0">CPT</span>
+                </div>
+                <span class="text-right text-xs font-mono text-muted-foreground tabular-nums">{{ p.mmr }}</span>
+                <template v-if="hasPointChanges">
+                  <span class="text-right text-xs font-mono font-bold tabular-nums">
+                    <template v-if="Number.isFinite(Number(p.points_after))">{{ Math.round(Number(p.points_after)) }}</template>
+                    <template v-else>—</template>
+                  </span>
+                  <span class="text-right text-xs font-mono font-bold tabular-nums"
+                        :class="Number(p.season_delta) > 0 ? 'text-green-500' : (Number(p.season_delta) < 0 ? 'text-red-500' : 'text-muted-foreground')">
+                    {{ fmtSignedDelta(p.season_delta) || '—' }}
+                  </span>
+                </template>
+              </div>
+            </div>
+          </div>
+
+          <!-- Dire -->
+          <div class="card overflow-hidden border-red-500/40">
+            <div class="flex items-center justify-between px-5 py-4 bg-red-500/10 border-b border-red-500/30">
+              <div class="flex items-center gap-2">
+                <Shield class="w-4 h-4 text-red-500" />
+                <span class="font-bold text-sm">{{ match.captain2_display_name || match.captain2_name }}</span>
+                <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ml-1"
+                      :class="team2Won ? 'bg-green-500/15 text-green-500' : 'bg-muted/40 text-muted-foreground'">
+                  {{ team2Won ? t('queueResultVictory') : (team1Won ? t('queueResultDefeat') : t('matchLive')) }}
+                </span>
+              </div>
+            </div>
+            <div class="px-5 py-2.5 grid items-center text-[10px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border/30"
+                 :style="hasPointChanges ? 'grid-template-columns: 1fr 80px 90px 80px;' : 'grid-template-columns: 1fr 100px;'">
+              <span>{{ t('player') }}</span>
+              <span class="text-right">MMR</span>
+              <template v-if="hasPointChanges">
+                <span class="text-right">{{ t('seasonPoints') }}</span>
+                <span class="text-right">{{ t('seasonChange') }}</span>
+              </template>
+            </div>
+            <div>
+              <div v-for="(p, idx) in team2" :key="p.playerId || idx"
+                   class="px-5 py-2.5 grid items-center border-b border-border/20 last:border-b-0 hover:bg-accent/15 transition-colors"
+                   :style="hasPointChanges ? 'grid-template-columns: 1fr 80px 90px 80px;' : 'grid-template-columns: 1fr 100px;'">
+                <div class="flex items-center gap-2 min-w-0">
+                  <UserName :id="p.playerId" :name="p.name" :avatar-url="p.avatarUrl" size="md" class="min-w-0" />
+                  <span v-if="idx === 0" class="text-[9px] font-bold text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded shrink-0">CPT</span>
+                </div>
+                <span class="text-right text-xs font-mono text-muted-foreground tabular-nums">{{ p.mmr }}</span>
+                <template v-if="hasPointChanges">
+                  <span class="text-right text-xs font-mono font-bold tabular-nums">
+                    <template v-if="Number.isFinite(Number(p.points_after))">{{ Math.round(Number(p.points_after)) }}</template>
+                    <template v-else>—</template>
+                  </span>
+                  <span class="text-right text-xs font-mono font-bold tabular-nums"
+                        :class="Number(p.season_delta) > 0 ? 'text-green-500' : (Number(p.season_delta) < 0 ? 'text-red-500' : 'text-muted-foreground')">
+                    {{ fmtSignedDelta(p.season_delta) || '—' }}
+                  </span>
+                </template>
               </div>
             </div>
           </div>
