@@ -507,6 +507,29 @@ export default function createQueueRouter(io) {
       // Always update DB status
       await execute(`UPDATE queue_matches SET status = 'cancelled' WHERE id = $1`, [qmId])
 
+      // Safety net: even if the in-memory match was already gone (state drifted
+      // out of sync — e.g. server restart, half-cleaned lobby, race), the
+      // playerInMatch map can still hold stale entries that lock people out of
+      // re-queuing. Walk the persisted roster and free anyone still pinned to
+      // this queueMatchId. Idempotent and safe — the equality check ensures we
+      // never free a player who's been since pulled into a different match.
+      try {
+        const roster = await queryOne(
+          'SELECT team1_players, team2_players FROM queue_matches WHERE id = $1',
+          [qmId]
+        )
+        const allIds = [
+          ...((roster?.team1_players || []).map(p => p.playerId)),
+          ...((roster?.team2_players || []).map(p => p.playerId)),
+        ]
+        for (const pid of allIds) {
+          if (playerInMatch.get(pid) === qmId) playerInMatch.delete(pid)
+        }
+        activeQueueMatches.delete(qmId)
+      } catch (e) {
+        console.error('[Queue cancel] roster cleanup failed:', e.message)
+      }
+
       // Cancel the Dota 2 lobby via bot if one exists
       const qm = await queryOne('SELECT match_id FROM queue_matches WHERE id = $1', [qmId])
       if (qm?.match_id) {

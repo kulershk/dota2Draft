@@ -986,27 +986,47 @@ async function finalizeQueueMatch(queueMatchId, io) {
   }
 }
 
-function cancelQueueMatch(queueMatchId, reason, io) {
+async function cancelQueueMatch(queueMatchId, reason, io) {
   const match = activeQueueMatches.get(queueMatchId)
-  if (!match) return
 
   clearPickTimer(queueMatchId)
 
-  // Update DB
+  // Update DB regardless of in-memory state
   execute(`UPDATE queue_matches SET status = 'cancelled' WHERE id = $1`, [queueMatchId]).catch(() => {})
 
-  // Notify players
+  // Notify players in the room (broadcast even if memory is empty — anyone
+  // still subscribed should know it died)
   io.to(`queue-match:${queueMatchId}`).emit('queue:cancelled', { queueMatchId, reason })
 
-  // Clean up player-in-match tracking
-  for (const p of match.allPlayers) {
-    playerInMatch.delete(p.playerId)
+  // Collect player IDs from in-memory state if present, otherwise fall back
+  // to the persisted roster — this is the safety net for the case where
+  // memory drifted out of sync but playerInMatch still has stale entries.
+  let allPlayerIds = match ? match.allPlayers.map(p => p.playerId) : []
+  if (!allPlayerIds.length) {
+    try {
+      const roster = await queryOne(
+        'SELECT team1_players, team2_players FROM queue_matches WHERE id = $1',
+        [queueMatchId]
+      )
+      allPlayerIds = [
+        ...((roster?.team1_players || []).map(p => p.playerId)),
+        ...((roster?.team2_players || []).map(p => p.playerId)),
+      ]
+    } catch (e) {
+      console.error('[cancelQueueMatch] roster fallback failed:', e.message)
+    }
+  }
+
+  // Free playerInMatch only for those still pinned to THIS match (so we don't
+  // accidentally release a player who's already moved into a new match)
+  for (const pid of allPlayerIds) {
+    if (playerInMatch.get(pid) === queueMatchId) playerInMatch.delete(pid)
   }
 
   // Leave room
   const room = `queue-match:${queueMatchId}`
   for (const [socketId, playerId] of socketPlayers) {
-    if (match.allPlayers.some(p => p.playerId === playerId)) {
+    if (allPlayerIds.includes(playerId)) {
       const s = io.sockets.sockets.get(socketId)
       if (s) s.leave(room)
     }
