@@ -747,6 +747,69 @@ export async function initDb() {
       created_at TIMESTAMP DEFAULT NOW()
     )
   `)
+
+  // ─── Seasons ─────────────────────────────────────────────
+  // Independent ELO ladders. Each queue_pool may be assigned to a season.
+  // When a queue_match completes with a winner, the rating engine adjusts
+  // every participating player's points on the pool's season.
+  await execute(`
+    CREATE TABLE IF NOT EXISTS seasons (
+      id          SERIAL PRIMARY KEY,
+      name        TEXT NOT NULL,
+      slug        TEXT UNIQUE NOT NULL,
+      description TEXT DEFAULT '',
+      starts_at   TIMESTAMP NULL,
+      ends_at     TIMESTAMP NULL,
+      is_active   BOOLEAN DEFAULT TRUE,
+      settings    JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_by  INTEGER NULL REFERENCES players(id) ON DELETE SET NULL,
+      created_at  TIMESTAMP DEFAULT NOW()
+    )
+  `)
+
+  await execute(`
+    CREATE TABLE IF NOT EXISTS season_rankings (
+      season_id     INTEGER NOT NULL REFERENCES seasons(id) ON DELETE CASCADE,
+      player_id     INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      points        REAL NOT NULL,
+      peak_points   REAL NOT NULL,
+      games_played  INTEGER NOT NULL DEFAULT 0,
+      wins          INTEGER NOT NULL DEFAULT 0,
+      losses        INTEGER NOT NULL DEFAULT 0,
+      last_match_at TIMESTAMP NULL,
+      PRIMARY KEY (season_id, player_id)
+    )
+  `)
+  try { await execute(`CREATE INDEX IF NOT EXISTS season_rankings_leaderboard_idx ON season_rankings (season_id, points DESC)`) } catch {}
+
+  // queue_match_id is NULL for manual admin adjustments.
+  await execute(`
+    CREATE TABLE IF NOT EXISTS season_match_log (
+      id               SERIAL PRIMARY KEY,
+      season_id        INTEGER NOT NULL REFERENCES seasons(id) ON DELETE CASCADE,
+      queue_match_id   INTEGER NULL REFERENCES queue_matches(id) ON DELETE CASCADE,
+      player_id        INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      team             SMALLINT NULL,
+      won              BOOLEAN NULL,
+      points_before    REAL NOT NULL,
+      points_after     REAL NOT NULL,
+      delta            REAL NOT NULL,
+      team_avg_mmr     INTEGER NULL,
+      opponent_avg_mmr INTEGER NULL,
+      expected_win     REAL NULL,
+      k_used           REAL NULL,
+      reason           TEXT NULL,
+      created_by       INTEGER NULL REFERENCES players(id) ON DELETE SET NULL,
+      created_at       TIMESTAMP DEFAULT NOW()
+    )
+  `)
+  try { await execute(`CREATE INDEX IF NOT EXISTS season_match_log_season_player_idx ON season_match_log (season_id, player_id, created_at DESC)`) } catch {}
+  try { await execute(`CREATE INDEX IF NOT EXISTS season_match_log_match_idx ON season_match_log (queue_match_id)`) } catch {}
+
+  // Wire seasons to queue pools and (snapshot) to queue matches.
+  try { await execute(`ALTER TABLE queue_pools   ADD COLUMN season_id INTEGER NULL REFERENCES seasons(id) ON DELETE SET NULL`) } catch {}
+  // No FK on queue_matches.season_id so deleting a season doesn't lose match history.
+  try { await execute(`ALTER TABLE queue_matches ADD COLUMN season_id INTEGER NULL`) } catch {}
 }
 
 async function createFreshCompetitionTables() {

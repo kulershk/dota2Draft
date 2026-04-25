@@ -40,6 +40,12 @@ const matchLoading = ref(false)
 const xpTotalPages = computed(() => Math.max(1, Math.ceil(xpLog.value.length / PAGE_SIZE)))
 const pagedXpLog = computed(() => xpLog.value.slice((xpPage.value - 1) * PAGE_SIZE, xpPage.value * PAGE_SIZE))
 
+const playerSeasons = ref<Array<{
+  season_id: number; season_name: string; season_slug: string; is_active: boolean;
+  rank: number; points: number; peak_points: number; games_played: number; wins: number; losses: number;
+  last_match_at: string | null;
+}>>([])
+
 const compTotalPages = computed(() => Math.max(1, Math.ceil((profile.value?.competitions?.length || 0) / PAGE_SIZE)))
 const pagedCompetitions = computed(() => (profile.value?.competitions || []).slice((compPage.value - 1) * PAGE_SIZE, compPage.value * PAGE_SIZE))
 
@@ -52,6 +58,7 @@ watch(playerId, async (id) => {
   try {
     profile.value = await api.getPlayerProfile(id)
     api.getPlayerXpLog(id).then(logs => { xpLog.value = logs }).catch(() => {})
+    api.getPlayerSeasons(id).then(rows => { playerSeasons.value = rows }).catch(() => { playerSeasons.value = [] })
     matchPage.value = 0
     fetchMatches(id)
   } catch {
@@ -669,6 +676,39 @@ const streakBadge = computed(() => {
                   </span>
                 </div>
               </div>
+            </div>
+          </div>
+
+          <!-- Season rankings -->
+          <div v-if="playerSeasons.length > 0" class="card">
+            <div class="flex items-center gap-3 px-5 py-4 border-b border-border">
+              <Medal class="w-4 h-4 text-primary" />
+              <span class="text-sm font-bold text-foreground">{{ t('seasonRankings') }}</span>
+              <span class="flex-1"></span>
+              <span class="inline-flex items-center rounded px-2 py-0.5 text-[11px] font-mono font-bold bg-primary/10 text-cyan-300">
+                {{ playerSeasons.length }} {{ t('seasonRankingsCount') }}
+              </span>
+            </div>
+            <div class="p-3 flex flex-col gap-2">
+              <router-link
+                v-for="row in playerSeasons" :key="row.season_id"
+                :to="{ name: 'season-leaderboard', params: { slug: row.season_slug } }"
+                class="flex items-center gap-3 rounded-[10px] bg-muted border-l-[3px] border-primary/40 px-3.5 py-3 hover:border-primary transition-colors"
+              >
+                <div class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-primary/15 text-primary">
+                  <Medal class="w-[18px] h-[18px]" />
+                </div>
+                <div class="min-w-0 flex-1 flex flex-col gap-0.5">
+                  <p class="text-[13px] font-bold text-foreground truncate leading-tight">{{ row.season_name }}</p>
+                  <p class="text-[11px] font-medium text-muted-foreground truncate leading-tight font-mono tabular-nums">
+                    {{ row.games_played }} {{ t('seasonGames') }} · {{ row.wins }}W / {{ row.losses }}L
+                  </p>
+                </div>
+                <div class="text-right shrink-0">
+                  <div class="text-[11px] text-muted-foreground font-mono">#{{ row.rank }}</div>
+                  <div class="text-[15px] font-bold font-mono tabular-nums">{{ Math.round(Number(row.points)) }}</div>
+                </div>
+              </router-link>
             </div>
           </div>
         </div>

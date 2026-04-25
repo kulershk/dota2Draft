@@ -803,11 +803,12 @@ async function startQueueMatch(poolId, io, preselectedPlayers = null, preselecte
   const pickOrder = generatePickOrder(teamSize)
   const pickTimer = pool?.pick_timer || 30
 
-  // Insert queue_matches row
+  // Insert queue_matches row. Snapshot the pool's season_id so later changes
+  // to the pool don't retroactively rewrite this match's rating attribution.
   const qm = await queryOne(`
-    INSERT INTO queue_matches (pool_id, captain1_player_id, captain2_player_id, all_player_ids, status)
-    VALUES ($1, $2, $3, $4, 'picking') RETURNING *
-  `, [poolId, captain1.playerId, captain2.playerId, JSON.stringify(players.map(p => p.playerId))])
+    INSERT INTO queue_matches (pool_id, captain1_player_id, captain2_player_id, all_player_ids, status, season_id)
+    VALUES ($1, $2, $3, $4, 'picking', $5) RETURNING *
+  `, [poolId, captain1.playerId, captain2.playerId, JSON.stringify(players.map(p => p.playerId)), pool?.season_id || null])
 
   const queueMatchId = qm.id
   const match = {

@@ -443,5 +443,43 @@ export function useApi() {
       request('/api/admin/queue/bans', { method: 'POST', body: JSON.stringify(data) }),
     removeAdminQueueBan: (playerId: number) =>
       request(`/api/admin/queue/bans/${playerId}`, { method: 'DELETE' }),
+
+    // Seasons (public)
+    getPublicSeasons: () => request('/api/seasons'),
+    getPublicSeason: (slug: string) => request(`/api/seasons/${slug}`),
+    getSeasonLeaderboard: (slug: string, params?: { limit?: number; offset?: number }) => {
+      const qs = new URLSearchParams()
+      if (params?.limit) qs.set('limit', String(params.limit))
+      if (params?.offset) qs.set('offset', String(params.offset))
+      const tail = qs.toString() ? `?${qs}` : ''
+      return request(`/api/seasons/${slug}/leaderboard${tail}`)
+    },
+    getSeasonPlayer: (slug: string, playerId: number) =>
+      request(`/api/seasons/${slug}/players/${playerId}`),
+    getPlayerSeasons: (playerId: number) =>
+      request(`/api/players/${playerId}/seasons`),
+
+    // Seasons (admin)
+    getAdminSeasons: () => request('/api/admin/seasons'),
+    getAdminSeason: (id: number) => request(`/api/admin/seasons/${id}`),
+    createSeason: (data: Record<string, any>) =>
+      request('/api/admin/seasons', { method: 'POST', body: JSON.stringify(data) }),
+    updateSeason: (id: number, data: Record<string, any>) =>
+      request(`/api/admin/seasons/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    deleteSeason: (id: number) =>
+      request(`/api/admin/seasons/${id}`, { method: 'DELETE' }),
+    getAdminSeasonLeaderboard: (id: number) => request(`/api/admin/seasons/${id}/leaderboard`),
+    getAdminSeasonAudit: (id: number, params?: { playerId?: number; limit?: number; offset?: number }) => {
+      const qs = new URLSearchParams()
+      if (params?.playerId) qs.set('playerId', String(params.playerId))
+      if (params?.limit) qs.set('limit', String(params.limit))
+      if (params?.offset) qs.set('offset', String(params.offset))
+      const tail = qs.toString() ? `?${qs}` : ''
+      return request(`/api/admin/seasons/${id}/audit${tail}`)
+    },
+    adjustSeasonPoints: (id: number, data: { player_id: number; delta: number; reason?: string }) =>
+      request(`/api/admin/seasons/${id}/adjust`, { method: 'POST', body: JSON.stringify(data) }),
+    recomputeSeason: (id: number) =>
+      request(`/api/admin/seasons/${id}/recompute`, { method: 'POST' }),
   }
 }

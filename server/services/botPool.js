@@ -5,6 +5,7 @@ import { fetchAndSaveGameStats, fetchOpenDotaMatch, saveMatchGameStats, requestO
 import { fetchSteamMatchDetails } from '../helpers/steam.js'
 import { awardXp, getTeamPlayerIds, awardStagePlacements } from '../helpers/xp.js'
 import { getCompetition, parseCompSettings } from '../helpers/competition.js'
+import { applyMatchToSeason } from './seasonRankingApply.js'
 import SteamCommunity from 'steamcommunity'
 import { LoginSession, EAuthTokenPlatformType } from 'steam-session'
 
@@ -994,6 +995,29 @@ class BotPool {
         }
         // Update queue match status
         await execute("UPDATE queue_matches SET status = 'completed', completed_at = NOW() WHERE id = $1", [queueMatchXp.id])
+
+        // Apply season rating change (only if this match's pool was assigned to a season).
+        // applyMatchToSeason is idempotent against queue_match_id, so a retry can't double-apply.
+        if (queueMatchXp.season_id) {
+          try {
+            const result = await applyMatchToSeason({
+              queueMatchId: queueMatchXp.id,
+              seasonId: queueMatchXp.season_id,
+              team1PlayerIds: team1Ids,
+              team2PlayerIds: team2Ids,
+              winnerTeam: team1Won ? 1 : 2,
+            })
+            if (this.io && result?.applied) {
+              this.io.emit('season:rankUpdated', {
+                seasonId: queueMatchXp.season_id,
+                queueMatchId: queueMatchXp.id,
+                playerIds: [...team1Ids, ...team2Ids],
+              })
+            }
+          } catch (err) {
+            console.error('[seasonRanking] failed to apply match', queueMatchXp.id, err)
+          }
+        }
 
         // Free players so they can re-queue now that the game is over
         const allIds = [...team1Ids, ...team2Ids]

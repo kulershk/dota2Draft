@@ -22,6 +22,7 @@
     { "name": "Settings", "description": "Site settings" },
     { "name": "Streams", "description": "Twitch streams" },
     { "name": "Queue", "description": "Queue matchmaking pools & matches" },
+    { "name": "Seasons", "description": "Ranked seasons — ELO ladders attached to queue pools" },
     { "name": "Dota", "description": "Dota 2 constants (heroes, items)" },
     { "name": "Jobs", "description": "Background job admin (list/retry/cancel)" }
   ],
@@ -1881,6 +1882,195 @@
         "summary": "Admin: remove a queue ban",
         "parameters": [{ "name": "playerId", "in": "path", "required": true, "schema": { "type": "integer" } }],
         "responses": { "200": { "description": "Ban removed" } }
+      }
+    },
+    "/api/seasons": {
+      "get": {
+        "tags": ["Seasons"],
+        "summary": "List public/active seasons",
+        "description": "Returns active seasons plus seasons that ended within the last 30 days, with player and match counts. Public — no auth required.",
+        "responses": { "200": { "description": "Season list" } }
+      }
+    },
+    "/api/seasons/{slug}": {
+      "get": {
+        "tags": ["Seasons"],
+        "summary": "Get a season by slug",
+        "parameters": [{ "name": "slug", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "Season meta with player/match counts" },
+          "404": { "description": "Season not found" }
+        }
+      }
+    },
+    "/api/seasons/{slug}/leaderboard": {
+      "get": {
+        "tags": ["Seasons"],
+        "summary": "Public leaderboard for a season",
+        "description": "Filters out players below the season's `min_games_for_leaderboard` setting. Sorted by points DESC, then games DESC, then name ASC.",
+        "parameters": [
+          { "name": "slug",   "in": "path",  "required": true, "schema": { "type": "string" } },
+          { "name": "limit",  "in": "query", "schema": { "type": "integer", "default": 50, "maximum": 200 } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "default": 0 } }
+        ],
+        "responses": { "200": { "description": "Ranked rows" } }
+      }
+    },
+    "/api/players/{playerId}/seasons": {
+      "get": {
+        "tags": ["Seasons"],
+        "summary": "All seasons a player has played, with their rank within each",
+        "description": "Returns one row per (player, season) where the player has a season_rankings entry. Includes the player's rank within the season computed via window function. Active seasons first, newest first.",
+        "parameters": [{ "name": "playerId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Player's season rows" } }
+      }
+    },
+    "/api/seasons/{slug}/players/{playerId}": {
+      "get": {
+        "tags": ["Seasons"],
+        "summary": "One player's stats and recent rating changes in a season",
+        "parameters": [
+          { "name": "slug",     "in": "path", "required": true, "schema": { "type": "string"  } },
+          { "name": "playerId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "{ ranking: row|null, recent: log[] }" },
+          "404": { "description": "Season not found" }
+        }
+      }
+    },
+    "/api/admin/seasons": {
+      "get": {
+        "tags": ["Seasons"],
+        "summary": "Admin: list all seasons (incl. archived)",
+        "description": "Includes pool/player/match counts. Requires manage_seasons.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Season list with counts" } }
+      },
+      "post": {
+        "tags": ["Seasons"],
+        "summary": "Admin: create a season",
+        "description": "Slug auto-generated from name if omitted. Settings JSON accepts: starting_points (default 1000), k_win (30), k_loss (15), mmr_scale (1500), min_points (0), max_points (null), min_games_for_leaderboard (5). Requires manage_seasons.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string" },
+              "slug": { "type": "string" },
+              "description": { "type": "string" },
+              "starts_at": { "type": "string", "format": "date-time", "nullable": true },
+              "ends_at":   { "type": "string", "format": "date-time", "nullable": true },
+              "is_active": { "type": "boolean", "default": true },
+              "settings": {
+                "type": "object",
+                "properties": {
+                  "starting_points":           { "type": "number" },
+                  "k_win":                     { "type": "number" },
+                  "k_loss":                    { "type": "number" },
+                  "mmr_scale":                 { "type": "number" },
+                  "min_points":                { "type": "number" },
+                  "max_points":                { "type": "number", "nullable": true },
+                  "min_games_for_leaderboard": { "type": "integer" }
+                }
+              }
+            }
+          }}}
+        },
+        "responses": {
+          "201": { "description": "Created season" },
+          "400": { "description": "Name is required / slug invalid" },
+          "409": { "description": "Slug already in use" }
+        }
+      }
+    },
+    "/api/admin/seasons/{id}": {
+      "get": {
+        "tags": ["Seasons"],
+        "summary": "Admin: get one season + assigned pools",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Season + pools" }, "404": { "description": "Not found" } }
+      },
+      "patch": {
+        "tags": ["Seasons"],
+        "summary": "Admin: update season",
+        "description": "Only provided fields are updated. settings is shallow-merged with existing settings JSON.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object" } } } },
+        "responses": { "200": { "description": "Updated season" }, "404": { "description": "Not found" }, "409": { "description": "Slug conflict" } }
+      },
+      "delete": {
+        "tags": ["Seasons"],
+        "summary": "Admin: delete season",
+        "description": "Cascades season_rankings and season_match_log. Pools assigned to this season have their season_id set to NULL.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Deleted" } }
+      }
+    },
+    "/api/admin/seasons/{id}/leaderboard": {
+      "get": {
+        "tags": ["Seasons"],
+        "summary": "Admin: full leaderboard (no min_games filter)",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Ranked rows" } }
+      }
+    },
+    "/api/admin/seasons/{id}/audit": {
+      "get": {
+        "tags": ["Seasons"],
+        "summary": "Admin: rating-change audit log",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id",       "in": "path",  "required": true, "schema": { "type": "integer" } },
+          { "name": "limit",    "in": "query", "schema": { "type": "integer", "default": 100, "maximum": 500 } },
+          { "name": "offset",   "in": "query", "schema": { "type": "integer", "default": 0 } },
+          { "name": "playerId", "in": "query", "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "Audit rows newest-first" } }
+      }
+    },
+    "/api/admin/seasons/{id}/adjust": {
+      "post": {
+        "tags": ["Seasons"],
+        "summary": "Admin: manual point adjustment",
+        "description": "Writes a synthetic season_match_log row with queue_match_id = NULL so the audit trail stays complete. Also broadcasts season:rankUpdated.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": {
+            "type": "object",
+            "required": ["player_id", "delta"],
+            "properties": {
+              "player_id": { "type": "integer" },
+              "delta":     { "type": "number", "description": "Positive or negative non-zero point change" },
+              "reason":    { "type": "string" }
+            }
+          }}}
+        },
+        "responses": {
+          "200": { "description": "{ before, after, delta }" },
+          "400": { "description": "Validation error" }
+        }
+      }
+    },
+    "/api/admin/seasons/{id}/recompute": {
+      "post": {
+        "tags": ["Seasons"],
+        "summary": "Admin: rebuild rankings by replaying every match + manual adjust",
+        "description": "Wipes season_rankings and matches' audit-log rows, then replays every completed queue_match in this season under the current settings. Manual-adjust rows are preserved by timestamp and re-applied in order. Use after editing settings or to clean up corrupted state.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": { "description": "{ ok: true, players, events }" },
+          "404": { "description": "Not found" }
+        }
       }
     },
     "/api/dota/constants": {

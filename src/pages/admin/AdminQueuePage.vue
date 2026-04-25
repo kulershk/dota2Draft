@@ -31,6 +31,8 @@ const banSearchResults = ref<any[]>([])
 let banSearchTimer: ReturnType<typeof setTimeout> | null = null
 let refreshInterval: ReturnType<typeof setInterval> | null = null
 
+const seasons = ref<Array<{ id: number; name: string; is_active: boolean }>>([])
+
 const form = ref<Record<string, any>>({
   name: '',
   enabled: true,
@@ -57,6 +59,7 @@ const form = ref<Record<string, any>>({
   xp_participate: 5,
   accept_timer: 20,
   decline_ban_minutes: 5,
+  season_id: null,
 })
 
 function resetForm() {
@@ -69,6 +72,7 @@ function resetForm() {
     lobby_series_type: 0, lobby_timeout_minutes: 10,
     xp_win: 15, xp_participate: 5,
     accept_timer: 20, decline_ban_minutes: 5,
+    season_id: null,
   }
 }
 
@@ -264,8 +268,13 @@ const GAME_MODES: [number, string][] = [
   [22, 'gameModeAD'], [23, 'gameModeTurbo'],
 ]
 
+async function fetchSeasons() {
+  try { seasons.value = (await api.getAdminSeasons()).filter((s: any) => s.is_active) } catch { seasons.value = [] }
+}
+
 onMounted(() => {
   fetchPools()
+  fetchSeasons()
   fetchActiveMatches()
   fetchQueuedPlayers()
   fetchBans()
@@ -558,6 +567,15 @@ onUnmounted(() => {
             <option :value="3">3v3</option>
             <option :value="4">4v4</option>
             <option :value="5">5v5</option>
+          </select>
+        </div>
+
+        <!-- Season -->
+        <div class="flex flex-col gap-1 col-span-2">
+          <label class="text-xs text-muted-foreground">{{ t('queuePoolSeason') }}</label>
+          <select class="input-field" v-model="form.season_id">
+            <option :value="null">{{ t('queuePoolNoSeason') }}</option>
+            <option v-for="s in seasons" :key="s.id" :value="s.id">{{ s.name }}</option>
           </select>
         </div>
 

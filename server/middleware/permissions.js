@@ -16,6 +16,7 @@ export const ALL_PERMISSIONS = [
   'manage_jobs',
   'manage_games',
   'manage_queue_pools',
+  'manage_seasons',
 ]
 
 export async function getPlayerPermissions(playerId) {

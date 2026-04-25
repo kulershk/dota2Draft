@@ -14,6 +14,8 @@ const router = createRouter({
     { path: '/queue', name: 'queue', component: () => import('@/pages/QueuePage.vue') },
     { path: '/queue/match/:id', name: 'queue-match', component: () => import('@/pages/QueueMatchPage.vue') },
     { path: '/leaderboard', name: 'leaderboard', component: () => import('@/pages/LeaderboardPage.vue') },
+    { path: '/seasons', name: 'seasons', component: () => import('@/pages/SeasonsPage.vue') },
+    { path: '/seasons/:slug', name: 'season-leaderboard', component: () => import('@/pages/SeasonLeaderboardPage.vue') },
     { path: '/player/:id', name: 'player-profile', component: () => import('@/pages/PlayerProfilePage.vue') },
     { path: '/team/:id', name: 'team-profile', component: () => import('@/pages/TeamProfilePage.vue') },
     {
@@ -61,6 +63,8 @@ const router = createRouter({
         { path: 'fantasy', name: 'admin-fantasy', meta: { permissions: ['manage_competitions', 'manage_own_competitions'] }, component: () => import('@/pages/admin/AdminFantasyPage.vue') },
         { path: 'xp-log', name: 'admin-xp-log', meta: { permissions: ['manage_users'] }, component: () => import('@/pages/admin/AdminXpLogPage.vue') },
         { path: 'queue', name: 'admin-queue', meta: { permissions: ['manage_queue_pools'] }, component: () => import('@/pages/admin/AdminQueuePage.vue') },
+        { path: 'seasons', name: 'admin-seasons', meta: { permissions: ['manage_seasons'] }, component: () => import('@/pages/admin/AdminSeasonsPage.vue') },
+        { path: 'seasons/:id', name: 'admin-season-setup', meta: { permissions: ['manage_seasons'] }, component: () => import('@/pages/admin/AdminSeasonSetupPage.vue') },
         { path: 'jobs', name: 'admin-jobs', meta: { permissions: ['manage_jobs'] }, component: () => import('@/pages/admin/AdminJobsPage.vue') },
       ],
     },

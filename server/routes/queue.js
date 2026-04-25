@@ -203,6 +203,7 @@ export default function createQueueRouter(io) {
       lobby_series_type, lobby_timeout_minutes,
       xp_win, xp_participate,
       accept_timer, decline_ban_minutes,
+      season_id,
     } = req.body
 
     if (!name) return res.status(400).json({ error: 'Name is required' })
@@ -217,8 +218,9 @@ export default function createQueueRouter(io) {
           lobby_auto_assign_teams, lobby_penalty_radiant, lobby_penalty_dire,
           lobby_series_type, lobby_timeout_minutes,
           xp_win, xp_participate,
-          accept_timer, decline_ban_minutes
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
+          accept_timer, decline_ban_minutes,
+          season_id
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
         RETURNING *
       `, [
         name, enabled !== false, min_mmr || 0, max_mmr || 0,
@@ -230,6 +232,7 @@ export default function createQueueRouter(io) {
         lobby_series_type || 0, lobby_timeout_minutes || 10,
         xp_win ?? 15, xp_participate ?? 5,
         accept_timer ?? 20, decline_ban_minutes ?? 5,
+        season_id || null,
       ])
       res.status(201).json(pool)
     } catch (e) {
@@ -256,6 +259,7 @@ export default function createQueueRouter(io) {
         'lobby_series_type', 'lobby_timeout_minutes',
         'xp_win', 'xp_participate',
         'accept_timer', 'decline_ban_minutes',
+        'season_id',
       ]
       const setClauses = []
       const values = []

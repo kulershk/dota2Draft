@@ -1174,6 +1174,23 @@
           }
         }
       }
+    },
+    "season:rankUpdated": {
+      "subscribe": {
+        "summary": "Broadcast: a season's rankings changed. Fired after a queue match completes (with the participating playerIds), after a manual admin point adjustment (with the affected playerId), or after a recompute (with recomputed: true). Clients with an open leaderboard or profile should refetch.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "seasonId": { "type": "integer" },
+              "queueMatchId": { "type": "integer", "nullable": true },
+              "playerIds": { "type": "array", "items": { "type": "integer" } },
+              "recomputed": { "type": "boolean", "description": "true when the whole season was rebuilt" }
+            },
+            "required": ["seasonId"]
+          }
+        }
+      }
     }
   }
 }
