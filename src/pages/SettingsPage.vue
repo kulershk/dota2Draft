@@ -19,7 +19,7 @@ interface MmrVerification {
   id: number
   submitted_mmr: number
   screenshot_url: string
-  status: 'pending' | 'approved' | 'rejected'
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled'
   submitted_at: string
   reviewed_at: string | null
   reviewed_by_name: string | null
@@ -39,6 +39,22 @@ async function loadVerifications() {
 function onPickFile(e: Event) {
   const input = e.target as HTMLInputElement
   verifFile.value = input.files && input.files[0] || null
+}
+
+const cancelling = ref(false)
+async function cancelMyPending() {
+  const pending = pendingVerification.value
+  if (!pending) return
+  if (!confirm(t('mmrVerificationCancelConfirm'))) return
+  cancelling.value = true
+  try {
+    await api.cancelMmrVerification(pending.id)
+    await loadVerifications()
+  } catch (e: any) {
+    verifMessage.value = { type: 'err', text: e.message || 'Cancel failed' }
+  } finally {
+    cancelling.value = false
+  }
 }
 
 async function submitVerification() {
@@ -270,6 +286,14 @@ const hasDiscord = computed(() => !!store.currentUser.value?.discord_username)
                 {{ t('mmrVerificationPendingDetail', { mmr: pendingVerification.submitted_mmr, when: fmtTime(pendingVerification.submitted_at) }) }}
               </p>
             </div>
+            <button
+              type="button"
+              class="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 transition-colors disabled:opacity-40"
+              :disabled="cancelling"
+              @click="cancelMyPending"
+            >
+              {{ cancelling ? `${t('saving')}…` : t('mmrVerificationCancel') }}
+            </button>
           </div>
 
           <!-- Submission form -->
@@ -313,9 +337,10 @@ const hasDiscord = computed(() => !!store.currentUser.value?.discord_username)
                   class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide shrink-0"
                   :class="v.status === 'approved' ? 'bg-green-500/15 text-green-500'
                        : v.status === 'rejected' ? 'bg-red-500/15 text-red-500'
+                       : v.status === 'cancelled' ? 'bg-muted/40 text-muted-foreground'
                        : 'bg-amber-500/15 text-amber-400'"
                 >
-                  <component :is="v.status === 'approved' ? CheckCircle2 : v.status === 'rejected' ? XCircle : Clock" class="w-3 h-3 inline -mt-0.5 mr-1" />
+                  <component :is="v.status === 'approved' ? CheckCircle2 : (v.status === 'rejected' || v.status === 'cancelled') ? XCircle : Clock" class="w-3 h-3 inline -mt-0.5 mr-1" />
                   {{ t('mmrVerificationStatus_' + v.status) }}
                 </span>
                 <span class="text-sm font-mono font-bold tabular-nums shrink-0">{{ v.submitted_mmr }} MMR</span>

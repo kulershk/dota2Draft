@@ -32,19 +32,14 @@ export default function createMmrVerificationsRouter(io) {
         return res.status(400).json({ error: 'MMR must be between 0 and 13000' })
       }
 
-      // Cap one pending submission per player; replacing the old one (and
-      // deleting its screenshot) keeps the queue tidy.
-      const existing = await queryOne(
-        `SELECT id, screenshot_url FROM mmr_verifications WHERE player_id = $1 AND status = 'pending' ORDER BY submitted_at DESC LIMIT 1`,
+      // One active pending per player. If there's already one, auto-cancel
+      // it (preserve the row + screenshot so the admin trail is complete).
+      await execute(
+        `UPDATE mmr_verifications
+            SET status = 'cancelled', reviewed_at = NOW(), review_note = COALESCE(review_note, 'Auto-cancelled when player submitted a new request')
+          WHERE player_id = $1 AND status = 'pending'`,
         [player.id]
       )
-      if (existing) {
-        if (existing.screenshot_url) {
-          const oldPath = join(uploadsDir, existing.screenshot_url.replace('/uploads/', ''))
-          try { fs.unlinkSync(oldPath) } catch {}
-        }
-        await execute('DELETE FROM mmr_verifications WHERE id = $1', [existing.id])
-      }
 
       const screenshotUrl = `/uploads/${req.file.filename}`
       const created = await queryOne(`
@@ -79,17 +74,43 @@ export default function createMmrVerificationsRouter(io) {
     }
   })
 
+  // ── User: cancel my own pending submission ──
+  // Row stays in the DB and the screenshot stays on disk so the admin still
+  // sees it in the player's history with status = 'cancelled'.
+  router.post('/api/mmr-verifications/:id/cancel', async (req, res) => {
+    const player = await getAuthPlayer(req)
+    if (!player) return res.status(401).json({ error: 'Not authenticated' })
+    try {
+      const v = await queryOne('SELECT * FROM mmr_verifications WHERE id = $1', [req.params.id])
+      if (!v) return res.status(404).json({ error: 'Submission not found' })
+      if (v.player_id !== player.id) return res.status(403).json({ error: 'Not your submission' })
+      if (v.status !== 'pending') return res.status(409).json({ error: 'Submission is not pending' })
+      await execute(`
+        UPDATE mmr_verifications
+          SET status = 'cancelled', reviewed_at = NOW(), review_note = COALESCE($1, 'Cancelled by player')
+        WHERE id = $2
+      `, [req.body?.note || null, v.id])
+      if (io) io.emit('mmrVerification:reviewed', { id: v.id, playerId: player.id, status: 'cancelled' })
+      res.json({ ok: true })
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
   // ── Admin: list submissions ──
   router.get('/api/admin/mmr-verifications', async (req, res) => {
     const admin = await requirePermission(req, res, 'manage_mmr_verifications')
     if (!admin) return
     try {
       const status = (req.query.status || 'pending').toString()
-      const allowedStatuses = ['pending', 'approved', 'rejected', 'all']
+      const allowedStatuses = ['pending', 'approved', 'rejected', 'cancelled', 'all']
       if (!allowedStatuses.includes(status)) return res.status(400).json({ error: 'Invalid status' })
+      const playerId = req.query.playerId ? Number(req.query.playerId) : null
       const params = []
-      let where = ''
-      if (status !== 'all') { params.push(status); where = `WHERE v.status = $${params.length}` }
+      const conds = []
+      if (status !== 'all') { params.push(status); conds.push(`v.status = $${params.length}`) }
+      if (playerId)         { params.push(playerId); conds.push(`v.player_id = $${params.length}`) }
+      const where = conds.length ? `WHERE ${conds.join(' AND ')}` : ''
       const limit = Math.min(Number(req.query.limit) || 100, 200)
       params.push(limit)
       const rows = await query(`

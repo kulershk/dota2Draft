@@ -1967,15 +1967,31 @@
         "responses": { "200": { "description": "Array of submissions with reviewer info" } }
       }
     },
+    "/api/mmr-verifications/{id}/cancel": {
+      "post": {
+        "tags": ["MMR Verifications"],
+        "summary": "Cancel my own pending submission",
+        "description": "Marks the submission status as cancelled. The row and its screenshot are preserved so the admin still sees the attempt in the player's history.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": { "description": "{ ok: true }" },
+          "403": { "description": "Not your submission" },
+          "404": { "description": "Submission not found" },
+          "409": { "description": "Submission is not pending" }
+        }
+      }
+    },
     "/api/admin/mmr-verifications": {
       "get": {
         "tags": ["MMR Verifications"],
         "summary": "Admin: list submissions",
-        "description": "Filter by status (pending, approved, rejected, all). Pending bubbles to the top. Requires manage_mmr_verifications.",
+        "description": "Filter by status (pending, approved, rejected, cancelled, all) and optionally by playerId. Pending bubbles to the top. Requires manage_mmr_verifications.",
         "security": [{ "bearerAuth": [] }],
         "parameters": [
-          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["pending", "approved", "rejected", "all"], "default": "pending" } },
-          { "name": "limit",  "in": "query", "schema": { "type": "integer", "default": 100, "maximum": 200 } }
+          { "name": "status",   "in": "query", "schema": { "type": "string", "enum": ["pending", "approved", "rejected", "cancelled", "all"], "default": "pending" } },
+          { "name": "playerId", "in": "query", "schema": { "type": "integer" }, "description": "Restrict to one player's history" },
+          { "name": "limit",    "in": "query", "schema": { "type": "integer", "default": 100, "maximum": 200 } }
         ],
         "responses": { "200": { "description": "Array of submissions enriched with player and reviewer info" } }
       }

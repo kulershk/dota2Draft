@@ -500,10 +500,15 @@ export function useApi() {
       return res.json()
     },
     getMyMmrVerifications: () => request('/api/mmr-verifications/mine'),
+    cancelMmrVerification: (id: number) =>
+      request(`/api/mmr-verifications/${id}/cancel`, { method: 'POST' }),
 
     // MMR verification (admin)
-    getAdminMmrVerifications: (status: 'pending' | 'approved' | 'rejected' | 'all' = 'pending') =>
-      request(`/api/admin/mmr-verifications?status=${status}`),
+    getAdminMmrVerifications: (status: 'pending' | 'approved' | 'rejected' | 'cancelled' | 'all' = 'pending', playerId?: number) => {
+      const qs = new URLSearchParams({ status })
+      if (playerId) qs.set('playerId', String(playerId))
+      return request(`/api/admin/mmr-verifications?${qs}`)
+    },
     approveMmrVerification: (id: number, note?: string) =>
       request(`/api/admin/mmr-verifications/${id}/approve`, { method: 'POST', body: JSON.stringify({ note }) }),
     rejectMmrVerification: (id: number, note?: string) =>
