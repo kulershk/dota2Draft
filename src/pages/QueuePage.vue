@@ -1124,35 +1124,50 @@ onUnmounted(() => {
               </div>
 
               <!-- Players in Queue grid (only visible once you've joined) -->
-              <div v-if="selectedPool && queue.inQueue.value" class="card p-5">
-                <div class="flex items-center justify-between mb-4">
-                  <h3 class="text-sm font-semibold">{{ t('queuePlayersInQueue') }}</h3>
+              <div v-if="selectedPool && queue.inQueue.value" class="card overflow-hidden">
+                <div class="flex items-center justify-between px-5 py-4 border-b border-border/40">
+                  <div class="flex items-center gap-2.5">
+                    <Users class="w-4 h-4 text-primary" />
+                    <h3 class="text-sm font-bold">{{ t('queuePlayersInQueue') }}</h3>
+                    <span class="px-2 py-0.5 rounded-full bg-primary/15 text-primary text-[11px] font-bold font-mono tabular-nums">
+                      {{ queue.queuePlayers.value.length }}
+                    </span>
+                  </div>
                   <span class="text-[11px] text-muted-foreground tabular-nums">{{ queue.queuePlayers.value.length }}/{{ totalPlayers }}</span>
                 </div>
                 <div v-if="queue.queuePlayers.value.length === 0" class="text-xs text-muted-foreground text-center py-8">
                   {{ t('queueEmptyPool') }}
                 </div>
-                <div v-else class="grid grid-cols-4 gap-4">
+                <div v-else class="grid grid-cols-5 gap-2 p-3">
                   <router-link
                     v-for="p in queue.queuePlayers.value" :key="p.playerId"
                     :to="{ name: 'player-profile', params: { id: p.playerId } }"
-                    class="flex flex-col items-center gap-1 min-w-0 p-2 -m-2 rounded-lg hover:bg-accent/40 transition-colors"
+                    class="flex flex-col items-center gap-2.5 min-w-0 px-2.5 py-3.5 rounded-[10px] bg-[#0F172A] border border-border/40 hover:border-primary/40 hover:bg-[#111d33] transition-colors"
                     :title="t('queuePlayerCardOpenProfile')"
                   >
-                    <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-14 h-14 rounded-lg object-cover" />
-                    <div v-else class="w-14 h-14 rounded-lg bg-accent flex items-center justify-center">
-                      <Users class="w-6 h-6 text-muted-foreground/40" />
+                    <img
+                      v-if="p.avatarUrl"
+                      :src="p.avatarUrl"
+                      class="w-12 h-12 rounded-full object-cover"
+                      :class="p.playerId === currentUserId ? 'ring-2 ring-primary' : ''"
+                    />
+                    <div
+                      v-else
+                      class="w-12 h-12 rounded-full bg-primary/15 flex items-center justify-center"
+                      :class="p.playerId === currentUserId ? 'ring-2 ring-primary' : ''"
+                    >
+                      <span class="text-primary text-lg font-bold">{{ (p.name || '?').charAt(0).toUpperCase() }}</span>
                     </div>
-                    <span class="text-xs font-medium truncate max-w-full">{{ p.name }}</span>
-                    <span class="text-[10px] text-muted-foreground tabular-nums">{{ p.mmr }}</span>
-                    <span class="text-[10px] tabular-nums flex items-center gap-1 mt-0.5"
+                    <span class="text-[13px] font-semibold truncate max-w-full">{{ p.name }}</span>
+                    <span class="text-[11px] text-muted-foreground font-mono font-medium tabular-nums">{{ p.mmr }} MMR</span>
+                    <span class="flex items-center gap-1 font-mono tabular-nums"
                       :title="t('queuePlayerStatsTooltip')">
                       <template v-if="queue.playerStats.value[p.playerId]">
-                        <span class="text-green-500 font-semibold">{{ queue.playerStats.value[p.playerId].wins }}W</span>
-                        <span class="text-muted-foreground/60">·</span>
-                        <span class="text-destructive font-semibold">{{ queue.playerStats.value[p.playerId].losses }}L</span>
+                        <span class="text-green-500 text-sm font-bold">{{ queue.playerStats.value[p.playerId].wins }}</span>
+                        <span class="text-slate-600 text-sm">/</span>
+                        <span class="text-red-500 text-sm font-bold">{{ queue.playerStats.value[p.playerId].losses }}</span>
                       </template>
-                      <span v-else class="text-muted-foreground/50">—</span>
+                      <span v-else class="text-muted-foreground/50 text-sm">—</span>
                     </span>
                   </router-link>
                 </div>
@@ -1184,18 +1199,38 @@ onUnmounted(() => {
                       </div>
                     </div>
 
-                    <!-- Score / VS + relative time -->
-                    <div class="flex flex-col items-center shrink-0 min-w-[72px]">
-                      <div v-if="qm.score1 != null && qm.score2 != null" class="flex items-center gap-2 font-mono font-bold text-sm tabular-nums">
-                        <span :class="winnerSide(qm) === 1 ? 'text-green-500' : 'text-muted-foreground'">{{ qm.score1 }}</span>
-                        <span class="text-muted-foreground/50">–</span>
-                        <span :class="winnerSide(qm) === 2 ? 'text-green-500' : 'text-muted-foreground'">{{ qm.score2 }}</span>
+                    <!-- Score / VS + status -->
+                    <div class="flex flex-col items-center shrink-0 gap-1.5 min-w-[140px]">
+                      <div v-if="qm.score1 != null && qm.score2 != null" class="flex items-center gap-2 font-mono font-bold tabular-nums">
+                        <span
+                          class="px-2 py-0.5 rounded text-[11px]"
+                          :class="winnerSide(qm) === 1
+                            ? 'bg-green-500/15 text-green-500'
+                            : (winnerSide(qm) === 2 ? 'bg-red-500/15 text-red-500' : 'bg-accent/40 text-muted-foreground')"
+                        >{{ winnerSide(qm) === 1 ? 'W' : (winnerSide(qm) === 2 ? 'L' : '–') }}</span>
+                        <span class="text-foreground text-sm">{{ qm.score1 }} — {{ qm.score2 }}</span>
+                        <span
+                          class="px-2 py-0.5 rounded text-[11px]"
+                          :class="winnerSide(qm) === 2
+                            ? 'bg-green-500/15 text-green-500'
+                            : (winnerSide(qm) === 1 ? 'bg-red-500/15 text-red-500' : 'bg-accent/40 text-muted-foreground')"
+                        >{{ winnerSide(qm) === 2 ? 'W' : (winnerSide(qm) === 1 ? 'L' : '–') }}</span>
                       </div>
                       <div v-else class="px-3 py-1 rounded bg-accent text-xs font-semibold text-muted-foreground">VS</div>
-                      <span v-if="qm.status === 'live'" class="text-[10px] text-amber-500 font-semibold mt-0.5">{{ t('matchLive') }}</span>
-                      <span v-else-if="qm.completed_at" class="text-[10px] text-muted-foreground whitespace-nowrap mt-0.5">
-                        {{ formatRelativeTime(qm.completed_at) }}
-                      </span>
+                      <div class="flex items-center gap-2">
+                        <div v-if="qm.completed_at || qm.status === 'live'" class="flex items-center gap-1 text-[10px] text-muted-foreground font-mono whitespace-nowrap">
+                          <Timer class="w-2.5 h-2.5" />
+                          <span>{{ formatRelativeTime(qm.completed_at || qm.created_at) }}</span>
+                        </div>
+                        <span
+                          v-if="qm.status === 'live'"
+                          class="px-1.5 py-px rounded-sm text-[9px] font-mono font-bold tracking-wide bg-amber-500/15 text-amber-500"
+                        >{{ t('matchLive').toUpperCase() }}</span>
+                        <span
+                          v-else-if="qm.score1 != null && qm.score2 != null"
+                          class="px-1.5 py-px rounded-sm text-[9px] font-mono font-bold tracking-wide bg-green-500/15 text-green-500"
+                        >{{ t('matchCompleted').toUpperCase() }}</span>
+                      </div>
                     </div>
 
                     <!-- Team 2 (right) -->
