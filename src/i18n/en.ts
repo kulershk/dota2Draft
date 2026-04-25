@@ -1313,6 +1313,8 @@ export default {
   mmrVerificationOpenHistory: 'Open this player\'s submission history',
   mmrVerificationHistoryFor: 'Submissions — {name}',
   mmrVerificationSubmittedAt: 'Submitted',
+  mmrVerifiedTooltip: 'MMR verified by admin',
+  mmrVerifiedSince: 'Verified · {date}',
   adminMmrVerifications: 'MMR Verifications',
   mmrVerificationTab_pending: 'Pending',
   mmrVerificationTab_approved: 'Approved',

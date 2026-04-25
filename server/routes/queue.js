@@ -206,6 +206,24 @@ export default function createQueueRouter(io) {
       }
     }
 
+    // Enrich every roster player with their current verified-MMR timestamp
+    // so the UI can render the verified badge. team1_players / team2_players
+    // are JSONB snapshots, so we join against the live players table here.
+    const allRosterIds = [
+      ...((qm.team1_players || []).map(p => p.playerId)),
+      ...((qm.team2_players || []).map(p => p.playerId)),
+    ]
+    if (allRosterIds.length) {
+      const verifiedRows = await query(
+        'SELECT id, mmr_verified_at FROM players WHERE id = ANY($1::int[])',
+        [allRosterIds]
+      )
+      const verifiedById = Object.fromEntries(verifiedRows.map(r => [r.id, r.mmr_verified_at || null]))
+      const stamp = (p) => { p.mmr_verified_at = verifiedById[p.playerId] || null }
+      ;(qm.team1_players || []).forEach(stamp)
+      ;(qm.team2_players || []).forEach(stamp)
+    }
+
     // Enrich players with season data (rating delta from this match + current standing).
     // Both lookups gracefully return empty if the match isn't attached to a season.
     let season = null

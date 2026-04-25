@@ -65,7 +65,7 @@ router.get('/api/players/search', async (req, res) => {
 // Public player profile
 router.get('/api/players/:id/profile', async (req, res) => {
   const playerId = Number(req.params.id)
-  const player = await queryOne('SELECT id, name, display_name, steam_id, avatar_url, roles, mmr, info, twitch_username, discord_username, total_xp, is_admin, favorite_position, created_at FROM players WHERE id = $1', [playerId])
+  const player = await queryOne('SELECT id, name, display_name, steam_id, avatar_url, roles, mmr, mmr_verified_at, info, twitch_username, discord_username, total_xp, is_admin, favorite_position, created_at FROM players WHERE id = $1', [playerId])
   if (!player) return res.status(404).json({ error: 'Player not found' })
 
   // Get all competitions this player participated in (as player or captain)
@@ -547,7 +547,7 @@ router.get('/api/leaderboard', async (req, res) => {
   const offset = Math.max(0, Number(req.query.offset) || 0)
 
   const rows = await query(
-    `SELECT id, COALESCE(display_name, name) AS name, avatar_url, total_xp
+    `SELECT id, COALESCE(display_name, name) AS name, avatar_url, total_xp, mmr_verified_at
      FROM players
      WHERE total_xp > 0
      ORDER BY total_xp DESC, id ASC
@@ -564,6 +564,7 @@ router.get('/api/leaderboard', async (req, res) => {
       total_xp: r.total_xp || 0,
       level: Math.floor((r.total_xp || 0) / 1000) + 1,
       level_progress: (r.total_xp || 0) % 1000,
+      mmr_verified_at: r.mmr_verified_at || null,
     })),
     total: Number(countResult?.total || 0),
   })

@@ -324,7 +324,7 @@ onMounted(async () => {
                    class="px-5 py-2.5 grid items-center border-b border-border/20 last:border-b-0 hover:bg-accent/15 transition-colors"
                    :style="hasPointChanges ? 'grid-template-columns: 1fr 80px 90px 80px;' : 'grid-template-columns: 1fr 100px;'">
                 <div class="flex items-center gap-2 min-w-0">
-                  <UserName :id="p.playerId" :name="p.name" :avatar-url="p.avatarUrl" size="md" class="min-w-0" />
+                  <UserName :id="p.playerId" :name="p.name" :avatar-url="p.avatarUrl" :verified="p.mmr_verified_at" size="md" class="min-w-0" />
                   <span v-if="idx === 0" class="text-[9px] font-bold text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded shrink-0">CPT</span>
                 </div>
                 <span class="text-right text-xs font-mono text-muted-foreground tabular-nums">{{ p.mmr }}</span>
@@ -368,7 +368,7 @@ onMounted(async () => {
                    class="px-5 py-2.5 grid items-center border-b border-border/20 last:border-b-0 hover:bg-accent/15 transition-colors"
                    :style="hasPointChanges ? 'grid-template-columns: 1fr 80px 90px 80px;' : 'grid-template-columns: 1fr 100px;'">
                 <div class="flex items-center gap-2 min-w-0">
-                  <UserName :id="p.playerId" :name="p.name" :avatar-url="p.avatarUrl" size="md" class="min-w-0" />
+                  <UserName :id="p.playerId" :name="p.name" :avatar-url="p.avatarUrl" :verified="p.mmr_verified_at" size="md" class="min-w-0" />
                   <span v-if="idx === 0" class="text-[9px] font-bold text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded shrink-0">CPT</span>
                 </div>
                 <span class="text-right text-xs font-mono text-muted-foreground tabular-nums">{{ p.mmr }}</span>

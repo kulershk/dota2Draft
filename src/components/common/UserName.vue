@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Crown } from 'lucide-vue-next'
+import { Crown, BadgeCheck } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
 
 defineProps<{
   id: number
@@ -8,7 +9,11 @@ defineProps<{
   size?: 'xs' | 'sm' | 'md'
   noLink?: boolean
   isAdmin?: boolean
+  /** Truthy timestamp (or any truthy value) marks the player as MMR-verified. */
+  verified?: string | null | boolean
 }>()
+
+const { t } = useI18n()
 
 const avatarClass: Record<string, string> = {
   xs: 'w-4 h-4 text-[8px]',
@@ -27,6 +32,12 @@ const crownClass: Record<string, string> = {
   sm: 'w-3 h-3 -top-2',
   md: 'w-3.5 h-3.5 -top-2',
 }
+
+const verifiedClass: Record<string, string> = {
+  xs: 'w-3 h-3',
+  sm: 'w-3.5 h-3.5',
+  md: 'w-4 h-4',
+}
 </script>
 
 <template>
@@ -44,5 +55,11 @@ const crownClass: Record<string, string> = {
       </div>
     </div>
     <span class="font-medium text-foreground truncate transition-colors" :class="[textClass[size || 'md'], noLink ? '' : 'group-hover:!text-primary']"><slot>{{ name }}</slot></span>
+    <BadgeCheck
+      v-if="verified"
+      class="text-cyan-400 shrink-0"
+      :class="verifiedClass[size || 'md']"
+      :title="t('mmrVerifiedTooltip')"
+    />
   </component>
 </template>

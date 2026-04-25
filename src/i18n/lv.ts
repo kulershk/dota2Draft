@@ -1305,6 +1305,8 @@ export default {
   mmrVerificationOpenHistory: 'Atvērt šī spēlētāja iesniegumu vēsturi',
   mmrVerificationHistoryFor: 'Iesniegumi — {name}',
   mmrVerificationSubmittedAt: 'Iesniegts',
+  mmrVerifiedTooltip: 'MMR verificēts no administratora',
+  mmrVerifiedSince: 'Verificēts · {date}',
   adminMmrVerifications: 'MMR Verifikācijas',
   mmrVerificationTab_pending: 'Gaida',
   mmrVerificationTab_approved: 'Apstiprināti',

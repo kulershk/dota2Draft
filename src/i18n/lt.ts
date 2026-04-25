@@ -1305,6 +1305,8 @@ export default {
   mmrVerificationOpenHistory: 'Atidaryti šio žaidėjo pateikimų istoriją',
   mmrVerificationHistoryFor: 'Pateikimai — {name}',
   mmrVerificationSubmittedAt: 'Pateikta',
+  mmrVerifiedTooltip: 'MMR patvirtintas administratoriaus',
+  mmrVerifiedSince: 'Patvirtinta · {date}',
   adminMmrVerifications: 'MMR Verifikacijos',
   mmrVerificationTab_pending: 'Laukia',
   mmrVerificationTab_approved: 'Patvirtinti',

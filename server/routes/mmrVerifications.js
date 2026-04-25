@@ -146,7 +146,11 @@ export default function createMmrVerificationsRouter(io) {
         SET status = 'approved', reviewed_by = $1, reviewed_at = NOW(), review_note = $2
         WHERE id = $3
       `, [admin.id, req.body.note || null, v.id])
-      await execute('UPDATE players SET mmr = $1 WHERE id = $2', [v.submitted_mmr, v.player_id])
+      // Apply the new MMR and stamp the verified-at marker on first approval.
+      await execute(
+        'UPDATE players SET mmr = $1, mmr_verified_at = COALESCE(mmr_verified_at, NOW()) WHERE id = $2',
+        [v.submitted_mmr, v.player_id]
+      )
       if (io) io.emit('mmrVerification:reviewed', { id: v.id, playerId: v.player_id, status: 'approved', mmr: v.submitted_mmr })
       res.json({ ok: true, player_id: v.player_id, mmr: v.submitted_mmr })
     } catch (e) {

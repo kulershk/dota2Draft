@@ -830,6 +830,24 @@ export async function initDb() {
   `)
   try { await execute(`CREATE INDEX IF NOT EXISTS mmr_verifications_status_idx ON mmr_verifications (status, submitted_at DESC)`) } catch {}
   try { await execute(`CREATE INDEX IF NOT EXISTS mmr_verifications_player_idx ON mmr_verifications (player_id, submitted_at DESC)`) } catch {}
+
+  // Verified-MMR badge timestamp. Set on first admin approval and never
+  // unset — players who go through the verification process keep the badge
+  // even if their MMR is later edited directly by an admin.
+  try { await execute(`ALTER TABLE players ADD COLUMN mmr_verified_at TIMESTAMP NULL`) } catch {}
+  // One-time backfill: any player with an existing approved row gets a
+  // verified-at timestamp from their earliest approval. Idempotent because
+  // it only writes when mmr_verified_at IS NULL.
+  await execute(`
+    UPDATE players p SET mmr_verified_at = sub.first_approved
+    FROM (
+      SELECT player_id, MIN(reviewed_at) AS first_approved
+      FROM mmr_verifications
+      WHERE status = 'approved' AND reviewed_at IS NOT NULL
+      GROUP BY player_id
+    ) sub
+    WHERE p.id = sub.player_id AND p.mmr_verified_at IS NULL
+  `)
 }
 
 async function createFreshCompetitionTables() {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { User, Trophy, Swords, Tv, Medal, MessageCircle, Star, ChevronLeft, ChevronRight, Percent, Target, Flame, Clock, Award, Zap, Check, X, Flag, Users } from 'lucide-vue-next'
+import { User, Trophy, Swords, Tv, Medal, MessageCircle, Star, ChevronLeft, ChevronRight, Percent, Target, Flame, Clock, Award, Zap, Check, X, Flag, Users, BadgeCheck } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -212,6 +212,7 @@ const streakBadge = computed(() => {
               <div class="min-w-0 flex-1">
                 <div class="flex flex-wrap items-center gap-2">
                   <h1 class="text-2xl md:text-3xl font-extrabold text-foreground tracking-tight truncate">{{ profile.name }}</h1>
+                  <BadgeCheck v-if="profile.mmr_verified_at" class="w-6 h-6 text-cyan-400 shrink-0" :title="t('mmrVerifiedTooltip')" />
                   <span class="text-xs text-muted-foreground">· {{ t('memberSince') }} {{ formatDate(profile.created_at) }}</span>
                 </div>
                 <div class="flex flex-wrap items-center gap-2 mt-1.5">
@@ -220,6 +221,11 @@ const streakBadge = computed(() => {
                   <div v-if="profile.roles?.length" class="flex flex-wrap gap-1">
                     <RoleBadge v-for="role in sortedRoles(profile.roles)" :key="role" :role="role" />
                   </div>
+                  <span v-if="profile.mmr_verified_at"
+                        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-[11px] font-bold">
+                    <BadgeCheck class="w-3 h-3" />
+                    {{ t('mmrVerifiedSince', { date: formatDate(profile.mmr_verified_at) }) }}
+                  </span>
                 </div>
               </div>
               <!-- External links -->
