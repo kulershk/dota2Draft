@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { Clock, Users, Swords, X, Check, Loader2, Shield, ShieldCheck, ChevronRight, Timer, Send, MessageSquare, Ban, Target, Copy, Eye, EyeOff, Hourglass, ListOrdered, UserPlus, Plus, Info, Crown } from 'lucide-vue-next'
+import { Clock, Users, Swords, X, Check, Loader2, Shield, ShieldCheck, ChevronRight, Timer, Send, MessageCircle, Ban, Target, Copy, Eye, EyeOff, Hourglass, ListOrdered, UserPlus, Plus, Info, Crown } from 'lucide-vue-next'
 import { useQueueStore, type QueuePlayer, QUEUE_ROLES } from '@/composables/useQueueStore'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { getServerNow } from '@/composables/useSocket'
@@ -146,6 +146,15 @@ const joinedCount = computed(() => queue.lobbyPlayersJoined.value.length)
 function topRoleOf(playerId: number): string | null {
   const prefs = queue.rolePreferences.value[playerId]
   return (prefs && prefs.length) ? prefs[0] : null
+}
+
+const CHAT_NAME_COLORS = [
+  'text-cyan-400', 'text-purple-400', 'text-amber-400',
+  'text-pink-400', 'text-emerald-400', 'text-rose-400',
+  'text-sky-400', 'text-violet-400',
+]
+function chatNameColorClass(playerId: number): string {
+  return CHAT_NAME_COLORS[Math.abs(playerId) % CHAT_NAME_COLORS.length]
 }
 
 function winratePct(s: { wins: number; losses: number }): number {
@@ -1273,44 +1282,58 @@ onUnmounted(() => {
 
             <!-- Right column: Pool Chat -->
             <div class="flex flex-col gap-6 min-w-0">
-              <div v-if="selectedPool" class="card overflow-hidden flex flex-col" style="max-height: calc(100vh - 220px); min-height: 400px;">
-                <div class="px-5 py-3 border-b border-border/30 flex items-center gap-2 shrink-0">
-                  <MessageSquare class="w-4 h-4 text-muted-foreground" />
-                  <span class="text-sm font-semibold">{{ t('queueChat') }}</span>
-                  <span class="text-[10px] text-muted-foreground ml-auto">{{ t('queueChatHint') }}</span>
+              <div v-if="selectedPool" class="card overflow-hidden flex flex-col p-5 gap-3.5" style="max-height: calc(100vh - 220px); min-height: 400px;">
+                <div class="flex items-center justify-between shrink-0">
+                  <div class="flex items-center gap-2.5">
+                    <MessageCircle class="w-4 h-4 text-primary" />
+                    <span class="text-[15px] font-bold">{{ t('queueChat') }}</span>
+                    <span class="flex items-center gap-1.5 px-1.5 py-0.5 rounded bg-green-500/15 text-green-500 text-[10px] font-mono font-semibold">
+                      <span class="w-1 h-1 rounded-full bg-green-500" />
+                      {{ queue.poolCounts.value[selectedPool.id] || queue.queuePlayers.value.length }} online
+                    </span>
+                  </div>
+                  <span class="text-[10px] text-muted-foreground">{{ t('queueChatHint') }}</span>
                 </div>
-                <div ref="chatScroll" class="px-5 py-3 flex-1 overflow-y-auto flex flex-col gap-2">
+                <div class="h-px bg-border/40 shrink-0" />
+                <div ref="chatScroll" class="flex-1 overflow-y-auto flex flex-col gap-3 -mr-2 pr-2">
                   <div v-if="queue.chatMessages.value.length === 0" class="text-xs text-muted-foreground text-center py-6">
                     {{ t('queueChatEmpty') }}
                   </div>
                   <div v-for="m in queue.chatMessages.value" :key="m.id" class="flex items-start gap-2.5">
-                    <img v-if="m.avatarUrl" :src="m.avatarUrl" class="w-6 h-6 rounded-full mt-0.5 shrink-0" />
-                    <div v-else class="w-6 h-6 rounded-full bg-accent shrink-0" />
-                    <div class="flex-1 min-w-0">
+                    <img v-if="m.avatarUrl" :src="m.avatarUrl" class="w-[30px] h-[30px] rounded-full shrink-0 object-cover" />
+                    <div v-else class="w-[30px] h-[30px] rounded-full bg-accent shrink-0" />
+                    <div class="flex-1 min-w-0 flex flex-col gap-0.5">
                       <div class="flex items-baseline gap-2">
-                        <span class="text-xs font-semibold truncate">{{ m.name }}</span>
-                        <span class="text-[10px] text-muted-foreground tabular-nums">{{ new Date(m.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}</span>
+                        <span class="text-xs font-bold truncate" :class="m.playerId === currentUserId ? 'text-primary' : chatNameColorClass(m.playerId)">{{ m.name }}</span>
+                        <span class="text-[10px] text-muted-foreground font-mono tabular-nums">{{ new Date(m.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}</span>
                       </div>
-                      <div class="text-sm break-words whitespace-pre-wrap">{{ m.text }}</div>
+                      <div
+                        class="text-[13px] break-words whitespace-pre-wrap rounded-lg px-2.5 py-1.5 self-start max-w-full"
+                        :class="m.playerId === currentUserId ? 'bg-primary/10 border border-primary/30' : 'bg-accent/40'"
+                      >{{ m.text }}</div>
                     </div>
                   </div>
                 </div>
-                <form class="px-5 py-3 border-t border-border/30 flex items-center gap-2 shrink-0" @submit.prevent="sendChat">
+                <form
+                  class="shrink-0 flex items-center gap-2 rounded-[10px] bg-[#0A0F1C] border border-border/40 focus-within:border-primary/40 px-2.5 py-2 transition-colors"
+                  @submit.prevent="sendChat"
+                >
                   <input
                     v-model="chatInput"
                     type="text"
                     maxlength="300"
                     :placeholder="t('queueChatPlaceholder')"
-                    class="flex-1 min-w-0 bg-accent/40 border border-border/40 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40"
+                    class="flex-1 min-w-0 bg-transparent text-sm placeholder:text-muted-foreground/70 focus:outline-none"
                   />
                   <button
                     type="submit"
                     :disabled="!canSendChat"
-                    class="btn-primary px-3 py-2 text-sm flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                    class="shrink-0 flex items-center justify-center rounded-lg bg-primary text-[#0A0F1C] hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                    :class="chatCooldownLeft > 0 ? 'px-2.5 py-1.5 gap-1.5' : 'w-8 h-8'"
+                    :title="t('queueChatSend')"
                   >
                     <Send class="w-3.5 h-3.5" />
-                    <span v-if="chatCooldownLeft > 0" class="tabular-nums">{{ Math.ceil(chatCooldownLeft / 1000) }}s</span>
-                    <span v-else>{{ t('queueChatSend') }}</span>
+                    <span v-if="chatCooldownLeft > 0" class="text-xs font-bold tabular-nums">{{ Math.ceil(chatCooldownLeft / 1000) }}s</span>
                   </button>
                 </form>
               </div>
