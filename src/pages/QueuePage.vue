@@ -1283,16 +1283,9 @@ onUnmounted(() => {
             <!-- Right column: Pool Chat -->
             <div class="flex flex-col gap-6 min-w-0">
               <div v-if="selectedPool" class="card overflow-hidden flex flex-col p-5 gap-3.5" style="max-height: calc(100vh - 220px); min-height: 400px;">
-                <div class="flex items-center justify-between shrink-0">
-                  <div class="flex items-center gap-2.5">
-                    <MessageCircle class="w-4 h-4 text-primary" />
-                    <span class="text-[15px] font-bold">{{ t('queueChat') }}</span>
-                    <span class="flex items-center gap-1.5 px-1.5 py-0.5 rounded bg-green-500/15 text-green-500 text-[10px] font-mono font-semibold">
-                      <span class="w-1 h-1 rounded-full bg-green-500" />
-                      {{ queue.poolCounts.value[selectedPool.id] || queue.queuePlayers.value.length }} online
-                    </span>
-                  </div>
-                  <span class="text-[10px] text-muted-foreground">{{ t('queueChatHint') }}</span>
+                <div class="flex items-center gap-2.5 shrink-0">
+                  <MessageCircle class="w-4 h-4 text-primary" />
+                  <span class="text-[15px] font-bold">{{ t('queueChat') }}</span>
                 </div>
                 <div class="h-px bg-border/40 shrink-0" />
                 <div ref="chatScroll" class="flex-1 overflow-y-auto flex flex-col gap-3 -mr-2 pr-2">
