@@ -23,6 +23,7 @@
     { "name": "Streams", "description": "Twitch streams" },
     { "name": "Queue", "description": "Queue matchmaking pools & matches" },
     { "name": "Seasons", "description": "Ranked seasons — ELO ladders attached to queue pools" },
+    { "name": "MMR Verifications", "description": "User-submitted MMR change requests with screenshot proof; admins approve to update players.mmr" },
     { "name": "Dota", "description": "Dota 2 constants (heroes, items)" },
     { "name": "Jobs", "description": "Background job admin (list/retry/cancel)" }
   ],
@@ -346,8 +347,9 @@
       "put": {
         "tags": ["Auth"],
         "summary": "Update own profile",
+        "description": "Updates info and roles. MMR is intentionally NOT accepted here — it changes only via the MMR Verifications approval flow (POST /api/mmr-verifications + admin approve).",
         "security": [{ "bearerAuth": [] }],
-        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "mmr": { "type": "integer" }, "info": { "type": "string" }, "roles": { "type": "array", "items": { "type": "string" } } } } } } },
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "info": { "type": "string" }, "roles": { "type": "array", "items": { "type": "string" } } } } } } },
         "responses": { "200": { "description": "Updated user", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/User" } } } } }
       }
     },
@@ -1926,6 +1928,86 @@
           { "name": "offset", "in": "query", "schema": { "type": "integer", "default": 0 } }
         ],
         "responses": { "200": { "description": "Ranked rows" } }
+      }
+    },
+    "/api/mmr-verifications": {
+      "post": {
+        "tags": ["MMR Verifications"],
+        "summary": "Submit a new MMR verification (multipart)",
+        "description": "Sends a screenshot file plus the requested MMR. Creates a pending submission. Replaces any existing pending submission by the same user (old screenshot file is unlinked).",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["mmr", "screenshot"],
+                "properties": {
+                  "mmr":        { "type": "integer", "minimum": 0, "maximum": 13000 },
+                  "screenshot": { "type": "string", "format": "binary" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Created submission row" },
+          "400": { "description": "Missing screenshot or invalid MMR" },
+          "401": { "description": "Not authenticated" },
+          "403": { "description": "Account banned" }
+        }
+      }
+    },
+    "/api/mmr-verifications/mine": {
+      "get": {
+        "tags": ["MMR Verifications"],
+        "summary": "List my submissions (newest first, last 25)",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Array of submissions with reviewer info" } }
+      }
+    },
+    "/api/admin/mmr-verifications": {
+      "get": {
+        "tags": ["MMR Verifications"],
+        "summary": "Admin: list submissions",
+        "description": "Filter by status (pending, approved, rejected, all). Pending bubbles to the top. Requires manage_mmr_verifications.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["pending", "approved", "rejected", "all"], "default": "pending" } },
+          { "name": "limit",  "in": "query", "schema": { "type": "integer", "default": 100, "maximum": 200 } }
+        ],
+        "responses": { "200": { "description": "Array of submissions enriched with player and reviewer info" } }
+      }
+    },
+    "/api/admin/mmr-verifications/{id}/approve": {
+      "post": {
+        "tags": ["MMR Verifications"],
+        "summary": "Admin: approve a submission and apply MMR",
+        "description": "Sets players.mmr to submitted_mmr and marks the row approved. Requires manage_mmr_verifications.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "note": { "type": "string" } } } } } },
+        "responses": {
+          "200": { "description": "{ ok: true, player_id, mmr }" },
+          "404": { "description": "Submission not found" },
+          "409": { "description": "Already reviewed" }
+        }
+      }
+    },
+    "/api/admin/mmr-verifications/{id}/reject": {
+      "post": {
+        "tags": ["MMR Verifications"],
+        "summary": "Admin: reject a submission",
+        "description": "Marks the row rejected with an optional note. Does not modify players.mmr.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "note": { "type": "string" } } } } } },
+        "responses": {
+          "200": { "description": "{ ok: true }" },
+          "404": { "description": "Submission not found" },
+          "409": { "description": "Already reviewed" }
+        }
       }
     },
     "/api/players/{playerId}/seasons": {

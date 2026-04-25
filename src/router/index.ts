@@ -65,6 +65,7 @@ const router = createRouter({
         { path: 'queue', name: 'admin-queue', meta: { permissions: ['manage_queue_pools'] }, component: () => import('@/pages/admin/AdminQueuePage.vue') },
         { path: 'seasons', name: 'admin-seasons', meta: { permissions: ['manage_seasons'] }, component: () => import('@/pages/admin/AdminSeasonsPage.vue') },
         { path: 'seasons/:id', name: 'admin-season-setup', meta: { permissions: ['manage_seasons'] }, component: () => import('@/pages/admin/AdminSeasonSetupPage.vue') },
+        { path: 'mmr-verifications', name: 'admin-mmr-verifications', meta: { permissions: ['manage_mmr_verifications'] }, component: () => import('@/pages/admin/AdminMmrVerificationsPage.vue') },
         { path: 'jobs', name: 'admin-jobs', meta: { permissions: ['manage_jobs'] }, component: () => import('@/pages/admin/AdminJobsPage.vue') },
       ],
     },

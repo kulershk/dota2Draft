@@ -29,6 +29,7 @@ import createNewsRouter from './routes/news.js'
 import templateRoutes from './routes/templates.js'
 import createQueueRouter from './routes/queue.js'
 import createSeasonsRouter from './routes/seasons.js'
+import createMmrVerificationsRouter from './routes/mmrVerifications.js'
 import jobRoutes from './routes/jobs.js'
 import { startJobWorker, registerHandler, registerSchedule, enqueueJob } from './services/jobs.js'
 import { fetchSteamMatchDetails } from './helpers/steam.js'
@@ -110,6 +111,7 @@ app.use(createNewsRouter(io))
 app.use(templateRoutes)
 app.use(createQueueRouter(io))
 app.use(createSeasonsRouter(io))
+app.use(createMmrVerificationsRouter(io))
 app.use(jobRoutes)
 
 // Socket.io

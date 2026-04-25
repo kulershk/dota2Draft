@@ -92,11 +92,12 @@ router.get('/api/auth/me', async (req, res) => {
 router.put('/api/auth/me', async (req, res) => {
   const player = await getAuthPlayer(req)
   if (!player) return res.status(401).json({ error: 'Not authenticated' })
-  const { mmr, info, roles } = req.body
+  // MMR is no longer self-editable — it changes only when an admin approves
+  // an MMR verification submission. Body's mmr field is ignored here.
+  const { info, roles } = req.body
   await execute(
-    'UPDATE players SET mmr = $1, info = $2, roles = $3 WHERE id = $4',
+    'UPDATE players SET info = $1, roles = $2 WHERE id = $3',
     [
-      mmr ?? player.mmr,
       info ?? player.info,
       roles ? JSON.stringify(roles) : player.roles,
       player.id,

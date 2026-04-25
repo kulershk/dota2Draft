@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Settings, Save, Twitch, User, LinkIcon, Unlink, MessageCircle } from 'lucide-vue-next'
+import { Settings, Save, Twitch, User, LinkIcon, Unlink, MessageCircle, Shield, Upload, CheckCircle2, XCircle, Clock } from 'lucide-vue-next'
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
@@ -9,11 +9,63 @@ const { t } = useI18n()
 const api = useApi()
 const store = useDraftStore()
 
-const mmr = ref(0)
 const info = ref('')
 const selectedRoles = ref<string[]>([])
 const saving = ref(false)
 const saved = ref(false)
+
+// MMR verification flow — replaces direct self-edit of MMR
+interface MmrVerification {
+  id: number
+  submitted_mmr: number
+  screenshot_url: string
+  status: 'pending' | 'approved' | 'rejected'
+  submitted_at: string
+  reviewed_at: string | null
+  reviewed_by_name: string | null
+  review_note: string | null
+}
+const verifMmr = ref<number | null>(null)
+const verifFile = ref<File | null>(null)
+const verifSubmitting = ref(false)
+const verifMessage = ref<{ type: 'ok' | 'err'; text: string } | null>(null)
+const verifications = ref<MmrVerification[]>([])
+const pendingVerification = computed(() => verifications.value.find(v => v.status === 'pending') || null)
+
+async function loadVerifications() {
+  try { verifications.value = await api.getMyMmrVerifications() } catch { verifications.value = [] }
+}
+
+function onPickFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  verifFile.value = input.files && input.files[0] || null
+}
+
+async function submitVerification() {
+  if (!verifMmr.value || !verifFile.value) {
+    verifMessage.value = { type: 'err', text: t('mmrVerificationMissingFields') }
+    return
+  }
+  verifSubmitting.value = true
+  verifMessage.value = null
+  try {
+    await api.submitMmrVerification(verifMmr.value, verifFile.value)
+    verifMessage.value = { type: 'ok', text: t('mmrVerificationSubmitted') }
+    verifMmr.value = null
+    verifFile.value = null
+    const fileInput = document.getElementById('mmrVerifFileInput') as HTMLInputElement | null
+    if (fileInput) fileInput.value = ''
+    await loadVerifications()
+  } catch (e: any) {
+    verifMessage.value = { type: 'err', text: e.message || 'Submission failed' }
+  } finally {
+    verifSubmitting.value = false
+  }
+}
+
+function fmtTime(iso: string): string {
+  return new Date(iso).toLocaleString()
+}
 const twitchLinking = ref(false)
 const twitchUnlinking = ref(false)
 const twitchMessage = ref('')
@@ -26,9 +78,9 @@ const allRoles = ['Carry', 'Mid', 'Offlane', 'Pos4', 'Pos5']
 onMounted(async () => {
   await store.authReady
   if (store.currentUser.value) {
-    mmr.value = store.currentUser.value.mmr || 0
     info.value = store.currentUser.value.info || ''
     selectedRoles.value = [...(store.currentUser.value.roles || [])]
+    loadVerifications()
   }
 
   // Handle Twitch callback params
@@ -74,13 +126,11 @@ async function saveProfile() {
   saved.value = false
   try {
     const updated = await api.updateMe({
-      mmr: mmr.value,
       info: info.value,
       roles: selectedRoles.value,
     })
     if (store.currentUser.value) {
       store.currentUser.value.name = updated.name
-      store.currentUser.value.mmr = updated.mmr
       store.currentUser.value.info = updated.info
       store.currentUser.value.roles = updated.roles
     }
@@ -188,11 +238,93 @@ const hasDiscord = computed(() => !!store.currentUser.value?.discord_username)
           </div>
           <div>
             <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('mmr') }}</label>
-            <input type="number" v-model.number="mmr" class="input-field w-full max-w-[200px]" />
+            <div class="flex items-center gap-3">
+              <div class="px-3 py-2 rounded bg-accent/40 border border-border/40 text-sm font-mono font-bold tabular-nums min-w-[100px]">
+                {{ store.currentUser.value?.mmr ?? 0 }}
+              </div>
+              <span class="text-[11px] text-muted-foreground">{{ t('mmrLockedHint') }}</span>
+            </div>
           </div>
           <div>
             <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('aboutYouLabel') }}</label>
             <textarea v-model="info" class="input-field w-full" rows="3" :placeholder="t('aboutYouPlaceholder')"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- MMR Verification -->
+      <div class="card">
+        <div class="flex items-center gap-2 px-5 py-3 border-b border-border">
+          <Shield class="w-4 h-4 text-primary" />
+          <span class="text-sm font-semibold text-foreground">{{ t('mmrVerificationTitle') }}</span>
+        </div>
+        <div class="px-5 py-4 flex flex-col gap-4">
+          <p class="text-xs text-muted-foreground">{{ t('mmrVerificationDesc') }}</p>
+
+          <!-- Pending submission banner -->
+          <div v-if="pendingVerification" class="flex items-start gap-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+            <Clock class="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+            <div class="flex-1 text-xs">
+              <p class="font-semibold text-amber-300">{{ t('mmrVerificationPending') }}</p>
+              <p class="text-muted-foreground mt-0.5">
+                {{ t('mmrVerificationPendingDetail', { mmr: pendingVerification.submitted_mmr, when: fmtTime(pendingVerification.submitted_at) }) }}
+              </p>
+            </div>
+          </div>
+
+          <!-- Submission form -->
+          <div class="grid grid-cols-1 md:grid-cols-[160px_1fr_auto] gap-3 items-end">
+            <div>
+              <label class="block text-[11px] font-medium text-muted-foreground mb-1">{{ t('mmrVerificationMmrLabel') }}</label>
+              <input
+                v-model.number="verifMmr" type="number" min="0" max="13000"
+                class="input-field w-full" :placeholder="t('mmrVerificationMmrPlaceholder')"
+              />
+            </div>
+            <div>
+              <label class="block text-[11px] font-medium text-muted-foreground mb-1">{{ t('mmrVerificationScreenshotLabel') }}</label>
+              <input
+                id="mmrVerifFileInput" type="file" accept="image/*" @change="onPickFile"
+                class="block w-full text-xs text-muted-foreground file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-primary file:text-[#0A0F1C] file:font-semibold hover:file:brightness-110 file:cursor-pointer"
+              />
+            </div>
+            <button
+              type="button"
+              class="btn-primary px-3 py-2 text-sm flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+              :disabled="verifSubmitting || !verifMmr || !verifFile"
+              @click="submitVerification"
+            >
+              <Upload class="w-3.5 h-3.5" />
+              {{ verifSubmitting ? `${t('saving')}…` : t('mmrVerificationSubmit') }}
+            </button>
+          </div>
+
+          <div v-if="verifMessage" class="text-xs" :class="verifMessage.type === 'ok' ? 'text-green-500' : 'text-destructive'">
+            {{ verifMessage.text }}
+          </div>
+
+          <!-- History -->
+          <div v-if="verifications.length" class="border-t border-border/40 pt-3">
+            <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">{{ t('mmrVerificationHistory') }}</p>
+            <div class="flex flex-col gap-2">
+              <div v-for="v in verifications" :key="v.id"
+                class="flex items-center gap-3 p-2.5 rounded-md bg-accent/30 border border-border/40">
+                <span
+                  class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide shrink-0"
+                  :class="v.status === 'approved' ? 'bg-green-500/15 text-green-500'
+                       : v.status === 'rejected' ? 'bg-red-500/15 text-red-500'
+                       : 'bg-amber-500/15 text-amber-400'"
+                >
+                  <component :is="v.status === 'approved' ? CheckCircle2 : v.status === 'rejected' ? XCircle : Clock" class="w-3 h-3 inline -mt-0.5 mr-1" />
+                  {{ t('mmrVerificationStatus_' + v.status) }}
+                </span>
+                <span class="text-sm font-mono font-bold tabular-nums shrink-0">{{ v.submitted_mmr }} MMR</span>
+                <a :href="v.screenshot_url" target="_blank" class="text-xs text-primary hover:underline">{{ t('mmrVerificationScreenshot') }}</a>
+                <span class="flex-1"></span>
+                <span class="text-[10px] text-muted-foreground font-mono tabular-nums">{{ fmtTime(v.submitted_at) }}</span>
+                <span v-if="v.review_note" class="text-[11px] italic text-muted-foreground truncate max-w-[260px]" :title="v.review_note">"{{ v.review_note }}"</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>

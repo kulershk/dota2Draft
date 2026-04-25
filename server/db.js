@@ -810,6 +810,26 @@ export async function initDb() {
   try { await execute(`ALTER TABLE queue_pools   ADD COLUMN season_id INTEGER NULL REFERENCES seasons(id) ON DELETE SET NULL`) } catch {}
   // No FK on queue_matches.season_id so deleting a season doesn't lose match history.
   try { await execute(`ALTER TABLE queue_matches ADD COLUMN season_id INTEGER NULL`) } catch {}
+
+  // ─── MMR verifications ───────────────────────────────────
+  // Players submit a screenshot + MMR; admins approve to update players.mmr.
+  // Self-edit of MMR is locked once this flow is in place — only approval
+  // bumps the canonical value.
+  await execute(`
+    CREATE TABLE IF NOT EXISTS mmr_verifications (
+      id              SERIAL PRIMARY KEY,
+      player_id       INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      submitted_mmr   INTEGER NOT NULL,
+      screenshot_url  TEXT NOT NULL,
+      status          TEXT NOT NULL DEFAULT 'pending',
+      submitted_at    TIMESTAMP DEFAULT NOW(),
+      reviewed_by     INTEGER NULL REFERENCES players(id) ON DELETE SET NULL,
+      reviewed_at     TIMESTAMP NULL,
+      review_note     TEXT NULL
+    )
+  `)
+  try { await execute(`CREATE INDEX IF NOT EXISTS mmr_verifications_status_idx ON mmr_verifications (status, submitted_at DESC)`) } catch {}
+  try { await execute(`CREATE INDEX IF NOT EXISTS mmr_verifications_player_idx ON mmr_verifications (player_id, submitted_at DESC)`) } catch {}
 }
 
 async function createFreshCompetitionTables() {

@@ -483,5 +483,30 @@ export function useApi() {
       request(`/api/admin/seasons/${id}/recompute`, { method: 'POST' }),
     backfillSeason: (id: number) =>
       request(`/api/admin/seasons/${id}/backfill`, { method: 'POST' }),
+
+    // MMR verification (user)
+    submitMmrVerification: async (mmr: number, screenshot: File) => {
+      const fd = new FormData()
+      fd.append('mmr', String(mmr))
+      fd.append('screenshot', screenshot)
+      const token = localStorage.getItem('draft_auth_token')
+      const headers: Record<string, string> = {}
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const res = await fetch('/api/mmr-verifications', { method: 'POST', headers, body: fd })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }))
+        throw new Error(err.error || 'Submission failed')
+      }
+      return res.json()
+    },
+    getMyMmrVerifications: () => request('/api/mmr-verifications/mine'),
+
+    // MMR verification (admin)
+    getAdminMmrVerifications: (status: 'pending' | 'approved' | 'rejected' | 'all' = 'pending') =>
+      request(`/api/admin/mmr-verifications?status=${status}`),
+    approveMmrVerification: (id: number, note?: string) =>
+      request(`/api/admin/mmr-verifications/${id}/approve`, { method: 'POST', body: JSON.stringify({ note }) }),
+    rejectMmrVerification: (id: number, note?: string) =>
+      request(`/api/admin/mmr-verifications/${id}/reject`, { method: 'POST', body: JSON.stringify({ note }) }),
   }
 }
