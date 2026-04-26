@@ -48,17 +48,15 @@ router.get('/api/home/featured-tournament', async (req, res) => {
     try {
       upcoming_matches = await query(`
         SELECT m.id, m.team1_captain_id, m.team2_captain_id, m.status, m.score1, m.score2,
-          m.winner_captain_id, m.scheduled_at, m.best_of, m.label,
+          m.winner_captain_id, m.scheduled_at, m.best_of, m.stage, m.round, m.group_name,
           c1.team AS team1, c1.banner_url AS team1_banner,
-          c2.team AS team2, c2.banner_url AS team2_banner,
-          ts.name AS stage_name
+          c2.team AS team2, c2.banner_url AS team2_banner
         FROM matches m
         LEFT JOIN captains c1 ON c1.id = m.team1_captain_id
         LEFT JOIN captains c2 ON c2.id = m.team2_captain_id
-        LEFT JOIN tournament_stages ts ON ts.id = m.stage_id
         WHERE m.competition_id = $1
-          AND m.status IN ('live', 'pending')
-          AND m.hidden = false
+          AND m.status != 'completed'
+          AND COALESCE(m.hidden, false) = false
         ORDER BY
           CASE WHEN m.status = 'live' THEN 0 ELSE 1 END,
           m.scheduled_at ASC NULLS LAST,
@@ -66,7 +64,7 @@ router.get('/api/home/featured-tournament', async (req, res) => {
         LIMIT 5
       `, [comp.id])
     } catch (e) {
-      // tournament_stages may not exist on older deployments — fall back gracefully.
+      console.error('[home featured-tournament] upcoming_matches query failed:', e.message)
       upcoming_matches = []
     }
     res.json({

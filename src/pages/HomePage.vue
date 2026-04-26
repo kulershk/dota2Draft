@@ -380,7 +380,10 @@ onUnmounted(() => { if (pollInterval) clearInterval(pollInterval) })
                 <div class="flex items-center justify-between text-[10px] font-bold font-mono tracking-widest">
                   <span :class="m.status === 'live' ? 'text-red-500' : 'text-muted-foreground'">
                     <span v-if="m.status === 'live'" class="inline-block w-1.5 h-1.5 rounded-full bg-red-500 mr-1 animate-pulse" />
-                    {{ m.status === 'live' ? t('matchLive').toUpperCase() : (m.stage_name || m.label || t('matchScheduled').toUpperCase()) }}
+                    <template v-if="m.status === 'live'">{{ t('matchLive').toUpperCase() }}</template>
+                    <template v-else-if="m.group_name">{{ m.group_name }}</template>
+                    <template v-else-if="m.round">R{{ m.round }}</template>
+                    <template v-else>{{ t('matchScheduled').toUpperCase() }}</template>
                   </span>
                   <span v-if="m.scheduled_at && m.status !== 'live'" class="text-muted-foreground/70">{{ fmtMatchTime(m.scheduled_at) }}</span>
                 </div>
