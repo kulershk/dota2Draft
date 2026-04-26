@@ -8,9 +8,14 @@ router.get('/api/home/stats', async (req, res) => {
   try {
     const [activePlayers, liveQueueMatches, liveTournamentMatches, activeTournaments] = await Promise.all([
       queryOne(`SELECT COUNT(*)::int AS n FROM players WHERE total_xp > 0 OR mmr > 0`),
-      queryOne(`SELECT COUNT(*)::int AS n FROM queue_matches WHERE status IN ('live', 'lobby_creating', 'picking')`),
+      // Only games actually being played — skip 'picking' / 'lobby_creating'
+      // (those are the draft + queue-up phases, not in-game). Also bound to
+      // the last 4 hours to filter stale 'live' rows that never resolved.
+      queryOne(`SELECT COUNT(*)::int AS n FROM queue_matches WHERE status = 'live' AND created_at > NOW() - INTERVAL '4 hours'`),
       queryOne(`SELECT COUNT(*)::int AS n FROM matches WHERE status = 'live'`),
-      queryOne(`SELECT COUNT(*)::int AS n FROM competitions WHERE is_public = TRUE AND status NOT IN ('archived', 'cancelled')`),
+      // "Active" = currently signing-up or currently running. Drafts, finished
+      // and archived/cancelled don't count.
+      queryOne(`SELECT COUNT(*)::int AS n FROM competitions WHERE is_public = TRUE AND status IN ('registration', 'registration_closed', 'active')`),
     ])
     res.json({
       active_players: activePlayers?.n || 0,
