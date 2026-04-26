@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Settings, Save, Twitch, User, LinkIcon, Unlink, MessageCircle, Shield, Upload, CheckCircle2, XCircle, Clock } from 'lucide-vue-next'
+import { Settings, Save, Twitch, User, LinkIcon, Unlink, MessageCircle, Shield, Upload, CheckCircle2, XCircle, Clock, Eye, ExternalLink } from 'lucide-vue-next'
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
@@ -351,6 +351,30 @@ const hasDiscord = computed(() => !!store.currentUser.value?.discord_username)
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- Live Stats / Steam Privacy -->
+      <div class="card">
+        <div class="flex items-center gap-2 px-5 py-3 border-b border-border">
+          <Eye class="w-4 h-4 text-cyan-400" />
+          <span class="text-sm font-semibold text-foreground">{{ t('liveStatsTitle') }}</span>
+        </div>
+        <div class="px-5 py-4 flex flex-col gap-3">
+          <p class="text-xs text-muted-foreground leading-relaxed">{{ t('liveStatsDesc') }}</p>
+          <ol class="text-xs text-muted-foreground leading-relaxed space-y-1.5 list-decimal list-inside">
+            <li>{{ t('liveStatsStep1') }}</li>
+            <li>{{ t('liveStatsStep2') }}</li>
+            <li>{{ t('liveStatsStep3') }}</li>
+          </ol>
+          <a
+            :href="store.currentUser.value?.steam_id ? `https://steamcommunity.com/profiles/${store.currentUser.value.steam_id}/edit/settings` : 'https://steamcommunity.com/my/edit/settings'"
+            target="_blank" rel="noopener"
+            class="self-start inline-flex items-center gap-2 mt-1 px-3 py-2 rounded-md bg-cyan-500/15 text-cyan-400 text-xs font-bold hover:bg-cyan-500/25 transition-colors"
+          >
+            <ExternalLink class="w-3.5 h-3.5" />
+            {{ t('liveStatsOpenSteam') }}
+          </a>
         </div>
       </div>
 

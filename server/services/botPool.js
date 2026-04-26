@@ -432,9 +432,22 @@ class BotPool {
           // does not restore the stale "lobby created" banner via queue:getState.
           // playerInMatch stays set until _autoFillGameWinner runs (re-queue gating).
           activeQueueMatches.delete(qm.id)
-          // Kick off live-stats polling — the match is now in-game, so Steam's
-          // GetRealtimeStats will start returning data (after we derive
-          // server_steam_id from a player summary on the first tick).
+          // Persist server_steam_id immediately if the Go bot included it in
+          // the game_started payload — this lets the live poller skip the
+          // 6-minute bootstrap loop where it tries to derive it from player
+          // summaries (which fails when players have Game Details = Friends).
+          const serverSteamId = data.serverSteamId || data.server_steamid || data.serverSteamID
+          if (serverSteamId) {
+            try {
+              await execute(
+                'UPDATE queue_matches SET server_steam_id = $1 WHERE id = $2',
+                [String(serverSteamId), qm.id]
+              )
+              console.log(`[livePoller] match ${qm.id} — server_steam_id ${serverSteamId} captured from bot game_started`)
+            } catch (e) { console.error('[livePoller] save server_steam_id failed:', e.message) }
+          }
+          // Kick off live-stats polling — uses the bot-provided server_steam_id
+          // when present, otherwise falls back to deriving from player summaries.
           try { startLivePolling(qm.id) } catch (e) { console.error('[livePoller] start failed:', e.message) }
         }
       }
