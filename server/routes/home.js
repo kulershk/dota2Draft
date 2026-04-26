@@ -12,7 +12,15 @@ router.get('/api/home/stats', async (req, res) => {
       // (those are the draft + queue-up phases, not in-game). Also bound to
       // the last 4 hours to filter stale 'live' rows that never resolved.
       queryOne(`SELECT COUNT(*)::int AS n FROM queue_matches WHERE status = 'live' AND created_at > NOW() - INTERVAL '4 hours'`),
-      queryOne(`SELECT COUNT(*)::int AS n FROM matches WHERE status = 'live'`),
+      // Tournament matches are admin-managed — admins sometimes forget to
+      // flip status to completed, leaving rows stuck at live for days.
+      // Only count matches that were scheduled or created recently enough
+      // that they could plausibly still be playing.
+      queryOne(`
+        SELECT COUNT(*)::int AS n FROM matches
+        WHERE status = 'live'
+          AND COALESCE(scheduled_at, created_at) > NOW() - INTERVAL '6 hours'
+      `),
       // "Active" = currently signing-up or currently running. Drafts, finished
       // and archived/cancelled don't count.
       queryOne(`SELECT COUNT(*)::int AS n FROM competitions WHERE is_public = TRUE AND status IN ('registration', 'registration_closed', 'active')`),
