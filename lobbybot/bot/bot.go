@@ -731,7 +731,27 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 		}
 	}
 
-	// Only signal bot to leave when game is actually running
+	// Capture server_steam_id whenever the GC populates it (transition 0 → non-zero).
+	// This is what Steam's IDOTA2MatchStats_570 GetRealtimeStats endpoint needs to
+	// return live scores. Forward to Node so it can seed queue_matches.server_steam_id
+	// without waiting on the player-summary derive (which depends on player privacy).
+	newServerId := newLobby.GetServerId()
+	oldServerId := uint64(0)
+	if oldLobby != nil {
+		oldServerId = oldLobby.GetServerId()
+	}
+	if newServerId != 0 && newServerId != oldServerId {
+		b.log(fmt.Sprintf("Server SteamID assigned: %d", newServerId))
+		b.send("lobby_server_id", protocol.LobbyServerIDEvent{
+			LobbyID:       b.activeLobbyID,
+			ServerSteamID: fmt.Sprintf("%d", newServerId),
+		})
+	}
+
+	// Only signal bot to leave when game is actually running. By the time state
+	// reaches RUN, server_steam_id is virtually always populated, but the
+	// transition above already handled the broadcast — this is just the leave
+	// trigger.
 	if lobbyState == gcccm.CSODOTALobby_RUN && oldState != gcccm.CSODOTALobby_RUN {
 		b.log("Game is now running — leaving lobby")
 		select {

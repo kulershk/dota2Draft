@@ -109,6 +109,10 @@ class BotPool {
           await this._onLobbyTeamIds(data)
           break
 
+        case 'lobby_server_id':
+          await this._onLobbyServerId(data)
+          break
+
         case 'lobby_error':
           await this._onLobbyError(data)
           break
@@ -521,6 +525,32 @@ class BotPool {
           try { await this.forceLaunch(lobbyId, { skipValidation: true }) } catch {}
         }
       }
+    }
+  }
+
+  // Bot has captured the matchmaking server's SteamID from the lobby cache.
+  // Persist it on the queue match so the live-stats poller can call Steam's
+  // GetRealtimeStats directly, skipping the player-summary derive path that
+  // depends on player privacy settings.
+  async _onLobbyServerId(data) {
+    const lobbyId = Number(data.lobbyId)
+    const serverSteamId = String(data.serverSteamId || '').trim()
+    if (!lobbyId || !serverSteamId || serverSteamId === '0') return
+    try {
+      const lobby = await queryOne('SELECT match_id FROM match_lobbies WHERE id = $1', [lobbyId])
+      if (!lobby?.match_id) return
+      const qm = await queryOne('SELECT id, server_steam_id FROM queue_matches WHERE match_id = $1', [lobby.match_id])
+      if (!qm) return
+      if (String(qm.server_steam_id || '') === serverSteamId) return // already set
+      await execute('UPDATE queue_matches SET server_steam_id = $1 WHERE id = $2', [serverSteamId, qm.id])
+      console.log(`[livePoller] match ${qm.id} — server_steam_id ${serverSteamId} captured from bot lobby_server_id`)
+      // If the match is already live and polling is running, the next tick
+      // will pick up the saved value automatically. If polling never started
+      // (e.g. game_started fired without serverSteamId and the bootstrap loop
+      // gave up), kick it off now.
+      try { startLivePolling(qm.id) } catch (e) { console.error('[livePoller] start failed:', e.message) }
+    } catch (e) {
+      console.error('[Bot] _onLobbyServerId error:', e.message)
     }
   }
 

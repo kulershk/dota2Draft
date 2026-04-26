@@ -176,6 +176,15 @@ type GameStartedEvent struct {
 	MatchID string `json:"matchId"`
 }
 
+// LobbyServerIDEvent is emitted when the GC populates server_steam_id on the
+// lobby cache (typically when lobby_state hits RUN). Node uses this to seed
+// queue_matches.server_steam_id so the live-stats poller can call Steam's
+// GetRealtimeStats without waiting for a player-summary derive.
+type LobbyServerIDEvent struct {
+	LobbyID       string `json:"lobbyId"`
+	ServerSteamID string `json:"serverSteamId"`
+}
+
 type LobbyTeamIdsEvent struct {
 	LobbyID          string `json:"lobbyId"`
 	RadiantTeamId    int    `json:"radiantTeamId"`
