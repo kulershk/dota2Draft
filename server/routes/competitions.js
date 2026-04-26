@@ -8,11 +8,15 @@ const router = Router()
 
 router.get('/api/competitions', async (req, res) => {
   const player = await getAuthPlayer(req)
+  // Finished competitions sink to the bottom; everything else stays in
+  // newest-first order.
   const comps = await query(`
     SELECT c.*, COALESCE(p.display_name, p.name) AS created_by_name, p.avatar_url AS created_by_avatar
     FROM competitions c
     LEFT JOIN players p ON p.id = c.created_by
-    ORDER BY c.created_at DESC
+    ORDER BY
+      CASE WHEN c.status = 'finished' THEN 1 ELSE 0 END,
+      c.created_at DESC
   `)
   const canManageAll = player && await hasPermission(player, 'manage_competitions')
   const visible = comps.filter(c => {
