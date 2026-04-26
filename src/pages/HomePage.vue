@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Trophy, Play, Users, Radio, Eye, Flame, ChevronRight, Calendar, Snowflake, BadgeCheck, UserPlus, Swords, Tv } from 'lucide-vue-next'
+import { Trophy, Play, Users, Radio, Eye, Flame, ChevronRight, Calendar, Snowflake, BadgeCheck, UserPlus, Swords, Tv, Gift, Check } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
+import { useDraftStore } from '@/composables/useDraftStore'
 import { useDotaConstants } from '@/composables/useDotaConstants'
 import { formatRelativeTime, fmtDateOnly } from '@/utils/format'
 
@@ -34,6 +35,8 @@ interface TopPlayer {
   avatar_url: string | null
   mmr: number
   mmr_verified_at: string | null
+  points: number | null
+  games_played: number | null
   streak: { count: number; won: boolean } | null
   win_rate: number | null
 }
@@ -41,8 +44,11 @@ interface Sponsor { id: number; logo_url: string; alt: string; link: string }
 
 const { t } = useI18n()
 const api = useApi()
+const store = useDraftStore()
 const dota = useDotaConstants()
 dota.loadConstants()
+
+const isLoggedIn = computed(() => !!store.currentUser.value)
 
 // All home data is loaded in parallel onMount
 const stats = ref<{ active_players: number; live_matches: number; active_tournaments: number } | null>(null)
@@ -55,6 +61,27 @@ const upcomingNext = ref<any | null>(null)
 const sponsors = ref<Sponsor[]>([])
 const heroTitle = ref('Latvian Dota 2 League')
 const heroSubtitle = ref('')
+const heroParagraph = ref('')
+
+// Daily check-in
+const daily = ref<{ claimed_today: boolean; streak: number; next_xp: number } | null>(null)
+const dailyClaiming = ref(false)
+async function loadDaily() {
+  if (!isLoggedIn.value) { daily.value = null; return }
+  try { daily.value = await api.getDailyStatus() } catch { daily.value = null }
+}
+async function claimDaily() {
+  if (!daily.value || daily.value.claimed_today) return
+  dailyClaiming.value = true
+  try {
+    await api.claimDaily()
+    await loadDaily()
+  } catch (e: any) {
+    /* swallow — server returns 400 if already claimed today */
+  } finally {
+    dailyClaiming.value = false
+  }
+}
 
 const liveCards = computed(() => liveMatches.value.slice(0, 3))
 const newsCards = computed(() => news.value.slice(0, 4))
@@ -83,7 +110,9 @@ async function loadAll() {
     sponsors.value = settings.site_sponsors || []
     if (settings.site_title) heroTitle.value = settings.site_title
     if (settings.site_subtitle) heroSubtitle.value = settings.site_subtitle
+    if (settings.site_hero_paragraph) heroParagraph.value = settings.site_hero_paragraph
   }
+  loadDaily()
 }
 
 function teamAvatars(players: any[] | null | undefined, fallback: string | null) {
@@ -148,8 +177,8 @@ onUnmounted(() => { if (pollInterval) clearInterval(pollInterval) })
           <p class="text-xl md:text-2xl font-semibold text-amber-500 leading-tight">
             {{ heroSubtitle || t('homeHeroSubtitle') }}
           </p>
-          <p class="text-base text-muted-foreground leading-relaxed">
-            {{ t('homeHeroParagraph') }}
+          <p class="text-base text-muted-foreground leading-relaxed whitespace-pre-line">
+            {{ heroParagraph || t('homeHeroParagraph') }}
           </p>
           <div class="flex flex-wrap items-center gap-3 mt-2">
             <router-link
@@ -416,13 +445,13 @@ onUnmounted(() => { if (pollInterval) clearInterval(pollInterval) })
               </span>
             </div>
             <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#0F1A2E] border border-[#1F2937] text-xs font-semibold text-muted-foreground">
-              {{ t('homeTopPlayersByMmr') }}
+              {{ topPlayers.season ? t('homeTopPlayersByPoints') : t('homeTopPlayersByMmr') }}
             </div>
           </div>
           <div class="grid grid-cols-[32px_1fr_90px_120px_80px] items-center px-6 py-2.5 bg-[#0B1220] border-b border-[#1F2937] text-[10px] font-bold font-mono tracking-widest text-muted-foreground">
             <span>#</span>
             <span>{{ t('player').toUpperCase() }}</span>
-            <span class="text-right">MMR</span>
+            <span class="text-right">{{ topPlayers.season ? t('seasonPoints').toUpperCase() : 'MMR' }}</span>
             <span class="text-right">{{ t('homeTopPlayersWinRate') }}</span>
             <span class="text-right">{{ t('homeTopPlayersStreak') }}</span>
           </div>
@@ -446,7 +475,9 @@ onUnmounted(() => { if (pollInterval) clearInterval(pollInterval) })
                 </span>
               </div>
             </div>
-            <span class="text-right font-mono font-bold text-cyan-400 tabular-nums">{{ p.mmr.toLocaleString() }}</span>
+            <span class="text-right font-mono font-bold text-cyan-400 tabular-nums">
+              {{ topPlayers.season ? (p.points != null ? p.points.toLocaleString() : '—') : p.mmr.toLocaleString() }}
+            </span>
             <div class="flex items-center justify-end gap-2">
               <div class="w-[60px] h-1.5 rounded-full bg-[#1F2937] overflow-hidden">
                 <div class="h-full rounded-full bg-emerald-500" :style="{ width: (p.win_rate ?? 0) + '%' }" />
@@ -466,6 +497,44 @@ onUnmounted(() => { if (pollInterval) clearInterval(pollInterval) })
 
         <!-- Side stats -->
         <div class="flex flex-col gap-5">
+          <!-- Daily check-in (logged-in only) -->
+          <div v-if="isLoggedIn && daily" class="rounded-[14px] border p-5 flex flex-col gap-3"
+               :class="daily.claimed_today
+                 ? 'border-emerald-500/40 bg-gradient-to-br from-emerald-500/[0.08] to-[#0F1A2E]'
+                 : 'border-amber-500/50 bg-gradient-to-br from-amber-500/[0.10] to-[#0F1A2E]'">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-lg flex items-center justify-center"
+                     :class="daily.claimed_today ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'">
+                  <Gift class="w-4 h-4" />
+                </div>
+                <span class="text-sm font-bold">{{ t('homeDailyTitle') }}</span>
+              </div>
+              <span v-if="daily.streak > 0" class="px-2 py-0.5 rounded bg-amber-500/15 text-amber-400 text-[10px] font-bold font-mono">
+                <Flame class="w-3 h-3 inline -mt-0.5 mr-0.5" />{{ daily.streak }}
+              </span>
+            </div>
+            <p class="text-xs text-muted-foreground leading-relaxed">
+              <template v-if="daily.claimed_today">{{ t('homeDailyClaimed', { xp: daily.next_xp }) }}</template>
+              <template v-else>{{ t('homeDailyAvailable', { xp: daily.next_xp }) }}</template>
+            </p>
+            <button
+              v-if="!daily.claimed_today"
+              type="button"
+              :disabled="dailyClaiming"
+              class="h-10 rounded-lg flex items-center justify-center gap-2 text-xs font-bold transition-all disabled:opacity-40"
+              style="background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%); color: #0A0F1C;"
+              @click="claimDaily"
+            >
+              <Gift class="w-3.5 h-3.5" />
+              {{ dailyClaiming ? `${t('saving')}…` : t('homeDailyClaim', { xp: daily.next_xp }) }}
+            </button>
+            <div v-else class="h-10 rounded-lg flex items-center justify-center gap-2 text-xs font-bold bg-emerald-500/15 text-emerald-400">
+              <Check class="w-3.5 h-3.5" />
+              {{ t('homeDailyDone') }}
+            </div>
+          </div>
+
           <!-- Hero pick rate -->
           <div class="rounded-[14px] border border-[#1F2937] p-6 flex flex-col gap-4"
                style="background: linear-gradient(135deg, #0F1A2E 0%, #1A1632 100%);">

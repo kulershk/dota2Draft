@@ -72,23 +72,15 @@ router.get('/api/home/featured-tournament', async (req, res) => {
 })
 
 // ── Top players for the home leaderboard ──
-// Sorted by MMR DESC. Each row carries a current streak (count + won flag)
-// derived from season_match_log of the most-recent active season, so the
-// table can render "W12" / "L2" badges. Streak is null when there's no
-// active season or the player hasn't played any season matches yet.
+// When an active season exists, ranks by season points (DESC) and returns
+// each player's current points + streak (count + won flag) from
+// season_match_log. Without an active season, falls back to a plain MMR
+// leaderboard. UI decides which column ("Points" or "MMR") to render based
+// on whether `season` is non-null in the response.
 router.get('/api/home/top-players', async (req, res) => {
   try {
     const limit = Math.min(Math.max(Number(req.query.limit) || 5, 1), 20)
-    const players = await query(`
-      SELECT id, COALESCE(display_name, name) AS name, avatar_url, mmr, mmr_verified_at
-      FROM players
-      WHERE mmr > 0
-      ORDER BY mmr DESC, id ASC
-      LIMIT $1
-    `, [limit])
-    if (!players.length) return res.json({ players: [], season: null })
 
-    // Find the season we'll pull streaks from — the active season with the most matches.
     const season = await queryOne(`
       SELECT s.id, s.name, s.slug
       FROM seasons s
@@ -97,8 +89,34 @@ router.get('/api/home/top-players', async (req, res) => {
       LIMIT 1
     `)
 
+    let players = []
+
+    if (season) {
+      // Season mode — pull from season_rankings, sorted by points
+      players = await query(`
+        SELECT p.id, COALESCE(p.display_name, p.name) AS name, p.avatar_url, p.mmr, p.mmr_verified_at,
+          sr.points, sr.wins, sr.losses, sr.games_played
+        FROM season_rankings sr
+        JOIN players p ON p.id = sr.player_id
+        WHERE sr.season_id = $1
+        ORDER BY sr.points DESC, sr.games_played DESC, p.id ASC
+        LIMIT $2
+      `, [season.id, limit])
+    } else {
+      // No season — fall back to MMR leaderboard
+      players = await query(`
+        SELECT id, COALESCE(display_name, name) AS name, avatar_url, mmr, mmr_verified_at
+        FROM players
+        WHERE mmr > 0
+        ORDER BY mmr DESC, id ASC
+        LIMIT $1
+      `, [limit])
+    }
+
+    if (!players.length) return res.json({ players: [], season })
+
+    // Streaks (only meaningful when there's a season)
     let streakByPid = {}
-    let winsByPid = {}
     if (season) {
       const ids = players.map(p => p.id)
       const streakRows = await query(`
@@ -121,13 +139,6 @@ router.get('/api/home/top-players', async (req, res) => {
         GROUP BY player_id, won
       `, [season.id, ids])
       for (const r of streakRows) streakByPid[r.player_id] = { count: r.streak, won: r.won }
-
-      const wlRows = await query(`
-        SELECT player_id, wins, losses
-        FROM season_rankings
-        WHERE season_id = $1 AND player_id = ANY($2::int[])
-      `, [season.id, ids])
-      for (const r of wlRows) winsByPid[r.player_id] = { wins: r.wins, losses: r.losses }
     }
 
     res.json({
@@ -138,11 +149,14 @@ router.get('/api/home/top-players', async (req, res) => {
         avatar_url: p.avatar_url || null,
         mmr: p.mmr,
         mmr_verified_at: p.mmr_verified_at || null,
+        // Season-only fields:
+        points: p.points != null ? Math.round(Number(p.points)) : null,
+        games_played: p.games_played != null ? Number(p.games_played) : null,
         streak: streakByPid[p.id] || null,
         win_rate: (() => {
-          const w = winsByPid[p.id]
+          const w = (p.wins != null && p.losses != null) ? { wins: Number(p.wins), losses: Number(p.losses) } : null
           if (!w) return null
-          const total = (w.wins || 0) + (w.losses || 0)
+          const total = w.wins + w.losses
           if (!total) return null
           return Math.round((w.wins / total) * 100)
         })(),

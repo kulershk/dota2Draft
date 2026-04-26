@@ -10,6 +10,7 @@ const api = useApi()
 const siteName = ref('')
 const siteTitle = ref('')
 const siteSubtitle = ref('')
+const siteHeroParagraph = ref('')
 const discordUrl = ref('')
 const logoUrl = ref('')
 const heroBannerUrl = ref('')
@@ -33,6 +34,7 @@ onMounted(async () => {
   siteName.value = data.site_name || ''
   siteTitle.value = data.site_title || ''
   siteSubtitle.value = data.site_subtitle || ''
+  siteHeroParagraph.value = data.site_hero_paragraph || ''
   discordUrl.value = data.site_discord_url || ''
   logoUrl.value = data.site_logo_url || ''
   heroBannerUrl.value = data.site_hero_banner_url || ''
@@ -82,6 +84,7 @@ async function saveSettings() {
       site_name: siteName.value,
       site_title: siteTitle.value,
       site_subtitle: siteSubtitle.value,
+      site_hero_paragraph: siteHeroParagraph.value,
       site_discord_url: discordUrl.value,
     })
     saved.value = true
@@ -207,6 +210,11 @@ async function removeBanner() {
           <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('siteHeroSubtitle') }}</label>
           <input type="text" v-model="siteSubtitle" class="input-field w-full" :placeholder="t('heroSubtitle')" />
           <p class="text-[11px] text-muted-foreground mt-1">{{ t('siteHeroSubtitleHint') }}</p>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('siteHeroParagraph') }}</label>
+          <textarea v-model="siteHeroParagraph" rows="3" class="input-field w-full" :placeholder="t('siteHeroParagraphPlaceholder')"></textarea>
+          <p class="text-[11px] text-muted-foreground mt-1">{{ t('siteHeroParagraphHint') }}</p>
         </div>
         <div>
           <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('siteDiscordUrl') }}</label>

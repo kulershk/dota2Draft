@@ -18,6 +18,7 @@ router.get('/api/site-settings', async (req, res) => {
   res.json({
     site_title: obj.site_title || '',
     site_subtitle: obj.site_subtitle || '',
+    site_hero_paragraph: obj.site_hero_paragraph || '',
     site_discord_url: obj.site_discord_url || '',
     site_name: obj.site_name || '',
     site_logo_url: obj.site_logo_url || '',
@@ -29,8 +30,14 @@ router.get('/api/site-settings', async (req, res) => {
 router.put('/api/site-settings', async (req, res) => {
   const admin = await requirePermission(req, res, 'manage_site_settings')
   if (!admin) return
-  const { site_title, site_subtitle, site_discord_url, site_name } = req.body
-  for (const [key, value] of [['site_title', site_title], ['site_subtitle', site_subtitle], ['site_discord_url', site_discord_url], ['site_name', site_name]]) {
+  const { site_title, site_subtitle, site_hero_paragraph, site_discord_url, site_name } = req.body
+  for (const [key, value] of [
+    ['site_title', site_title],
+    ['site_subtitle', site_subtitle],
+    ['site_hero_paragraph', site_hero_paragraph],
+    ['site_discord_url', site_discord_url],
+    ['site_name', site_name],
+  ]) {
     if (value !== undefined) {
       await execute(
         "INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2",
