@@ -815,6 +815,11 @@ export async function initDb() {
   // GetRealtimeStats for live score / time updates while the match runs.
   try { await execute(`ALTER TABLE queue_matches ADD COLUMN server_steam_id BIGINT NULL`) } catch {}
 
+  // Persistent role preferences carried from one queue match to the next so
+  // players don't have to re-pick their preferred role every time. Updated
+  // whenever the player saves preferences during a draft phase.
+  try { await execute(`ALTER TABLE players ADD COLUMN preferred_roles JSONB NOT NULL DEFAULT '[]'::jsonb`) } catch {}
+
   // ─── MMR verifications ───────────────────────────────────
   // Players submit a screenshot + MMR; admins approve to update players.mmr.
   // Self-edit of MMR is locked once this flow is in place — only approval

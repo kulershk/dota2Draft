@@ -189,6 +189,25 @@ function teamAvgMmrAll(captain: QueuePlayer | undefined | null, picks: QueuePlay
   if (!withMmr.length) return 0
   return Math.round(withMmr.reduce((s, p) => s + Number(p.mmr), 0) / withMmr.length)
 }
+function teamAvgPointsAll(captain: QueuePlayer | undefined | null, picks: QueuePlayer[] | undefined | null): number | null {
+  const all = [captain, ...(picks || [])].filter(Boolean) as QueuePlayer[]
+  const withPts = all.filter(p => Number.isFinite(Number(p.seasonPoints)))
+  if (!withPts.length) return null
+  return Math.round(withPts.reduce((s, p) => s + Number(p.seasonPoints), 0) / withPts.length)
+}
+const seasonAttached = computed(() => !!(selectedPool.value as any)?.season_slug || (queue.activeMatch.value as any)?.season_id != null)
+const showPointsInDraft = computed(() => {
+  // Show only when there's a season AND at least one player carries a points value.
+  if (!seasonAttached.value) return false
+  const all: any[] = [
+    ...((queue.activeMatch.value?.captain1 ? [queue.activeMatch.value.captain1] : [])),
+    ...((queue.activeMatch.value?.captain2 ? [queue.activeMatch.value.captain2] : [])),
+    ...(queue.pickState.value?.captain1Picks || []),
+    ...(queue.pickState.value?.captain2Picks || []),
+    ...(queue.pickState.value?.availablePlayers || []),
+  ]
+  return all.some(p => Number.isFinite(Number(p?.seasonPoints)))
+})
 function teamRolesCoveredText(captain: QueuePlayer | undefined | null, picks: QueuePlayer[] | undefined | null): string {
   const all = [captain, ...(picks || [])].filter(Boolean) as QueuePlayer[]
   const seen = new Set<string>()
@@ -795,6 +814,10 @@ onUnmounted(() => {
                       class="text-[10px] font-mono font-bold bg-accent text-muted-foreground px-2 py-0.5 rounded-full whitespace-nowrap">
                       avg {{ teamAvgMmrAll(queue.activeMatch.value.captain1, queue.pickState.value.captain1Picks) }}
                     </span>
+                    <span v-if="showPointsInDraft && teamAvgPointsAll(queue.activeMatch.value.captain1, queue.pickState.value.captain1Picks) != null"
+                      class="text-[10px] font-mono font-bold bg-amber-500/15 text-amber-400 px-2 py-0.5 rounded-full whitespace-nowrap">
+                      {{ teamAvgPointsAll(queue.activeMatch.value.captain1, queue.pickState.value.captain1Picks) }} pts
+                    </span>
                   </div>
                 </div>
 
@@ -842,7 +865,7 @@ onUnmounted(() => {
                           :class="roleBadgeClass(topRoleOf(p.playerId)!)">
                           {{ t('queueRoleShort_' + topRoleOf(p.playerId)) }}
                         </span>
-                        <span class="text-[11px] text-muted-foreground font-mono">· {{ p.mmr }} MMR</span>
+                        <span class="text-[11px] text-muted-foreground font-mono">· {{ p.mmr }} MMR<template v-if="showPointsInDraft && Number.isFinite(Number(p.seasonPoints))"> · <span class="text-amber-400 font-bold">{{ p.seasonPoints }} pts</span></template></span>
                       </div>
                     </div>
                     <Check class="w-3.5 h-3.5 text-cyan-400 shrink-0" />
@@ -917,6 +940,11 @@ onUnmounted(() => {
                       <div class="flex items-center gap-1.5 flex-wrap">
                         <span class="text-[10px] font-mono font-bold text-slate-300 tabular-nums">{{ p.mmr }}</span>
                         <span class="text-[9px] font-mono font-semibold text-muted-foreground/60">MMR</span>
+                        <template v-if="showPointsInDraft && Number.isFinite(Number(p.seasonPoints))">
+                          <span class="w-0.5 h-0.5 rounded-full bg-muted-foreground/40 mx-0.5"></span>
+                          <span class="text-[10px] font-mono font-bold text-amber-400 tabular-nums">{{ p.seasonPoints }}</span>
+                          <span class="text-[9px] font-mono font-semibold text-muted-foreground/60">PTS</span>
+                        </template>
                         <template v-if="(queue.rolePreferences.value[p.playerId] || []).length > 0">
                           <span class="w-0.5 h-0.5 rounded-full bg-muted-foreground/40 mx-0.5"></span>
                           <span v-for="role in (queue.rolePreferences.value[p.playerId] || []).slice(0, 2)" :key="role"
@@ -978,6 +1006,10 @@ onUnmounted(() => {
                       class="text-[10px] font-mono font-bold bg-accent text-muted-foreground px-2 py-0.5 rounded-full whitespace-nowrap">
                       avg {{ teamAvgMmrAll(queue.activeMatch.value.captain2, queue.pickState.value.captain2Picks) }}
                     </span>
+                    <span v-if="showPointsInDraft && teamAvgPointsAll(queue.activeMatch.value.captain2, queue.pickState.value.captain2Picks) != null"
+                      class="text-[10px] font-mono font-bold bg-amber-500/15 text-amber-400 px-2 py-0.5 rounded-full whitespace-nowrap">
+                      {{ teamAvgPointsAll(queue.activeMatch.value.captain2, queue.pickState.value.captain2Picks) }} pts
+                    </span>
                   </div>
                 </div>
 
@@ -1025,7 +1057,7 @@ onUnmounted(() => {
                           :class="roleBadgeClass(topRoleOf(p.playerId)!)">
                           {{ t('queueRoleShort_' + topRoleOf(p.playerId)) }}
                         </span>
-                        <span class="text-[11px] text-muted-foreground font-mono">· {{ p.mmr }} MMR</span>
+                        <span class="text-[11px] text-muted-foreground font-mono">· {{ p.mmr }} MMR<template v-if="showPointsInDraft && Number.isFinite(Number(p.seasonPoints))"> · <span class="text-amber-400 font-bold">{{ p.seasonPoints }} pts</span></template></span>
                       </div>
                     </div>
                     <Check class="w-3.5 h-3.5 text-red-400 shrink-0" />

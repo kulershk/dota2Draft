@@ -8,6 +8,10 @@ export interface QueuePlayer {
   steamId: string
   avatarUrl: string
   mmr: number
+  /** Current season points; populated when the pool has a season attached */
+  seasonPoints?: number | null
+  /** Saved role preferences carried from previous matches */
+  preferredRoles?: string[]
 }
 
 export interface QueuePool {

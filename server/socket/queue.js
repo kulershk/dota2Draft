@@ -208,6 +208,11 @@ export function registerQueueHandlers(socket, io) {
         'UPDATE queue_matches SET role_preferences = $1 WHERE id = $2',
         [JSON.stringify(match.rolePreferences), queueMatchId]
       )
+      // Also save to the player profile so the next match seeds the same prefs.
+      await execute(
+        'UPDATE players SET preferred_roles = $1 WHERE id = $2',
+        [JSON.stringify(cleaned), playerId]
+      )
     } catch (e) {
       console.error('[Queue] Failed to persist role preferences:', e.message)
     }
@@ -784,6 +789,34 @@ async function startQueueMatch(poolId, io, preselectedPlayers = null, preselecte
     }
   }
 
+  // Enrich each player with their saved preferred_roles (carried from
+  // their last match) and — when this pool has a season — their current
+  // season points, so the draft UI can show points alongside MMR and seed
+  // the role-pref toggles without making the player re-tap them.
+  try {
+    const ids = players.map(p => p.playerId)
+    if (ids.length) {
+      const prefRows = await query(
+        'SELECT id, preferred_roles FROM players WHERE id = ANY($1::int[])',
+        [ids]
+      )
+      const prefById = Object.fromEntries(prefRows.map(r => [r.id, r.preferred_roles || []]))
+      for (const p of players) p.preferredRoles = sanitizeRoles(prefById[p.playerId] || [])
+      if (pool?.season_id) {
+        const ptsRows = await query(
+          'SELECT player_id, points FROM season_rankings WHERE season_id = $1 AND player_id = ANY($2::int[])',
+          [pool.season_id, ids]
+        )
+        const ptsById = Object.fromEntries(ptsRows.map(r => [r.player_id, Math.round(Number(r.points))]))
+        for (const p of players) {
+          p.seasonPoints = ptsById[p.playerId] != null ? ptsById[p.playerId] : null
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[Queue] enrich players failed:', e.message)
+  }
+
   // Sort by MMR descending — top 2 are captains.
   // Captain 1 picks first; assign captain 1 = LOWER MMR of the two so the
   // weaker captain gets first pick. If MMRs are equal, pick randomly.
@@ -804,12 +837,18 @@ async function startQueueMatch(poolId, io, preselectedPlayers = null, preselecte
   const pickOrder = generatePickOrder(teamSize)
   const pickTimer = pool?.pick_timer || 30
 
+  // Seed role preferences from each player's saved set.
+  const seededRolePrefs = {}
+  for (const p of players) {
+    if (p.preferredRoles && p.preferredRoles.length) seededRolePrefs[p.playerId] = p.preferredRoles
+  }
+
   // Insert queue_matches row. Snapshot the pool's season_id so later changes
   // to the pool don't retroactively rewrite this match's rating attribution.
   const qm = await queryOne(`
-    INSERT INTO queue_matches (pool_id, captain1_player_id, captain2_player_id, all_player_ids, status, season_id)
-    VALUES ($1, $2, $3, $4, 'picking', $5) RETURNING *
-  `, [poolId, captain1.playerId, captain2.playerId, JSON.stringify(players.map(p => p.playerId)), pool?.season_id || null])
+    INSERT INTO queue_matches (pool_id, captain1_player_id, captain2_player_id, all_player_ids, status, season_id, role_preferences)
+    VALUES ($1, $2, $3, $4, 'picking', $5, $6) RETURNING *
+  `, [poolId, captain1.playerId, captain2.playerId, JSON.stringify(players.map(p => p.playerId)), pool?.season_id || null, JSON.stringify(seededRolePrefs)])
 
   const queueMatchId = qm.id
   const match = {
@@ -829,7 +868,9 @@ async function startQueueMatch(poolId, io, preselectedPlayers = null, preselecte
     pickTimerEnd: null,
     status: 'picking',
     // playerId -> ordered array of role keys (carry, mid, offlane, support, hard_support)
-    rolePreferences: {},
+    // Seeded from each player's persisted preferred_roles so they don't have
+    // to re-pick on every new match.
+    rolePreferences: { ...seededRolePrefs },
   }
   activeQueueMatches.set(queueMatchId, match)
 
