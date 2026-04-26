@@ -97,18 +97,30 @@ function isChunkLoadError(err: unknown): boolean {
   return /Failed to fetch dynamically imported module|Importing a module script failed|ChunkLoadError|Loading chunk .* failed/i.test(msg)
 }
 
+// Track at runtime so a successful navigation clears the flag — if the
+// reload fixed things, the next failure (much later, after another deploy)
+// can trigger another reload. Short 2s window only stops a true infinite loop
+// where the chunk really doesn't exist.
+let lastReloadAt = 0
 function reloadOnce() {
-  const KEY = 'draft_chunk_reload_at'
-  const last = Number(sessionStorage.getItem(KEY) || 0)
-  if (Date.now() - last < 10_000) return // already reloaded recently — give up
-  sessionStorage.setItem(KEY, String(Date.now()))
+  if (Date.now() - lastReloadAt < 2_000) return
+  lastReloadAt = Date.now()
   window.location.reload()
 }
 
 router.onError((err) => {
   if (isChunkLoadError(err)) reloadOnce()
 })
+router.afterEach(() => { lastReloadAt = 0 })
 
 window.addEventListener('vite:preloadError', () => reloadOnce())
+// Belt-and-suspenders: some chunk failures escape both router.onError and
+// vite:preloadError (e.g. when caught further down the promise chain).
+window.addEventListener('unhandledrejection', (e) => {
+  if (isChunkLoadError(e.reason)) {
+    e.preventDefault()
+    reloadOnce()
+  }
+})
 
 export default router
