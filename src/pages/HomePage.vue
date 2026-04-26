@@ -569,14 +569,18 @@ onUnmounted(() => { if (pollInterval) clearInterval(pollInterval) })
             </div>
             <div class="flex items-center justify-between gap-3">
               <div class="flex items-center gap-2 min-w-0 flex-1">
-                <img v-if="upcomingNext.captain1_avatar" :src="upcomingNext.captain1_avatar" class="w-8 h-8 rounded-full" />
+                <img v-if="upcomingNext.team1_banner || upcomingNext.team1_avatar"
+                     :src="upcomingNext.team1_banner || upcomingNext.team1_avatar"
+                     class="w-8 h-8 rounded-full object-cover" />
                 <div v-else class="w-8 h-8 rounded-full bg-accent" />
-                <span class="text-sm font-semibold truncate">{{ upcomingNext.captain1_display_name || upcomingNext.captain1_name || 'TBD' }}</span>
+                <span class="text-sm font-semibold truncate">{{ upcomingNext.team1_name || t('tbd') }}</span>
               </div>
               <span class="font-mono font-extrabold text-base text-muted-foreground/60 tracking-widest">VS</span>
               <div class="flex items-center gap-2 min-w-0 flex-1 justify-end">
-                <span class="text-sm font-semibold truncate text-right">{{ upcomingNext.captain2_display_name || upcomingNext.captain2_name || 'TBD' }}</span>
-                <img v-if="upcomingNext.captain2_avatar" :src="upcomingNext.captain2_avatar" class="w-8 h-8 rounded-full" />
+                <span class="text-sm font-semibold truncate text-right">{{ upcomingNext.team2_name || t('tbd') }}</span>
+                <img v-if="upcomingNext.team2_banner || upcomingNext.team2_avatar"
+                     :src="upcomingNext.team2_banner || upcomingNext.team2_avatar"
+                     class="w-8 h-8 rounded-full object-cover" />
                 <div v-else class="w-8 h-8 rounded-full bg-accent" />
               </div>
             </div>
