@@ -513,5 +513,32 @@ export function useApi() {
       request(`/api/admin/mmr-verifications/${id}/approve`, { method: 'POST', body: JSON.stringify({ note }) }),
     rejectMmrVerification: (id: number, note?: string) =>
       request(`/api/admin/mmr-verifications/${id}/reject`, { method: 'POST', body: JSON.stringify({ note }) }),
+
+    // Sponsors (admin)
+    uploadSponsor: async (logo: File, alt: string, link: string) => {
+      const fd = new FormData()
+      fd.append('logo', logo)
+      fd.append('alt', alt)
+      fd.append('link', link)
+      const token = localStorage.getItem('draft_auth_token')
+      const headers: Record<string, string> = {}
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const res = await fetch('/api/site-settings/sponsors', { method: 'POST', headers, body: fd })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }))
+        throw new Error(err.error || 'Upload failed')
+      }
+      return res.json()
+    },
+    updateSponsor: (id: number, data: { alt?: string; link?: string }) =>
+      request(`/api/site-settings/sponsors/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteSponsor: (id: number) =>
+      request(`/api/site-settings/sponsors/${id}`, { method: 'DELETE' }),
+
+    // Home page data
+    getHomeStats: () => request('/api/home/stats'),
+    getFeaturedTournament: () => request('/api/home/featured-tournament'),
+    getHomeTopPlayers: (limit = 5) => request(`/api/home/top-players?limit=${limit}`),
+    getHomeHeroPickRate: (days = 7, limit = 3) => request(`/api/home/hero-pick-rate?days=${days}&limit=${limit}`),
   }
 }

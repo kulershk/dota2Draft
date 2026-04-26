@@ -23,6 +23,7 @@
     { "name": "Streams", "description": "Twitch streams" },
     { "name": "Queue", "description": "Queue matchmaking pools & matches" },
     { "name": "Seasons", "description": "Ranked seasons — ELO ladders attached to queue pools" },
+    { "name": "Home", "description": "Aggregated data for the public home page (stats, featured tournament, top players, hero pick rate)" },
     { "name": "MMR Verifications", "description": "User-submitted MMR change requests with screenshot proof; admins approve to update players.mmr" },
     { "name": "Dota", "description": "Dota 2 constants (heroes, items)" },
     { "name": "Jobs", "description": "Background job admin (list/retry/cancel)" }
@@ -2195,6 +2196,70 @@
           "200": { "description": "{ ok: true, claimed, players, events }" },
           "404": { "description": "Not found" }
         }
+      }
+    },
+    "/api/home/stats": {
+      "get": {
+        "tags": ["Home"],
+        "summary": "Headline counters for the homepage hero (active players, live matches, active tournaments)",
+        "responses": { "200": { "description": "{ active_players, live_matches, active_tournaments }" } }
+      }
+    },
+    "/api/home/featured-tournament": {
+      "get": {
+        "tags": ["Home"],
+        "summary": "The competition flagged is_featured=TRUE plus its current bracket slice",
+        "description": "Returns null when no competition is featured. Bracket array contains up to 7 matches sorted by status then schedule.",
+        "responses": { "200": { "description": "Featured competition with captain_count and bracket[]" } }
+      }
+    },
+    "/api/home/top-players": {
+      "get": {
+        "tags": ["Home"],
+        "summary": "Top players by MMR for the homepage leaderboard, with current streak from the most active season",
+        "parameters": [{ "name": "limit", "in": "query", "schema": { "type": "integer", "default": 5, "maximum": 20 } }],
+        "responses": { "200": { "description": "{ season, players[] }; each player carries streak {count, won} and win_rate from season_match_log" } }
+      }
+    },
+    "/api/home/hero-pick-rate": {
+      "get": {
+        "tags": ["Home"],
+        "summary": "Top heroes by pick count over the last N days",
+        "parameters": [
+          { "name": "days",  "in": "query", "schema": { "type": "integer", "default": 7,  "maximum": 90 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 5,  "maximum": 20 } }
+        ],
+        "responses": { "200": { "description": "{ days, heroes: [{ hero_id, picks, pick_rate }] }" } }
+      }
+    },
+    "/api/site-settings/sponsors": {
+      "post": {
+        "tags": ["Settings"],
+        "summary": "Admin: upload a sponsor logo (multipart)",
+        "description": "Multipart fields: logo (image), alt (string), link (URL). Appends to site_settings.site_sponsors JSON array.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "multipart/form-data": { "schema": { "type": "object", "required": ["logo"], "properties": { "logo": { "type": "string", "format": "binary" }, "alt": { "type": "string" }, "link": { "type": "string" } } } } }
+        },
+        "responses": { "201": { "description": "{ sponsors: [...] }" } }
+      }
+    },
+    "/api/site-settings/sponsors/{id}": {
+      "put": {
+        "tags": ["Settings"],
+        "summary": "Admin: update a sponsor's alt text or link",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "alt": { "type": "string" }, "link": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "{ sponsors: [...] }" }, "404": { "description": "Not found" } }
+      },
+      "delete": {
+        "tags": ["Settings"],
+        "summary": "Admin: delete a sponsor and unlink its logo file",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "{ sponsors: [...] }" } }
       }
     },
     "/api/dota/constants": {

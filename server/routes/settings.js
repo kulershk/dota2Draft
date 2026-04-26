@@ -13,6 +13,8 @@ router.get('/api/site-settings', async (req, res) => {
   const rows = await query("SELECT key, value FROM settings WHERE key LIKE 'site_%'")
   const obj = {}
   for (const r of rows) obj[r.key] = r.value
+  let sponsors = []
+  try { sponsors = JSON.parse(obj.site_sponsors || '[]') } catch { sponsors = [] }
   res.json({
     site_title: obj.site_title || '',
     site_subtitle: obj.site_subtitle || '',
@@ -20,6 +22,7 @@ router.get('/api/site-settings', async (req, res) => {
     site_name: obj.site_name || '',
     site_logo_url: obj.site_logo_url || '',
     site_hero_banner_url: obj.site_hero_banner_url || '',
+    site_sponsors: sponsors,
   })
 })
 
@@ -85,6 +88,68 @@ router.delete('/api/site-settings/logo', async (req, res) => {
   }
   await execute("DELETE FROM settings WHERE key = 'site_logo_url'")
   res.json({ ok: true })
+})
+
+// ─── Sponsors ─────────────────────────────────────────────
+// Stored as a single JSON array under settings key `site_sponsors`:
+//   [{ id, logo_url, alt, link }]
+// Each upload is appended; delete-by-id removes the row + unlinks the file.
+async function loadSponsors() {
+  const row = await queryOne("SELECT value FROM settings WHERE key = 'site_sponsors'")
+  try { return JSON.parse(row?.value || '[]') } catch { return [] }
+}
+async function saveSponsors(arr) {
+  await execute(
+    "INSERT INTO settings (key, value) VALUES ('site_sponsors', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
+    [JSON.stringify(arr || [])]
+  )
+}
+
+router.post('/api/site-settings/sponsors', upload.single('logo'), async (req, res) => {
+  const admin = await requirePermission(req, res, 'manage_site_settings')
+  if (!admin) {
+    if (req.file) try { fs.unlinkSync(req.file.path) } catch {}
+    return
+  }
+  if (!req.file) return res.status(400).json({ error: 'Logo image is required' })
+  const sponsors = await loadSponsors()
+  const id = (sponsors.reduce((m, s) => Math.max(m, Number(s.id) || 0), 0)) + 1
+  sponsors.push({
+    id,
+    logo_url: `/uploads/${req.file.filename}`,
+    alt: (req.body?.alt || '').toString().slice(0, 80),
+    link: (req.body?.link || '').toString().slice(0, 500),
+  })
+  await saveSponsors(sponsors)
+  res.status(201).json({ sponsors })
+})
+
+router.put('/api/site-settings/sponsors/:id', async (req, res) => {
+  const admin = await requirePermission(req, res, 'manage_site_settings')
+  if (!admin) return
+  const id = Number(req.params.id)
+  const sponsors = await loadSponsors()
+  const idx = sponsors.findIndex(s => Number(s.id) === id)
+  if (idx === -1) return res.status(404).json({ error: 'Sponsor not found' })
+  if (req.body?.alt !== undefined)  sponsors[idx].alt  = String(req.body.alt).slice(0, 80)
+  if (req.body?.link !== undefined) sponsors[idx].link = String(req.body.link).slice(0, 500)
+  await saveSponsors(sponsors)
+  res.json({ sponsors })
+})
+
+router.delete('/api/site-settings/sponsors/:id', async (req, res) => {
+  const admin = await requirePermission(req, res, 'manage_site_settings')
+  if (!admin) return
+  const id = Number(req.params.id)
+  const sponsors = await loadSponsors()
+  const target = sponsors.find(s => Number(s.id) === id)
+  if (target?.logo_url) {
+    const filePath = join(__dirname, '..', '..', target.logo_url)
+    try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath) } catch {}
+  }
+  const filtered = sponsors.filter(s => Number(s.id) !== id)
+  await saveSponsors(filtered)
+  res.json({ sponsors: filtered })
 })
 
 // Deploy status — lightweight endpoint for deploy banner

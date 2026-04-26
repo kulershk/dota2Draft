@@ -1,527 +1,545 @@
 <script setup lang="ts">
-import { Newspaper, Trophy, Users, Swords, User, MessageSquare, Send, Trash2, ChevronDown, ChevronUp, Twitch, Eye, Radio, ArrowRight, Clock, Gift, Flame } from 'lucide-vue-next'
-import { ref, reactive, onMounted, onUnmounted, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { Trophy, Play, Users, Radio, Eye, Flame, ChevronRight, Calendar, Snowflake, BadgeCheck, UserPlus, Swords, Tv } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
-import { useDraftStore } from '@/composables/useDraftStore'
-import { getSocket, getServerNow } from '@/composables/useSocket'
+import { useDotaConstants } from '@/composables/useDotaConstants'
+import { formatRelativeTime, fmtDateOnly } from '@/utils/format'
 
-interface NewsPost {
+interface NewsCard {
   id: number
   title: string
-  content: string
   image_url: string | null
-  created_by_name: string | null
-  created_by_avatar: string | null
   created_at: string
+  tag?: string | null
 }
-
-interface Comment {
+interface LiveMatch {
   id: number
-  news_id: number
-  player_id: number
-  player_name: string
-  player_avatar: string | null
-  content: string
+  pool_name: string | null
+  best_of: number | null
+  team1_kills: number | null
+  team2_kills: number | null
+  team1_players: any[] | null
+  team2_players: any[] | null
+  captain1_display_name: string | null
+  captain2_display_name: string | null
+  captain1_avatar: string | null
+  captain2_avatar: string | null
+  status: string
   created_at: string
 }
-
-const { t } = useI18n()
-const api = useApi()
-const store = useDraftStore()
-const news = ref<NewsPost[]>([])
-
-// Comments state: newsId -> comments array
-const commentsMap = reactive<Record<number, Comment[]>>({})
-const commentCounts = reactive<Record<number, number>>({})
-const expandedComments = reactive<Record<number, boolean>>({})
-const newComment = reactive<Record<number, string>>({})
-const submittingComment = reactive<Record<number, boolean>>({})
-
-async function fetchNews() {
-  news.value = await api.getNews()
-  // Fetch comment counts for all posts
-  for (const post of news.value) {
-    fetchComments(post.id)
-  }
-}
-
-async function fetchComments(newsId: number) {
-  try {
-    const comments = await api.getComments(newsId)
-    commentsMap[newsId] = comments
-    commentCounts[newsId] = comments.length
-  } catch {
-    commentsMap[newsId] = []
-    commentCounts[newsId] = 0
-  }
-}
-
-function toggleComments(newsId: number) {
-  expandedComments[newsId] = !expandedComments[newsId]
-}
-
-async function submitComment(newsId: number) {
-  const text = (newComment[newsId] || '').trim()
-  if (!text) return
-  submittingComment[newsId] = true
-  try {
-    await api.addComment(newsId, text)
-    newComment[newsId] = ''
-    await fetchComments(newsId)
-  } finally {
-    submittingComment[newsId] = false
-  }
-}
-
-async function deleteComment(newsId: number, commentId: number) {
-  await api.deleteComment(newsId, commentId)
-  await fetchComments(newsId)
-}
-
-function canDeleteComment(comment: Comment) {
-  if (!store.currentUser.value) return false
-  return comment.player_id === store.currentUser.value.id || store.currentUser.value.is_admin
-}
-
-onMounted(async () => {
-  fetchNews()
-  fetchStreamers()
-  fetchSiteSettings()
-  fetchUpcomingMatches()
-  fetchDailyStatus()
-  getSocket().on('news:updated', fetchNews)
-  getSocket().on('news:commented', ({ newsId }: { newsId: number }) => {
-    fetchComments(newsId)
-  })
-  await store.fetchCompetitions()
-})
-
-function formatDate(dateStr: string) {
-  return formatDateUtil(dateStr)
-}
-
-function formatCommentDate(dateStr: string) {
-  const d = new Date(dateStr)
-  const now = new Date(getServerNow())
-  const diff = now.getTime() - d.getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return t('justNow')
-  if (mins < 60) return t('mAgo', { n: mins })
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return t('hAgo', { n: hours })
-  const days = Math.floor(hours / 24)
-  if (days < 7) return t('dAgo', { n: days })
-  return fmtDateOnly(d)
-}
-
-const statusLabel = computed<Record<string, string>>(() => ({
-  draft: t('statusSetup'),
-  registration: t('statusRegistrationOpen'),
-  registration_closed: t('statusRegistrationClosed'),
-  active: t('statusInProgress'),
-  finished: t('statusCompleted'),
-}))
-
-const statusClass: Record<string, string> = {
-  draft: 'bg-accent text-muted-foreground',
-  registration: 'bg-primary/20 text-primary',
-  registration_closed: 'bg-amber-500/20 text-amber-600 dark:text-amber-400',
-  active: 'bg-color-success/20 text-color-success',
-  finished: 'bg-color-success/20 text-color-success',
-}
-
-function getCompStatus(comp: any) {
-  const auctionStatus = comp.auction_state?.status || 'idle'
-  // If auction is actively running, show as active regardless of comp.status
-  if (['nominating', 'bidding', 'paused'].includes(auctionStatus)) return 'active'
-  // Otherwise use the competition's own status
-  return comp.status || 'draft'
-}
-
-interface Streamer {
+interface TopPlayer {
   id: number
   name: string
   avatar_url: string | null
-  twitch_username: string
-  stream: {
-    title: string
-    viewer_count: number
-    thumbnail_url: string
-    started_at: string
+  mmr: number
+  mmr_verified_at: string | null
+  streak: { count: number; won: boolean } | null
+  win_rate: number | null
+}
+interface Sponsor { id: number; logo_url: string; alt: string; link: string }
+
+const { t } = useI18n()
+const api = useApi()
+const dota = useDotaConstants()
+dota.loadConstants()
+
+// All home data is loaded in parallel onMount
+const stats = ref<{ active_players: number; live_matches: number; active_tournaments: number } | null>(null)
+const liveMatches = ref<LiveMatch[]>([])
+const featured = ref<any | null>(null)
+const news = ref<NewsCard[]>([])
+const topPlayers = ref<{ players: TopPlayer[]; season: { id: number; name: string; slug: string } | null }>({ players: [], season: null })
+const heroPickRate = ref<{ days: number; heroes: { hero_id: number; picks: number; pick_rate: string }[] }>({ days: 7, heroes: [] })
+const upcomingNext = ref<any | null>(null)
+const sponsors = ref<Sponsor[]>([])
+const heroTitle = ref('Latvian Dota 2 League')
+const heroSubtitle = ref('')
+
+const liveCards = computed(() => liveMatches.value.slice(0, 3))
+const newsCards = computed(() => news.value.slice(0, 4))
+
+let pollInterval: ReturnType<typeof setInterval> | null = null
+
+async function loadAll() {
+  const [s, history, feat, n, top, pickRate, upcoming, settings] = await Promise.all([
+    api.getHomeStats().catch(() => null),
+    api.getQueueHistory({ limit: 6 }).catch(() => []),
+    api.getFeaturedTournament().catch(() => null),
+    api.getNews().catch(() => []),
+    api.getHomeTopPlayers(5).catch(() => ({ players: [], season: null })),
+    api.getHomeHeroPickRate(7, 3).catch(() => ({ days: 7, heroes: [] })),
+    api.getUpcomingMatches().catch(() => []),
+    api.getSiteSettings().catch(() => null),
+  ])
+  stats.value = s
+  liveMatches.value = (history as any[]).filter(m => m.status === 'live')
+  featured.value = feat
+  news.value = (n as any[]).slice(0, 4)
+  topPlayers.value = top
+  heroPickRate.value = pickRate
+  upcomingNext.value = (upcoming as any[])[0] || null
+  if (settings) {
+    sponsors.value = settings.site_sponsors || []
+    if (settings.site_title) heroTitle.value = settings.site_title
+    if (settings.site_subtitle) heroSubtitle.value = settings.site_subtitle
   }
 }
 
-const streamers = ref<Streamer[]>([])
-const siteTitle = ref('')
-const siteSubtitle = ref('')
-const discordUrl = ref('')
-
-async function fetchSiteSettings() {
-  try {
-    const data = await api.getSiteSettings()
-    siteTitle.value = data.site_title || ''
-    siteSubtitle.value = data.site_subtitle || ''
-    discordUrl.value = data.site_discord_url || ''
-  } catch {}
+function teamAvatars(players: any[] | null | undefined, fallback: string | null) {
+  const list = (players?.length ? players : (fallback ? [{ avatarUrl: fallback }] : [])).slice(0, 5)
+  return list
 }
 
-async function fetchStreamers() {
-  try {
-    streamers.value = await api.getStreamers()
-  } catch {
-    streamers.value = []
-  }
+function streakLabel(s: TopPlayer['streak']): string {
+  if (!s || !s.count) return '—'
+  return (s.won ? 'W' : 'L') + s.count
+}
+function streakColor(s: TopPlayer['streak']): string {
+  if (!s || !s.count) return 'text-muted-foreground'
+  return s.won ? 'text-emerald-400' : 'text-red-400'
 }
 
-const activeCompetitions = computed(() =>
-  store.competitions.value.filter(c => {
-    const s = c.status || 'draft'
-    return s !== 'finished'
-  })
-)
-
-const upcomingMatches = ref<any[]>([])
-
-async function fetchUpcomingMatches() {
-  try {
-    upcomingMatches.value = await api.getUpcomingMatches()
-  } catch {
-    upcomingMatches.value = []
-  }
+function winrateColor(wr: number | null): string {
+  if (wr == null) return 'text-muted-foreground'
+  if (wr >= 60) return 'text-emerald-400'
+  if (wr >= 50) return 'text-amber-400'
+  return 'text-red-400'
 }
 
-import { formatMatchDate, formatDate as formatDateUtil, fmtDateOnly } from '@/utils/format'
-
-const isLoggedIn = computed(() => !!store.currentUser.value)
-
-// Daily bonus
-const dailyStatus = ref<{ claimed_today: boolean; streak: number; next_xp: number } | null>(null)
-const dailyClaiming = ref(false)
-const dailyClaimed = ref<{ xp: number; streak: number } | null>(null)
-
-async function fetchDailyStatus() {
-  await store.authReady
-  if (!store.currentUser.value) return
-  try {
-    dailyStatus.value = await api.getDailyStatus()
-    if (dailyStatus.value?.claimed_today) startCountdown()
-  } catch {}
+function rankColor(idx: number): string {
+  if (idx === 0) return 'text-amber-400'
+  return 'text-muted-foreground'
 }
 
-// Countdown to next UTC midnight
-const dailyCountdown = ref('')
-let countdownTimer: ReturnType<typeof setInterval> | null = null
-
-function updateCountdown() {
-  const now = new Date()
-  const tomorrow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1))
-  const diff = tomorrow.getTime() - now.getTime()
-  const h = Math.floor(diff / 3600000)
-  const m = Math.floor((diff % 3600000) / 60000)
-  const s = Math.floor((diff % 60000) / 1000)
-  dailyCountdown.value = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+function fmtRange(a: string | null, b: string | null): string {
+  if (!a && !b) return '—'
+  const f = (s: string | null) => s ? new Date(s).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '?'
+  return `${f(a)} → ${f(b)}`
 }
 
-function startCountdown() {
-  updateCountdown()
-  countdownTimer = setInterval(updateCountdown, 1000)
-}
-
-onUnmounted(() => { if (countdownTimer) clearInterval(countdownTimer) })
-
-async function claimDaily() {
-  dailyClaiming.value = true
-  try {
-    const result = await api.claimDaily()
-    dailyClaimed.value = { xp: result.xp, streak: result.streak }
-    dailyStatus.value = { claimed_today: true, streak: result.streak, next_xp: result.streak >= 7 ? 20 : 10 }
-    startCountdown()
-  } catch {}
-  dailyClaiming.value = false
-}
-
-// Flat list: live first, then by scheduled_at
-const sortedMatches = computed(() => {
-  return [...upcomingMatches.value].sort((a: any, b: any) => {
-    if (a.status === 'live' && b.status !== 'live') return -1
-    if (a.status !== 'live' && b.status === 'live') return 1
-    const tA = a.scheduled_at ? new Date(a.scheduled_at).getTime() : Infinity
-    const tB = b.scheduled_at ? new Date(b.scheduled_at).getTime() : Infinity
-    return tA - tB
-  })
+onMounted(() => {
+  loadAll()
+  // Live stats refresh every 30s — keeps the hero chips honest without spamming.
+  pollInterval = setInterval(() => {
+    api.getHomeStats().then(s => { stats.value = s }).catch(() => {})
+  }, 30000)
 })
+onUnmounted(() => { if (pollInterval) clearInterval(pollInterval) })
 </script>
 
 <template>
-  <div>
-    <!-- Hero Content -->
-    <div class="relative">
-      <div class="max-w-[1200px] mx-auto w-full px-6 md:px-10 pt-16 pb-16 md:pt-24 md:pb-24 flex flex-col items-center text-center gap-6">
-        <div>
-          <h1 class="text-3xl md:text-4xl font-bold text-foreground">{{ siteTitle || t('heroTitle') }}</h1>
-          <p class="text-muted-foreground mt-2 text-sm md:text-base">{{ siteSubtitle || t('heroSubtitle') }}</p>
-        </div>
-        <!-- Stats row -->
-        <div class="flex items-center gap-0">
-          <div class="flex flex-col items-center gap-1 px-6 md:px-10 py-3">
-            <span class="text-2xl md:text-[28px] font-bold font-mono text-foreground">{{ store.competitions.value.length }}</span>
-            <span class="text-[11px] font-semibold font-mono uppercase tracking-[2px] text-text-tertiary">{{ t('competitions') }}</span>
+  <div class="bg-[#0A0F1C] text-foreground">
+    <!-- ─── Hero ─── -->
+    <section
+      class="relative overflow-hidden"
+      style="background: linear-gradient(160deg, #0A0F1C 0%, #0E1A33 50%, #1A0E1F 100%);"
+    >
+      <div class="max-w-[1200px] mx-auto px-4 md:px-8 lg:px-20 py-12 lg:py-16 grid lg:grid-cols-[1fr_auto] gap-12 items-center">
+        <!-- Hero left -->
+        <div class="flex flex-col gap-6 max-w-[680px]">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#1A2B4A] border border-[#22D3EE] text-[11px] font-bold font-mono tracking-widest text-cyan-400 self-start">
+            <span class="w-2 h-2 rounded-full bg-cyan-400" />
+            {{ t('homeHeroSeasonTag') }}
           </div>
-          <div class="w-px h-10 bg-border" />
-          <div class="flex flex-col items-center gap-1 px-6 md:px-10 py-3">
-            <span class="text-2xl md:text-[28px] font-bold font-mono text-foreground">{{ upcomingMatches.length }}</span>
-            <span class="text-[11px] font-semibold font-mono uppercase tracking-[2px] text-text-tertiary">{{ t('matches') || 'MATCHES' }}</span>
-          </div>
-          <div class="w-px h-10 bg-border" />
-          <div class="flex flex-col items-center gap-1 px-6 md:px-10 py-3">
-            <span class="text-2xl md:text-[28px] font-bold font-mono text-primary">{{ streamers.length }}</span>
-            <span class="text-[11px] font-semibold font-mono uppercase tracking-[2px] text-text-tertiary">{{ t('liveStreams') || 'LIVE' }}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="relative z-10 max-w-[1200px] mx-auto w-full px-6 md:px-10 pt-6 pb-8 flex flex-col gap-6">
-    <div class="flex flex-col lg:flex-row gap-6">
-      <!-- Main Content -->
-      <div class="flex-1 min-w-0 flex flex-col gap-6">
-        <!-- News & Announcements -->
-        <div class="rounded-lg bg-card overflow-hidden">
-          <!-- Header -->
-          <div class="flex items-center justify-between px-5 py-4">
-            <div class="flex items-center gap-2">
-              <Newspaper class="w-[18px] h-[18px] text-primary" />
-              <span class="text-base font-semibold text-foreground">{{ t('newsTitle') }}</span>
-            </div>
-            <router-link v-if="news.length > 5" to="/news" class="text-xs font-medium text-primary hover:text-primary/80 transition-colors">
-              {{ t('viewAll') }} →
-            </router-link>
-          </div>
-          <!-- Entries -->
-          <div v-if="news.length === 0" class="px-5 pb-5 text-sm text-muted-foreground">
-            {{ t('noNewsYet') }}
-          </div>
-          <div v-else class="flex flex-col">
-            <!-- Featured first post -->
+          <h1 class="text-4xl md:text-5xl lg:text-6xl font-extrabold text-foreground tracking-tight leading-[1.05]">
+            {{ heroTitle }}
+          </h1>
+          <p class="text-xl md:text-2xl font-semibold text-amber-500 leading-tight">
+            {{ heroSubtitle || t('homeHeroSubtitle') }}
+          </p>
+          <p class="text-base text-muted-foreground leading-relaxed">
+            {{ t('homeHeroParagraph') }}
+          </p>
+          <div class="flex flex-wrap items-center gap-3 mt-2">
             <router-link
-              :to="{ name: 'news-post', params: { id: news[0].id } }"
-              class="block hover:opacity-90 transition-opacity"
+              to="/competitions"
+              class="inline-flex items-center gap-2 h-12 px-7 rounded-[10px] font-bold text-[#0A0F1C] text-sm transition-all hover:brightness-110"
+              style="background: linear-gradient(135deg, #22D3EE 0%, #0891B2 100%); box-shadow: 0 8px 24px #22D3EE40;"
             >
-              <div v-if="news[0].image_url" class="w-full bg-surface overflow-hidden" style="aspect-ratio: 1120 / 400;">
-                <img :src="news[0].image_url" class="w-full h-full object-cover" />
-              </div>
-              <div class="px-5 py-4 border-b border-foreground/10">
-                <h3 class="text-lg font-bold text-foreground leading-tight mb-1.5">{{ news[0].title }}</h3>
-                <p class="text-sm text-muted-foreground line-clamp-2 mb-2">{{ news[0].content.replace(/<[^>]*>/g, '').slice(0, 150) }}</p>
-                <div class="flex items-center gap-3">
-                  <div v-if="news[0].created_by_avatar" class="flex items-center gap-1.5">
-                    <img :src="news[0].created_by_avatar" class="w-4 h-4 rounded-full" />
-                    <span class="text-xs text-text-muted">{{ news[0].created_by_name }}</span>
-                  </div>
-                  <span class="text-xs text-text-muted">{{ formatDate(news[0].created_at) }}</span>
-                  <span class="text-xs text-text-muted">{{ commentCounts[news[0].id] || 0 }} {{ (commentCounts[news[0].id] || 0) === 1 ? t('comment') : t('comments') }}</span>
-                </div>
-              </div>
+              <Trophy class="w-4 h-4" />
+              {{ t('homeHeroCtaPrimary') }}
             </router-link>
-            <!-- Rest of posts -->
-            <div class="px-5 pb-5 flex flex-col gap-0">
-              <router-link
-                v-for="(post, idx) in news.slice(1, 5)"
-                :key="post.id"
-                :to="{ name: 'news-post', params: { id: post.id } }"
-                class="flex items-center gap-3 py-3 hover:opacity-80 transition-opacity"
-                :class="idx < news.length - 2 ? 'border-b border-foreground/10' : ''"
-              >
-                <div class="w-20 h-[60px] rounded-md bg-surface overflow-hidden shrink-0">
-                  <img v-if="post.image_url" :src="post.image_url" class="w-full h-full object-cover" />
-                </div>
-                <div class="flex-1 flex flex-col gap-1 min-w-0">
-                  <span class="text-sm font-semibold text-foreground truncate">{{ post.title }}</span>
-                  <div class="flex items-center gap-2">
-                    <span class="text-xs text-text-muted">{{ formatDate(post.created_at) }}</span>
-                    <span class="text-xs text-text-muted">{{ commentCounts[post.id] || 0 }} {{ (commentCounts[post.id] || 0) === 1 ? t('comment') : t('comments') }}</span>
-                  </div>
-                </div>
-              </router-link>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Sidebar -->
-      <div class="lg:w-[320px] shrink-0">
-        <div class="flex flex-col gap-4 lg:sticky lg:top-4">
-          <!-- Daily Bonus -->
-          <div v-if="isLoggedIn && dailyStatus" class="rounded-lg bg-card overflow-hidden">
-            <div class="flex items-center gap-2 px-5 py-3 border-b border-surface">
-              <Gift class="w-[18px] h-[18px] text-primary" />
-              <span class="text-sm font-semibold text-foreground">{{ t('dailyBonus') }}</span>
-            </div>
-            <div class="px-5 py-4 flex flex-col gap-3">
-              <!-- Streak -->
-              <div class="flex items-center gap-2">
-                <Flame class="w-4 h-4 text-orange-500" />
-                <span class="text-sm text-foreground">
-                  {{ t('dailyStreak', { n: dailyStatus.streak }) }}
-                </span>
-              </div>
-              <!-- 7-day tracker -->
-              <div class="flex items-center gap-1.5">
-                <div
-                  v-for="day in 7"
-                  :key="day"
-                  class="flex-1 h-7 rounded flex items-center justify-center text-[10px] font-bold font-mono"
-                  :class="day <= dailyStatus.streak
-                    ? 'bg-primary/20 text-primary border border-primary/30'
-                    : day === dailyStatus.streak + 1 && !dailyStatus.claimed_today
-                      ? 'bg-primary/10 text-primary border border-primary/20 animate-pulse'
-                      : 'bg-surface text-muted-foreground'"
-                >
-                  {{ day >= 7 ? '20' : '10' }}
-                </div>
-              </div>
-              <!-- Claim button or claimed state -->
-              <div v-if="dailyClaimed" class="flex items-center justify-center gap-2 py-2 rounded-lg bg-color-success/15 text-color-success">
-                <span class="text-sm font-semibold">+{{ dailyClaimed.xp }} XP</span>
-                <span class="text-xs text-color-success/70">{{ t('dailyClaimed') }}</span>
-              </div>
-              <button
-                v-else-if="!dailyStatus.claimed_today"
-                class="w-full py-2 rounded-lg text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
-                :disabled="dailyClaiming"
-                @click="claimDaily"
-              >
-                {{ dailyClaiming ? '...' : t('dailyClaim', { xp: dailyStatus.next_xp }) }}
-              </button>
-              <div v-else class="flex items-center justify-center gap-2 py-1">
-                <span class="text-xs text-muted-foreground">{{ t('dailyNextIn') }}</span>
-                <span class="text-xs font-mono font-semibold text-foreground">{{ dailyCountdown }}</span>
-              </div>
-            </div>
-          </div>
-          <!-- Competitions -->
-          <div class="rounded-lg bg-card overflow-hidden">
-            <div class="flex items-center justify-between px-5 py-4 border-b border-surface">
-              <div class="flex items-center gap-2">
-                <Trophy class="w-[18px] h-[18px] text-primary" />
-                <span class="text-sm font-semibold text-foreground">{{ t('competitions') }}</span>
-              </div>
-              <router-link to="/competitions" class="text-xs font-medium text-primary hover:text-primary/80 transition-colors">
-                {{ t('viewAll') }} →
-              </router-link>
-            </div>
-            <div v-if="activeCompetitions.length === 0" class="px-5 py-4 text-sm text-muted-foreground">
-              {{ t('noActiveCompetitions') }}
-            </div>
-            <div v-else class="divide-y divide-surface">
-              <router-link
-                v-for="comp in activeCompetitions"
-                :key="comp.id"
-                :to="`/c/${comp.id}/info`"
-                class="flex flex-col gap-1 px-5 py-3 hover:bg-surface/50 transition-colors"
-              >
-                <div class="flex items-center gap-2">
-                  <span class="text-sm font-semibold text-foreground truncate">{{ comp.name }}</span>
-                  <span class="inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold font-mono shrink-0"
-                    :class="statusClass[getCompStatus(comp)] || statusClass.draft">
-                    {{ statusLabel[getCompStatus(comp)] || t('statusSetup') }}
-                  </span>
-                </div>
-                <span class="text-[10px] text-text-muted">
-                  {{ comp.registration_start ? formatDate(comp.registration_start) : '' }}{{ comp.registration_end ? ' - ' + formatDate(comp.registration_end) : '' }}
-                </span>
-              </router-link>
-            </div>
-          </div>
-          <!-- Matches (separate block, grouped by competition) -->
-          <div v-if="upcomingMatches.length > 0" class="rounded-lg bg-card overflow-hidden">
-            <div class="flex items-center justify-between px-5 py-4 border-b border-surface">
-              <div class="flex items-center gap-2">
-                <Swords class="w-[18px] h-[18px] text-primary" />
-                <span class="text-sm font-semibold text-foreground">{{ t('upcomingMatches') }}</span>
-              </div>
-              <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-primary/15 text-primary">{{ upcomingMatches.length }}</span>
-            </div>
-            <div class="divide-y divide-surface">
-                <router-link
-                  v-for="match in sortedMatches"
-                  :key="match.id"
-                  :to="`/c/${match.competition_id}/match/${match.id}`"
-                  class="flex items-center gap-2 px-4 py-2 hover:bg-surface/50 transition-colors"
-                >
-                  <!-- Live indicator -->
-                  <div class="w-3 shrink-0 flex justify-center">
-                    <span v-if="match.status === 'live'" class="w-1.5 h-1.5 rounded-full bg-destructive animate-pulse"></span>
-                  </div>
-                  <!-- Teams stacked -->
-                  <div class="flex flex-col gap-1 flex-1 min-w-0">
-                    <div class="flex items-center gap-1.5">
-                      <div class="w-4 h-4 rounded-full bg-surface overflow-hidden shrink-0">
-                        <img v-if="match.team1_banner || match.team1_avatar" :src="match.team1_banner || match.team1_avatar" class="w-full h-full object-cover" />
-                      </div>
-                      <span class="text-[11px] text-foreground truncate" :class="match.score1 > match.score2 ? 'font-bold' : 'font-medium'">{{ match.team1_name || t('tbd') }}</span>
-                    </div>
-                    <div class="flex items-center gap-1.5">
-                      <div class="w-4 h-4 rounded-full bg-surface overflow-hidden shrink-0">
-                        <img v-if="match.team2_banner || match.team2_avatar" :src="match.team2_banner || match.team2_avatar" class="w-full h-full object-cover" />
-                      </div>
-                      <span class="text-[11px] text-foreground truncate" :class="match.score2 > match.score1 ? 'font-bold' : 'font-medium'">{{ match.team2_name || t('tbd') }}</span>
-                    </div>
-                  </div>
-                  <!-- Score + Time (right side) -->
-                  <div class="shrink-0 flex flex-col items-end gap-1">
-                    <template v-if="match.status === 'live' || (match.score1 > 0 || match.score2 > 0)">
-                      <span class="text-[11px] font-bold font-mono" :class="{ 'text-foreground': match.score1 >= match.score2, 'text-muted-foreground': match.score1 < match.score2 }">{{ match.score1 ?? 0 }}</span>
-                      <span class="text-[11px] font-bold font-mono" :class="{ 'text-foreground': match.score2 >= match.score1, 'text-muted-foreground': match.score2 < match.score1 }">{{ match.score2 ?? 0 }}</span>
-                    </template>
-                    <template v-else>
-                      <span v-if="match.scheduled_at" class="text-[10px] text-muted-foreground font-mono whitespace-nowrap">{{ formatMatchDate(match.scheduled_at, t) }}</span>
-                      <span v-else class="text-[10px] text-muted-foreground font-mono">{{ t('tbd') }}</span>
-                      <span class="text-[10px] text-muted-foreground font-mono">BO{{ match.best_of || 3 }}</span>
-                    </template>
-                  </div>
-                </router-link>
-            </div>
-          </div>
-          <!-- Live Streams -->
-          <div v-if="streamers.length > 0" class="rounded-lg bg-card overflow-hidden">
-            <!-- Header -->
-            <div class="flex items-center justify-between px-5 py-4 border-b border-surface">
-              <div class="flex items-center gap-2.5">
-                <svg class="w-[18px] h-[18px] text-destructive" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                <span class="text-sm font-semibold text-foreground">Live Dota 2 Streams</span>
-              </div>
-              <span class="inline-flex items-center rounded px-2 py-0.5 text-[9px] font-bold font-mono bg-destructive/20 text-destructive">{{ streamers.length }} LIVE</span>
-            </div>
-            <!-- Stream rows -->
             <a
-              v-for="(streamer, idx) in streamers"
-              :key="streamer.id"
-              :href="`https://twitch.tv/${streamer.twitch_username}`"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="flex items-center gap-3 px-5 py-3 hover:bg-surface/50 transition-colors"
-              :class="idx < streamers.length - 1 ? 'border-b border-surface' : ''"
+              v-if="liveMatches.length > 0"
+              :href="liveMatches[0]?.id ? '/queue/match/' + liveMatches[0].id : '/matches'"
+              class="inline-flex items-center gap-2 h-12 px-6 rounded-[10px] font-semibold text-foreground text-sm border border-[#334155] hover:bg-white/5 transition-colors"
             >
-              <!-- Thumbnail -->
-              <div class="w-[100px] h-14 rounded-md overflow-hidden bg-surface shrink-0">
-                <img v-if="streamer.stream.thumbnail_url" :src="streamer.stream.thumbnail_url" class="w-full h-full object-cover" />
-              </div>
-              <!-- Info -->
-              <div class="flex-1 flex flex-col gap-1 min-w-0">
-                <span class="text-sm font-medium text-foreground truncate">{{ streamer.twitch_username }}</span>
-                <span class="text-[11px] text-muted-foreground truncate">{{ streamer.stream.title }}</span>
-                <div class="flex items-center gap-1.5">
-                  <span class="w-1.5 h-1.5 rounded-full bg-destructive shrink-0"></span>
-                  <span class="text-[10px] font-mono text-text-tertiary">{{ streamer.stream.viewer_count.toLocaleString() }} viewers</span>
-                </div>
-              </div>
+              <Play class="w-4 h-4" />
+              {{ t('homeHeroCtaSecondary') }}
             </a>
           </div>
         </div>
+
+        <!-- Hero visual -->
+        <div class="relative w-[360px] h-[420px] hidden lg:block shrink-0">
+          <!-- glow / ring background -->
+          <div class="absolute inset-0 rounded-full blur-3xl opacity-50"
+            style="background: radial-gradient(circle, #22D3EE40 0%, transparent 70%);" />
+          <div class="absolute inset-8 rounded-full border-[6px] border-cyan-400/40" />
+          <div class="absolute inset-16 rounded-full border-[5px] border-amber-500/50" />
+          <Swords class="absolute inset-0 m-auto w-24 h-24 text-cyan-400/90" />
+
+          <!-- floating chips -->
+          <div class="absolute top-12 left-0 flex items-center gap-3 h-16 px-4 rounded-xl bg-[#0F1A2E]/85 border border-[#1F2937] shadow-2xl">
+            <div class="w-9 h-9 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+              <Users class="w-4 h-4 text-cyan-400" />
+            </div>
+            <div class="flex flex-col">
+              <span class="text-base font-bold font-mono text-foreground tabular-nums">{{ stats?.active_players?.toLocaleString() ?? '—' }}</span>
+              <span class="text-[11px] text-muted-foreground">{{ t('homeStatActivePlayers') }}</span>
+            </div>
+          </div>
+
+          <div class="absolute top-0 right-0 flex items-center gap-3 h-16 px-4 rounded-xl bg-[#0F1A2E]/85 border border-red-500/40 shadow-2xl">
+            <div class="w-9 h-9 rounded-lg bg-red-500/20 flex items-center justify-center">
+              <Radio class="w-4 h-4 text-red-500" />
+            </div>
+            <div class="flex flex-col">
+              <span class="text-base font-bold font-mono text-foreground tabular-nums">{{ stats?.live_matches ?? 0 }} {{ t('homeStatLiveSuffix') }}</span>
+              <span class="text-[11px] text-muted-foreground">{{ t('homeStatLiveMatches') }}</span>
+            </div>
+          </div>
+
+          <div class="absolute bottom-0 left-12 flex items-center gap-3 h-16 px-4 rounded-xl bg-[#0F1A2E]/85 border border-amber-500/40 shadow-2xl">
+            <div class="w-9 h-9 rounded-lg bg-amber-500/20 flex items-center justify-center">
+              <Trophy class="w-4 h-4 text-amber-500" />
+            </div>
+            <div class="flex flex-col">
+              <span class="text-base font-bold font-mono text-amber-500 tabular-nums">{{ stats?.active_tournaments ?? 0 }}</span>
+              <span class="text-[11px] text-muted-foreground">{{ t('homeStatActiveTournaments') }}</span>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
-    </div>
+    </section>
+
+    <!-- ─── Live Now ─── -->
+    <section v-if="liveCards.length > 0" class="bg-[#0A0F1C]">
+      <div class="max-w-[1200px] mx-auto px-4 md:px-8 lg:px-20 py-12">
+        <div class="flex items-center justify-between mb-6">
+          <div class="flex items-center gap-3">
+            <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+            <h2 class="text-xl font-bold">{{ t('homeLiveTitle') }}</h2>
+          </div>
+          <router-link to="/matches" class="inline-flex items-center gap-1 text-sm text-cyan-400 hover:underline font-semibold">
+            {{ t('viewAll') }} <ChevronRight class="w-4 h-4" />
+          </router-link>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <router-link
+            v-for="m in liveCards" :key="m.id"
+            :to="{ name: 'queue-match', params: { id: m.id } }"
+            class="rounded-[14px] bg-[#0F1A2E] border border-[#1F2937] hover:border-cyan-500/50 transition-colors overflow-hidden"
+          >
+            <div class="flex items-center justify-between h-10 px-4 bg-[#0B1220]">
+              <div class="flex items-center gap-2">
+                <span class="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                <span class="text-[10px] font-bold font-mono tracking-widest text-red-500">
+                  {{ t('matchLive').toUpperCase() }}<span v-if="m.best_of && m.best_of > 1"> · BO{{ m.best_of }}</span>
+                </span>
+              </div>
+              <div class="flex items-center gap-1.5 text-[11px] text-muted-foreground font-mono">
+                <Eye class="w-3 h-3" />
+                <span>{{ formatRelativeTime(m.created_at) }}</span>
+              </div>
+            </div>
+            <div class="p-5 flex flex-col gap-4">
+              <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-2 min-w-0 flex-1">
+                  <img v-if="m.captain1_avatar" :src="m.captain1_avatar" class="w-8 h-8 rounded-full ring-2 ring-emerald-500/30" />
+                  <div v-else class="w-8 h-8 rounded-full bg-emerald-500/15" />
+                  <span class="text-sm font-semibold truncate">{{ m.captain1_display_name || '?' }}</span>
+                </div>
+                <div class="flex items-center gap-2 font-mono font-bold text-base shrink-0">
+                  <span class="text-emerald-400">{{ m.team1_kills ?? '–' }}</span>
+                  <span class="text-muted-foreground/40">·</span>
+                  <span class="text-red-400">{{ m.team2_kills ?? '–' }}</span>
+                </div>
+                <div class="flex items-center gap-2 min-w-0 flex-1 justify-end">
+                  <span class="text-sm font-semibold truncate text-right">{{ m.captain2_display_name || '?' }}</span>
+                  <img v-if="m.captain2_avatar" :src="m.captain2_avatar" class="w-8 h-8 rounded-full ring-2 ring-red-500/30" />
+                  <div v-else class="w-8 h-8 rounded-full bg-red-500/15" />
+                </div>
+              </div>
+              <div class="h-10 rounded-lg bg-cyan-400 hover:brightness-110 transition-all flex items-center justify-center gap-2 text-[#0A0F1C] font-bold text-sm">
+                <Play class="w-3.5 h-3.5" />
+                {{ t('homeLiveWatch') }}
+              </div>
+            </div>
+          </router-link>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── Featured Tournament ─── -->
+    <section v-if="featured" class="bg-[#0A0F1C]">
+      <div class="max-w-[1200px] mx-auto px-4 md:px-8 lg:px-20 py-8">
+        <div
+          class="rounded-2xl overflow-hidden border border-[#1F2937] grid grid-cols-1 lg:grid-cols-2"
+          style="background: linear-gradient(135deg, #0F1A2E 0%, #1A1632 100%); box-shadow: 0 12px 32px #00000060;"
+        >
+          <!-- Left -->
+          <div class="p-10 flex flex-col gap-5">
+            <div class="inline-flex items-center gap-2 self-start px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500 text-[11px] font-bold font-mono tracking-widest text-amber-500">
+              <Flame class="w-3 h-3" />
+              {{ t('homeFeaturedBadge') }}
+            </div>
+            <h2 class="text-3xl md:text-4xl font-extrabold tracking-tight leading-tight">{{ featured.name }}</h2>
+            <p v-if="featured.description" class="text-sm text-muted-foreground leading-relaxed line-clamp-3">{{ featured.description.replace(/<[^>]+>/g, '') }}</p>
+            <div class="flex flex-wrap gap-8 mt-2">
+              <div class="flex flex-col gap-1">
+                <span class="text-2xl font-bold font-mono text-cyan-400">{{ featured.captain_count || 0 }}</span>
+                <span class="text-xs text-muted-foreground">{{ t('homeFeaturedTeams') }}</span>
+              </div>
+              <div class="flex flex-col gap-1">
+                <span class="text-lg font-bold font-mono text-foreground">{{ fmtRange(featured.starts_at, featured.registration_end) }}</span>
+                <span class="text-xs text-muted-foreground">{{ t('homeFeaturedDates') }}</span>
+              </div>
+              <div v-if="featured.competition_type" class="flex flex-col gap-1">
+                <span class="text-lg font-bold font-mono text-foreground capitalize">{{ featured.competition_type }}</span>
+                <span class="text-xs text-muted-foreground">{{ t('homeFeaturedFormat') }}</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 mt-4">
+              <router-link
+                :to="{ name: 'comp-info', params: { compId: featured.id } }"
+                class="inline-flex items-center gap-2 h-12 px-6 rounded-lg bg-amber-500 text-[#0A0F1C] font-bold text-sm hover:brightness-110 transition-all"
+              >
+                <UserPlus class="w-4 h-4" />
+                {{ t('homeFeaturedCtaPrimary') }}
+              </router-link>
+              <router-link
+                :to="{ name: 'comp-info', params: { compId: featured.id } }"
+                class="inline-flex items-center h-12 px-5 rounded-lg border border-[#334155] text-foreground text-sm font-semibold hover:bg-white/5 transition-colors"
+              >
+                {{ t('homeFeaturedCtaSecondary') }}
+              </router-link>
+            </div>
+          </div>
+
+          <!-- Right: Bracket Preview -->
+          <div class="p-8 border-t lg:border-t-0 lg:border-l border-[#1F2937]"
+               style="background: linear-gradient(135deg, #0A1224 0%, #160A24 100%);">
+            <div class="flex items-center justify-between mb-4">
+              <span class="text-sm font-bold">{{ t('homeFeaturedBracket') }}</span>
+              <span class="text-xs font-mono font-semibold text-cyan-400">
+                {{ featured.bracket?.[0]?.stage_name || t('homeFeaturedBracketStage') }}
+              </span>
+            </div>
+            <div v-if="featured.bracket?.length" class="grid grid-cols-3 gap-4 items-center">
+              <!-- Column 1: first 4 matches -->
+              <div class="flex flex-col gap-3">
+                <div v-for="m in featured.bracket.slice(0, 4)" :key="m.id"
+                     class="rounded-md bg-[#0F1A2E] border border-[#1F2937] overflow-hidden text-[11px]">
+                  <div class="px-2.5 py-1.5 truncate text-muted-foreground">{{ m.team1 || '—' }}</div>
+                  <div class="h-px bg-border/40" />
+                  <div class="px-2.5 py-1.5 truncate text-muted-foreground">{{ m.team2 || '—' }}</div>
+                </div>
+              </div>
+              <!-- Column 2: 2 semis -->
+              <div class="flex flex-col gap-6 justify-center py-6">
+                <div v-for="m in featured.bracket.slice(4, 6)" :key="m.id"
+                     class="rounded-md bg-[#0F1A2E] border border-cyan-500/40 overflow-hidden text-[11px]">
+                  <div class="px-2.5 py-1.5 truncate text-muted-foreground">{{ m.team1 || '—' }}</div>
+                  <div class="h-px bg-border/40" />
+                  <div class="px-2.5 py-1.5 truncate text-muted-foreground">{{ m.team2 || '—' }}</div>
+                </div>
+              </div>
+              <!-- Column 3: trophy -->
+              <div class="flex flex-col items-center gap-2 justify-center py-12">
+                <div class="w-14 h-14 rounded-2xl flex items-center justify-center"
+                     style="background: linear-gradient(135deg, #F59E0B 0%, #B45309 100%);">
+                  <Trophy class="w-7 h-7 text-[#0A0F1C]" />
+                </div>
+                <span class="text-[11px] font-bold font-mono tracking-widest text-amber-500">{{ t('homeFeaturedFinal') }}</span>
+              </div>
+            </div>
+            <div v-else class="text-center text-sm text-muted-foreground py-12">
+              {{ t('homeFeaturedNoBracket') }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── Latest News ─── -->
+    <section v-if="newsCards.length > 0" class="bg-[#0A0F1C]">
+      <div class="max-w-[1200px] mx-auto px-4 md:px-8 lg:px-20 py-8">
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h2 class="text-xl font-bold">{{ t('homeNewsTitle') }}</h2>
+            <p class="text-xs text-muted-foreground mt-1">{{ t('homeNewsSubtitle') }}</p>
+          </div>
+          <router-link to="/news" class="inline-flex items-center gap-1 text-sm text-cyan-400 hover:underline font-semibold">
+            {{ t('viewAll') }} <ChevronRight class="w-4 h-4" />
+          </router-link>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <router-link
+            v-for="(n, i) in newsCards" :key="n.id"
+            :to="{ name: 'news-post', params: { id: n.id } }"
+            class="rounded-[14px] bg-[#0F1A2E] border border-[#1F2937] hover:border-cyan-500/50 transition-colors overflow-hidden flex flex-col"
+          >
+            <div class="h-40 flex items-center justify-center"
+                 :style="`background: linear-gradient(135deg, ${i % 4 === 0 ? '#22D3EE' : i % 4 === 1 ? '#A855F7' : i % 4 === 2 ? '#F59E0B' : '#10B981'} 0%, #0E1A33 100%);`">
+              <img v-if="n.image_url" :src="n.image_url" class="w-full h-full object-cover" />
+              <Trophy v-else class="w-12 h-12 text-[#0A0F1C] opacity-40" />
+            </div>
+            <div class="p-4 flex flex-col gap-2.5 flex-1">
+              <span class="self-start px-2 py-0.5 rounded bg-cyan-500/20 text-[9px] font-bold font-mono tracking-widest text-cyan-400 uppercase">
+                {{ n.tag || t('newsNav') }}
+              </span>
+              <p class="text-sm font-bold leading-snug line-clamp-3 flex-1">{{ n.title }}</p>
+              <div class="flex items-center gap-1.5 text-[11px] text-muted-foreground font-mono">
+                <Calendar class="w-3 h-3" />
+                <span>{{ fmtDateOnly(new Date(n.created_at)) }}</span>
+              </div>
+            </div>
+          </router-link>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── Leaderboard + Side Stats ─── -->
+    <section class="bg-[#0A0F1C]">
+      <div class="max-w-[1200px] mx-auto px-4 md:px-8 lg:px-20 py-8 grid grid-cols-1 lg:grid-cols-[760px_1fr] gap-5">
+        <!-- Top players -->
+        <div class="rounded-[14px] bg-[#0F1A2E] border border-[#1F2937] overflow-hidden">
+          <div class="flex items-center justify-between px-6 py-4 bg-[#0B1220]">
+            <div class="flex items-center gap-2.5">
+              <div class="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                <Trophy class="w-4 h-4 text-amber-500" />
+              </div>
+              <span class="text-base font-bold">
+                {{ topPlayers.season ? t('homeTopPlayersWithSeason', { name: topPlayers.season.name }) : t('homeTopPlayersTitle') }}
+              </span>
+            </div>
+            <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#0F1A2E] border border-[#1F2937] text-xs font-semibold text-muted-foreground">
+              {{ t('homeTopPlayersByMmr') }}
+            </div>
+          </div>
+          <div class="grid grid-cols-[32px_1fr_90px_120px_80px] items-center px-6 py-2.5 bg-[#0B1220] border-b border-[#1F2937] text-[10px] font-bold font-mono tracking-widest text-muted-foreground">
+            <span>#</span>
+            <span>{{ t('player').toUpperCase() }}</span>
+            <span class="text-right">MMR</span>
+            <span class="text-right">{{ t('homeTopPlayersWinRate') }}</span>
+            <span class="text-right">{{ t('homeTopPlayersStreak') }}</span>
+          </div>
+          <div v-if="topPlayers.players.length === 0" class="text-sm text-muted-foreground text-center py-10">
+            {{ t('homeTopPlayersEmpty') }}
+          </div>
+          <router-link
+            v-for="(p, idx) in topPlayers.players" :key="p.id"
+            :to="{ name: 'player-profile', params: { id: p.id } }"
+            class="grid grid-cols-[32px_1fr_90px_120px_80px] items-center px-6 h-16 border-b border-[#1F2937] hover:bg-accent/15 transition-colors"
+            :class="idx === 0 ? 'bg-amber-500/[0.03]' : 'bg-[#0F1A2E]'"
+          >
+            <span class="font-mono font-extrabold text-lg" :class="rankColor(idx)">{{ idx + 1 }}</span>
+            <div class="flex items-center gap-3 min-w-0">
+              <img v-if="p.avatar_url" :src="p.avatar_url" class="w-9 h-9 rounded-full object-cover ring-2 ring-amber-500/30" />
+              <div v-else class="w-9 h-9 rounded-full bg-accent" />
+              <div class="min-w-0 flex flex-col">
+                <span class="text-sm font-semibold truncate flex items-center gap-1">
+                  {{ p.name }}
+                  <BadgeCheck v-if="p.mmr_verified_at" class="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                </span>
+              </div>
+            </div>
+            <span class="text-right font-mono font-bold text-cyan-400 tabular-nums">{{ p.mmr.toLocaleString() }}</span>
+            <div class="flex items-center justify-end gap-2">
+              <div class="w-[60px] h-1.5 rounded-full bg-[#1F2937] overflow-hidden">
+                <div class="h-full rounded-full bg-emerald-500" :style="{ width: (p.win_rate ?? 0) + '%' }" />
+              </div>
+              <span class="font-mono font-bold text-xs tabular-nums" :class="winrateColor(p.win_rate)">
+                {{ p.win_rate != null ? p.win_rate + '%' : '—' }}
+              </span>
+            </div>
+            <div class="flex items-center justify-end gap-1">
+              <component :is="p.streak?.won ? Flame : (p.streak ? Snowflake : Flame)"
+                class="w-3 h-3"
+                :class="p.streak?.won ? 'text-red-500' : (p.streak ? 'text-cyan-400' : 'text-muted-foreground/40')" />
+              <span class="text-xs font-mono font-bold" :class="streakColor(p.streak)">{{ streakLabel(p.streak) }}</span>
+            </div>
+          </router-link>
+        </div>
+
+        <!-- Side stats -->
+        <div class="flex flex-col gap-5">
+          <!-- Hero pick rate -->
+          <div class="rounded-[14px] border border-[#1F2937] p-6 flex flex-col gap-4"
+               style="background: linear-gradient(135deg, #0F1A2E 0%, #1A1632 100%);">
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-bold">{{ t('homeHeroPickRateTitle') }}</span>
+              <span class="text-[10px] font-mono font-semibold text-muted-foreground">{{ t('homeHeroPickRateRange') }}</span>
+            </div>
+            <div v-if="heroPickRate.heroes.length === 0" class="text-xs text-muted-foreground">{{ t('homeHeroPickRateEmpty') }}</div>
+            <div v-for="(h, i) in heroPickRate.heroes" :key="h.hero_id" class="flex items-center gap-2.5">
+              <div class="w-8 h-8 rounded-lg overflow-hidden bg-accent flex items-center justify-center"
+                   :style="`background: ${i === 0 ? '#EF4444' : i === 1 ? '#22D3EE' : '#A855F7'}`">
+                <img v-if="dota.heroImg(h.hero_id)" :src="dota.heroImg(h.hero_id)" class="w-full h-full object-cover" />
+              </div>
+              <div class="flex-1 min-w-0 flex flex-col">
+                <span class="text-xs font-semibold truncate">{{ dota.heroName(h.hero_id) || '#' + h.hero_id }}</span>
+                <span class="text-[10px] text-muted-foreground font-mono">{{ h.picks }} {{ t('homeHeroPickRatePicks') }}</span>
+              </div>
+              <span class="text-xs font-mono font-bold tabular-nums"
+                    :class="i === 0 ? 'text-red-500' : i === 1 ? 'text-cyan-400' : 'text-purple-400'">
+                {{ h.pick_rate }}%
+              </span>
+            </div>
+          </div>
+
+          <!-- Next match -->
+          <div v-if="upcomingNext" class="rounded-[14px] border border-[#1F2937] p-6 flex flex-col gap-4 bg-[#0F1A2E]">
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-bold">{{ t('homeNextMatchTitle') }}</span>
+              <span class="px-2 py-0.5 rounded bg-cyan-500/20 text-[10px] font-bold font-mono tracking-widest text-cyan-400">
+                {{ formatRelativeTime(upcomingNext.scheduled_at || upcomingNext.created_at) }}
+              </span>
+            </div>
+            <div class="flex items-center justify-between gap-3">
+              <div class="flex items-center gap-2 min-w-0 flex-1">
+                <img v-if="upcomingNext.captain1_avatar" :src="upcomingNext.captain1_avatar" class="w-8 h-8 rounded-full" />
+                <div v-else class="w-8 h-8 rounded-full bg-accent" />
+                <span class="text-sm font-semibold truncate">{{ upcomingNext.captain1_display_name || upcomingNext.captain1_name || 'TBD' }}</span>
+              </div>
+              <span class="font-mono font-extrabold text-base text-muted-foreground/60 tracking-widest">VS</span>
+              <div class="flex items-center gap-2 min-w-0 flex-1 justify-end">
+                <span class="text-sm font-semibold truncate text-right">{{ upcomingNext.captain2_display_name || upcomingNext.captain2_name || 'TBD' }}</span>
+                <img v-if="upcomingNext.captain2_avatar" :src="upcomingNext.captain2_avatar" class="w-8 h-8 rounded-full" />
+                <div v-else class="w-8 h-8 rounded-full bg-accent" />
+              </div>
+            </div>
+            <router-link
+              :to="upcomingNext.competition_id ? { name: 'comp-match', params: { compId: upcomingNext.competition_id, matchId: upcomingNext.id } } : '/matches'"
+              class="h-10 rounded-lg border border-cyan-400 text-cyan-400 hover:bg-cyan-500/10 transition-colors flex items-center justify-center gap-2 text-xs font-semibold"
+            >
+              <Tv class="w-3.5 h-3.5" />
+              {{ t('homeNextMatchView') }}
+            </router-link>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── Sponsors ─── -->
+    <section v-if="sponsors.length > 0" class="bg-[#0A0F1C] border-t border-[#1F2937]">
+      <div class="max-w-[1200px] mx-auto px-4 md:px-8 lg:px-20 py-10">
+        <p class="text-center text-[11px] font-bold font-mono tracking-[2px] text-muted-foreground/70 mb-5">
+          {{ t('homeSponsorsLabel') }}
+        </p>
+        <div class="flex flex-wrap items-center justify-center gap-12">
+          <component
+            :is="s.link ? 'a' : 'div'"
+            v-for="s in sponsors" :key="s.id"
+            :href="s.link || undefined" target="_blank" rel="noopener"
+            class="opacity-70 hover:opacity-100 transition-opacity"
+          >
+            <img :src="s.logo_url" :alt="s.alt" class="h-8 max-w-[160px] object-contain" />
+          </component>
+        </div>
+      </div>
+    </section>
   </div>
 </template>

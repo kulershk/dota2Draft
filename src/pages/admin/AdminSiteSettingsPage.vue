@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Settings, Save, Upload, Trash2 } from 'lucide-vue-next'
+import { Settings, Save, Upload, Trash2, Plus, Image } from 'lucide-vue-next'
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
@@ -18,6 +18,16 @@ const saved = ref(false)
 const uploadingLogo = ref(false)
 const uploadingBanner = ref(false)
 
+interface Sponsor { id: number; logo_url: string; alt: string; link: string }
+const sponsors = ref<Sponsor[]>([])
+const newSponsorFile = ref<File | null>(null)
+const newSponsorAlt = ref('')
+const newSponsorLink = ref('')
+const uploadingSponsor = ref(false)
+const editingSponsorId = ref<number | null>(null)
+const editAlt = ref('')
+const editLink = ref('')
+
 onMounted(async () => {
   const data = await api.getSiteSettings()
   siteName.value = data.site_name || ''
@@ -26,7 +36,43 @@ onMounted(async () => {
   discordUrl.value = data.site_discord_url || ''
   logoUrl.value = data.site_logo_url || ''
   heroBannerUrl.value = data.site_hero_banner_url || ''
+  sponsors.value = data.site_sponsors || []
 })
+
+function pickSponsorFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  newSponsorFile.value = input.files && input.files[0] || null
+}
+async function addSponsor() {
+  if (!newSponsorFile.value) return
+  uploadingSponsor.value = true
+  try {
+    const result = await api.uploadSponsor(newSponsorFile.value, newSponsorAlt.value, newSponsorLink.value)
+    sponsors.value = result.sponsors
+    newSponsorFile.value = null
+    newSponsorAlt.value = ''
+    newSponsorLink.value = ''
+    const fileInput = document.getElementById('sponsorFileInput') as HTMLInputElement | null
+    if (fileInput) fileInput.value = ''
+  } finally {
+    uploadingSponsor.value = false
+  }
+}
+function startEditSponsor(s: Sponsor) {
+  editingSponsorId.value = s.id
+  editAlt.value = s.alt
+  editLink.value = s.link
+}
+async function saveSponsor(s: Sponsor) {
+  const result = await api.updateSponsor(s.id, { alt: editAlt.value, link: editLink.value })
+  sponsors.value = result.sponsors
+  editingSponsorId.value = null
+}
+async function removeSponsor(s: Sponsor) {
+  if (!confirm(t('sponsorDeleteConfirm', { alt: s.alt || '#' + s.id }))) return
+  const result = await api.deleteSponsor(s.id)
+  sponsors.value = result.sponsors
+}
 
 async function saveSettings() {
   saving.value = true
@@ -166,6 +212,63 @@ async function removeBanner() {
           <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('siteDiscordUrl') }}</label>
           <input type="text" v-model="discordUrl" class="input-field w-full" placeholder="https://discord.gg/..." />
           <p class="text-[11px] text-muted-foreground mt-1">{{ t('siteDiscordUrlHint') }}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sponsors -->
+    <div class="card">
+      <div class="flex items-center gap-2 px-5 py-3 border-b border-border">
+        <Image class="w-4 h-4 text-foreground" />
+        <span class="text-sm font-semibold text-foreground">{{ t('sponsorsTitle') }}</span>
+        <span class="text-xs text-muted-foreground ml-2">{{ t('sponsorsHint') }}</span>
+      </div>
+      <div class="px-5 py-4 flex flex-col gap-4">
+        <!-- Existing list -->
+        <div v-if="sponsors.length === 0" class="text-xs text-muted-foreground text-center py-2">{{ t('sponsorsEmpty') }}</div>
+        <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div v-for="s in sponsors" :key="s.id" class="flex items-center gap-3 p-3 rounded-md bg-accent/30 border border-border/40">
+            <img :src="s.logo_url" :alt="s.alt" class="w-16 h-12 object-contain bg-[#0F1A2E] rounded" />
+            <div class="flex-1 min-w-0">
+              <template v-if="editingSponsorId === s.id">
+                <input v-model="editAlt" type="text" :placeholder="t('sponsorAlt')" class="input-field w-full text-xs mb-1" />
+                <input v-model="editLink" type="text" :placeholder="t('sponsorLink')" class="input-field w-full text-xs" />
+              </template>
+              <template v-else>
+                <p class="text-sm font-semibold truncate">{{ s.alt || '—' }}</p>
+                <a v-if="s.link" :href="s.link" target="_blank" class="text-[11px] text-primary truncate block hover:underline">{{ s.link }}</a>
+              </template>
+            </div>
+            <div class="flex items-center gap-1">
+              <button v-if="editingSponsorId === s.id" type="button" class="px-2 py-1 text-xs rounded bg-primary/15 text-primary hover:bg-primary/25" @click="saveSponsor(s)">{{ t('save') }}</button>
+              <button v-else type="button" class="p-1.5 rounded hover:bg-accent text-muted-foreground" @click="startEditSponsor(s)" :title="t('edit')">
+                <Settings class="w-3.5 h-3.5" />
+              </button>
+              <button type="button" class="p-1.5 rounded hover:bg-destructive/15 text-muted-foreground hover:text-destructive" @click="removeSponsor(s)" :title="t('delete')">
+                <Trash2 class="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Upload new -->
+        <div class="border-t border-border/40 pt-4 grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr_auto] gap-3 items-end">
+          <div>
+            <label class="block text-[11px] font-medium text-muted-foreground mb-1">{{ t('sponsorLogo') }}</label>
+            <input id="sponsorFileInput" type="file" accept="image/*" @change="pickSponsorFile" class="block w-full text-xs text-muted-foreground file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-primary file:text-[#0A0F1C] file:font-semibold hover:file:brightness-110 file:cursor-pointer" />
+          </div>
+          <div>
+            <label class="block text-[11px] font-medium text-muted-foreground mb-1">{{ t('sponsorAlt') }}</label>
+            <input v-model="newSponsorAlt" type="text" class="input-field w-full" :placeholder="t('sponsorAltPlaceholder')" />
+          </div>
+          <div>
+            <label class="block text-[11px] font-medium text-muted-foreground mb-1">{{ t('sponsorLink') }}</label>
+            <input v-model="newSponsorLink" type="text" class="input-field w-full" placeholder="https://..." />
+          </div>
+          <button type="button" class="btn-primary px-3 py-2 flex items-center gap-1.5 disabled:opacity-40" :disabled="uploadingSponsor || !newSponsorFile" @click="addSponsor">
+            <Plus class="w-4 h-4" />
+            {{ uploadingSponsor ? `${t('saving')}…` : t('add') }}
+          </button>
         </div>
       </div>
     </div>

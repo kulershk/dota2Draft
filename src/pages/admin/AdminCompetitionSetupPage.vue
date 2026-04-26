@@ -43,6 +43,7 @@ const compRulesContent = ref('')
 const compType = ref('')
 const compStatus = ref('draft')
 const compIsPublic = ref(false)
+const compIsFeatured = ref(false)
 const compStartsAt = ref('')
 const compRegStart = ref('')
 const compRegEnd = ref('')
@@ -174,6 +175,7 @@ onMounted(async () => {
   compType.value = comp.competition_type || ''
   compStatus.value = comp.status || 'draft'
   compIsPublic.value = !!comp.is_public
+  compIsFeatured.value = !!comp.is_featured
   compStartsAt.value = comp.starts_at ? toLocalDatetime(comp.starts_at) : ''
   compRegStart.value = comp.registration_start ? toLocalDatetime(comp.registration_start) : ''
   compRegEnd.value = comp.registration_end ? toLocalDatetime(comp.registration_end) : ''
@@ -262,6 +264,7 @@ async function saveAll() {
       competition_type: compType.value,
       status: compStatus.value,
       is_public: compIsPublic.value,
+      is_featured: compIsFeatured.value,
       starts_at: compStartsAt.value ? localDatetimeToISO(compStartsAt.value) : null,
       registration_start: compRegStart.value ? localDatetimeToISO(compRegStart.value) : null,
       registration_end: compRegEnd.value ? localDatetimeToISO(compRegEnd.value) : null,
@@ -509,6 +512,11 @@ watch(activeTab, (tab) => {
           <input type="checkbox" class="w-4 h-4 accent-primary" v-model="compIsPublic" />
           <span class="text-sm text-foreground">{{ t('publicCompetition') }}</span>
           <span class="text-xs text-muted-foreground">{{ t('publicCompetitionHint') }}</span>
+        </label>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" class="w-4 h-4 accent-primary" v-model="compIsFeatured" />
+          <span class="text-sm text-foreground">{{ t('featuredCompetition') }}</span>
+          <span class="text-xs text-muted-foreground">{{ t('featuredCompetitionHint') }}</span>
         </label>
         <div class="flex flex-col gap-1.5">
           <label class="label-text">{{ t('description') }}</label>
