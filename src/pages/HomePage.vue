@@ -15,19 +15,23 @@ interface NewsCard {
   tag?: string | null
 }
 interface LiveMatch {
+  kind: 'queue' | 'tournament'
   id: number
-  pool_name: string | null
+  /** Where to navigate when the card is clicked */
+  to: { name: string; params: Record<string, any> }
+  /** Top-left subtitle (pool name for queue, competition name for tournament) */
+  context: string | null
   best_of: number | null
-  team1_kills: number | null
-  team2_kills: number | null
-  team1_players: any[] | null
-  team2_players: any[] | null
-  captain1_display_name: string | null
-  captain2_display_name: string | null
-  captain1_avatar: string | null
-  captain2_avatar: string | null
-  status: string
-  created_at: string
+  team1_name: string | null
+  team2_name: string | null
+  team1_avatar: string | null
+  team2_avatar: string | null
+  /** Queue matches carry kill totals; tournament matches use score (games won) */
+  team1_score: number | null
+  team2_score: number | null
+  show_kills: boolean
+  /** Used for ordering newest live first */
+  started_at: string
 }
 interface TopPlayer {
   id: number
@@ -100,7 +104,47 @@ async function loadAll() {
     api.getSiteSettings().catch(() => null),
   ])
   stats.value = s
-  liveMatches.value = (history as any[]).filter(m => m.status === 'live')
+
+  // Merge queue + tournament live matches into a unified card list, newest first.
+  const queueLive: LiveMatch[] = (history as any[])
+    .filter(m => m.status === 'live')
+    .map(m => ({
+      kind: 'queue',
+      id: m.id,
+      to: { name: 'queue-match', params: { id: m.id } },
+      context: m.pool_name || null,
+      best_of: m.best_of || null,
+      team1_name: m.captain1_display_name || m.captain1_name || null,
+      team2_name: m.captain2_display_name || m.captain2_name || null,
+      team1_avatar: m.captain1_avatar || null,
+      team2_avatar: m.captain2_avatar || null,
+      team1_score: m.team1_kills,
+      team2_score: m.team2_kills,
+      show_kills: true,
+      started_at: m.created_at,
+    }))
+  const tournamentLive: LiveMatch[] = (upcoming as any[])
+    .filter(m => m.status === 'live')
+    .map(m => ({
+      kind: 'tournament',
+      id: m.id,
+      to: m.competition_id
+        ? { name: 'comp-match', params: { compId: m.competition_id, matchId: m.id } }
+        : { name: 'home', params: {} },
+      context: m.competition_name || null,
+      best_of: m.best_of || null,
+      team1_name: m.team1_name || null,
+      team2_name: m.team2_name || null,
+      team1_avatar: m.team1_banner || m.team1_avatar || null,
+      team2_avatar: m.team2_banner || m.team2_avatar || null,
+      team1_score: m.score1,
+      team2_score: m.score2,
+      show_kills: false,
+      started_at: m.scheduled_at || m.created_at || new Date().toISOString(),
+    }))
+  liveMatches.value = [...queueLive, ...tournamentLive]
+    .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())
+
   featured.value = feat
   news.value = (n as any[]).slice(0, 3)
   topPlayers.value = top
@@ -206,14 +250,14 @@ onUnmounted(() => { if (pollInterval) clearInterval(pollInterval) })
               <Trophy class="w-4 h-4" />
               {{ t('homeHeroCtaPrimary') }}
             </router-link>
-            <a
+            <router-link
               v-if="liveMatches.length > 0"
-              :href="liveMatches[0]?.id ? '/queue/match/' + liveMatches[0].id : '/matches'"
+              :to="liveMatches[0].to"
               class="inline-flex items-center gap-2 h-12 px-6 rounded-[10px] font-semibold text-foreground text-sm border border-[#334155] hover:bg-white/5 transition-colors"
             >
               <Play class="w-4 h-4" />
               {{ t('homeHeroCtaSecondary') }}
-            </a>
+            </router-link>
           </div>
         </div>
 
@@ -313,8 +357,8 @@ onUnmounted(() => { if (pollInterval) clearInterval(pollInterval) })
         </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
           <router-link
-            v-for="m in liveCards" :key="m.id"
-            :to="{ name: 'queue-match', params: { id: m.id } }"
+            v-for="m in liveCards" :key="m.kind + '-' + m.id"
+            :to="m.to"
             class="rounded-[14px] bg-[#0F1A2E] border border-[#1F2937] hover:border-cyan-500/50 transition-colors overflow-hidden"
           >
             <div class="flex items-center justify-between h-10 px-4 bg-[#0B1220]">
@@ -324,32 +368,31 @@ onUnmounted(() => { if (pollInterval) clearInterval(pollInterval) })
                   {{ t('matchLive').toUpperCase() }}<span v-if="m.best_of && m.best_of > 1"> · BO{{ m.best_of }}</span>
                 </span>
               </div>
-              <div class="flex items-center gap-1.5 text-[11px] text-muted-foreground font-mono">
-                <Eye class="w-3 h-3" />
-                <span>{{ formatRelativeTime(m.created_at) }}</span>
+              <div v-if="m.context" class="text-[11px] text-muted-foreground font-mono truncate max-w-[180px]" :title="m.context">
+                {{ m.context }}
               </div>
             </div>
-            <div class="p-5 flex flex-col gap-4">
+            <div class="p-5 flex flex-col gap-3">
               <div class="flex items-center justify-between gap-3">
                 <div class="flex items-center gap-2 min-w-0 flex-1">
-                  <img v-if="m.captain1_avatar" :src="m.captain1_avatar" class="w-8 h-8 rounded-full ring-2 ring-emerald-500/30" />
+                  <img v-if="m.team1_avatar" :src="m.team1_avatar" class="w-8 h-8 rounded-full object-cover ring-2 ring-emerald-500/30" />
                   <div v-else class="w-8 h-8 rounded-full bg-emerald-500/15" />
-                  <span class="text-sm font-semibold truncate">{{ m.captain1_display_name || '?' }}</span>
+                  <span class="text-sm font-semibold truncate">{{ m.team1_name || '?' }}</span>
                 </div>
                 <div class="flex items-center gap-2 font-mono font-bold text-base shrink-0">
-                  <span class="text-emerald-400">{{ m.team1_kills ?? '–' }}</span>
+                  <span class="text-emerald-400">{{ m.team1_score ?? '–' }}</span>
                   <span class="text-muted-foreground/40">·</span>
-                  <span class="text-red-400">{{ m.team2_kills ?? '–' }}</span>
+                  <span class="text-red-400">{{ m.team2_score ?? '–' }}</span>
                 </div>
                 <div class="flex items-center gap-2 min-w-0 flex-1 justify-end">
-                  <span class="text-sm font-semibold truncate text-right">{{ m.captain2_display_name || '?' }}</span>
-                  <img v-if="m.captain2_avatar" :src="m.captain2_avatar" class="w-8 h-8 rounded-full ring-2 ring-red-500/30" />
+                  <span class="text-sm font-semibold truncate text-right">{{ m.team2_name || '?' }}</span>
+                  <img v-if="m.team2_avatar" :src="m.team2_avatar" class="w-8 h-8 rounded-full object-cover ring-2 ring-red-500/30" />
                   <div v-else class="w-8 h-8 rounded-full bg-red-500/15" />
                 </div>
               </div>
-              <div class="h-10 rounded-lg bg-cyan-400 hover:brightness-110 transition-all flex items-center justify-center gap-2 text-[#0A0F1C] font-bold text-sm">
-                <Play class="w-3.5 h-3.5" />
-                {{ t('homeLiveWatch') }}
+              <div class="flex items-center justify-center gap-1.5 text-[10px] text-muted-foreground font-mono uppercase tracking-wider">
+                <Eye class="w-3 h-3" />
+                <span>{{ formatRelativeTime(m.started_at) }}</span>
               </div>
             </div>
           </router-link>
