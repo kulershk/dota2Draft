@@ -120,7 +120,8 @@ app.use(jobRoutes)
 // Socket.io
 initSocket(io)
 setLivePollerIo(io)
-resumeLivePolling()
+// resumeLivePolling() needs the queue_matches.server_steam_id column
+// (added in initDb()) — kicked off after init below.
 
 // SPA fallback
 app.get('*', (req, res) => {
@@ -150,6 +151,9 @@ server.on('upgrade', (req, socket, head) => {
 
 initDb().then(async () => {
   await botPool.init(io, botWss)
+  // Schema is now in place — safe to resume live-stat polling for any matches
+  // still flagged 'live' in the DB.
+  resumeLivePolling()
 
   // Register recurring background jobs. Handlers are thin wrappers around
   // botPool methods so the logic stays in one place.
