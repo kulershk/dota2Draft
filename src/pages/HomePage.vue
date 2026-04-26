@@ -489,9 +489,9 @@ onUnmounted(() => { if (pollInterval) clearInterval(pollInterval) })
 
     <!-- ─── Leaderboard + Side Stats ─── -->
     <section class="bg-[#0A0F1C]">
-      <div class="max-w-[1200px] mx-auto px-4 md:px-8 lg:px-20 py-8 grid grid-cols-1 lg:grid-cols-[760px_1fr] gap-5">
+      <div class="max-w-[1200px] mx-auto px-4 md:px-8 lg:px-20 py-8 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-5">
         <!-- Top players -->
-        <div class="rounded-[14px] bg-[#0F1A2E] border border-[#1F2937] overflow-hidden">
+        <div class="rounded-[14px] bg-[#0F1A2E] border border-[#1F2937] overflow-hidden min-w-0">
           <div class="flex items-center justify-between px-6 py-4 bg-[#0B1220]">
             <div class="flex items-center gap-2.5">
               <div class="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
@@ -505,7 +505,7 @@ onUnmounted(() => { if (pollInterval) clearInterval(pollInterval) })
               {{ topPlayers.season ? t('homeTopPlayersByPoints') : t('homeTopPlayersByMmr') }}
             </div>
           </div>
-          <div class="grid grid-cols-[32px_1fr_90px_120px_80px] items-center px-6 py-2.5 bg-[#0B1220] border-b border-[#1F2937] text-[10px] font-bold font-mono tracking-widest text-muted-foreground">
+          <div class="grid grid-cols-[32px_minmax(0,1fr)_90px_120px_80px] items-center px-6 py-2.5 bg-[#0B1220] border-b border-[#1F2937] text-[10px] font-bold font-mono tracking-widest text-muted-foreground">
             <span>#</span>
             <span>{{ t('player').toUpperCase() }}</span>
             <span class="text-right">{{ topPlayers.season ? t('seasonPoints').toUpperCase() : 'MMR' }}</span>
@@ -518,7 +518,7 @@ onUnmounted(() => { if (pollInterval) clearInterval(pollInterval) })
           <router-link
             v-for="(p, idx) in topPlayers.players" :key="p.id"
             :to="{ name: 'player-profile', params: { id: p.id } }"
-            class="grid grid-cols-[32px_1fr_90px_120px_80px] items-center px-6 h-16 border-b border-[#1F2937] hover:bg-accent/15 transition-colors"
+            class="grid grid-cols-[32px_minmax(0,1fr)_90px_120px_80px] items-center px-6 h-16 border-b border-[#1F2937] hover:bg-accent/15 transition-colors"
             :class="idx === 0 ? 'bg-amber-500/[0.03]' : 'bg-[#0F1A2E]'"
           >
             <span class="font-mono font-extrabold text-lg" :class="rankColor(idx)">{{ idx + 1 }}</span>
