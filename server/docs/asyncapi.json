@@ -1176,6 +1176,42 @@
         }
       }
     },
+    "queue:liveStats": {
+      "subscribe": {
+        "summary": "Broadcast to queue-match:${queueMatchId}: realtime live-game snapshot polled from Steam GetRealtimeStats",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "queueMatchId":   { "type": "integer" },
+              "radiant_score":  { "type": "integer", "nullable": true },
+              "dire_score":     { "type": "integer", "nullable": true },
+              "game_time":      { "type": "integer", "nullable": true, "description": "Steam game_time in seconds; negative during pre-game" },
+              "game_state":     { "type": "integer", "nullable": true },
+              "updated_at":     { "type": "integer", "description": "Unix ms when the snapshot was taken on the server" }
+            }
+          }
+        }
+      }
+    },
+    "home:liveStats": {
+      "subscribe": {
+        "summary": "Global broadcast: same payload as queue:liveStats — used by the homepage Live Matches strip to update scores in place without subscribing to per-match rooms",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "queueMatchId":   { "type": "integer" },
+              "radiant_score":  { "type": "integer", "nullable": true },
+              "dire_score":     { "type": "integer", "nullable": true },
+              "game_time":      { "type": "integer", "nullable": true },
+              "game_state":     { "type": "integer", "nullable": true },
+              "updated_at":     { "type": "integer" }
+            }
+          }
+        }
+      }
+    },
     "season:rankUpdated": {
       "subscribe": {
         "summary": "Broadcast: a season's rankings changed. Fired after a queue match completes (with the participating playerIds), after a manual admin point adjustment (with the affected playerId), or after a recompute (with recomputed: true). Clients with an open leaderboard or profile should refetch.",

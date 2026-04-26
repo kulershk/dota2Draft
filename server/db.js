@@ -811,6 +811,9 @@ export async function initDb() {
   try { await execute(`ALTER TABLE queue_pools   ADD COLUMN season_id INTEGER NULL REFERENCES seasons(id) ON DELETE SET NULL`) } catch {}
   // No FK on queue_matches.season_id so deleting a season doesn't lose match history.
   try { await execute(`ALTER TABLE queue_matches ADD COLUMN season_id INTEGER NULL`) } catch {}
+  // Steam server steam_id captured once a player is in-game — used to query
+  // GetRealtimeStats for live score / time updates while the match runs.
+  try { await execute(`ALTER TABLE queue_matches ADD COLUMN server_steam_id BIGINT NULL`) } catch {}
 
   // ─── MMR verifications ───────────────────────────────────
   // Players submit a screenshot + MMR; admins approve to update players.mmr.

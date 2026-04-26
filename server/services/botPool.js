@@ -6,6 +6,7 @@ import { fetchSteamMatchDetails } from '../helpers/steam.js'
 import { awardXp, getTeamPlayerIds, awardStagePlacements } from '../helpers/xp.js'
 import { getCompetition, parseCompSettings } from '../helpers/competition.js'
 import { applyMatchToSeason } from './seasonRankingApply.js'
+import { startPolling as startLivePolling, stopPolling as stopLivePolling } from './liveMatchPoller.js'
 import SteamCommunity from 'steamcommunity'
 import { LoginSession, EAuthTokenPlatformType } from 'steam-session'
 
@@ -431,6 +432,10 @@ class BotPool {
           // does not restore the stale "lobby created" banner via queue:getState.
           // playerInMatch stays set until _autoFillGameWinner runs (re-queue gating).
           activeQueueMatches.delete(qm.id)
+          // Kick off live-stats polling — the match is now in-game, so Steam's
+          // GetRealtimeStats will start returning data (after we derive
+          // server_steam_id from a player summary on the first tick).
+          try { startLivePolling(qm.id) } catch (e) { console.error('[livePoller] start failed:', e.message) }
         }
       }
     }
@@ -995,6 +1000,8 @@ class BotPool {
         }
         // Update queue match status
         await execute("UPDATE queue_matches SET status = 'completed', completed_at = NOW() WHERE id = $1", [queueMatchXp.id])
+        // Stop the live poller — match is no longer in-game.
+        try { stopLivePolling(queueMatchXp.id) } catch {}
 
         // Apply season rating change (only if this match's pool was assigned to a season).
         // applyMatchToSeason is idempotent against queue_match_id, so a retry can't double-apply.

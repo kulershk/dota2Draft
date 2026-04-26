@@ -39,6 +39,7 @@ import { queryOne } from './db.js'
 
 // Socket
 import { initSocket } from './socket/index.js'
+import { setLivePollerIo, resumeActiveMatches as resumeLivePolling } from './services/liveMatchPoller.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -118,6 +119,8 @@ app.use(jobRoutes)
 
 // Socket.io
 initSocket(io)
+setLivePollerIo(io)
+resumeLivePolling()
 
 // SPA fallback
 app.get('*', (req, res) => {

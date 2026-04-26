@@ -5,6 +5,7 @@ import { Trophy, Play, Users, Radio, Eye, Flame, ChevronRight, Calendar, Snowfla
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { useDotaConstants } from '@/composables/useDotaConstants'
+import { getSocket } from '@/composables/useSocket'
 import { formatRelativeTime, fmtDateOnly } from '@/utils/format'
 
 interface NewsCard {
@@ -32,6 +33,8 @@ interface LiveMatch {
   show_kills: boolean
   /** Used for ordering newest live first */
   started_at: string
+  /** Live game time in seconds (set when a live-stats snapshot arrives) */
+  live_game_time: number | null
 }
 interface TopPlayer {
   id: number
@@ -122,6 +125,7 @@ async function loadAll() {
       team2_score: m.team2_kills,
       show_kills: true,
       started_at: m.created_at,
+      live_game_time: null,
     }))
   const tournamentLive: LiveMatch[] = (upcoming as any[])
     .filter(m => m.status === 'live')
@@ -141,6 +145,7 @@ async function loadAll() {
       team2_score: m.score2,
       show_kills: false,
       started_at: m.scheduled_at || m.created_at || new Date().toISOString(),
+      live_game_time: null,
     }))
   liveMatches.value = [...queueLive, ...tournamentLive]
     .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())
@@ -208,14 +213,40 @@ function fmtMatchTime(iso: string | null): string {
   return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
+// Realtime score updates pushed by the server while a queue match is live
+function onLiveStats(payload: any) {
+  if (!payload || payload.queueMatchId == null) return
+  const card = liveMatches.value.find(m => m.kind === 'queue' && m.id === payload.queueMatchId)
+  if (!card) return
+  // Steam returns radiant/dire — team1 is treated as radiant by convention
+  if (Number.isFinite(Number(payload.radiant_score))) card.team1_score = Number(payload.radiant_score)
+  if (Number.isFinite(Number(payload.dire_score)))    card.team2_score = Number(payload.dire_score)
+  if (Number.isFinite(Number(payload.game_time)))     card.live_game_time = Number(payload.game_time)
+}
+
+function fmtGameTime(sec: number | null): string {
+  if (sec == null || !Number.isFinite(sec)) return ''
+  const m = Math.floor(sec / 60)
+  const s = Math.abs(sec % 60).toString().padStart(2, '0')
+  // Steam gives negative values during pre-game/horn — show 00:00 there
+  if (sec < 0) return '00:00'
+  return `${m}:${s}`
+}
+
 onMounted(() => {
   loadAll()
   // Live stats refresh every 30s — keeps the hero chips honest without spamming.
   pollInterval = setInterval(() => {
     api.getHomeStats().then(s => { stats.value = s }).catch(() => {})
   }, 30000)
+  const sock = getSocket()
+  sock?.on('home:liveStats', onLiveStats)
 })
-onUnmounted(() => { if (pollInterval) clearInterval(pollInterval) })
+onUnmounted(() => {
+  if (pollInterval) clearInterval(pollInterval)
+  const sock = getSocket()
+  sock?.off('home:liveStats', onLiveStats)
+})
 </script>
 
 <template>
@@ -390,9 +421,15 @@ onUnmounted(() => { if (pollInterval) clearInterval(pollInterval) })
                   <div v-else class="w-8 h-8 rounded-full bg-red-500/15" />
                 </div>
               </div>
-              <div class="flex items-center justify-center gap-1.5 text-[10px] text-muted-foreground font-mono uppercase tracking-wider">
+              <div class="flex items-center justify-center gap-1.5 text-[10px] font-mono uppercase tracking-wider"
+                   :class="m.live_game_time != null ? 'text-cyan-400' : 'text-muted-foreground'">
                 <Eye class="w-3 h-3" />
-                <span>{{ formatRelativeTime(m.started_at) }}</span>
+                <template v-if="m.live_game_time != null">
+                  <span class="font-bold">{{ t('homeLiveGameTime') }} {{ fmtGameTime(m.live_game_time) }}</span>
+                </template>
+                <template v-else>
+                  <span>{{ formatRelativeTime(m.started_at) }}</span>
+                </template>
               </div>
             </div>
           </router-link>

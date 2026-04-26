@@ -1330,6 +1330,7 @@ export default {
   homeStatActiveTournaments: 'Active Tournaments',
   homeLiveTitle: 'Live Matches',
   homeLiveWatch: 'Watch Stream',
+  homeLiveGameTime: 'Game time',
   viewAll: 'View all',
   homeFeaturedBadge: 'FEATURED TOURNAMENT',
   homeFeaturedTeams: 'Teams',

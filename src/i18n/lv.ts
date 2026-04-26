@@ -1321,6 +1321,7 @@ export default {
   homeStatActiveTournaments: 'Aktīvie Turnīri',
   homeLiveTitle: 'Tiešraides Mači',
   homeLiveWatch: 'Skatīties Translāciju',
+  homeLiveGameTime: 'Spēles laiks',
   viewAll: 'Skatīt visus',
   homeFeaturedBadge: 'IZVĒLĒTAIS TURNĪRS',
   homeFeaturedTeams: 'Komandas',

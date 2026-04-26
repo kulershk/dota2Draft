@@ -1321,6 +1321,7 @@ export default {
   homeStatActiveTournaments: 'Aktyvūs Turnyrai',
   homeLiveTitle: 'Tiesioginės Rungtynės',
   homeLiveWatch: 'Žiūrėti Transliaciją',
+  homeLiveGameTime: 'Žaidimo laikas',
   viewAll: 'Žiūrėti visus',
   homeFeaturedBadge: 'IŠSKIRTINIS TURNYRAS',
   homeFeaturedTeams: 'Komandos',
