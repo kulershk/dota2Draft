@@ -84,7 +84,7 @@ async function claimDaily() {
 }
 
 const liveCards = computed(() => liveMatches.value.slice(0, 3))
-const newsCards = computed(() => news.value.slice(0, 4))
+const newsCards = computed(() => news.value.slice(0, 3))
 
 let pollInterval: ReturnType<typeof setInterval> | null = null
 
@@ -102,7 +102,7 @@ async function loadAll() {
   stats.value = s
   liveMatches.value = (history as any[]).filter(m => m.status === 'live')
   featured.value = feat
-  news.value = (n as any[]).slice(0, 4)
+  news.value = (n as any[]).slice(0, 3)
   topPlayers.value = top
   heroPickRate.value = pickRate
   upcomingNext.value = (upcoming as any[])[0] || null
@@ -145,6 +145,23 @@ function fmtRange(a: string | null, b: string | null): string {
   if (!a && !b) return '—'
   const f = (s: string | null) => s ? new Date(s).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '?'
   return `${f(a)} → ${f(b)}`
+}
+
+// Featured tournament CTA — text + variant depend on competition status.
+function featuredCta(status: string | null | undefined): { key: string; show: boolean } {
+  switch (status) {
+    case 'registration':        return { key: 'homeFeaturedCtaRegister',   show: true }
+    case 'registration_closed': return { key: 'homeFeaturedCtaView',       show: true }
+    case 'active':              return { key: 'homeFeaturedCtaJoin',       show: true }
+    case 'finished':            return { key: 'homeFeaturedCtaResults',    show: true }
+    default:                    return { key: 'homeFeaturedCtaView',       show: false }
+  }
+}
+
+function fmtMatchTime(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
 onMounted(() => {
@@ -321,10 +338,6 @@ onUnmounted(() => { if (pollInterval) clearInterval(pollInterval) })
                 <span class="text-2xl font-bold font-mono text-cyan-400">{{ featured.captain_count || 0 }}</span>
                 <span class="text-xs text-muted-foreground">{{ t('homeFeaturedTeams') }}</span>
               </div>
-              <div class="flex flex-col gap-1">
-                <span class="text-lg font-bold font-mono text-foreground">{{ fmtRange(featured.starts_at, featured.registration_end) }}</span>
-                <span class="text-xs text-muted-foreground">{{ t('homeFeaturedDates') }}</span>
-              </div>
               <div v-if="featured.competition_type" class="flex flex-col gap-1">
                 <span class="text-lg font-bold font-mono text-foreground capitalize">{{ featured.competition_type }}</span>
                 <span class="text-xs text-muted-foreground">{{ t('homeFeaturedFormat') }}</span>
@@ -332,11 +345,12 @@ onUnmounted(() => { if (pollInterval) clearInterval(pollInterval) })
             </div>
             <div class="flex items-center gap-3 mt-4">
               <router-link
+                v-if="featuredCta(featured.status).show"
                 :to="{ name: 'comp-info', params: { compId: featured.id } }"
                 class="inline-flex items-center gap-2 h-12 px-6 rounded-lg bg-amber-500 text-[#0A0F1C] font-bold text-sm hover:brightness-110 transition-all"
               >
                 <UserPlus class="w-4 h-4" />
-                {{ t('homeFeaturedCtaPrimary') }}
+                {{ t(featuredCta(featured.status).key) }}
               </router-link>
               <router-link
                 :to="{ name: 'comp-info', params: { compId: featured.id } }"
@@ -347,45 +361,38 @@ onUnmounted(() => { if (pollInterval) clearInterval(pollInterval) })
             </div>
           </div>
 
-          <!-- Right: Bracket Preview -->
+          <!-- Right: Upcoming Matches -->
           <div class="p-8 border-t lg:border-t-0 lg:border-l border-[#1F2937]"
                style="background: linear-gradient(135deg, #0A1224 0%, #160A24 100%);">
             <div class="flex items-center justify-between mb-4">
-              <span class="text-sm font-bold">{{ t('homeFeaturedBracket') }}</span>
-              <span class="text-xs font-mono font-semibold text-cyan-400">
-                {{ featured.bracket?.[0]?.stage_name || t('homeFeaturedBracketStage') }}
-              </span>
+              <span class="text-sm font-bold">{{ t('homeFeaturedUpcoming') }}</span>
+              <router-link :to="{ name: 'comp-matches', params: { compId: featured.id } }"
+                           class="inline-flex items-center gap-1 text-xs text-cyan-400 hover:underline font-semibold">
+                {{ t('viewAll') }} <ChevronRight class="w-3 h-3" />
+              </router-link>
             </div>
-            <div v-if="featured.bracket?.length" class="grid grid-cols-3 gap-4 items-center">
-              <!-- Column 1: first 4 matches -->
-              <div class="flex flex-col gap-3">
-                <div v-for="m in featured.bracket.slice(0, 4)" :key="m.id"
-                     class="rounded-md bg-[#0F1A2E] border border-[#1F2937] overflow-hidden text-[11px]">
-                  <div class="px-2.5 py-1.5 truncate text-muted-foreground">{{ m.team1 || '—' }}</div>
-                  <div class="h-px bg-border/40" />
-                  <div class="px-2.5 py-1.5 truncate text-muted-foreground">{{ m.team2 || '—' }}</div>
+            <div v-if="featured.upcoming_matches?.length" class="flex flex-col gap-3">
+              <router-link
+                v-for="m in featured.upcoming_matches" :key="m.id"
+                :to="{ name: 'comp-match', params: { compId: featured.id, matchId: m.id } }"
+                class="rounded-lg bg-[#0F1A2E] border border-[#1F2937] hover:border-cyan-500/40 transition-colors p-3 flex flex-col gap-2"
+              >
+                <div class="flex items-center justify-between text-[10px] font-bold font-mono tracking-widest">
+                  <span :class="m.status === 'live' ? 'text-red-500' : 'text-muted-foreground'">
+                    <span v-if="m.status === 'live'" class="inline-block w-1.5 h-1.5 rounded-full bg-red-500 mr-1 animate-pulse" />
+                    {{ m.status === 'live' ? t('matchLive').toUpperCase() : (m.stage_name || m.label || t('matchScheduled').toUpperCase()) }}
+                  </span>
+                  <span v-if="m.scheduled_at && m.status !== 'live'" class="text-muted-foreground/70">{{ fmtMatchTime(m.scheduled_at) }}</span>
                 </div>
-              </div>
-              <!-- Column 2: 2 semis -->
-              <div class="flex flex-col gap-6 justify-center py-6">
-                <div v-for="m in featured.bracket.slice(4, 6)" :key="m.id"
-                     class="rounded-md bg-[#0F1A2E] border border-cyan-500/40 overflow-hidden text-[11px]">
-                  <div class="px-2.5 py-1.5 truncate text-muted-foreground">{{ m.team1 || '—' }}</div>
-                  <div class="h-px bg-border/40" />
-                  <div class="px-2.5 py-1.5 truncate text-muted-foreground">{{ m.team2 || '—' }}</div>
+                <div class="flex items-center justify-between gap-2 text-xs">
+                  <span class="font-semibold truncate flex-1">{{ m.team1 || t('tbd') }}</span>
+                  <span class="font-mono text-muted-foreground/60">vs</span>
+                  <span class="font-semibold truncate flex-1 text-right">{{ m.team2 || t('tbd') }}</span>
                 </div>
-              </div>
-              <!-- Column 3: trophy -->
-              <div class="flex flex-col items-center gap-2 justify-center py-12">
-                <div class="w-14 h-14 rounded-2xl flex items-center justify-center"
-                     style="background: linear-gradient(135deg, #F59E0B 0%, #B45309 100%);">
-                  <Trophy class="w-7 h-7 text-[#0A0F1C]" />
-                </div>
-                <span class="text-[11px] font-bold font-mono tracking-widest text-amber-500">{{ t('homeFeaturedFinal') }}</span>
-              </div>
+              </router-link>
             </div>
             <div v-else class="text-center text-sm text-muted-foreground py-12">
-              {{ t('homeFeaturedNoBracket') }}
+              {{ t('homeFeaturedNoUpcoming') }}
             </div>
           </div>
         </div>
@@ -404,14 +411,14 @@ onUnmounted(() => { if (pollInterval) clearInterval(pollInterval) })
             {{ t('viewAll') }} <ChevronRight class="w-4 h-4" />
           </router-link>
         </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           <router-link
             v-for="(n, i) in newsCards" :key="n.id"
             :to="{ name: 'news-post', params: { id: n.id } }"
             class="rounded-[14px] bg-[#0F1A2E] border border-[#1F2937] hover:border-cyan-500/50 transition-colors overflow-hidden flex flex-col"
           >
             <div class="h-40 flex items-center justify-center"
-                 :style="`background: linear-gradient(135deg, ${i % 4 === 0 ? '#22D3EE' : i % 4 === 1 ? '#A855F7' : i % 4 === 2 ? '#F59E0B' : '#10B981'} 0%, #0E1A33 100%);`">
+                 :style="`background: linear-gradient(135deg, ${i % 3 === 0 ? '#22D3EE' : i % 3 === 1 ? '#A855F7' : '#F59E0B'} 0%, #0E1A33 100%);`">
               <img v-if="n.image_url" :src="n.image_url" class="w-full h-full object-cover" />
               <Trophy v-else class="w-12 h-12 text-[#0A0F1C] opacity-40" />
             </div>

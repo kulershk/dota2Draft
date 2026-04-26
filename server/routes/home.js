@@ -43,12 +43,12 @@ router.get('/api/home/featured-tournament', async (req, res) => {
     `)
     if (!comp) return res.json(null)
 
-    // Pull the latest "live" or most-recent stage's matches as a bracket slice
-    let bracket = []
+    // Pull upcoming/live matches for this competition (next 5).
+    let upcoming_matches = []
     try {
-      bracket = await query(`
+      upcoming_matches = await query(`
         SELECT m.id, m.team1_captain_id, m.team2_captain_id, m.status, m.score1, m.score2,
-          m.winner_captain_id, m.scheduled_at, m.round, m.match_order, m.label,
+          m.winner_captain_id, m.scheduled_at, m.best_of, m.label,
           c1.team AS team1, c1.banner_url AS team1_banner,
           c2.team AS team2, c2.banner_url AS team2_banner,
           ts.name AS stage_name
@@ -57,19 +57,21 @@ router.get('/api/home/featured-tournament', async (req, res) => {
         LEFT JOIN captains c2 ON c2.id = m.team2_captain_id
         LEFT JOIN tournament_stages ts ON ts.id = m.stage_id
         WHERE m.competition_id = $1
+          AND m.status IN ('live', 'pending')
+          AND m.hidden = false
         ORDER BY
-          CASE WHEN m.status = 'live' THEN 0 WHEN m.status = 'pending' THEN 1 ELSE 2 END,
-          COALESCE(m.scheduled_at, m.created_at) ASC,
-          m.round ASC, m.match_order ASC
-        LIMIT 7
+          CASE WHEN m.status = 'live' THEN 0 ELSE 1 END,
+          m.scheduled_at ASC NULLS LAST,
+          m.id ASC
+        LIMIT 5
       `, [comp.id])
     } catch (e) {
       // tournament_stages may not exist on older deployments — fall back gracefully.
-      bracket = []
+      upcoming_matches = []
     }
     res.json({
       ...comp,
-      bracket,
+      upcoming_matches,
     })
   } catch (e) {
     res.status(500).json({ error: e.message })
