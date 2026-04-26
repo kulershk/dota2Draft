@@ -217,17 +217,54 @@ onUnmounted(() => { if (pollInterval) clearInterval(pollInterval) })
           </div>
         </div>
 
-        <!-- Hero visual -->
-        <div class="relative w-[360px] h-[420px] hidden lg:block shrink-0">
-          <!-- glow / ring background -->
-          <div class="absolute inset-0 rounded-full blur-3xl opacity-50"
-            style="background: radial-gradient(circle, #22D3EE40 0%, transparent 70%);" />
-          <div class="absolute inset-8 rounded-full border-[6px] border-cyan-400/40" />
-          <div class="absolute inset-16 rounded-full border-[5px] border-amber-500/50" />
-          <Swords class="absolute inset-0 m-auto w-24 h-24 text-cyan-400/90" />
+        <!-- Hero visual (480×420 to match Pencil ratios) -->
+        <div class="relative w-[480px] h-[420px] hidden lg:block shrink-0">
+          <!-- Background glows: cyan top-left + amber lower-mid -->
+          <div class="absolute blur-3xl rounded-full"
+               style="left: 80px; top: 40px; width: 340px; height: 340px;
+                      background: radial-gradient(circle, #22D3EE66 0%, transparent 70%);" />
+          <div class="absolute blur-3xl rounded-full"
+               style="left: 140px; top: 120px; width: 300px; height: 300px;
+                      background: radial-gradient(circle, #F59E0B40 0%, transparent 70%);" />
 
-          <!-- floating chips -->
-          <div class="absolute top-12 left-0 flex items-center gap-3 h-16 px-4 rounded-xl bg-[#0F1A2E]/85 border border-[#1F2937] shadow-2xl">
+          <!-- Rings + shield drawn as one SVG so proportions stay perfect -->
+          <svg viewBox="0 0 480 420" class="absolute inset-0 w-full h-full">
+            <defs>
+              <linearGradient id="shieldGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#1E293B" />
+                <stop offset="100%" stop-color="#0F172A" />
+              </linearGradient>
+            </defs>
+            <!-- Outer cyan ring (full) — radius 156, thin stroke -->
+            <circle cx="250" cy="210" r="156" fill="none" stroke="#22D3EE" stroke-opacity="0.4" stroke-width="13" />
+            <!-- Inner amber arc (partial 240° sweep) — radius 124, thin stroke
+                 SVG circle starts at 3 o'clock; rotate so the gap sits top-right. -->
+            <circle cx="250" cy="210" r="124" fill="none" stroke="#F59E0B" stroke-opacity="0.6" stroke-width="6"
+                    stroke-dasharray="519 260" transform="rotate(140 250 210)" stroke-linecap="round" />
+            <!-- Shield silhouette: pentagonal badge with banner cuts -->
+            <path
+              d="M170 100
+                 L330 100
+                 L330 240
+                 L300 270
+                 L330 290
+                 L300 320
+                 L250 340
+                 L200 320
+                 L170 290
+                 L200 270
+                 L170 240
+                 Z"
+              fill="url(#shieldGradient)" stroke="#22D3EE" stroke-width="2" stroke-linejoin="round" />
+          </svg>
+
+          <!-- Crossed swords icon centered in the shield -->
+          <Swords class="absolute text-cyan-400/90"
+                  style="left: 200px; top: 170px; width: 100px; height: 100px;" />
+
+          <!-- Floating chips -->
+          <div class="absolute flex items-center gap-3 h-16 px-4 rounded-xl bg-[#0F1A2E]/85 border border-[#1F2937] shadow-2xl"
+               style="left: 0px; top: 60px;">
             <div class="w-9 h-9 rounded-lg bg-cyan-500/20 flex items-center justify-center">
               <Users class="w-4 h-4 text-cyan-400" />
             </div>
@@ -237,7 +274,8 @@ onUnmounted(() => { if (pollInterval) clearInterval(pollInterval) })
             </div>
           </div>
 
-          <div class="absolute top-0 right-0 flex items-center gap-3 h-16 px-4 rounded-xl bg-[#0F1A2E]/85 border border-red-500/40 shadow-2xl">
+          <div class="absolute flex items-center gap-3 h-16 px-4 rounded-xl bg-[#0F1A2E]/85 border border-red-500/40 shadow-2xl"
+               style="left: 280px; top: 0px;">
             <div class="w-9 h-9 rounded-lg bg-red-500/20 flex items-center justify-center">
               <Radio class="w-4 h-4 text-red-500" />
             </div>
@@ -247,7 +285,8 @@ onUnmounted(() => { if (pollInterval) clearInterval(pollInterval) })
             </div>
           </div>
 
-          <div class="absolute bottom-0 left-12 flex items-center gap-3 h-16 px-4 rounded-xl bg-[#0F1A2E]/85 border border-amber-500/40 shadow-2xl">
+          <div class="absolute flex items-center gap-3 h-16 px-4 rounded-xl bg-[#0F1A2E]/85 border border-amber-500/40 shadow-2xl"
+               style="left: 140px; top: 340px;">
             <div class="w-9 h-9 rounded-lg bg-amber-500/20 flex items-center justify-center">
               <Trophy class="w-4 h-4 text-amber-500" />
             </div>
