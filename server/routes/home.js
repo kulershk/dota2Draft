@@ -52,8 +52,8 @@ router.get('/api/home/featured-tournament', async (req, res) => {
           c1.team AS team1, c1.banner_url AS team1_banner,
           c2.team AS team2, c2.banner_url AS team2_banner
         FROM matches m
-        LEFT JOIN captains c1 ON c1.id = m.team1_captain_id
-        LEFT JOIN captains c2 ON c2.id = m.team2_captain_id
+        JOIN captains c1 ON c1.id = m.team1_captain_id
+        JOIN captains c2 ON c2.id = m.team2_captain_id
         WHERE m.competition_id = $1
           AND m.status != 'completed'
           AND COALESCE(m.hidden, false) = false

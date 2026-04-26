@@ -388,9 +388,17 @@ onUnmounted(() => { if (pollInterval) clearInterval(pollInterval) })
                   <span v-if="m.scheduled_at && m.status !== 'live'" class="text-muted-foreground/70">{{ fmtMatchTime(m.scheduled_at) }}</span>
                 </div>
                 <div class="flex items-center justify-between gap-2 text-xs">
-                  <span class="font-semibold truncate flex-1">{{ m.team1 || t('tbd') }}</span>
-                  <span class="font-mono text-muted-foreground/60">vs</span>
-                  <span class="font-semibold truncate flex-1 text-right">{{ m.team2 || t('tbd') }}</span>
+                  <div class="flex items-center gap-1.5 min-w-0 flex-1">
+                    <img v-if="m.team1_banner" :src="m.team1_banner" class="w-5 h-5 rounded object-cover shrink-0" />
+                    <div v-else class="w-5 h-5 rounded bg-accent shrink-0" />
+                    <span class="font-semibold truncate">{{ m.team1 }}</span>
+                  </div>
+                  <span class="font-mono text-muted-foreground/60 shrink-0">vs</span>
+                  <div class="flex items-center gap-1.5 min-w-0 flex-1 justify-end">
+                    <span class="font-semibold truncate text-right">{{ m.team2 }}</span>
+                    <img v-if="m.team2_banner" :src="m.team2_banner" class="w-5 h-5 rounded object-cover shrink-0" />
+                    <div v-else class="w-5 h-5 rounded bg-accent shrink-0" />
+                  </div>
                 </div>
               </router-link>
             </div>
