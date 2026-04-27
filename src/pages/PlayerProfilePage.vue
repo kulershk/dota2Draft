@@ -32,6 +32,7 @@ const PAGE_SIZE = 5
 const MATCH_PAGE_SIZE = 10
 const xpPage = ref(1)
 const compPage = ref(1)
+const placementPage = ref(1)
 const matchPage = ref(0)
 const matchHistory = ref<any[]>([])
 const matchTotal = ref(0)
@@ -49,12 +50,16 @@ const playerSeasons = ref<Array<{
 const compTotalPages = computed(() => Math.max(1, Math.ceil((profile.value?.competitions?.length || 0) / PAGE_SIZE)))
 const pagedCompetitions = computed(() => (profile.value?.competitions || []).slice((compPage.value - 1) * PAGE_SIZE, compPage.value * PAGE_SIZE))
 
+const placementTotalPages = computed(() => Math.max(1, Math.ceil((profile.value?.tournament_results?.length || 0) / PAGE_SIZE)))
+const pagedPlacements = computed(() => (profile.value?.tournament_results || []).slice((placementPage.value - 1) * PAGE_SIZE, placementPage.value * PAGE_SIZE))
+
 watch(playerId, async (id) => {
   if (!id) return
   loading.value = true
   error.value = false
   xpPage.value = 1
   compPage.value = 1
+  placementPage.value = 1
   try {
     profile.value = await api.getPlayerProfile(id)
     api.getPlayerXpLog(id).then(logs => { xpLog.value = logs }).catch(() => {})
@@ -660,7 +665,7 @@ const streakBadge = computed(() => {
             </div>
             <div class="p-3 flex flex-col gap-2">
               <div
-                v-for="(result, idx) in profile.tournament_results" :key="idx"
+                v-for="(result, idx) in pagedPlacements" :key="idx"
                 class="flex items-center gap-3 rounded-[10px] bg-muted border-l-[3px] px-3.5 py-3"
                 :class="placementBorderClass(result.placement)"
               >
@@ -685,6 +690,15 @@ const streakBadge = computed(() => {
                   </span>
                 </div>
               </div>
+            </div>
+            <div v-if="placementTotalPages > 1" class="flex items-center justify-between px-4 py-2 border-t border-border">
+              <button class="p-1 rounded hover:bg-accent disabled:opacity-30" :disabled="placementPage <= 1" @click="placementPage--">
+                <ChevronLeft class="w-4 h-4 text-muted-foreground" />
+              </button>
+              <span class="text-xs text-muted-foreground font-mono">{{ placementPage }} / {{ placementTotalPages }}</span>
+              <button class="p-1 rounded hover:bg-accent disabled:opacity-30" :disabled="placementPage >= placementTotalPages" @click="placementPage++">
+                <ChevronRight class="w-4 h-4 text-muted-foreground" />
+              </button>
             </div>
           </div>
 
