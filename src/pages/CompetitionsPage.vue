@@ -101,7 +101,7 @@ watch([searchQuery, statusFilter], () => { page.value = 1 })
             </div>
             <div class="min-w-0">
               <h3 class="text-base font-semibold text-foreground">{{ comp.name }}</h3>
-              <div v-if="comp.description" class="text-xs text-muted-foreground mt-0.5 prose prose-sm dark:prose-invert max-w-none [&>*]:m-0 line-clamp-2" v-html="comp.description"></div>
+              <div v-if="comp.description" class="text-xs text-muted-foreground mt-0.5 prose prose-sm dark:prose-invert max-w-none [&>*]:m-0 line-clamp-2" v-safe-html="comp.description"></div>
               <div class="flex items-center gap-3 mt-1 flex-wrap">
                 <span v-if="comp.registration_start || comp.registration_end" class="flex items-center gap-1 text-xs text-muted-foreground">
                   <Users class="w-3 h-3" />

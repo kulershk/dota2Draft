@@ -26,7 +26,8 @@
     { "name": "Home", "description": "Aggregated data for the public home page (stats, featured tournament, top players, hero pick rate)" },
     { "name": "MMR Verifications", "description": "User-submitted MMR change requests with screenshot proof; admins approve to update players.mmr" },
     { "name": "Dota", "description": "Dota 2 constants (heroes, items)" },
-    { "name": "Jobs", "description": "Background job admin (list/retry/cancel)" }
+    { "name": "Jobs", "description": "Background job admin (list/retry/cancel)" },
+    { "name": "Admin Stats", "description": "Request and socket-event observability for admins" }
   ],
   "components": {
     "securitySchemes": {
@@ -2455,6 +2456,81 @@
             }
           },
           "responses": { "200": { "description": "Number deleted" } }
+        }
+      },
+      "/api/admin/stats/summary": {
+        "get": {
+          "tags": ["Admin Stats"],
+          "summary": "Aggregate request/socket counts for the period",
+          "description": "Returns total requests, unique users/IPs, avg + p95 latency, status-class breakdown, and socket totals. Requires `view_request_stats` permission.",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [
+            { "name": "period", "in": "query", "schema": { "type": "string", "enum": ["1h", "24h", "7d", "14d"], "default": "24h" } }
+          ],
+          "responses": { "200": { "description": "Summary stats" } }
+        }
+      },
+      "/api/admin/stats/top-routes": {
+        "get": {
+          "tags": ["Admin Stats"],
+          "summary": "Top routes by hit count",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [
+            { "name": "period", "in": "query", "schema": { "type": "string", "enum": ["1h", "24h", "7d", "14d"], "default": "24h" } },
+            { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } }
+          ],
+          "responses": { "200": { "description": "Array of { method, path, count, avg_ms, p95_ms, errors }" } }
+        }
+      },
+      "/api/admin/stats/timeseries": {
+        "get": {
+          "tags": ["Admin Stats"],
+          "summary": "Bucketed request counts over time",
+          "description": "Default bucket auto-selected from period (1h→minute, 24h→hour, longer→day). Optional path/method filters narrow to a single route.",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [
+            { "name": "period", "in": "query", "schema": { "type": "string", "enum": ["1h", "24h", "7d", "14d"], "default": "24h" } },
+            { "name": "bucket", "in": "query", "schema": { "type": "string", "enum": ["minute", "hour", "day"] } },
+            { "name": "path", "in": "query", "schema": { "type": "string" } },
+            { "name": "method", "in": "query", "schema": { "type": "string" } }
+          ],
+          "responses": { "200": { "description": "{ bucket, rows: [{ bucket, count, errors, avg_ms }] }" } }
+        }
+      },
+      "/api/admin/stats/top-users": {
+        "get": {
+          "tags": ["Admin Stats"],
+          "summary": "Top authenticated users by request count",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [
+            { "name": "period", "in": "query", "schema": { "type": "string", "enum": ["1h", "24h", "7d", "14d"], "default": "24h" } },
+            { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } }
+          ],
+          "responses": { "200": { "description": "Array of { user_id, name, avatar_url, count, errors, last_seen }" } }
+        }
+      },
+      "/api/admin/stats/top-ips": {
+        "get": {
+          "tags": ["Admin Stats"],
+          "summary": "Top source IPs by request count",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [
+            { "name": "period", "in": "query", "schema": { "type": "string", "enum": ["1h", "24h", "7d", "14d"], "default": "24h" } },
+            { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } }
+          ],
+          "responses": { "200": { "description": "Array of { ip, count, unique_users, errors, last_seen }" } }
+        }
+      },
+      "/api/admin/stats/socket-events": {
+        "get": {
+          "tags": ["Admin Stats"],
+          "summary": "Top Socket.io events by emit count",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [
+            { "name": "period", "in": "query", "schema": { "type": "string", "enum": ["1h", "24h", "7d", "14d"], "default": "24h" } },
+            { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 } }
+          ],
+          "responses": { "200": { "description": "Array of { event, count, unique_users }" } }
         }
       }
     }

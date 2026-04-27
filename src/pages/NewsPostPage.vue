@@ -146,7 +146,7 @@ watch(postId, () => {
           <img :src="post.image_url" class="w-full object-cover" style="aspect-ratio: 1120 / 400;" />
         </div>
         <div class="h-px bg-border" />
-        <div class="prose prose-sm dark:prose-invert max-w-none text-muted-foreground leading-relaxed" v-html="post.content"></div>
+        <div class="prose prose-sm dark:prose-invert max-w-none text-muted-foreground leading-relaxed" v-safe-html="post.content"></div>
       </article>
 
       <!-- Comments Section -->

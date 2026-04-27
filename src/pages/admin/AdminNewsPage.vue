@@ -114,7 +114,7 @@ function formatDate(dateStr: string) {
                   {{ formatDate(post.created_at) }}
                 </span>
               </div>
-              <div class="prose prose-sm dark:prose-invert max-w-none mt-2 text-muted-foreground line-clamp-3" v-html="post.content"></div>
+              <div class="prose prose-sm dark:prose-invert max-w-none mt-2 text-muted-foreground line-clamp-3" v-safe-html="post.content"></div>
             </div>
             <div class="flex items-center gap-1 shrink-0">
               <button class="btn-ghost p-2" title="Edit" @click="openEditNews(post)">

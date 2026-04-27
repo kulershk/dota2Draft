@@ -32,6 +32,8 @@ import createSeasonsRouter from './routes/seasons.js'
 import createMmrVerificationsRouter from './routes/mmrVerifications.js'
 import homeRoutes from './routes/home.js'
 import jobRoutes from './routes/jobs.js'
+import adminStatsRoutes from './routes/adminStats.js'
+import { requestLogger, startRequestLoggerWorkers } from './middleware/requestLogger.js'
 import { startJobWorker, registerHandler, registerSchedule, enqueueJob } from './services/jobs.js'
 import { fetchSteamMatchDetails } from './helpers/steam.js'
 import { fetchOpenDotaMatch, saveMatchGameStats, requestOpenDotaParse } from './helpers/opendota.js'
@@ -55,6 +57,7 @@ app.set('io', io)
 
 app.use(cors())
 app.use(express.json())
+app.use(requestLogger)
 
 // Static files
 // Hashed assets under /assets/* are immutable, so we can cache them aggressively.
@@ -116,6 +119,7 @@ app.use(createSeasonsRouter(io))
 app.use(createMmrVerificationsRouter(io))
 app.use(homeRoutes)
 app.use(jobRoutes)
+app.use(adminStatsRoutes)
 
 // Socket.io
 initSocket(io)
@@ -150,6 +154,7 @@ server.on('upgrade', (req, socket, head) => {
 })
 
 initDb().then(async () => {
+  startRequestLoggerWorkers()
   await botPool.init(io, botWss)
   // Schema is now in place — safe to resume live-stat polling for any matches
   // still flagged 'live' in the DB.

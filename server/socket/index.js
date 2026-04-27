@@ -8,10 +8,20 @@ import {
 import { registerAuctionHandlers } from './auction.js'
 import { registerMatchReadyHandlers } from './matchReady.js'
 import { registerQueueHandlers } from './queue.js'
+import { logSocketEvent } from '../middleware/requestLogger.js'
 
 export function initSocket(io) {
   io.on('connection', (socket) => {
     console.log(`Client connected: ${socket.id}`)
+
+    socket.use(([event], next) => {
+      logSocketEvent({
+        event,
+        userId: socketPlayers.get(socket.id) || null,
+        competitionId: socketCompetitions.get(socket.id) || null,
+      })
+      next()
+    })
 
     // Auth from handshake
     const handshakeToken = socket.handshake.auth?.token

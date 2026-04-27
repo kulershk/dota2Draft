@@ -67,6 +67,7 @@ const router = createRouter({
         { path: 'seasons/:id', name: 'admin-season-setup', meta: { permissions: ['manage_seasons'] }, component: () => import('@/pages/admin/AdminSeasonSetupPage.vue') },
         { path: 'mmr-verifications', name: 'admin-mmr-verifications', meta: { permissions: ['manage_mmr_verifications'] }, component: () => import('@/pages/admin/AdminMmrVerificationsPage.vue') },
         { path: 'jobs', name: 'admin-jobs', meta: { permissions: ['manage_jobs'] }, component: () => import('@/pages/admin/AdminJobsPage.vue') },
+        { path: 'request-stats', name: 'admin-request-stats', meta: { permissions: ['view_request_stats'] }, component: () => import('@/pages/admin/AdminRequestStatsPage.vue') },
       ],
     },
   ],

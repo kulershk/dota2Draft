@@ -105,7 +105,7 @@ function formatDate(dateStr: string) {
             </div>
             <div class="min-w-0">
               <h3 class="text-sm font-semibold text-foreground truncate">{{ comp.name }}</h3>
-              <div v-if="comp.description" class="text-xs text-muted-foreground truncate prose prose-sm dark:prose-invert max-w-none [&>*]:m-0" v-html="comp.description"></div>
+              <div v-if="comp.description" class="text-xs text-muted-foreground truncate prose prose-sm dark:prose-invert max-w-none [&>*]:m-0" v-safe-html="comp.description"></div>
               <div class="flex items-center gap-3 mt-0.5 flex-wrap">
                 <span v-if="comp.starts_at" class="flex items-center gap-1 text-xs text-muted-foreground">
                   <Calendar class="w-3 h-3" />

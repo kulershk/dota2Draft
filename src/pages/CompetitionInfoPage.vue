@@ -297,7 +297,7 @@ async function removeBanner() {
           <div class="flex flex-col gap-5">
             <div>
               <p class="text-[11px] font-semibold font-mono uppercase tracking-[2px] text-text-tertiary mb-1.5">{{ t('about').toUpperCase() }}</p>
-              <div class="prose prose-sm dark:prose-invert max-w-none text-muted-foreground leading-relaxed" v-html="comp.description"></div>
+              <div class="prose prose-sm dark:prose-invert max-w-none text-muted-foreground leading-relaxed" v-safe-html="comp.description"></div>
             </div>
           </div>
         </div>

@@ -535,6 +535,25 @@ export function useApi() {
     deleteSponsor: (id: number) =>
       request(`/api/site-settings/sponsors/${id}`, { method: 'DELETE' }),
 
+    // Admin Request Stats
+    getRequestStatsSummary: (period: string) =>
+      request(`/api/admin/stats/summary?period=${encodeURIComponent(period)}`),
+    getRequestStatsTopRoutes: (period: string, limit = 20) =>
+      request(`/api/admin/stats/top-routes?period=${encodeURIComponent(period)}&limit=${limit}`),
+    getRequestStatsTimeseries: (period: string, opts?: { bucket?: string; path?: string; method?: string }) => {
+      const qs = new URLSearchParams({ period })
+      if (opts?.bucket) qs.set('bucket', opts.bucket)
+      if (opts?.path) qs.set('path', opts.path)
+      if (opts?.method) qs.set('method', opts.method)
+      return request(`/api/admin/stats/timeseries?${qs}`)
+    },
+    getRequestStatsTopUsers: (period: string, limit = 20) =>
+      request(`/api/admin/stats/top-users?period=${encodeURIComponent(period)}&limit=${limit}`),
+    getSocketEventStats: (period: string, limit = 50) =>
+      request(`/api/admin/stats/socket-events?period=${encodeURIComponent(period)}&limit=${limit}`),
+    getRequestStatsTopIps: (period: string, limit = 20) =>
+      request(`/api/admin/stats/top-ips?period=${encodeURIComponent(period)}&limit=${limit}`),
+
     // Home page data
     getHomeStats: () => request('/api/home/stats'),
     getFeaturedTournament: () => request('/api/home/featured-tournament'),

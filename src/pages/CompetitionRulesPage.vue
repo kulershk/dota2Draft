@@ -18,7 +18,7 @@ const comp = computed(() => store.currentCompetition.value)
           <Info class="w-[18px] h-[18px] text-primary" />
           <span class="text-xl font-semibold text-foreground">{{ comp.rules_title || t('rules') || 'Rules' }}</span>
         </div>
-        <div class="prose prose-sm dark:prose-invert max-w-none text-muted-foreground leading-relaxed" v-html="comp.rules_content"></div>
+        <div class="prose prose-sm dark:prose-invert max-w-none text-muted-foreground leading-relaxed" v-safe-html="comp.rules_content"></div>
       </div>
       <div v-else class="text-center py-12 text-muted-foreground">
         {{ t('noRulesYet') || 'No rules have been added yet.' }}

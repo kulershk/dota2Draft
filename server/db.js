@@ -857,6 +857,36 @@ export async function initDb() {
     ) sub
     WHERE p.id = sub.player_id AND p.mmr_verified_at IS NULL
   `)
+
+  // ─── Request logs (admin observability) ──────────────────
+  await execute(`
+    CREATE TABLE IF NOT EXISTS request_logs (
+      id BIGSERIAL PRIMARY KEY,
+      ts TIMESTAMP NOT NULL DEFAULT NOW(),
+      method TEXT NOT NULL,
+      path TEXT NOT NULL,
+      status INTEGER NOT NULL,
+      duration_ms INTEGER,
+      user_id INTEGER,
+      ip TEXT,
+      user_agent TEXT
+    )
+  `)
+  try { await execute(`CREATE INDEX IF NOT EXISTS idx_request_logs_ts ON request_logs (ts DESC)`) } catch {}
+  try { await execute(`CREATE INDEX IF NOT EXISTS idx_request_logs_path_ts ON request_logs (path, ts DESC)`) } catch {}
+  try { await execute(`CREATE INDEX IF NOT EXISTS idx_request_logs_user_ts ON request_logs (user_id, ts DESC)`) } catch {}
+
+  await execute(`
+    CREATE TABLE IF NOT EXISTS socket_event_logs (
+      id BIGSERIAL PRIMARY KEY,
+      ts TIMESTAMP NOT NULL DEFAULT NOW(),
+      event TEXT NOT NULL,
+      user_id INTEGER,
+      competition_id INTEGER
+    )
+  `)
+  try { await execute(`CREATE INDEX IF NOT EXISTS idx_socket_event_logs_ts ON socket_event_logs (ts DESC)`) } catch {}
+  try { await execute(`CREATE INDEX IF NOT EXISTS idx_socket_event_logs_event_ts ON socket_event_logs (event, ts DESC)`) } catch {}
 }
 
 async function createFreshCompetitionTables() {
