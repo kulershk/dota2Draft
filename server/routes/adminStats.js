@@ -4,29 +4,59 @@ import { requirePermission } from '../middleware/permissions.js'
 
 const router = Router()
 
-const PERIOD_HOURS = { '1h': 1, '24h': 24, '7d': 7 * 24, '14d': 14 * 24 }
+const PERIOD_HOURS = { '1h': 1, '24h': 24, '7d': 7 * 24, '14d': 14 * 24, '30d': 30 * 24, '90d': 90 * 24 }
 const BUCKETS = new Set(['minute', 'hour', 'day'])
 
-function parsePeriodHours(period) {
-  return PERIOD_HOURS[period] || 24
-}
-
-function defaultBucketFor(period) {
+function defaultBucketFor(period, hours) {
   if (period === '1h') return 'minute'
   if (period === '24h') return 'hour'
+  if (hours && hours <= 24) return 'hour'
   return 'day'
 }
 
-// Builds the WHERE clause for request_logs. Always filters by ts >= now-hours.
-// Optionally filters by user_id and/or ip when provided. Returns { where, params }.
+// Returns { sql, params, effectiveHours } for the time predicate.
+// Supports presets (1h..90d), 'all' (no time bound), or 'custom' with from/to.
+function buildTimePredicate(req, alias = '') {
+  const a = alias ? `${alias}.` : ''
+  const period = req.query.period || '24h'
+  const params = []
+
+  if (period === 'custom') {
+    const from = req.query.from ? new Date(req.query.from) : null
+    const to = req.query.to ? new Date(req.query.to) : null
+    const validFrom = from && !isNaN(from.getTime()) ? from : null
+    const validTo = to && !isNaN(to.getTime()) ? to : null
+    const parts = []
+    if (validFrom) {
+      params.push(validFrom.toISOString())
+      parts.push(`${a}ts >= $${params.length}`)
+    }
+    if (validTo) {
+      params.push(validTo.toISOString())
+      parts.push(`${a}ts <= $${params.length}`)
+    }
+    if (parts.length === 0) parts.push('TRUE')
+    const effectiveHours = validFrom && validTo
+      ? Math.max(1, Math.round((validTo - validFrom) / 36e5))
+      : null
+    return { sql: parts.join(' AND '), params, effectiveHours }
+  }
+
+  if (period === 'all') {
+    return { sql: 'TRUE', params, effectiveHours: null }
+  }
+
+  const hours = PERIOD_HOURS[period] || 24
+  params.push(String(hours))
+  return { sql: `${a}ts >= NOW() - ($${params.length} || ' hours')::interval`, params, effectiveHours: hours }
+}
+
+// Builds the WHERE clause for request_logs. Time predicate + optional userId/ip.
 function buildRequestFilter(req, alias = '') {
   const a = alias ? `${alias}.` : ''
-  const params = []
-  const parts = []
-
-  const hours = parsePeriodHours(req.query.period || '24h')
-  params.push(String(hours))
-  parts.push(`${a}ts >= NOW() - ($${params.length} || ' hours')::interval`)
+  const t = buildTimePredicate(req, alias)
+  const params = [...t.params]
+  const parts = [t.sql]
 
   const userId = req.query.userId ? Number(req.query.userId) : null
   if (userId && Number.isFinite(userId)) {
@@ -40,17 +70,14 @@ function buildRequestFilter(req, alias = '') {
     parts.push(`${a}ip = $${params.length}`)
   }
 
-  return { where: parts.join(' AND '), params, hours, userId, ip }
+  return { where: parts.join(' AND '), params, hours: t.effectiveHours, userId, ip }
 }
 
 // socket_event_logs has no `ip` column — only user_id is filterable.
 function buildSocketFilter(req) {
-  const params = []
-  const parts = []
-
-  const hours = parsePeriodHours(req.query.period || '24h')
-  params.push(String(hours))
-  parts.push(`ts >= NOW() - ($${params.length} || ' hours')::interval`)
+  const t = buildTimePredicate(req)
+  const params = [...t.params]
+  const parts = [t.sql]
 
   const userId = req.query.userId ? Number(req.query.userId) : null
   if (userId && Number.isFinite(userId)) {
@@ -122,7 +149,7 @@ router.get('/api/admin/stats/timeseries', async (req, res) => {
   if (!await requirePermission(req, res, 'view_request_stats')) return
   const f = buildRequestFilter(req)
   const period = req.query.period || '24h'
-  const bucket = BUCKETS.has(req.query.bucket) ? req.query.bucket : defaultBucketFor(period)
+  const bucket = BUCKETS.has(req.query.bucket) ? req.query.bucket : defaultBucketFor(period, f.hours)
   const path = req.query.path || null
   const method = req.query.method || null
 
@@ -211,6 +238,47 @@ router.get('/api/admin/stats/top-ips', async (req, res) => {
        ORDER BY count DESC
        LIMIT $${f.params.length}`,
     f.params
+  )
+  res.json(rows)
+})
+
+router.get('/api/admin/stats/top-pages', async (req, res) => {
+  if (!await requirePermission(req, res, 'view_request_stats')) return
+  const sf = buildSocketFilter(req)
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100)
+  sf.params.push(limit)
+
+  const rows = await query(
+    `SELECT path,
+            COUNT(*)::int AS count,
+            COUNT(DISTINCT user_id)::int AS unique_users
+       FROM socket_event_logs
+       WHERE ${sf.where} AND event = 'activity' AND path IS NOT NULL
+       GROUP BY path
+       ORDER BY count DESC
+       LIMIT $${sf.params.length}`,
+    sf.params
+  )
+  res.json(rows)
+})
+
+router.get('/api/admin/stats/recent-pages', async (req, res) => {
+  if (!await requirePermission(req, res, 'view_request_stats')) return
+  const sf = buildSocketFilter(req)
+  const userId = req.query.userId ? Number(req.query.userId) : null
+  if (!userId || !Number.isFinite(userId)) {
+    return res.status(400).json({ error: 'userId filter required' })
+  }
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 500)
+  sf.params.push(limit)
+
+  const rows = await query(
+    `SELECT ts, path
+       FROM socket_event_logs
+       WHERE ${sf.where} AND event = 'activity' AND path IS NOT NULL
+       ORDER BY ts DESC
+       LIMIT $${sf.params.length}`,
+    sf.params
   )
   res.json(rows)
 })

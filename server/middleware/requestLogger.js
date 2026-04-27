@@ -3,8 +3,6 @@ import { getSessionPlayerId, getTokenFromReq } from './auth.js'
 
 const FLUSH_INTERVAL_MS = 5_000
 const FLUSH_BATCH_SIZE = 100
-const RETENTION_DAYS = 14
-const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000
 
 const requestQueue = []
 const socketQueue = []
@@ -57,12 +55,13 @@ export function requestLogger(req, res, next) {
   next()
 }
 
-export function logSocketEvent({ event, userId, competitionId }) {
+export function logSocketEvent({ event, userId, competitionId, path }) {
   if (!event) return
   socketQueue.push({
     event,
     user_id: userId || null,
     competition_id: competitionId || null,
+    path: path || null,
   })
   if (socketQueue.length >= FLUSH_BATCH_SIZE) flushSocketEvents().catch(() => {})
 }
@@ -95,26 +94,17 @@ async function flushSocketEvents() {
   const params = []
   let i = 1
   for (const r of batch) {
-    values.push(`($${i}, $${i + 1}, $${i + 2})`)
-    params.push(r.event, r.user_id, r.competition_id)
-    i += 3
+    values.push(`($${i}, $${i + 1}, $${i + 2}, $${i + 3})`)
+    params.push(r.event, r.user_id, r.competition_id, r.path)
+    i += 4
   }
   try {
     await execute(
-      `INSERT INTO socket_event_logs (event, user_id, competition_id) VALUES ${values.join(',')}`,
+      `INSERT INTO socket_event_logs (event, user_id, competition_id, path) VALUES ${values.join(',')}`,
       params
     )
   } catch (e) {
     console.error('[requestLogger] socket flush failed:', e.message)
-  }
-}
-
-async function cleanupOldLogs() {
-  try {
-    await execute(`DELETE FROM request_logs WHERE ts < NOW() - INTERVAL '${RETENTION_DAYS} days'`)
-    await execute(`DELETE FROM socket_event_logs WHERE ts < NOW() - INTERVAL '${RETENTION_DAYS} days'`)
-  } catch (e) {
-    console.error('[requestLogger] cleanup failed:', e.message)
   }
 }
 
@@ -123,12 +113,6 @@ export function startRequestLoggerWorkers() {
     flushRequests().catch(() => {})
     flushSocketEvents().catch(() => {})
   }, FLUSH_INTERVAL_MS).unref?.()
-
-  setInterval(() => {
-    cleanupOldLogs().catch(() => {})
-  }, CLEANUP_INTERVAL_MS).unref?.()
-
-  cleanupOldLogs().catch(() => {})
 
   const flushOnExit = () => {
     flushRequests().catch(() => {})

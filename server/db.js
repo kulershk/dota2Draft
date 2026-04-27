@@ -885,8 +885,10 @@ export async function initDb() {
       competition_id INTEGER
     )
   `)
+  try { await execute(`ALTER TABLE socket_event_logs ADD COLUMN path TEXT`) } catch {}
   try { await execute(`CREATE INDEX IF NOT EXISTS idx_socket_event_logs_ts ON socket_event_logs (ts DESC)`) } catch {}
   try { await execute(`CREATE INDEX IF NOT EXISTS idx_socket_event_logs_event_ts ON socket_event_logs (event, ts DESC)`) } catch {}
+  try { await execute(`CREATE INDEX IF NOT EXISTS idx_socket_event_logs_path_ts ON socket_event_logs (path, ts DESC) WHERE path IS NOT NULL`) } catch {}
 }
 
 async function createFreshCompetitionTables() {

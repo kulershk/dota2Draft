@@ -23,8 +23,10 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointEleme
 const { t } = useI18n()
 const api = useApi()
 
-type Period = '1h' | '24h' | '7d' | '14d'
+type Period = '1h' | '24h' | '7d' | '14d' | '30d' | '90d' | 'all' | 'custom'
 const period = ref<Period>('24h')
+const customFrom = ref<string>('')
+const customTo = ref<string>('')
 const autoRefresh = ref(true)
 const loading = ref(false)
 
@@ -46,6 +48,8 @@ type RecentRow = {
   ts: string; method: string; path: string; status: number; duration_ms: number;
   user_id: number | null; ip: string | null; user_agent: string | null; user_name: string | null
 }
+type PageRow = { path: string; count: number; unique_users: number }
+type RecentPageRow = { ts: string; path: string }
 
 const summary = ref<Summary | null>(null)
 const topRoutes = ref<RouteRow[]>([])
@@ -54,6 +58,8 @@ const topIps = ref<IpRow[]>([])
 const socketEvents = ref<SocketRow[]>([])
 const timeseries = ref<{ bucket: string; rows: TimeseriesRow[] }>({ bucket: 'hour', rows: [] })
 const recentRequests = ref<RecentRow[]>([])
+const topPages = ref<PageRow[]>([])
+const recentPages = ref<RecentPageRow[]>([])
 
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 
@@ -63,15 +69,34 @@ const filterOpts = computed(() => {
   return { ip: filter.value.ip }
 })
 
+const rangeOpts = computed<{ from?: string; to?: string }>(() => {
+  if (period.value !== 'custom') return {}
+  const out: { from?: string; to?: string } = {}
+  if (customFrom.value) {
+    const d = new Date(customFrom.value)
+    if (!isNaN(d.getTime())) out.from = d.toISOString()
+  }
+  if (customTo.value) {
+    const d = new Date(customTo.value)
+    if (!isNaN(d.getTime())) out.to = d.toISOString()
+  }
+  return out
+})
+
+const customRangeReady = computed(() => period.value !== 'custom' || !!(rangeOpts.value.from && rangeOpts.value.to))
+
 async function loadAll() {
+  if (!customRangeReady.value) return
   loading.value = true
   try {
-    const opts = filterOpts.value
+    const opts = { ...filterOpts.value, ...rangeOpts.value }
+    const range = rangeOpts.value
     const calls: Promise<any>[] = [
       api.getRequestStatsSummary(period.value, opts),
       api.getRequestStatsTopRoutes(period.value, { limit: 20, ...opts }),
       api.getSocketEventStats(period.value, {
         limit: 50,
+        ...range,
         ...(filter.value?.kind === 'user' ? { userId: filter.value.userId } : {}),
       }),
       api.getRequestStatsTimeseries(period.value, opts),
@@ -80,6 +105,7 @@ async function loadAll() {
     if (filter.value?.kind !== 'user') {
       calls.push(api.getRequestStatsTopUsers(period.value, {
         limit: 20,
+        ...range,
         ...(filter.value?.kind === 'ip' ? { ip: filter.value.ip } : {}),
       }))
     } else {
@@ -89,6 +115,7 @@ async function loadAll() {
     if (filter.value?.kind !== 'ip') {
       calls.push(api.getRequestStatsTopIps(period.value, {
         limit: 20,
+        ...range,
         ...(filter.value?.kind === 'user' ? { userId: filter.value.userId } : {}),
       }))
     } else {
@@ -100,8 +127,20 @@ async function loadAll() {
     } else {
       calls.push(Promise.resolve([]))
     }
+    // Top pages — uses userId filter when scoped to a user; IP filter not applicable
+    calls.push(api.getRequestStatsTopPages(period.value, {
+      limit: 20,
+      ...range,
+      ...(filter.value?.kind === 'user' ? { userId: filter.value.userId } : {}),
+    }))
+    // Recent pages — only when filtered to a specific user
+    if (filter.value?.kind === 'user') {
+      calls.push(api.getRequestStatsRecentPages(period.value, { userId: filter.value.userId, limit: 100, ...range }))
+    } else {
+      calls.push(Promise.resolve([]))
+    }
 
-    const [s, routes, sockets, ts, users, ips, recent] = await Promise.all(calls)
+    const [s, routes, sockets, ts, users, ips, recent, pages, recentPg] = await Promise.all(calls)
     summary.value = s
     topRoutes.value = routes
     socketEvents.value = sockets
@@ -109,6 +148,8 @@ async function loadAll() {
     topUsers.value = users
     topIps.value = ips
     recentRequests.value = recent
+    topPages.value = pages
+    recentPages.value = recentPg
   } catch (e) {
     console.error(e)
   } finally {
@@ -247,13 +288,36 @@ function statusBadge(s: number): string {
         </h1>
         <p class="text-sm text-muted-foreground mt-1">{{ t('adminRequestStatsDesc') }}</p>
       </div>
-      <div class="flex items-center gap-2">
-        <select v-model="period" class="input-field w-32">
+      <div class="flex items-center gap-2 flex-wrap justify-end">
+        <select v-model="period" class="input-field w-40">
           <option value="1h">{{ t('statsPeriod1h') }}</option>
           <option value="24h">{{ t('statsPeriod24h') }}</option>
           <option value="7d">{{ t('statsPeriod7d') }}</option>
           <option value="14d">{{ t('statsPeriod14d') }}</option>
+          <option value="30d">{{ t('statsPeriod30d') }}</option>
+          <option value="90d">{{ t('statsPeriod90d') }}</option>
+          <option value="all">{{ t('statsPeriodAll') }}</option>
+          <option value="custom">{{ t('statsPeriodCustom') }}</option>
         </select>
+        <template v-if="period === 'custom'">
+          <input
+            v-model="customFrom"
+            type="datetime-local"
+            class="input-field text-xs w-44"
+            :placeholder="t('statsFrom')"
+            :title="t('statsFrom')"
+          />
+          <input
+            v-model="customTo"
+            type="datetime-local"
+            class="input-field text-xs w-44"
+            :placeholder="t('statsTo')"
+            :title="t('statsTo')"
+          />
+          <button class="btn-secondary text-xs" :disabled="!customRangeReady || loading" @click="loadAll">
+            {{ t('statsApply') }}
+          </button>
+        </template>
         <label class="text-xs text-muted-foreground flex items-center gap-1.5">
           <input v-model="autoRefresh" type="checkbox" /> {{ t('autoRefresh') }}
         </label>
@@ -345,6 +409,36 @@ function statusBadge(s: number): string {
             </tr>
             <tr v-if="topRoutes.length === 0">
               <td colspan="6" class="px-4 py-6 text-center text-muted-foreground">{{ t('statsEmpty') }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Top pages -->
+    <div class="card p-0 overflow-hidden">
+      <div class="px-4 py-3 border-b border-border flex items-center gap-2">
+        <h3 class="text-sm font-semibold text-foreground">{{ t('statsTopPages') }}</h3>
+        <span class="text-xs text-muted-foreground">({{ topPages.length }})</span>
+        <span class="ml-auto text-[11px] text-muted-foreground">{{ t('statsTopPagesHint') }}</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-surface text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">
+            <tr>
+              <th class="text-left px-4 py-2.5">{{ t('statsPagePath') }}</th>
+              <th class="text-right px-4 py-2.5 w-24">{{ t('statsCount') }}</th>
+              <th class="text-right px-4 py-2.5 w-32">{{ t('statsUniqueUsers') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(p, i) in topPages" :key="i" class="border-t border-border hover:bg-accent/30">
+              <td class="px-4 py-2 font-mono text-xs text-foreground">{{ p.path }}</td>
+              <td class="px-4 py-2 text-right tabular-nums">{{ p.count.toLocaleString() }}</td>
+              <td class="px-4 py-2 text-right tabular-nums text-muted-foreground">{{ p.unique_users }}</td>
+            </tr>
+            <tr v-if="topPages.length === 0">
+              <td colspan="3" class="px-4 py-6 text-center text-muted-foreground">{{ t('statsEmpty') }}</td>
             </tr>
           </tbody>
         </table>
@@ -458,6 +552,33 @@ function statusBadge(s: number): string {
             </tr>
             <tr v-if="recentRequests.length === 0">
               <td colspan="6" class="px-4 py-6 text-center text-muted-foreground">{{ t('statsEmpty') }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Recent pages (only when filtered to a user) -->
+    <div v-if="filter?.kind === 'user'" class="card p-0 overflow-hidden">
+      <div class="px-4 py-3 border-b border-border flex items-center gap-2">
+        <h3 class="text-sm font-semibold text-foreground">{{ t('statsRecentPages') }}</h3>
+        <span class="text-xs text-muted-foreground">({{ recentPages.length }})</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-surface text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">
+            <tr>
+              <th class="text-left px-4 py-2.5 w-44">{{ t('statsTime') }}</th>
+              <th class="text-left px-4 py-2.5">{{ t('statsPagePath') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(p, i) in recentPages" :key="i" class="border-t border-border hover:bg-accent/30">
+              <td class="px-4 py-2 text-xs text-muted-foreground">{{ fmtDateTime(new Date(p.ts)) }}</td>
+              <td class="px-4 py-2 font-mono text-xs text-foreground truncate max-w-[600px]">{{ p.path }}</td>
+            </tr>
+            <tr v-if="recentPages.length === 0">
+              <td colspan="2" class="px-4 py-6 text-center text-muted-foreground">{{ t('statsEmpty') }}</td>
             </tr>
           </tbody>
         </table>

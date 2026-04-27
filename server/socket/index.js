@@ -14,11 +14,17 @@ export function initSocket(io) {
   io.on('connection', (socket) => {
     console.log(`Client connected: ${socket.id}`)
 
-    socket.use(([event], next) => {
+    socket.use(([event, payload], next) => {
+      let path = null
+      if (event === 'activity' && payload && typeof payload === 'object') {
+        const p = typeof payload.path === 'string' ? payload.path : null
+        if (p) path = p.length > 200 ? p.slice(0, 200) : p
+      }
       logSocketEvent({
         event,
         userId: socketPlayers.get(socket.id) || null,
         competitionId: socketCompetitions.get(socket.id) || null,
+        path,
       })
       next()
     })
