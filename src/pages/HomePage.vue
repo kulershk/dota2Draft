@@ -746,7 +746,7 @@ onUnmounted(() => {
             :href="s.link || undefined" target="_blank" rel="noopener"
             class="opacity-70 hover:opacity-100 transition-opacity"
           >
-            <img :src="s.logo_url" :alt="s.alt" class="h-8 max-w-[160px] object-contain" />
+            <img :src="s.logo_url" :alt="s.alt" class="h-16 max-w-[320px] object-contain" />
           </component>
         </div>
       </div>
