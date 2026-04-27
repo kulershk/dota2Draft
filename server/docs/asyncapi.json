@@ -63,6 +63,7 @@
     "competition:join": {
       "publish": {
         "summary": "Join a competition room to receive real-time updates",
+        "description": "Public competitions can be joined by anonymous sockets. Private (is_public=false) competitions require an authenticated socket — anonymous attempts receive `competition:join:denied` and the socket is not joined to the room.",
         "message": {
           "payload": {
             "type": "object",
@@ -77,6 +78,21 @@
               "payload": { "competitionId": 1 }
             }
           ]
+        }
+      }
+    },
+    "competition:join:denied": {
+      "subscribe": {
+        "summary": "Server rejected a competition:join attempt",
+        "description": "Emitted only to the requesting socket (not broadcast). Currently sent when an anonymous socket tries to join a private competition.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "reason": { "type": "string", "enum": ["auth_required"] }
+            },
+            "required": ["reason"]
+          }
         }
       }
     },

@@ -1,6 +1,6 @@
 import { queryOne, execute } from '../db.js'
 import { getSessionPlayerId } from '../middleware/auth.js'
-import { getFullAuctionState, getAuctionLog, getCaptains } from '../helpers/competition.js'
+import { getFullAuctionState, getAuctionLog, getCaptains, getCompetition } from '../helpers/competition.js'
 import {
   socketPlayers, socketCompetitions, compOnlineCaptains, compReadyCaptains,
   getOnlineCaptainIds, getReadyCaptainIds, playerActivity,
@@ -80,6 +80,15 @@ export function initSocket(io) {
     socket.on('competition:join', async ({ competitionId }) => {
       const compId = competitionId
       if (!compId) return
+
+      // Private competitions require an authenticated socket. Public comps
+      // are joinable anonymously (matches the public REST endpoint behavior).
+      const comp = await getCompetition(compId)
+      if (!comp) return
+      if (!comp.is_public && !socketPlayers.has(socket.id)) {
+        socket.emit('competition:join:denied', { reason: 'auth_required' })
+        return
+      }
 
       const prevCompId = socketCompetitions.get(socket.id)
       if (prevCompId && prevCompId !== compId) {
