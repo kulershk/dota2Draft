@@ -239,19 +239,19 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="p-6 max-w-[1200px] mx-auto">
-    <div class="flex items-center gap-2 mb-4">
+  <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[1200px] w-full">
+    <div class="flex items-center gap-2">
       <button type="button" class="p-1.5 rounded-md hover:bg-accent" @click="router.push({ name: 'admin-seasons' })">
         <ArrowLeft class="w-4 h-4" />
       </button>
       <div class="flex-1 min-w-0">
-        <h1 class="text-2xl font-bold truncate">{{ season?.name || t('loading') }}</h1>
-        <p class="text-xs text-muted-foreground font-mono">{{ season?.slug }}</p>
+        <h1 class="text-2xl font-semibold text-foreground truncate">{{ season?.name || t('loading') }}</h1>
+        <p class="text-xs text-muted-foreground font-mono mt-1">{{ season?.slug }}</p>
       </div>
     </div>
 
     <!-- Tabs -->
-    <div class="flex items-center gap-1 border-b border-border/40 mb-5">
+    <div class="flex items-center gap-1 border-b border-border/40">
       <button
         v-for="t_ in (['settings', 'leaderboard', 'audit'] as const)" :key="t_"
         type="button"

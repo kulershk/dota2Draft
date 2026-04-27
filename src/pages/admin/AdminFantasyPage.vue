@@ -253,11 +253,11 @@ function getUserName(user: any): string {
 </script>
 
 <template>
-  <div class="p-6 md:p-8 max-w-[1200px] mx-auto flex flex-col gap-6">
+  <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[1200px] w-full">
     <!-- Header -->
-    <div class="flex items-center gap-3">
-      <Star class="w-5 h-5 text-primary" />
-      <h1 class="text-xl font-bold text-foreground">{{ t('adminFantasy') }}</h1>
+    <div>
+      <h1 class="text-2xl font-semibold text-foreground">{{ t('adminFantasy') }}</h1>
+      <p class="text-sm text-muted-foreground mt-1">{{ t('adminFantasyDesc') }}</p>
     </div>
 
     <!-- Competition selector -->

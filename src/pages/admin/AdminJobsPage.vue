@@ -133,13 +133,10 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer) })
 </script>
 
 <template>
-  <div class="p-6 flex flex-col gap-5 max-w-[1200px]">
-    <div class="flex items-start justify-between gap-4">
+  <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[1200px] w-full">
+    <div class="flex items-center justify-between gap-4">
       <div>
-        <h1 class="text-xl font-semibold text-foreground flex items-center gap-2">
-          <Activity class="w-5 h-5 text-primary" />
-          {{ t('adminJobs') }}
-        </h1>
+        <h1 class="text-2xl font-semibold text-foreground">{{ t('adminJobs') }}</h1>
         <p class="text-sm text-muted-foreground mt-1">{{ t('adminJobsDesc') }}</p>
       </div>
       <div class="flex items-center gap-2">

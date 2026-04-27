@@ -47,12 +47,9 @@ watch([page, filterPlayer, filterReason], () => fetchLogs(), { immediate: true }
 </script>
 
 <template>
-  <div class="p-6 flex flex-col gap-5 max-w-[1100px]">
+  <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[1100px] w-full">
     <div>
-      <h1 class="text-xl font-semibold text-foreground flex items-center gap-2">
-        <Zap class="w-5 h-5 text-primary" />
-        {{ t('adminXpLog') }}
-      </h1>
+      <h1 class="text-2xl font-semibold text-foreground">{{ t('adminXpLog') }}</h1>
       <p class="text-sm text-muted-foreground mt-1">{{ t('adminXpLogDesc') }}</p>
     </div>
 

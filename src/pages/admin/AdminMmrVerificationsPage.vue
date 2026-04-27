@@ -123,13 +123,13 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="p-6 max-w-[1200px] mx-auto">
-    <div class="flex items-center gap-3 mb-5">
-      <Shield class="w-6 h-6 text-primary" />
-      <h1 class="text-2xl font-bold">{{ t('adminMmrVerifications') }}</h1>
+  <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[1200px] w-full">
+    <div>
+      <h1 class="text-2xl font-semibold text-foreground">{{ t('adminMmrVerifications') }}</h1>
+      <p class="text-sm text-muted-foreground mt-1">{{ t('adminMmrVerificationsDesc') }}</p>
     </div>
 
-    <div class="flex items-center gap-1 border-b border-border/40 mb-4">
+    <div class="flex items-center gap-1 border-b border-border/40">
       <button
         v-for="t_ in (['pending', 'approved', 'rejected', 'cancelled', 'all'] as const)" :key="t_"
         type="button"
@@ -152,7 +152,7 @@ onMounted(load)
     <div v-else-if="rows.length === 0" class="card p-8 text-center text-muted-foreground text-sm">
       {{ t('mmrVerificationEmpty') }}
     </div>
-    <div v-else class="flex flex-col gap-3">
+    <div v-else class="flex flex-col gap-3 -mt-2">
       <div v-for="s in rows" :key="s.id" class="card p-4 flex items-center gap-4">
         <!-- Player (click → history modal) -->
         <button

@@ -77,11 +77,11 @@ onMounted(fetchGames)
 </script>
 
 <template>
-  <div class="p-6 md:p-8 flex flex-col gap-5 max-w-[1000px]">
+  <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[1000px] w-full">
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-xl font-bold text-foreground">{{ t('adminGames') }}</h1>
-        <p class="text-sm text-muted-foreground mt-0.5">{{ t('adminGamesDesc') }}</p>
+        <h1 class="text-2xl font-semibold text-foreground">{{ t('adminGames') }}</h1>
+        <p class="text-sm text-muted-foreground mt-1">{{ t('adminGamesDesc') }}</p>
       </div>
       <div class="flex items-center gap-2">
         <button class="btn-secondary text-sm" :disabled="loading" @click="fetchGames">

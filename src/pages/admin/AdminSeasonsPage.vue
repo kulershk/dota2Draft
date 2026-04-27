@@ -110,11 +110,11 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="p-6 max-w-[1200px] mx-auto">
-    <div class="flex items-center justify-between mb-6">
-      <div class="flex items-center gap-3">
-        <Medal class="w-6 h-6 text-primary" />
-        <h1 class="text-2xl font-bold">{{ t('adminSeasons') }}</h1>
+  <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[1200px] w-full">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-semibold text-foreground">{{ t('adminSeasons') }}</h1>
+        <p class="text-sm text-muted-foreground mt-1">{{ t('adminSeasonsDesc') }}</p>
       </div>
       <button
         type="button"
