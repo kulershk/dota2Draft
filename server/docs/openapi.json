@@ -2462,10 +2462,12 @@
         "get": {
           "tags": ["Admin Stats"],
           "summary": "Aggregate request/socket counts for the period",
-          "description": "Returns total requests, unique users/IPs, avg + p95 latency, status-class breakdown, and socket totals. Requires `view_request_stats` permission.",
+          "description": "Returns total requests, unique users/IPs, avg + p95 latency, status-class breakdown, and socket totals. Optional userId/ip filters scope to a single entity. Requires `view_request_stats` permission.",
           "security": [{ "bearerAuth": [] }],
           "parameters": [
-            { "name": "period", "in": "query", "schema": { "type": "string", "enum": ["1h", "24h", "7d", "14d"], "default": "24h" } }
+            { "name": "period", "in": "query", "schema": { "type": "string", "enum": ["1h", "24h", "7d", "14d"], "default": "24h" } },
+            { "name": "userId", "in": "query", "schema": { "type": "integer" } },
+            { "name": "ip", "in": "query", "schema": { "type": "string" } }
           ],
           "responses": { "200": { "description": "Summary stats" } }
         }
@@ -2477,7 +2479,9 @@
           "security": [{ "bearerAuth": [] }],
           "parameters": [
             { "name": "period", "in": "query", "schema": { "type": "string", "enum": ["1h", "24h", "7d", "14d"], "default": "24h" } },
-            { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } }
+            { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } },
+            { "name": "userId", "in": "query", "schema": { "type": "integer" } },
+            { "name": "ip", "in": "query", "schema": { "type": "string" } }
           ],
           "responses": { "200": { "description": "Array of { method, path, count, avg_ms, p95_ms, errors }" } }
         }
@@ -2486,13 +2490,15 @@
         "get": {
           "tags": ["Admin Stats"],
           "summary": "Bucketed request counts over time",
-          "description": "Default bucket auto-selected from period (1h→minute, 24h→hour, longer→day). Optional path/method filters narrow to a single route.",
+          "description": "Default bucket auto-selected from period (1h→minute, 24h→hour, longer→day). Optional path/method/userId/ip filters narrow the data.",
           "security": [{ "bearerAuth": [] }],
           "parameters": [
             { "name": "period", "in": "query", "schema": { "type": "string", "enum": ["1h", "24h", "7d", "14d"], "default": "24h" } },
             { "name": "bucket", "in": "query", "schema": { "type": "string", "enum": ["minute", "hour", "day"] } },
             { "name": "path", "in": "query", "schema": { "type": "string" } },
-            { "name": "method", "in": "query", "schema": { "type": "string" } }
+            { "name": "method", "in": "query", "schema": { "type": "string" } },
+            { "name": "userId", "in": "query", "schema": { "type": "integer" } },
+            { "name": "ip", "in": "query", "schema": { "type": "string" } }
           ],
           "responses": { "200": { "description": "{ bucket, rows: [{ bucket, count, errors, avg_ms }] }" } }
         }
@@ -2504,7 +2510,8 @@
           "security": [{ "bearerAuth": [] }],
           "parameters": [
             { "name": "period", "in": "query", "schema": { "type": "string", "enum": ["1h", "24h", "7d", "14d"], "default": "24h" } },
-            { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } }
+            { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } },
+            { "name": "ip", "in": "query", "schema": { "type": "string" }, "description": "When provided, only counts requests from this IP." }
           ],
           "responses": { "200": { "description": "Array of { user_id, name, avatar_url, count, errors, last_seen }" } }
         }
@@ -2516,7 +2523,8 @@
           "security": [{ "bearerAuth": [] }],
           "parameters": [
             { "name": "period", "in": "query", "schema": { "type": "string", "enum": ["1h", "24h", "7d", "14d"], "default": "24h" } },
-            { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } }
+            { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } },
+            { "name": "userId", "in": "query", "schema": { "type": "integer" }, "description": "When provided, only counts requests by this user." }
           ],
           "responses": { "200": { "description": "Array of { ip, count, unique_users, errors, last_seen }" } }
         }
@@ -2528,9 +2536,28 @@
           "security": [{ "bearerAuth": [] }],
           "parameters": [
             { "name": "period", "in": "query", "schema": { "type": "string", "enum": ["1h", "24h", "7d", "14d"], "default": "24h" } },
-            { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 } }
+            { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 } },
+            { "name": "userId", "in": "query", "schema": { "type": "integer" } }
           ],
           "responses": { "200": { "description": "Array of { event, count, unique_users }" } }
+        }
+      },
+      "/api/admin/stats/recent-requests": {
+        "get": {
+          "tags": ["Admin Stats"],
+          "summary": "Raw recent request log for one user or IP",
+          "description": "Returns the most recent request_logs rows for the given userId or ip filter. At least one of userId or ip is required (returns 400 otherwise). Used by the admin dashboard to show drill-down detail when a filter is active.",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [
+            { "name": "period", "in": "query", "schema": { "type": "string", "enum": ["1h", "24h", "7d", "14d"], "default": "24h" } },
+            { "name": "userId", "in": "query", "schema": { "type": "integer" } },
+            { "name": "ip", "in": "query", "schema": { "type": "string" } },
+            { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 500, "default": 100 } }
+          ],
+          "responses": {
+            "200": { "description": "Array of { ts, method, path, status, duration_ms, user_id, ip, user_agent, user_name }" },
+            "400": { "description": "Neither userId nor ip provided" }
+          }
         }
       }
     }
