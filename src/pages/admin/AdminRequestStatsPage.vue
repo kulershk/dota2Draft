@@ -278,7 +278,7 @@ function statusBadge(s: number): string {
 </script>
 
 <template>
-  <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[1400px] w-full">
+  <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[var(--admin-content-max,1200px)] w-full">
     <!-- Header -->
     <div class="flex items-center justify-between gap-4 flex-wrap">
       <div>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Newspaper, Users, Trophy, ChevronRight, Settings, ShieldCheck, Bot, Gamepad2, Star, Zap, Swords, Activity, Medal, Shield, BarChart3 } from 'lucide-vue-next'
-import { computed, ref, onBeforeUnmount } from 'vue'
+import { computed, ref, onBeforeUnmount, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useDraftStore } from '@/composables/useDraftStore'
@@ -14,54 +14,107 @@ const SIDEBAR_MIN = 180
 const SIDEBAR_MAX = 480
 const SIDEBAR_STORAGE_KEY = 'admin_sidebar_width'
 
-const sidebarWidth = ref(loadStoredWidth())
+const CONTENT_DEFAULT = 1200
+const CONTENT_MIN = 600
+const CONTENT_MAX = 2400
+const CONTENT_STORAGE_KEY = 'admin_content_max_width'
 
-function loadStoredWidth(): number {
+const sidebarWidth = ref(loadStored(SIDEBAR_STORAGE_KEY, SIDEBAR_DEFAULT, SIDEBAR_MIN, SIDEBAR_MAX))
+const contentMaxWidth = ref(loadStored(CONTENT_STORAGE_KEY, CONTENT_DEFAULT, CONTENT_MIN, CONTENT_MAX))
+const viewportWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1920)
+
+function loadStored(key: string, def: number, min: number, max: number): number {
   try {
-    const raw = localStorage.getItem(SIDEBAR_STORAGE_KEY)
-    if (!raw) return SIDEBAR_DEFAULT
+    const raw = localStorage.getItem(key)
+    if (!raw) return def
     const n = parseInt(raw, 10)
-    if (!Number.isFinite(n)) return SIDEBAR_DEFAULT
-    return Math.min(Math.max(n, SIDEBAR_MIN), SIDEBAR_MAX)
+    if (!Number.isFinite(n)) return def
+    return Math.min(Math.max(n, min), max)
   } catch {
-    return SIDEBAR_DEFAULT
+    return def
   }
 }
 
-let dragStartX = 0
-let dragStartWidth = 0
+// Effective max width clamped to current viewport so the handle stays visible.
+const effectiveContentMax = computed(() => {
+  const room = Math.max(CONTENT_MIN, viewportWidth.value - sidebarWidth.value - 24)
+  return Math.min(contentMaxWidth.value, room)
+})
 
-function startResize(e: MouseEvent) {
+let dragStartX = 0
+let dragStartSidebar = 0
+let dragStartContent = 0
+
+function startSidebarResize(e: MouseEvent) {
   dragStartX = e.clientX
-  dragStartWidth = sidebarWidth.value
+  dragStartSidebar = sidebarWidth.value
   document.body.style.cursor = 'col-resize'
   document.body.style.userSelect = 'none'
-  window.addEventListener('mousemove', onResize)
-  window.addEventListener('mouseup', stopResize)
+  window.addEventListener('mousemove', onSidebarResize)
+  window.addEventListener('mouseup', stopSidebarResize)
   e.preventDefault()
 }
 
-function onResize(e: MouseEvent) {
-  const next = dragStartWidth + (e.clientX - dragStartX)
+function onSidebarResize(e: MouseEvent) {
+  const next = dragStartSidebar + (e.clientX - dragStartX)
   sidebarWidth.value = Math.min(Math.max(next, SIDEBAR_MIN), SIDEBAR_MAX)
 }
 
-function stopResize() {
+function stopSidebarResize() {
   document.body.style.cursor = ''
   document.body.style.userSelect = ''
-  window.removeEventListener('mousemove', onResize)
-  window.removeEventListener('mouseup', stopResize)
+  window.removeEventListener('mousemove', onSidebarResize)
+  window.removeEventListener('mouseup', stopSidebarResize)
   try { localStorage.setItem(SIDEBAR_STORAGE_KEY, String(sidebarWidth.value)) } catch {}
 }
 
-function resetWidth() {
+function resetSidebar() {
   sidebarWidth.value = SIDEBAR_DEFAULT
   try { localStorage.setItem(SIDEBAR_STORAGE_KEY, String(SIDEBAR_DEFAULT)) } catch {}
 }
 
+function startContentResize(e: MouseEvent) {
+  dragStartX = e.clientX
+  dragStartContent = contentMaxWidth.value
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+  window.addEventListener('mousemove', onContentResize)
+  window.addEventListener('mouseup', stopContentResize)
+  e.preventDefault()
+}
+
+function onContentResize(e: MouseEvent) {
+  const next = dragStartContent + (e.clientX - dragStartX)
+  contentMaxWidth.value = Math.min(Math.max(next, CONTENT_MIN), CONTENT_MAX)
+}
+
+function stopContentResize() {
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+  window.removeEventListener('mousemove', onContentResize)
+  window.removeEventListener('mouseup', stopContentResize)
+  try { localStorage.setItem(CONTENT_STORAGE_KEY, String(contentMaxWidth.value)) } catch {}
+}
+
+function resetContent() {
+  contentMaxWidth.value = CONTENT_DEFAULT
+  try { localStorage.setItem(CONTENT_STORAGE_KEY, String(CONTENT_DEFAULT)) } catch {}
+}
+
+function onWindowResize() {
+  viewportWidth.value = window.innerWidth
+}
+
+onMounted(() => {
+  window.addEventListener('resize', onWindowResize)
+})
+
 onBeforeUnmount(() => {
-  window.removeEventListener('mousemove', onResize)
-  window.removeEventListener('mouseup', stopResize)
+  window.removeEventListener('mousemove', onSidebarResize)
+  window.removeEventListener('mouseup', stopSidebarResize)
+  window.removeEventListener('mousemove', onContentResize)
+  window.removeEventListener('mouseup', stopContentResize)
+  window.removeEventListener('resize', onWindowResize)
   document.body.style.cursor = ''
   document.body.style.userSelect = ''
 })
@@ -112,14 +165,15 @@ const adminNav = computed(() =>
           <span class="truncate">{{ t(item.labelKey) }}</span>
         </router-link>
       </nav>
-      <!-- Resize handle -->
+      <!-- Sidebar resize handle -->
       <div
-        class="absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-primary/40 active:bg-primary/60 transition-colors group"
+        class="absolute top-0 -right-1 h-full w-3 cursor-col-resize group flex items-center justify-center z-10"
         :title="t('adminSidebarResizeHint')"
-        @mousedown="startResize"
-        @dblclick="resetWidth"
+        @mousedown="startSidebarResize"
+        @dblclick="resetSidebar"
       >
-        <div class="absolute inset-y-0 -right-1 w-3" />
+        <div class="w-px h-full bg-sidebar-border group-hover:w-1 group-hover:bg-primary group-active:bg-primary transition-all" />
+        <div class="absolute h-12 w-1 rounded-full bg-muted-foreground/30 group-hover:bg-primary/70 transition-colors" />
       </div>
     </aside>
 
@@ -140,9 +194,23 @@ const adminNav = computed(() =>
     </div>
 
     <!-- Content -->
-    <div class="flex-1 overflow-y-auto">
+    <div
+      class="flex-1 overflow-y-auto relative"
+      :style="{ '--admin-content-max': effectiveContentMax + 'px' }"
+    >
       <div class="md:hidden h-11"></div>
       <router-view />
+      <!-- Content resize handle (desktop only) -->
+      <div
+        class="hidden md:flex absolute top-0 bottom-0 w-3 cursor-col-resize group items-center justify-center z-10"
+        :style="{ left: (effectiveContentMax - 6) + 'px' }"
+        :title="t('adminContentResizeHint')"
+        @mousedown="startContentResize"
+        @dblclick="resetContent"
+      >
+        <div class="w-px h-full bg-border group-hover:w-1 group-hover:bg-primary group-active:bg-primary transition-all" />
+        <div class="absolute h-12 w-1 rounded-full bg-muted-foreground/20 group-hover:bg-primary/70 transition-colors" />
+      </div>
     </div>
   </div>
 </template>

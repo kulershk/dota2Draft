@@ -1398,6 +1398,7 @@ export default {
   adminMmrVerifications: 'MMR Verifications',
   adminMmrVerificationsDesc: 'Review player-submitted MMR change requests.',
   adminSidebarResizeHint: 'Drag to resize · double-click to reset',
+  adminContentResizeHint: 'Drag to resize content · double-click to reset',
   mmrVerificationTab_pending: 'Pending',
   mmrVerificationTab_approved: 'Approved',
   mmrVerificationTab_rejected: 'Rejected',

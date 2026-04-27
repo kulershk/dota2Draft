@@ -58,7 +58,7 @@ When adding UI text, always add translations to all three locale files:
 
 ```vue
 <template>
-  <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[1200px] w-full">
+  <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[var(--admin-content-max,1200px)] w-full">
     <!-- Header: title + optional subtitle on the left, actions on the right -->
     <div class="flex items-center justify-between">
       <div>
@@ -76,8 +76,7 @@ When adding UI text, always add translations to all three locale files:
 
 ### Rules
 
-- Wrapper classes are exactly `p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[1200px] w-full`. Do NOT use `mx-auto`, `p-6`, or fixed gap values — the responsive padding/gap pair is the canonical mobile→desktop scale.
-- `max-w` defaults to `1200px`. Wider (`1400px`) is allowed only for dashboards with multiple side-by-side tables (e.g. request stats). Narrower (`800px`/`1000px`) is allowed for narrow forms (site settings, permissions).
+- Wrapper classes are exactly `p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[var(--admin-content-max,1200px)] w-full`. Do NOT use `mx-auto`, `p-6`, or fixed gap values — the responsive padding/gap pair is the canonical mobile→desktop scale. Do NOT hardcode the max-width; use the CSS variable so the user's drag-resize preference applies.
 - Title is `<h1 class="text-2xl font-semibold text-foreground">` with optional subtitle `<p class="text-sm text-muted-foreground mt-1">`. Do not use `text-xl` or icon-prefixed titles unless they're already established in the section.
 - Inter-section spacing is owned by the wrapper's `gap-4 md:gap-6` — child sections should NOT add their own top/bottom margins.
 

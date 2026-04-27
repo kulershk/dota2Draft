@@ -1387,6 +1387,7 @@ export default {
   adminMmrVerifications: 'MMR Verifikacijos',
   adminMmrVerificationsDesc: 'Peržiūrėti naudotojų pateiktus MMR pakeitimo prašymus.',
   adminSidebarResizeHint: 'Tempkite, kad pakeistumėte dydį · dvigubas spustelėjimas atstato',
+  adminContentResizeHint: 'Tempkite, kad pakeistumėte turinio plotį · dvigubas spustelėjimas atstato',
   mmrVerificationTab_pending: 'Laukia',
   mmrVerificationTab_approved: 'Patvirtinti',
   mmrVerificationTab_rejected: 'Atmesti',

@@ -1387,6 +1387,7 @@ export default {
   adminMmrVerifications: 'MMR Verifikācijas',
   adminMmrVerificationsDesc: 'Apskatīt spēlētāju iesniegtos MMR maiņas pieprasījumus.',
   adminSidebarResizeHint: 'Velc, lai mainītu izmēru · dubultklikšķis atjauno',
+  adminContentResizeHint: 'Velc, lai mainītu satura platumu · dubultklikšķis atjauno',
   mmrVerificationTab_pending: 'Gaida',
   mmrVerificationTab_approved: 'Apstiprināti',
   mmrVerificationTab_rejected: 'Noraidīti',

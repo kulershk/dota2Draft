@@ -447,7 +447,7 @@ watch(activeTab, (tab) => {
 </script>
 
 <template>
-  <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[1200px] w-full">
+  <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[var(--admin-content-max,1200px)] w-full">
     <div class="flex items-center gap-3">
       <button class="btn-ghost p-2" @click="router.push('/admin/competitions')">
         <ArrowLeft class="w-4 h-4" />

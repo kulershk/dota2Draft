@@ -111,7 +111,7 @@ async function deleteGroup(id: number) {
 </script>
 
 <template>
-  <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[1000px]">
+  <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[var(--admin-content-max,1200px)] w-full">
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-xl font-semibold text-foreground">{{ t('permissionGroups') }}</h1>
