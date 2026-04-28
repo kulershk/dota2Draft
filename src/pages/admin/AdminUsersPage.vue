@@ -551,7 +551,7 @@ function formatRelativeTime(dateStr: string | null) {
                   <button v-else class="btn-ghost p-2 text-red-500" :title="t('unbanUser')" @click="promptToggleBan(user)">
                     <CheckCircle class="w-4 h-4" />
                   </button>
-                  <router-link :to="{ name: 'admin-multi-account', params: { id: user.id } }" class="btn-ghost p-2 inline-flex" :title="t('multiAccountInspect')">
+                  <router-link v-if="store.hasPerm('view_request_stats')" :to="{ name: 'admin-multi-account', params: { id: user.id } }" class="btn-ghost p-2 inline-flex" :title="t('multiAccountInspect')">
                     <Network class="w-4 h-4" />
                   </router-link>
                   <button class="btn-ghost p-2" :title="t('loginAs')" @click="impersonateUser(user)">
