@@ -499,21 +499,26 @@ function formatRelativeTime(dateStr: string | null) {
                 </div>
               </td>
               <td class="px-4 py-3">
-                <div class="flex flex-wrap gap-1">
-                  <span
-                    v-if="user.is_banned"
-                    class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-red-500/15 text-red-600 dark:text-red-400 w-fit"
-                    :title="user.banned_reason
-                      ? `${t('bannedBy')}: ${user.banned_by_name || '—'}\n${t('bannedAt')}: ${user.banned_at ? fmtDateOnly(new Date(user.banned_at)) : '—'}\n${t('banReason')}: ${user.banned_reason}`
-                      : `${t('bannedBy')}: ${user.banned_by_name || '—'}\n${t('bannedAt')}: ${user.banned_at ? fmtDateOnly(new Date(user.banned_at)) : '—'}`"
-                  >{{ t('banned') }}</span>
-                  <span v-if="user.is_admin" class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-amber-500/15 text-amber-600 dark:text-amber-400 w-fit">{{ t('rootAdmin') }}</span>
-                  <span v-if="!user.is_admin && !user.is_banned && user.permission_groups.length === 0" class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-accent text-muted-foreground w-fit">{{ t('user') }}</span>
-                  <span
-                    v-for="pg in user.permission_groups"
-                    :key="pg.id"
-                    class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-primary/15 text-primary w-fit"
-                  >{{ pg.name }}</span>
+                <div class="flex flex-col gap-1">
+                  <div class="flex flex-wrap gap-1">
+                    <span
+                      v-if="user.is_banned"
+                      class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-red-500/15 text-red-600 dark:text-red-400 w-fit"
+                    >{{ t('banned') }}</span>
+                    <span v-if="user.is_admin" class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-amber-500/15 text-amber-600 dark:text-amber-400 w-fit">{{ t('rootAdmin') }}</span>
+                    <span v-if="!user.is_admin && !user.is_banned && user.permission_groups.length === 0" class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-accent text-muted-foreground w-fit">{{ t('user') }}</span>
+                    <span
+                      v-for="pg in user.permission_groups"
+                      :key="pg.id"
+                      class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-primary/15 text-primary w-fit"
+                    >{{ pg.name }}</span>
+                  </div>
+                  <div v-if="user.is_banned && (user.banned_reason || user.banned_by_name)" class="text-[10px] text-red-500/80 dark:text-red-400/70 leading-tight max-w-[260px]">
+                    <span v-if="user.banned_reason" class="italic">"{{ user.banned_reason }}"</span>
+                    <span v-if="user.banned_by_name" class="block text-muted-foreground/80 not-italic mt-0.5">
+                      — {{ user.banned_by_name }}<template v-if="user.banned_at"> · {{ fmtDateOnly(new Date(user.banned_at)) }}</template>
+                    </span>
+                  </div>
                 </div>
               </td>
               <td class="px-4 py-3">
