@@ -12,6 +12,12 @@ export interface NavItem {
   active_match: string | null
   requires_auth: boolean
   badge: string | null
+  parent_id: number | null
+  column_group: string | null
+}
+
+export interface NavRoot extends NavItem {
+  children: NavItem[]
 }
 
 const items = ref<NavItem[]>([])
@@ -33,9 +39,25 @@ async function load(force = false) {
   }
 }
 
+// Build a {root, children[]} tree from the flat list. Roots keep their
+// document order; children are attached to their parent in document order.
+const tree = computed<NavRoot[]>(() => {
+  const childMap = new Map<number, NavItem[]>()
+  for (const item of items.value) {
+    if (item.parent_id) {
+      if (!childMap.has(item.parent_id)) childMap.set(item.parent_id, [])
+      childMap.get(item.parent_id)!.push(item)
+    }
+  }
+  return items.value
+    .filter(i => !i.parent_id)
+    .map(i => ({ ...i, children: childMap.get(i.id) || [] }))
+})
+
 export function useNavStore() {
   return {
     items: computed(() => items.value),
+    tree,
     loaded: computed(() => loaded.value),
     load,
     refresh: () => load(true),

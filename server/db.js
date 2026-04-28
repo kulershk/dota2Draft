@@ -910,7 +910,10 @@ export async function initDb() {
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     )
   `)
+  try { await execute(`ALTER TABLE nav_items ADD COLUMN parent_id INTEGER REFERENCES nav_items(id) ON DELETE SET NULL`) } catch {}
+  try { await execute(`ALTER TABLE nav_items ADD COLUMN column_group TEXT`) } catch {}
   try { await execute(`CREATE INDEX IF NOT EXISTS idx_nav_items_sort ON nav_items (sort_order, id)`) } catch {}
+  try { await execute(`CREATE INDEX IF NOT EXISTS idx_nav_items_parent ON nav_items (parent_id, sort_order)`) } catch {}
 
   // Seed default nav items if empty (matches the previous hardcoded menu)
   const navCount = await queryOne('SELECT COUNT(*)::int AS n FROM nav_items')

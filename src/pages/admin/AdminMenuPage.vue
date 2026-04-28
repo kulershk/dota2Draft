@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Menu as MenuIcon, Plus, Trash2, ArrowUp, ArrowDown, Eye, EyeOff, Save, X } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
@@ -17,6 +17,8 @@ interface AdminNavItem {
   active_match: string | null
   requires_auth: boolean
   badge: string | null
+  parent_id: number | null
+  column_group: string | null
 }
 
 const { t } = useI18n()
@@ -24,6 +26,32 @@ const api = useApi()
 const navStore = useNavStore()
 
 const items = ref<AdminNavItem[]>([])
+
+// Render order: each root immediately followed by its children. Both roots
+// and the children of each root keep their own sort_order.
+const orderedItems = computed<AdminNavItem[]>(() => {
+  const childrenByParent = new Map<number, AdminNavItem[]>()
+  for (const it of items.value) {
+    if (it.parent_id) {
+      if (!childrenByParent.has(it.parent_id)) childrenByParent.set(it.parent_id, [])
+      childrenByParent.get(it.parent_id)!.push(it)
+    }
+  }
+  const out: AdminNavItem[] = []
+  for (const it of items.value) {
+    if (it.parent_id) continue
+    out.push(it)
+    const kids = childrenByParent.get(it.id)
+    if (kids) for (const k of kids) out.push(k)
+  }
+  // Append orphans (children whose parent_id no longer exists) at the end so
+  // they're still editable rather than vanishing from the list.
+  const rootIds = new Set(items.value.filter(i => !i.parent_id).map(i => i.id))
+  for (const it of items.value) {
+    if (it.parent_id && !rootIds.has(it.parent_id)) out.push(it)
+  }
+  return out
+})
 const loading = ref(false)
 const editing = ref<AdminNavItem | null>(null)
 const showCreate = ref(false)
@@ -46,6 +74,8 @@ const blank = (): AdminNavItem => ({
   active_match: '',
   requires_auth: false,
   badge: null,
+  parent_id: null,
+  column_group: '',
 })
 
 async function load() {
@@ -57,22 +87,40 @@ async function load() {
   }
 }
 
-async function reorderUp(idx: number) {
-  if (idx <= 0) return
-  const reordered = [...items.value]
-  ;[reordered[idx - 1], reordered[idx]] = [reordered[idx], reordered[idx - 1]]
-  items.value = reordered
-  await persistOrder()
+// Move within siblings (same parent_id). Roots reorder among roots,
+// children reorder among children of the same parent.
+function siblingsOf(item: AdminNavItem): AdminNavItem[] {
+  return items.value.filter(i => (i.parent_id || null) === (item.parent_id || null))
 }
-async function reorderDown(idx: number) {
-  if (idx >= items.value.length - 1) return
-  const reordered = [...items.value]
-  ;[reordered[idx + 1], reordered[idx]] = [reordered[idx], reordered[idx + 1]]
-  items.value = reordered
-  await persistOrder()
-}
-async function persistOrder() {
-  await api.reorderNavItems(items.value.map(i => i.id))
+
+async function reorderItem(item: AdminNavItem, direction: -1 | 1) {
+  const siblings = siblingsOf(item).slice()
+  const idx = siblings.findIndex(s => s.id === item.id)
+  const target = idx + direction
+  if (target < 0 || target >= siblings.length) return
+  ;[siblings[idx], siblings[target]] = [siblings[target], siblings[idx]]
+
+  const rootList = item.parent_id
+    ? items.value.filter(i => !i.parent_id)
+    : siblings
+  const childrenByParent = new Map<number, AdminNavItem[]>()
+  for (const it of items.value) {
+    if (it.parent_id) {
+      if (!childrenByParent.has(it.parent_id)) childrenByParent.set(it.parent_id, [])
+      childrenByParent.get(it.parent_id)!.push(it)
+    }
+  }
+  if (item.parent_id) childrenByParent.set(item.parent_id, siblings)
+
+  const allOrder: number[] = []
+  for (const root of rootList) {
+    allOrder.push(root.id)
+    const kids = childrenByParent.get(root.id)
+    if (kids) for (const k of kids) allOrder.push(k.id)
+  }
+
+  await api.reorderNavItems(allOrder)
+  await load()
   await navStore.refresh()
 }
 
@@ -112,6 +160,8 @@ async function save() {
     active_match: editing.value.active_match || null,
     requires_auth: editing.value.requires_auth,
     badge: editing.value.badge || null,
+    parent_id: editing.value.parent_id || null,
+    column_group: editing.value.column_group || null,
   }
   if (showCreate.value) {
     await api.createNavItem(payload)
@@ -159,16 +209,18 @@ onMounted(load)
         <tbody>
           <tr v-if="loading && items.length === 0"><td colspan="6" class="px-4 py-6 text-center text-muted-foreground">{{ t('loading') }}</td></tr>
           <tr v-else-if="items.length === 0"><td colspan="6" class="px-4 py-6 text-center text-muted-foreground">{{ t('navMenuEmpty') }}</td></tr>
-          <tr v-for="(item, i) in items" :key="item.id" class="border-t border-border" :class="!item.is_visible ? 'opacity-50' : ''">
+          <tr v-for="(item, i) in orderedItems" :key="item.id" class="border-t border-border" :class="[!item.is_visible ? 'opacity-50' : '', item.parent_id ? 'bg-accent/10' : '']">
             <td class="px-4 py-2 text-muted-foreground tabular-nums">{{ i + 1 }}</td>
             <td class="px-4 py-2">
-              <div class="text-foreground font-medium">
+              <div class="text-foreground font-medium" :class="item.parent_id ? 'pl-5 text-sm' : ''">
+                <span v-if="item.parent_id" class="text-muted-foreground mr-1">↳</span>
                 <template v-if="item.labels?.en || item.labels?.lv || item.labels?.lt">{{ item.labels?.en || item.labels?.lv || item.labels?.lt }}</template>
                 <template v-else-if="item.label_key">{{ t(item.label_key) }}</template>
                 <template v-else>—</template>
               </div>
-              <div class="text-[11px] text-muted-foreground">
+              <div class="text-[11px] text-muted-foreground" :class="item.parent_id ? 'pl-5' : ''">
                 <span v-if="item.label_key">key: <span class="font-mono">{{ item.label_key }}</span></span>
+                <span v-if="item.column_group" class="ml-2 px-1.5 py-0 rounded bg-accent/40 text-[10px] font-mono uppercase">{{ item.column_group }}</span>
               </div>
             </td>
             <td class="px-4 py-2 font-mono text-xs text-muted-foreground">{{ item.icon }}</td>
@@ -184,10 +236,10 @@ onMounted(load)
             </td>
             <td class="px-4 py-2 text-right">
               <div class="flex items-center justify-end gap-1">
-                <button class="p-1 rounded hover:bg-accent disabled:opacity-30" :disabled="i === 0" :title="t('navMenuMoveUp')" @click="reorderUp(i)">
+                <button class="p-1 rounded hover:bg-accent disabled:opacity-30" :disabled="siblingsOf(item).findIndex(s => s.id === item.id) === 0" :title="t('navMenuMoveUp')" @click="reorderItem(item, -1)">
                   <ArrowUp class="w-3.5 h-3.5" />
                 </button>
-                <button class="p-1 rounded hover:bg-accent disabled:opacity-30" :disabled="i === items.length - 1" :title="t('navMenuMoveDown')" @click="reorderDown(i)">
+                <button class="p-1 rounded hover:bg-accent disabled:opacity-30" :disabled="siblingsOf(item).findIndex(s => s.id === item.id) === siblingsOf(item).length - 1" :title="t('navMenuMoveDown')" @click="reorderItem(item, 1)">
                   <ArrowDown class="w-3.5 h-3.5" />
                 </button>
                 <button class="btn-ghost text-xs px-2" @click="openEdit(item)">{{ t('edit') }}</button>
@@ -246,6 +298,22 @@ onMounted(load)
             <input v-model="editing.active_match" type="text" class="input-field w-full mt-1 font-mono text-xs" placeholder="^/competitions" />
             <p class="text-[11px] text-muted-foreground mt-1">{{ t('navMenuActiveMatchHint') }}</p>
           </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{{ t('navMenuParent') }}</label>
+              <select v-model="editing.parent_id" class="input-field w-full mt-1">
+                <option :value="null">— {{ t('navMenuParentNone') }} —</option>
+                <option v-for="p in items.filter(p => !p.parent_id && p.id !== editing!.id)" :key="p.id" :value="p.id">
+                  {{ p.labels?.en || p.labels?.lv || p.labels?.lt || (p.label_key ? t(p.label_key) : p.path) }}
+                </option>
+              </select>
+            </div>
+            <div>
+              <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{{ t('navMenuColumnGroup') }}</label>
+              <input v-model="editing.column_group" type="text" class="input-field w-full mt-1" placeholder="BROWSE" />
+            </div>
+          </div>
+          <p class="text-[11px] text-muted-foreground -mt-2">{{ t('navMenuColumnGroupHint') }}</p>
           <div class="flex items-center gap-4 flex-wrap">
             <label class="text-sm flex items-center gap-2 cursor-pointer">
               <input v-model="editing.is_visible" type="checkbox" />

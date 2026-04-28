@@ -4,11 +4,13 @@ import { requirePermission } from '../middleware/permissions.js'
 
 const router = Router()
 
-// Public: visible nav items only, sorted.
+// Public: visible nav items only, sorted. Includes parent_id/column_group
+// so the frontend can build the dropdown tree.
 router.get('/api/nav-items', async (req, res) => {
   const rows = await query(
     `SELECT id, sort_order, label_key, labels, icon, path, is_external,
-            is_visible, active_match, requires_auth, badge
+            is_visible, active_match, requires_auth, badge,
+            parent_id, column_group
        FROM nav_items
        WHERE is_visible = TRUE
        ORDER BY sort_order ASC, id ASC`
@@ -24,6 +26,8 @@ router.get('/api/nav-items', async (req, res) => {
     active_match: r.active_match,
     requires_auth: !!r.requires_auth,
     badge: r.badge || null,
+    parent_id: r.parent_id || null,
+    column_group: r.column_group || null,
   })))
 })
 
@@ -32,7 +36,8 @@ router.get('/api/admin/nav-items', async (req, res) => {
   if (!await requirePermission(req, res, 'manage_menu')) return
   const rows = await query(
     `SELECT id, sort_order, label_key, labels, icon, path, is_external,
-            is_visible, active_match, requires_auth, badge, created_at
+            is_visible, active_match, requires_auth, badge,
+            parent_id, column_group, created_at
        FROM nav_items
        ORDER BY sort_order ASC, id ASC`
   )
@@ -44,6 +49,7 @@ router.post('/api/admin/nav-items', async (req, res) => {
   const {
     label_key, labels, icon, path, is_external,
     is_visible, active_match, requires_auth, badge, sort_order,
+    parent_id, column_group,
   } = req.body || {}
   if (typeof path !== 'string' || !path.trim()) {
     return res.status(400).json({ error: 'path required' })
@@ -58,8 +64,8 @@ router.post('/api/admin/nav-items', async (req, res) => {
   }
   const row = await queryOne(
     `INSERT INTO nav_items
-       (sort_order, label_key, labels, icon, path, is_external, is_visible, active_match, requires_auth, badge)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       (sort_order, label_key, labels, icon, path, is_external, is_visible, active_match, requires_auth, badge, parent_id, column_group)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING *`,
     [
       order,
@@ -72,6 +78,8 @@ router.post('/api/admin/nav-items', async (req, res) => {
       active_match || null,
       !!requires_auth,
       badge || null,
+      parent_id ? Number(parent_id) : null,
+      column_group || null,
     ]
   )
   res.json(row)
@@ -97,6 +105,16 @@ router.put('/api/admin/nav-items/:id', async (req, res) => {
   if (!existing) return res.status(404).json({ error: 'Not found' })
 
   const b = req.body || {}
+  // Prevent making a parent its own descendant.
+  let nextParent = b.parent_id !== undefined
+    ? (b.parent_id ? Number(b.parent_id) : null)
+    : existing.parent_id
+  if (nextParent === id) return res.status(400).json({ error: 'parent_id cannot be self' })
+  if (nextParent) {
+    const ancestor = await queryOne('SELECT parent_id FROM nav_items WHERE id = $1', [nextParent])
+    if (ancestor?.parent_id === id) return res.status(400).json({ error: 'cycle in parent chain' })
+  }
+
   const next = {
     sort_order: b.sort_order !== undefined ? Number(b.sort_order) : existing.sort_order,
     label_key: b.label_key !== undefined ? (b.label_key || null) : existing.label_key,
@@ -108,17 +126,20 @@ router.put('/api/admin/nav-items/:id', async (req, res) => {
     active_match: b.active_match !== undefined ? (b.active_match || null) : existing.active_match,
     requires_auth: b.requires_auth !== undefined ? !!b.requires_auth : existing.requires_auth,
     badge: b.badge !== undefined ? (b.badge || null) : existing.badge,
+    parent_id: nextParent,
+    column_group: b.column_group !== undefined ? (b.column_group || null) : existing.column_group,
   }
   const row = await queryOne(
     `UPDATE nav_items
        SET sort_order = $1, label_key = $2, labels = $3, icon = $4, path = $5,
-           is_external = $6, is_visible = $7, active_match = $8, requires_auth = $9, badge = $10
-       WHERE id = $11
+           is_external = $6, is_visible = $7, active_match = $8, requires_auth = $9, badge = $10,
+           parent_id = $11, column_group = $12
+       WHERE id = $13
        RETURNING *`,
     [
       next.sort_order, next.label_key, next.labels, next.icon, next.path,
       next.is_external, next.is_visible, next.active_match, next.requires_auth,
-      next.badge, id,
+      next.badge, next.parent_id, next.column_group, id,
     ]
   )
   res.json(row)
