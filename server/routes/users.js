@@ -11,7 +11,14 @@ router.get('/api/users', async (req, res) => {
   const admin = await requirePermission(req, res, 'manage_users')
   if (!admin) return
 
-  const rows = await query('SELECT * FROM players ORDER BY id')
+  const rows = await query(`
+    SELECT p.*,
+           bb.name AS banned_by_name,
+           bb.display_name AS banned_by_display_name
+      FROM players p
+      LEFT JOIN players bb ON bb.id = p.banned_by
+      ORDER BY p.id
+  `)
   const groupMemberships = await query(`
     SELECT ppg.player_id, pg.id AS group_id, pg.name AS group_name
     FROM player_permission_groups ppg
@@ -37,6 +44,10 @@ router.get('/api/users', async (req, res) => {
     info: p.info || '',
     is_admin: !!p.is_admin,
     is_banned: !!p.is_banned,
+    banned_at: p.banned_at || null,
+    banned_by: p.banned_by || null,
+    banned_by_name: p.banned_by_display_name || p.banned_by_name || null,
+    banned_reason: p.banned_reason || null,
     twitch_username: p.twitch_username || null,
     created_at: p.created_at,
     last_online: p.last_online || null,
@@ -666,18 +677,89 @@ router.put('/api/players/:id', async (req, res) => {
   const player = await queryOne('SELECT * FROM players WHERE id = $1', [req.params.id])
   if (!player) return res.status(404).json({ error: 'Player not found' })
   const { name, roles, mmr, info, is_admin, is_banned, display_name } = req.body
+
+  const banChanging = is_banned !== undefined && !!is_banned !== !!player.is_banned
+  const newIsBanned = is_banned !== undefined ? !!is_banned : !!player.is_banned
+
+  if (banChanging && newIsBanned) {
+    await execute(
+      `UPDATE players
+         SET name = $1, roles = $2, mmr = $3, info = $4, is_admin = $5,
+             is_banned = TRUE, display_name = $6,
+             banned_at = NOW(), banned_by = $7, banned_reason = $8
+       WHERE id = $9`,
+      [
+        name ?? player.name,
+        roles ? JSON.stringify(roles) : player.roles,
+        mmr ?? player.mmr,
+        info ?? player.info,
+        is_admin !== undefined ? is_admin : player.is_admin,
+        display_name !== undefined ? (display_name?.trim() || null) : player.display_name,
+        admin.id,
+        typeof req.body.banned_reason === 'string' ? req.body.banned_reason.trim() || null : null,
+        req.params.id,
+      ]
+    )
+  } else if (banChanging && !newIsBanned) {
+    await execute(
+      `UPDATE players
+         SET name = $1, roles = $2, mmr = $3, info = $4, is_admin = $5,
+             is_banned = FALSE, display_name = $6,
+             banned_at = NULL, banned_by = NULL, banned_reason = NULL
+       WHERE id = $7`,
+      [
+        name ?? player.name,
+        roles ? JSON.stringify(roles) : player.roles,
+        mmr ?? player.mmr,
+        info ?? player.info,
+        is_admin !== undefined ? is_admin : player.is_admin,
+        display_name !== undefined ? (display_name?.trim() || null) : player.display_name,
+        req.params.id,
+      ]
+    )
+  } else {
+    await execute(
+      'UPDATE players SET name = $1, roles = $2, mmr = $3, info = $4, is_admin = $5, is_banned = $6, display_name = $7 WHERE id = $8',
+      [
+        name ?? player.name,
+        roles ? JSON.stringify(roles) : player.roles,
+        mmr ?? player.mmr,
+        info ?? player.info,
+        is_admin !== undefined ? is_admin : player.is_admin,
+        newIsBanned,
+        display_name !== undefined ? (display_name?.trim() || null) : player.display_name,
+        req.params.id,
+      ]
+    )
+  }
+  res.json({ ok: true })
+})
+
+router.post('/api/admin/players/:id/ban', async (req, res) => {
+  const admin = await requirePermission(req, res, 'manage_users')
+  if (!admin) return
+  const player = await queryOne('SELECT * FROM players WHERE id = $1', [req.params.id])
+  if (!player) return res.status(404).json({ error: 'Player not found' })
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() || null : null
   await execute(
-    'UPDATE players SET name = $1, roles = $2, mmr = $3, info = $4, is_admin = $5, is_banned = $6, display_name = $7 WHERE id = $8',
-    [
-      name ?? player.name,
-      roles ? JSON.stringify(roles) : player.roles,
-      mmr ?? player.mmr,
-      info ?? player.info,
-      is_admin !== undefined ? is_admin : player.is_admin,
-      is_banned !== undefined ? is_banned : !!player.is_banned,
-      display_name !== undefined ? (display_name?.trim() || null) : player.display_name,
-      req.params.id,
-    ]
+    `UPDATE players
+       SET is_banned = TRUE, banned_at = NOW(), banned_by = $1, banned_reason = $2
+       WHERE id = $3`,
+    [admin.id, reason, req.params.id]
+  )
+  res.json({ ok: true })
+})
+
+router.post('/api/admin/players/:id/unban', async (req, res) => {
+  const admin = await requirePermission(req, res, 'manage_users')
+  if (!admin) return
+  const player = await queryOne('SELECT * FROM players WHERE id = $1', [req.params.id])
+  if (!player) return res.status(404).json({ error: 'Player not found' })
+  await execute(
+    `UPDATE players
+       SET is_banned = FALSE, banned_at = NULL, banned_by = NULL, banned_reason = NULL
+       WHERE id = $1`,
+    [req.params.id]
   )
   res.json({ ok: true })
 })

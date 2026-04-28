@@ -36,6 +36,10 @@ interface User {
   info: string
   is_admin: boolean
   is_banned: boolean
+  banned_at: string | null
+  banned_by: number | null
+  banned_by_name: string | null
+  banned_reason: string | null
   created_at: string
   last_online: string | null
   permission_groups: PermGroupRef[]
@@ -220,15 +224,22 @@ const hasMoreUsers = computed(() => paginatedUsers.value.length < filteredUsers.
 watch(searchQuery, () => { usersPage.value = 1 })
 
 const banConfirmUser = ref<User | null>(null)
+const banReason = ref('')
 
 function promptToggleBan(user: User) {
   banConfirmUser.value = user
+  banReason.value = ''
 }
 
 async function confirmToggleBan() {
   if (!banConfirmUser.value) return
-  await api.updatePlayer(banConfirmUser.value.id, { is_banned: !banConfirmUser.value.is_banned })
+  if (banConfirmUser.value.is_banned) {
+    await api.unbanPlayer(banConfirmUser.value.id)
+  } else {
+    await api.banPlayer(banConfirmUser.value.id, banReason.value.trim() || undefined)
+  }
   banConfirmUser.value = null
+  banReason.value = ''
   await fetchUsers()
 }
 
@@ -489,7 +500,13 @@ function formatRelativeTime(dateStr: string | null) {
               </td>
               <td class="px-4 py-3">
                 <div class="flex flex-wrap gap-1">
-                  <span v-if="user.is_banned" class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-red-500/15 text-red-600 dark:text-red-400 w-fit">{{ t('banned') }}</span>
+                  <span
+                    v-if="user.is_banned"
+                    class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-red-500/15 text-red-600 dark:text-red-400 w-fit"
+                    :title="user.banned_reason
+                      ? `${t('bannedBy')}: ${user.banned_by_name || '—'}\n${t('bannedAt')}: ${user.banned_at ? fmtDateOnly(new Date(user.banned_at)) : '—'}\n${t('banReason')}: ${user.banned_reason}`
+                      : `${t('bannedBy')}: ${user.banned_by_name || '—'}\n${t('bannedAt')}: ${user.banned_at ? fmtDateOnly(new Date(user.banned_at)) : '—'}`"
+                  >{{ t('banned') }}</span>
                   <span v-if="user.is_admin" class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-amber-500/15 text-amber-600 dark:text-amber-400 w-fit">{{ t('rootAdmin') }}</span>
                   <span v-if="!user.is_admin && !user.is_banned && user.permission_groups.length === 0" class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-accent text-muted-foreground w-fit">{{ t('user') }}</span>
                   <span
@@ -554,18 +571,45 @@ function formatRelativeTime(dateStr: string | null) {
 
     <!-- Ban Confirmation Modal -->
     <ModalOverlay :show="!!banConfirmUser" @close="banConfirmUser = null">
-      <div class="px-7 py-6">
-        <h2 class="text-xl font-semibold text-foreground">
-          {{ banConfirmUser?.is_banned ? t('banConfirmModal.unbanTitle') : t('banConfirmModal.banTitle') }}
-        </h2>
-        <p class="text-sm text-muted-foreground mt-2">
-          <template v-if="banConfirmUser?.is_banned">
-            {{ t('banConfirmModal.unbanDesc', { name: banConfirmUser?.name }) }}
-          </template>
-          <template v-else>
-            {{ t('banConfirmModal.banDesc', { name: banConfirmUser?.name }) }}
-          </template>
-        </p>
+      <div class="px-7 py-6 flex flex-col gap-4">
+        <div>
+          <h2 class="text-xl font-semibold text-foreground">
+            {{ banConfirmUser?.is_banned ? t('banConfirmModal.unbanTitle') : t('banConfirmModal.banTitle') }}
+          </h2>
+          <p class="text-sm text-muted-foreground mt-2">
+            <template v-if="banConfirmUser?.is_banned">
+              {{ t('banConfirmModal.unbanDesc', { name: banConfirmUser?.name }) }}
+            </template>
+            <template v-else>
+              {{ t('banConfirmModal.banDesc', { name: banConfirmUser?.name }) }}
+            </template>
+          </p>
+        </div>
+        <!-- Reason input when banning -->
+        <div v-if="!banConfirmUser?.is_banned">
+          <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{{ t('banReason') }}</label>
+          <textarea
+            v-model="banReason"
+            rows="3"
+            class="input-field w-full mt-1.5 resize-none"
+            :placeholder="t('banReasonPlaceholder')"
+          />
+        </div>
+        <!-- Existing ban info when unbanning -->
+        <div v-else-if="banConfirmUser?.banned_at" class="rounded-md bg-accent/40 border border-border p-3 flex flex-col gap-1.5 text-sm">
+          <div v-if="banConfirmUser.banned_by_name" class="flex justify-between gap-3">
+            <span class="text-muted-foreground">{{ t('bannedBy') }}</span>
+            <span class="text-foreground font-medium">{{ banConfirmUser.banned_by_name }}</span>
+          </div>
+          <div class="flex justify-between gap-3">
+            <span class="text-muted-foreground">{{ t('bannedAt') }}</span>
+            <span class="text-foreground">{{ fmtDateOnly(new Date(banConfirmUser.banned_at)) }}</span>
+          </div>
+          <div v-if="banConfirmUser.banned_reason" class="flex flex-col gap-1 pt-1.5 border-t border-border/60">
+            <span class="text-muted-foreground text-xs uppercase tracking-wider">{{ t('banReason') }}</span>
+            <span class="text-foreground italic">{{ banConfirmUser.banned_reason }}</span>
+          </div>
+        </div>
       </div>
       <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
         <button :class="banConfirmUser?.is_banned ? 'btn-primary' : 'btn-destructive'" class="w-full justify-center" @click="confirmToggleBan">

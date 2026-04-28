@@ -73,6 +73,9 @@ export async function initDb() {
     ['total_xp', 'INTEGER NOT NULL DEFAULT 0'],
     ['daily_last_claimed', 'DATE DEFAULT NULL'],
     ['daily_streak', 'INTEGER NOT NULL DEFAULT 0'],
+    ['banned_at', 'TIMESTAMP DEFAULT NULL'],
+    ['banned_by', 'INTEGER DEFAULT NULL REFERENCES players(id) ON DELETE SET NULL'],
+    ['banned_reason', 'TEXT DEFAULT NULL'],
   ]) {
     const has = await queryOne(
       `SELECT 1 FROM information_schema.columns WHERE table_name = 'players' AND column_name = $1`, [col]

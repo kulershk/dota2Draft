@@ -327,6 +327,10 @@ export function useApi() {
       request(`/api/players/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     impersonateUser: (id: number) =>
       request(`/api/admin/impersonate/${id}`, { method: 'POST' }),
+    banPlayer: (id: number, reason?: string) =>
+      request(`/api/admin/players/${id}/ban`, { method: 'POST', body: JSON.stringify({ reason: reason || null }) }),
+    unbanPlayer: (id: number) =>
+      request(`/api/admin/players/${id}/unban`, { method: 'POST' }),
     generateTestUsers: (count: number) =>
       request('/api/admin/generate-test-users', { method: 'POST', body: JSON.stringify({ count }) }),
     parseSteamIds: (input: string) =>

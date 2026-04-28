@@ -1507,6 +1507,44 @@
         "responses": { "200": { "description": "Session token", "content": { "application/json": { "schema": { "type": "object", "properties": { "token": { "type": "string" } } } } } } }
       }
     },
+    "/api/admin/players/{id}/ban": {
+      "post": {
+        "tags": ["Users"],
+        "summary": "Ban a player and capture admin identity + reason",
+        "description": "Sets is_banned=true and records banned_at, banned_by (calling admin), and banned_reason. Requires `manage_users` permission.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": { "type": "string", "nullable": true, "description": "Optional explanation visible to other admins on unban." }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Player banned" },
+          "404": { "description": "Player not found" }
+        }
+      }
+    },
+    "/api/admin/players/{id}/unban": {
+      "post": {
+        "tags": ["Users"],
+        "summary": "Unban a player and clear ban metadata",
+        "description": "Sets is_banned=false and nulls banned_at, banned_by, banned_reason. Requires `manage_users` permission.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": { "description": "Player unbanned" },
+          "404": { "description": "Player not found" }
+        }
+      }
+    },
     "/api/admin/parse-steam-ids": {
       "post": {
         "tags": ["Users"],
