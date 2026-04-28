@@ -57,7 +57,8 @@ router.get('/api/auth/steam/callback', async (req, res) => {
       )
     }
 
-    if (player.is_banned) return res.redirect(`${BASE_URL}/login?error=banned`)
+    // Banned users are still allowed to log in. The banner + write-action
+    // blocks (server middleware + UI) take care of restricting them.
     const token = createSession(player.id)
     res.redirect(`${BASE_URL}/?authToken=${token}`)
   } catch (e) {
@@ -71,6 +72,16 @@ router.get('/api/auth/me', async (req, res) => {
   if (!player) return res.status(401).json({ error: 'Not authenticated' })
   execute('UPDATE players SET last_online = NOW() WHERE id = $1', [player.id]).catch(() => {})
   const perms = await getPlayerPermissions(player.id)
+
+  let bannedByName = null
+  if (player.is_banned && player.banned_by) {
+    const banner = await queryOne(
+      'SELECT name, display_name FROM players WHERE id = $1',
+      [player.banned_by]
+    )
+    bannedByName = banner ? (banner.display_name || banner.name) : null
+  }
+
   res.json({
     id: player.id,
     name: player.display_name || player.name,
@@ -87,6 +98,10 @@ router.get('/api/auth/me', async (req, res) => {
     total_xp: player.total_xp || 0,
     twitch_username: player.twitch_username || null,
     discord_username: player.discord_username || null,
+    is_banned: !!player.is_banned,
+    banned_at: player.banned_at || null,
+    banned_by_name: bannedByName,
+    banned_reason: player.banned_reason || null,
   })
 })
 

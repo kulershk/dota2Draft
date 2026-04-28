@@ -327,6 +327,8 @@ export default {
   banReasonPlaceholder: 'Neprivaloma — matoma kitiems administratoriams atblokavus.',
   bannedBy: 'Užblokavo',
   bannedAt: 'Užblokuota',
+  bannedBannerTitle: 'Tavo paskyra užblokuota. Dauguma veiksmų išjungti.',
+  bannedBannerNoReason: 'Priežastis neužregistruota.',
   loginAs: 'Prisijungti kaip šis vartotojas',
   generateTestUsers: 'Testiniai vartotojai',
   generate: 'Generuoti',

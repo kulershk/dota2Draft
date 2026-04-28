@@ -328,6 +328,8 @@ export default {
   banReasonPlaceholder: 'Optional — visible to other admins on unban.',
   bannedBy: 'Banned by',
   bannedAt: 'Banned on',
+  bannedBannerTitle: 'Your account is banned. Most actions are disabled.',
+  bannedBannerNoReason: 'No reason was recorded.',
   loginAs: 'Login as this user',
   generateTestUsers: 'Test Users',
   generate: 'Generate',

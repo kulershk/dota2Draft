@@ -34,6 +34,7 @@ import homeRoutes from './routes/home.js'
 import jobRoutes from './routes/jobs.js'
 import adminStatsRoutes from './routes/adminStats.js'
 import { requestLogger, startRequestLoggerWorkers } from './middleware/requestLogger.js'
+import { blockBanned } from './middleware/blockBanned.js'
 import { startJobWorker, registerHandler, registerSchedule, enqueueJob } from './services/jobs.js'
 import { fetchSteamMatchDetails } from './helpers/steam.js'
 import { fetchOpenDotaMatch, saveMatchGameStats, requestOpenDotaParse } from './helpers/opendota.js'
@@ -58,6 +59,7 @@ app.set('io', io)
 app.use(cors())
 app.use(express.json())
 app.use(requestLogger)
+app.use(blockBanned)
 
 // Static files
 // Hashed assets under /assets/* are immutable, so we can cache them aggressively.

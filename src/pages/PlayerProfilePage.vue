@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { User, Trophy, Swords, Tv, Medal, MessageCircle, Star, ChevronLeft, ChevronRight, Percent, Target, Flame, Clock, Award, Zap, Check, X, Flag, Users, BadgeCheck } from 'lucide-vue-next'
+import { User, Trophy, Swords, Tv, Medal, MessageCircle, Star, ChevronLeft, ChevronRight, Percent, Target, Flame, Clock, Award, Zap, Check, X, Flag, Users, BadgeCheck, Ban } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -218,6 +218,11 @@ const streakBadge = computed(() => {
                 <div class="flex flex-wrap items-center gap-2">
                   <h1 class="text-2xl md:text-3xl font-extrabold text-foreground tracking-tight truncate">{{ profile.name }}</h1>
                   <BadgeCheck v-if="profile.mmr_verified_at" class="w-6 h-6 text-cyan-400 shrink-0" :title="t('mmrVerifiedTooltip')" />
+                  <span v-if="profile.is_banned"
+                        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-500/15 border border-red-500/40 text-red-500 dark:text-red-400 text-[11px] font-bold uppercase tracking-wider">
+                    <Ban class="w-3 h-3" />
+                    {{ t('banned') }}
+                  </span>
                   <span class="text-xs text-muted-foreground">· {{ t('memberSince') }} {{ formatDate(profile.created_at) }}</span>
                 </div>
                 <div class="flex flex-wrap items-center gap-2 mt-1.5">

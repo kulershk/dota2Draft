@@ -327,6 +327,8 @@ export default {
   banReasonPlaceholder: 'Pēc izvēles — redzams citiem administratoriem atbloķējot.',
   bannedBy: 'Bloķēja',
   bannedAt: 'Bloķēts',
+  bannedBannerTitle: 'Tavs konts ir bloķēts. Lielākā daļa darbību ir atspējotas.',
+  bannedBannerNoReason: 'Iemesls nav reģistrēts.',
   loginAs: 'Pieslēgties kā šis lietotājs',
   generateTestUsers: 'Testa lietotāji',
   generate: 'Ģenerēt',

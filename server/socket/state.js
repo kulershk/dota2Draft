@@ -4,6 +4,7 @@ import { hasPermission } from '../middleware/permissions.js'
 // Per-competition state maps
 export const socketPlayers = new Map()       // socketId -> playerId
 export const socketCompetitions = new Map()  // socketId -> compId
+export const bannedSockets = new Set()       // socketId — banned at auth time
 export const playerActivity = new Map()      // playerId -> { page, path, timestamp }
 export const compOnlineCaptains = new Map()  // compId -> Map<socketId, captainId>
 export const compReadyCaptains = new Map()   // compId -> Set<captainId>

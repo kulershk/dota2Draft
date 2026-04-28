@@ -3,7 +3,7 @@ import { getSessionPlayerId } from '../middleware/auth.js'
 import { getFullAuctionState, getAuctionLog, getCaptains, getCompetition } from '../helpers/competition.js'
 import {
   socketPlayers, socketCompetitions, compOnlineCaptains, compReadyCaptains,
-  getOnlineCaptainIds, getReadyCaptainIds, playerActivity,
+  getOnlineCaptainIds, getReadyCaptainIds, playerActivity, bannedSockets,
 } from './state.js'
 import { registerAuctionHandlers } from './auction.js'
 import { registerMatchReadyHandlers } from './matchReady.js'
@@ -26,27 +26,35 @@ export function initSocket(io) {
         competitionId: socketCompetitions.get(socket.id) || null,
         path,
       })
+      // Block all events from banned sockets except auth itself.
+      if (event !== 'auth' && bannedSockets.has(socket.id)) {
+        socket.emit('error', { code: 'banned' })
+        return // drop the packet
+      }
       next()
     })
 
-    // Auth from handshake
-    const handshakeToken = socket.handshake.auth?.token
-    if (handshakeToken) {
-      const playerId = getSessionPlayerId(handshakeToken)
-      if (playerId) {
-        socketPlayers.set(socket.id, playerId)
-        execute('UPDATE players SET last_online = NOW() WHERE id = $1', [playerId]).catch(() => {})
-      }
+    // Resolve a token to (playerId, is_banned) and update socket state.
+    async function applyAuthToken(token) {
+      const playerId = getSessionPlayerId(token)
+      if (!playerId) return null
+      const player = await queryOne('SELECT id, is_banned FROM players WHERE id = $1', [playerId])
+      if (!player) return null
+      socketPlayers.set(socket.id, player.id)
+      if (player.is_banned) bannedSockets.add(socket.id)
+      else bannedSockets.delete(socket.id)
+      execute('UPDATE players SET last_online = NOW() WHERE id = $1', [player.id]).catch(() => {})
+      return player
     }
 
+    // Auth from handshake
+    const handshakeToken = socket.handshake.auth?.token
+    if (handshakeToken) applyAuthToken(handshakeToken).catch(() => {})
+
     // Auth from explicit event (fallback)
-    socket.on('auth', ({ token }) => {
-      const playerId = getSessionPlayerId(token)
-      if (playerId) {
-        socketPlayers.set(socket.id, playerId)
-        execute('UPDATE players SET last_online = NOW() WHERE id = $1', [playerId]).catch(() => {})
-        socket.emit('auth:success')
-      }
+    socket.on('auth', async ({ token }) => {
+      const player = await applyAuthToken(token).catch(() => null)
+      if (player) socket.emit('auth:success')
     })
 
     // Periodic heartbeat to keep last_online fresh
@@ -136,6 +144,7 @@ export function initSocket(io) {
       const compId = socketCompetitions.get(socket.id)
       socketPlayers.delete(socket.id)
       socketCompetitions.delete(socket.id)
+      bannedSockets.delete(socket.id)
 
       if (compId) {
         const onlineMap = compOnlineCaptains.get(compId)

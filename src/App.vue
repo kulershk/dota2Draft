@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { Gamepad2, Shield, ShieldAlert, LogOut, Sun, Moon, Menu, X, Home, LogIn, Lock, Globe, Settings, Swords, Info, Radio, ChevronDown, Check, LayoutDashboard, Bell, User, Newspaper, Calendar, Trophy, Medal } from 'lucide-vue-next'
+import { Gamepad2, Shield, ShieldAlert, LogOut, Sun, Moon, Menu, X, Home, LogIn, Lock, Globe, Settings, Swords, Info, Radio, ChevronDown, Check, LayoutDashboard, Bell, User, Newspaper, Calendar, Trophy, Medal, Ban } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { onMounted, ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { useQueueStore } from '@/composables/useQueueStore'
-import { useApi } from '@/composables/useApi'
+import { useApi, onBannedAction } from '@/composables/useApi'
+import { fmtDateOnly } from '@/utils/format'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 import AppFooter from '@/components/common/AppFooter.vue'
 import QueueStatusOverlay from '@/components/common/QueueStatusOverlay.vue'
@@ -207,10 +208,49 @@ async function handleClaimAdmin() {
     claimError.value = t('invalidAdminPassword')
   }
 }
+
+// Briefly emphasize the banned banner when a write action is rejected.
+const banFlash = ref(false)
+let banFlashTimer: ReturnType<typeof setTimeout> | null = null
+onMounted(() => {
+  const off = onBannedAction(() => {
+    banFlash.value = true
+    if (banFlashTimer) clearTimeout(banFlashTimer)
+    banFlashTimer = setTimeout(() => { banFlash.value = false }, 2000)
+  })
+  return off
+})
 </script>
 
 <template>
   <div class="flex flex-col h-screen bg-background" @click="showLangMenu = false; showUserMenu = false">
+    <!-- Banned-account banner — sticky at the top whenever the current user is banned. -->
+    <div
+      v-if="store.currentUser.value?.is_banned"
+      class="border-b transition-colors"
+      :class="banFlash
+        ? 'bg-red-500/40 border-red-500/80 animate-pulse'
+        : 'bg-red-500/20 border-red-500/40'"
+    >
+      <div class="max-w-[1200px] mx-auto w-full flex items-center gap-3 px-4 md:px-8 py-2.5">
+        <Ban class="w-5 h-5 text-red-400 shrink-0" />
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-semibold text-red-100">{{ t('bannedBannerTitle') }}</p>
+          <p class="text-xs text-red-200/90 mt-0.5">
+            <template v-if="store.currentUser.value?.banned_reason">
+              {{ t('banReason') }}: <span class="italic">"{{ store.currentUser.value.banned_reason }}"</span>
+            </template>
+            <template v-else>{{ t('bannedBannerNoReason') }}</template>
+            <template v-if="store.currentUser.value?.banned_by_name || store.currentUser.value?.banned_at">
+              <span class="text-red-300/70 ml-2">·</span>
+              <span class="text-red-300/70 ml-2" v-if="store.currentUser.value?.banned_by_name">{{ t('bannedBy') }} {{ store.currentUser.value.banned_by_name }}</span>
+              <span class="text-red-300/70 ml-1" v-if="store.currentUser.value?.banned_at">{{ store.currentUser.value?.banned_by_name ? '·' : '' }} {{ fmtDateOnly(new Date(store.currentUser.value.banned_at)) }}</span>
+            </template>
+          </p>
+        </div>
+      </div>
+    </div>
+
     <!-- MMR verification nudge — only for logged-in unverified players, dismissible per session -->
     <div v-if="showMmrBanner" class="bg-amber-500/15 border-b border-amber-500/30">
       <div class="max-w-[1200px] mx-auto w-full flex items-center gap-3 px-4 md:px-8 py-2">

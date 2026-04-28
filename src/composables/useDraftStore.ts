@@ -140,6 +140,10 @@ export interface CurrentUser {
   total_xp: number
   twitch_username: string | null
   discord_username: string | null
+  is_banned: boolean
+  banned_at: string | null
+  banned_by_name: string | null
+  banned_reason: string | null
 }
 
 export interface CompetitionUser {

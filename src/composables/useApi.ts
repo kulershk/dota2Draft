@@ -5,6 +5,13 @@ function getAuthHeaders(): Record<string, string> {
   return headers
 }
 
+// Listeners notified when a request is rejected because the caller is banned.
+const bannedListeners = new Set<(reason: string | null) => void>()
+export function onBannedAction(fn: (reason: string | null) => void): () => void {
+  bannedListeners.add(fn)
+  return () => bannedListeners.delete(fn)
+}
+
 async function request(path: string, options?: RequestInit) {
   const res = await fetch(path, {
     headers: getAuthHeaders(),
@@ -12,6 +19,11 @@ async function request(path: string, options?: RequestInit) {
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }))
+    if (res.status === 403 && err?.error === 'banned') {
+      for (const fn of bannedListeners) {
+        try { fn(err.reason ?? null) } catch {}
+      }
+    }
     throw new Error(err.error || 'Request failed')
   }
   return res.json()
