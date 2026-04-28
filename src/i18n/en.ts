@@ -1409,6 +1409,7 @@ export default {
   adminMenuDesc: 'Customize the public navigation — add, hide, reorder, or rename links.',
   searchPlaceholder: 'Search players, matches…',
   searchPlayers: 'Players',
+  searchCompetitions: 'Competitions',
   searchMatches: 'Matches',
   searchNoResults: 'No results',
   navMenuAddItem: 'Add item',

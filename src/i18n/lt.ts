@@ -1398,6 +1398,7 @@ export default {
   adminMenuDesc: 'Pritaikyk navigaciją — pridėk, slėpk, pertvarkyk ar pervadink nuorodas.',
   searchPlaceholder: 'Ieškoti naudotojų, rungtynių…',
   searchPlayers: 'Naudotojai',
+  searchCompetitions: 'Turnyrai',
   searchMatches: 'Rungtynės',
   searchNoResults: 'Rezultatų nėra',
   navMenuAddItem: 'Pridėti',

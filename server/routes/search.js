@@ -5,7 +5,7 @@ const router = Router()
 
 router.get('/api/search', async (req, res) => {
   const q = (req.query.q || '').toString().trim()
-  if (!q || q.length < 2) return res.json({ players: [], matches: [] })
+  if (!q || q.length < 2) return res.json({ players: [], matches: [], competitions: [] })
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 8, 1), 20)
 
   // Player search: numeric id, 17-digit steam_id, or fuzzy name
@@ -145,6 +145,36 @@ router.get('/api/search', async (req, res) => {
     }
   }
 
+  // Competition search: by name, public only, ordered by status (active first)
+  // then most recently created.
+  const compLike = `%${q.replace(/[%_]/g, '\\$&')}%`
+  const compRows = await query(
+    `SELECT id, name, status, starts_at, is_public, competition_type
+       FROM competitions
+       WHERE is_public = TRUE
+         AND name ILIKE $1
+       ORDER BY
+         CASE status
+           WHEN 'in_progress' THEN 0
+           WHEN 'active' THEN 0
+           WHEN 'registration' THEN 1
+           WHEN 'draft' THEN 2
+           WHEN 'completed' THEN 3
+           ELSE 4
+         END,
+         created_at DESC
+       LIMIT $2`,
+    [compLike, limit]
+  )
+  const competitions = compRows.map(c => ({
+    id: c.id,
+    name: c.name,
+    status: c.status,
+    starts_at: c.starts_at,
+    competition_type: c.competition_type || null,
+    path: `/c/${c.id}/info`,
+  }))
+
   res.json({
     players: players.map(p => ({
       id: p.id,
@@ -156,6 +186,7 @@ router.get('/api/search', async (req, res) => {
       is_banned: !!p.is_banned,
     })),
     matches,
+    competitions,
   })
 })
 

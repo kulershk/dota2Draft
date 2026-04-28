@@ -2,7 +2,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Search, User as UserIcon, Swords, Loader2 } from 'lucide-vue-next'
+import { Search, User as UserIcon, Swords, Loader2, Trophy } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 
 interface PlayerHit {
@@ -23,6 +23,14 @@ interface MatchHit {
   status: string | null
   date: string | null
 }
+interface CompetitionHit {
+  id: number
+  name: string
+  status: string | null
+  starts_at: string | null
+  competition_type: string | null
+  path: string
+}
 
 const { t } = useI18n()
 const router = useRouter()
@@ -31,6 +39,7 @@ const api = useApi()
 const query = ref('')
 const players = ref<PlayerHit[]>([])
 const matches = ref<MatchHit[]>([])
+const competitions = ref<CompetitionHit[]>([])
 const open = ref(false)
 const loading = ref(false)
 const activeIdx = ref(-1)
@@ -40,8 +49,9 @@ const wrapperEl = ref<HTMLDivElement | null>(null)
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
 const flatHits = computed(() => {
-  const out: Array<{ kind: 'player' | 'match'; data: PlayerHit | MatchHit }> = []
+  const out: Array<{ kind: 'player' | 'match' | 'competition'; data: PlayerHit | MatchHit | CompetitionHit }> = []
   for (const p of players.value) out.push({ kind: 'player', data: p })
+  for (const c of competitions.value) out.push({ kind: 'competition', data: c })
   for (const m of matches.value) out.push({ kind: 'match', data: m })
   return out
 })
@@ -55,6 +65,7 @@ watch(query, (q) => {
   if (!q || q.trim().length < 2) {
     players.value = []
     matches.value = []
+    competitions.value = []
     return
   }
   loading.value = true
@@ -63,19 +74,24 @@ watch(query, (q) => {
       const res = await api.search(q.trim(), 8)
       players.value = res.players || []
       matches.value = res.matches || []
+      competitions.value = res.competitions || []
     } catch {
       players.value = []
       matches.value = []
+      competitions.value = []
     } finally {
       loading.value = false
     }
   }, 200)
 })
 
-function navigateHit(hit: { kind: 'player' | 'match'; data: PlayerHit | MatchHit }) {
+function navigateHit(hit: { kind: 'player' | 'match' | 'competition'; data: PlayerHit | MatchHit | CompetitionHit }) {
   if (hit.kind === 'player') {
     const p = hit.data as PlayerHit
     router.push({ name: 'player-profile', params: { id: p.id } })
+  } else if (hit.kind === 'competition') {
+    const c = hit.data as CompetitionHit
+    router.push(c.path)
   } else {
     const m = hit.data as MatchHit
     if (m.path) router.push(m.path)
@@ -92,6 +108,7 @@ function close() {
   query.value = ''
   players.value = []
   matches.value = []
+  competitions.value = []
 }
 
 function handleKey(e: KeyboardEvent) {
@@ -196,6 +213,30 @@ const shortcutLabel = isMac ? '⌘K' : 'Ctrl+K'
             </div>
           </button>
         </div>
+        <!-- Competitions section -->
+        <div v-if="competitions.length > 0">
+          <div class="px-3 py-2 text-[10px] font-mono font-semibold uppercase tracking-wider text-text-tertiary border-b border-border">
+            {{ t('searchCompetitions') }}
+          </div>
+          <button
+            v-for="(c, i) in competitions" :key="`c-${c.id}`"
+            class="w-full flex items-center gap-3 px-3 py-2 text-left transition-colors"
+            :class="activeIdx === (players.length + i) ? 'bg-accent' : 'hover:bg-accent/40'"
+            @mouseenter="activeIdx = players.length + i"
+            @click="navigateHit({ kind: 'competition', data: c })"
+          >
+            <div class="w-7 h-7 rounded-md bg-muted shrink-0 flex items-center justify-center">
+              <Trophy class="w-3.5 h-3.5 text-muted-foreground" />
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium text-foreground truncate">{{ c.name }}</div>
+              <div class="text-[11px] text-muted-foreground truncate">
+                <span v-if="c.competition_type">{{ c.competition_type }}</span>
+                <span v-if="c.status" class="ml-1 uppercase tracking-wider">{{ c.competition_type ? '· ' : '' }}{{ c.status }}</span>
+              </div>
+            </div>
+          </button>
+        </div>
         <!-- Matches section -->
         <div v-if="matches.length > 0">
           <div class="px-3 py-2 text-[10px] font-mono font-semibold uppercase tracking-wider text-text-tertiary border-b border-border">
@@ -204,9 +245,9 @@ const shortcutLabel = isMac ? '⌘K' : 'Ctrl+K'
           <button
             v-for="(m, i) in matches" :key="`m-${m.type}-${m.id}`"
             class="w-full flex items-center gap-3 px-3 py-2 text-left transition-colors"
-            :class="activeIdx === (players.length + i) ? 'bg-accent' : 'hover:bg-accent/40'"
+            :class="activeIdx === (players.length + competitions.length + i) ? 'bg-accent' : 'hover:bg-accent/40'"
             :disabled="!m.path"
-            @mouseenter="activeIdx = players.length + i"
+            @mouseenter="activeIdx = players.length + competitions.length + i"
             @click="navigateHit({ kind: 'match', data: m })"
           >
             <div class="w-7 h-7 rounded-md bg-muted shrink-0 flex items-center justify-center">
