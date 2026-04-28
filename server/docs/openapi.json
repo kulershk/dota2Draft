@@ -27,7 +27,9 @@
     { "name": "MMR Verifications", "description": "User-submitted MMR change requests with screenshot proof; admins approve to update players.mmr" },
     { "name": "Dota", "description": "Dota 2 constants (heroes, items)" },
     { "name": "Jobs", "description": "Background job admin (list/retry/cancel)" },
-    { "name": "Admin Stats", "description": "Request and socket-event observability for admins" }
+    { "name": "Admin Stats", "description": "Request and socket-event observability for admins" },
+    { "name": "Search", "description": "Global search across players and matches" },
+    { "name": "Nav Items", "description": "Customizable site navigation menu" }
   ],
   "components": {
     "securitySchemes": {
@@ -2594,6 +2596,99 @@
             { "name": "userId", "in": "query", "schema": { "type": "integer" } }
           ],
           "responses": { "200": { "description": "Array of { path, count, unique_users }" } }
+        }
+      },
+      "/api/search": {
+        "get": {
+          "tags": ["Search"],
+          "summary": "Find players and matches",
+          "description": "Searches by player id, steam id, fuzzy name; matches by id (queue or tournament) or dotabuff_id. Returns up to `limit` results per category.",
+          "parameters": [
+            { "name": "q", "in": "query", "required": true, "schema": { "type": "string", "minLength": 2 } },
+            { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 20, "default": 8 } }
+          ],
+          "responses": {
+            "200": { "description": "{ players: [...], matches: [...] }" }
+          }
+        }
+      },
+      "/api/nav-items": {
+        "get": {
+          "tags": ["Nav Items"],
+          "summary": "Public visible navigation items",
+          "description": "Returns the visible nav items in render order. No auth required — frontend reads this on every page load.",
+          "responses": { "200": { "description": "Array of NavItem" } }
+        }
+      },
+      "/api/admin/nav-items": {
+        "get": {
+          "tags": ["Nav Items"],
+          "summary": "All navigation items (admin)",
+          "security": [{ "bearerAuth": [] }],
+          "responses": { "200": { "description": "Array of NavItem (including hidden)" } }
+        },
+        "post": {
+          "tags": ["Nav Items"],
+          "summary": "Create a navigation item",
+          "security": [{ "bearerAuth": [] }],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["icon", "path"],
+                  "properties": {
+                    "label_key": { "type": "string", "nullable": true },
+                    "labels": { "type": "object", "nullable": true, "properties": { "en": { "type": "string" }, "lv": { "type": "string" }, "lt": { "type": "string" } } },
+                    "icon": { "type": "string", "description": "lucide-vue-next icon name" },
+                    "path": { "type": "string" },
+                    "is_external": { "type": "boolean", "default": false },
+                    "is_visible": { "type": "boolean", "default": true },
+                    "active_match": { "type": "string", "nullable": true, "description": "Regex for active-state matching" },
+                    "requires_auth": { "type": "boolean", "default": false },
+                    "badge": { "type": "string", "nullable": true },
+                    "sort_order": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "responses": { "200": { "description": "Created NavItem" } }
+        }
+      },
+      "/api/admin/nav-items/{id}": {
+        "put": {
+          "tags": ["Nav Items"],
+          "summary": "Update a navigation item",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+          "responses": { "200": { "description": "Updated NavItem" }, "404": { "description": "Not found" } }
+        },
+        "delete": {
+          "tags": ["Nav Items"],
+          "summary": "Delete a navigation item",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+          "responses": { "200": { "description": "Deleted" } }
+        }
+      },
+      "/api/admin/nav-items/reorder": {
+        "put": {
+          "tags": ["Nav Items"],
+          "summary": "Bulk reorder by sending an array of ids",
+          "security": [{ "bearerAuth": [] }],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "order": { "type": "array", "items": { "type": "integer" } } },
+                  "required": ["order"]
+                }
+              }
+            }
+          },
+          "responses": { "200": { "description": "Reordered" } }
         }
       },
       "/api/admin/stats/recent-pages": {

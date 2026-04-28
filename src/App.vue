@@ -6,7 +6,9 @@ import { useI18n } from 'vue-i18n'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { useQueueStore } from '@/composables/useQueueStore'
 import { useApi, onBannedAction } from '@/composables/useApi'
+import { useNavStore, type NavItem } from '@/composables/useNavStore'
 import { fmtDateOnly } from '@/utils/format'
+import GlobalSearch from '@/components/common/GlobalSearch.vue'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 import AppFooter from '@/components/common/AppFooter.vue'
 import QueueStatusOverlay from '@/components/common/QueueStatusOverlay.vue'
@@ -21,6 +23,38 @@ const route = useRoute()
 const router = useRouter()
 const store = useDraftStore()
 const queue = useQueueStore()
+const navStore = useNavStore()
+navStore.load().catch(() => {})
+
+// Map of icon name -> lucide component for data-driven nav.
+const ICON_MAP: Record<string, any> = {
+  Home, Swords, Calendar, Newspaper, Trophy, Medal, Settings, Shield, User, Radio,
+}
+
+function iconFor(name: string) {
+  return ICON_MAP[name] || Swords
+}
+
+function labelFor(item: NavItem): string {
+  if (item.labels) {
+    const cur = (locale.value as 'en' | 'lv' | 'lt')
+    const fromLabels = item.labels[cur] || item.labels.en
+    if (fromLabels) return fromLabels
+  }
+  if (item.label_key) return t(item.label_key)
+  return item.path
+}
+
+function isActive(item: NavItem): boolean {
+  if (item.active_match) {
+    try {
+      return new RegExp(item.active_match).test(route.path)
+    } catch {
+      return route.path.startsWith(item.active_match)
+    }
+  }
+  return route.path === item.path
+}
 
 const isDark = ref(localStorage.getItem('draft_theme') !== 'light')
 
@@ -286,67 +320,30 @@ onMounted(() => {
           </router-link>
           <div class="w-px h-6 bg-border hidden sm:block" />
           <nav class="hidden sm:flex items-center gap-1 h-full">
-            <router-link
-              to="/competitions"
-              class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] tracking-wide transition-colors"
-              :class="route.path === '/competitions' || route.path.startsWith('/c/')
-                ? 'bg-primary/15 text-primary font-semibold border border-primary/30'
-                : 'text-muted-foreground hover:text-foreground'"
-            >
-              <Swords class="w-[15px] h-[15px]" />
-              {{ t('competitions') }}
-            </router-link>
-            <router-link
-              to="/matches"
-              class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] tracking-wide transition-colors"
-              :class="route.path === '/matches'
-                ? 'bg-primary/15 text-primary font-semibold border border-primary/30'
-                : 'text-muted-foreground hover:text-foreground'"
-            >
-              <Calendar class="w-[15px] h-[15px]" />
-              {{ t('navMatches') }}
-              <span v-if="myMatchCount > 0" class="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full px-1 text-[10px] font-bold bg-primary text-primary-foreground">{{ myMatchCount }}</span>
-            </router-link>
-            <router-link
-              to="/news"
-              class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] tracking-wide transition-colors"
-              :class="route.path.startsWith('/news')
-                ? 'bg-primary/15 text-primary font-semibold border border-primary/30'
-                : 'text-muted-foreground hover:text-foreground'"
-            >
-              <Newspaper class="w-[15px] h-[15px]" />
-              {{ t('newsNav') }}
-            </router-link>
-            <router-link
-              to="/leaderboard"
-              class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] tracking-wide transition-colors"
-              :class="route.path === '/leaderboard'
-                ? 'bg-primary/15 text-primary font-semibold border border-primary/30'
-                : 'text-muted-foreground hover:text-foreground'"
-            >
-              <Trophy class="w-[15px] h-[15px]" />
-              {{ t('leaderboard') }}
-            </router-link>
-            <router-link
-              to="/seasons"
-              class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] tracking-wide transition-colors"
-              :class="route.path.startsWith('/seasons')
-                ? 'bg-primary/15 text-primary font-semibold border border-primary/30'
-                : 'text-muted-foreground hover:text-foreground'"
-            >
-              <Medal class="w-[15px] h-[15px]" />
-              {{ t('seasonsNav') }}
-            </router-link>
-            <router-link
-              to="/queue"
-              class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] tracking-wide transition-colors"
-              :class="route.path === '/queue'
-                ? 'bg-primary/15 text-primary font-semibold border border-primary/30'
-                : 'text-muted-foreground hover:text-foreground'"
-            >
-              <Swords class="w-[15px] h-[15px]" />
-              {{ t('queue') }}
-            </router-link>
+            <template v-for="item in navStore.items.value" :key="item.id">
+              <a
+                v-if="item.is_external"
+                :href="item.path"
+                target="_blank"
+                rel="noopener"
+                class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] tracking-wide transition-colors text-muted-foreground hover:text-foreground"
+              >
+                <component :is="iconFor(item.icon)" class="w-[15px] h-[15px]" />
+                {{ labelFor(item) }}
+              </a>
+              <router-link
+                v-else
+                :to="item.path"
+                class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] tracking-wide transition-colors"
+                :class="isActive(item)
+                  ? 'bg-primary/15 text-primary font-semibold border border-primary/30'
+                  : 'text-muted-foreground hover:text-foreground'"
+              >
+                <component :is="iconFor(item.icon)" class="w-[15px] h-[15px]" />
+                {{ labelFor(item) }}
+                <span v-if="item.badge === 'my-matches' && myMatchCount > 0" class="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full px-1 text-[10px] font-bold bg-primary text-primary-foreground">{{ myMatchCount }}</span>
+              </router-link>
+            </template>
           </nav>
         </div>
 
@@ -356,6 +353,11 @@ onMounted(() => {
           <button v-if="isLoggedIn && !store.isAdmin.value && showClaimAdminButton" class="text-xs text-muted-foreground hover:text-foreground transition-colors" @click="showClaimAdmin = true">
             <Lock class="w-3.5 h-3.5" />
           </button>
+
+          <!-- Global search (desktop only — mobile gets it inside the menu) -->
+          <div class="hidden md:block">
+            <GlobalSearch />
+          </div>
 
           <!-- Discord -->
           <a v-if="discordUrl" :href="discordUrl" target="_blank" rel="noopener noreferrer" class="hidden sm:flex items-center justify-center w-8 h-8 rounded-md text-muted-foreground hover:text-[#5865F2] transition-colors" title="Discord">
@@ -486,35 +488,36 @@ onMounted(() => {
       </div>
       <!-- Mobile Nav Dropdown -->
       <nav v-if="mobileMenuOpen" class="md:hidden flex flex-col gap-1 px-3 py-2 border-t border-border">
+        <div class="px-1 pt-1 pb-2">
+          <GlobalSearch />
+        </div>
         <router-link to="/" class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-muted-foreground hover:bg-accent hover:text-foreground" @click="mobileMenuOpen = false">
           <Home class="w-[18px] h-[18px]" />
           {{ t('home') }}
         </router-link>
-        <router-link to="/competitions" class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-muted-foreground hover:bg-accent hover:text-foreground" @click="mobileMenuOpen = false">
-          <Swords class="w-[18px] h-[18px]" />
-          {{ t('competitions') }}
-        </router-link>
-        <router-link to="/matches" class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-muted-foreground hover:bg-accent hover:text-foreground" @click="mobileMenuOpen = false">
-          <Calendar class="w-[18px] h-[18px]" />
-          {{ t('navMatches') }}
-          <span v-if="myMatchCount > 0" class="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full px-1 text-[10px] font-bold bg-primary text-primary-foreground">{{ myMatchCount }}</span>
-        </router-link>
-        <router-link to="/news" class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-muted-foreground hover:bg-accent hover:text-foreground" @click="mobileMenuOpen = false">
-          <Newspaper class="w-[18px] h-[18px]" />
-          {{ t('newsNav') }}
-        </router-link>
-        <router-link to="/leaderboard" class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-muted-foreground hover:bg-accent hover:text-foreground" @click="mobileMenuOpen = false">
-          <Trophy class="w-[18px] h-[18px]" />
-          {{ t('leaderboard') }}
-        </router-link>
-        <router-link to="/seasons" class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-muted-foreground hover:bg-accent hover:text-foreground" @click="mobileMenuOpen = false">
-          <Medal class="w-[18px] h-[18px]" />
-          {{ t('seasonsNav') }}
-        </router-link>
-        <router-link to="/queue" class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-muted-foreground hover:bg-accent hover:text-foreground" @click="mobileMenuOpen = false">
-          <Swords class="w-[18px] h-[18px]" />
-          {{ t('queue') }}
-        </router-link>
+        <template v-for="item in navStore.items.value" :key="item.id">
+          <a
+            v-if="item.is_external"
+            :href="item.path"
+            target="_blank"
+            rel="noopener"
+            class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+            @click="mobileMenuOpen = false"
+          >
+            <component :is="iconFor(item.icon)" class="w-[18px] h-[18px]" />
+            {{ labelFor(item) }}
+          </a>
+          <router-link
+            v-else
+            :to="item.path"
+            class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+            @click="mobileMenuOpen = false"
+          >
+            <component :is="iconFor(item.icon)" class="w-[18px] h-[18px]" />
+            {{ labelFor(item) }}
+            <span v-if="item.badge === 'my-matches' && myMatchCount > 0" class="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full px-1 text-[10px] font-bold bg-primary text-primary-foreground">{{ myMatchCount }}</span>
+          </router-link>
+        </template>
         <router-link v-if="isLoggedIn" to="/settings" class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-muted-foreground hover:bg-accent hover:text-foreground" @click="mobileMenuOpen = false">
           <Settings class="w-[18px] h-[18px]" />
           {{ t('settingsTitle') }}

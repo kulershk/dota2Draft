@@ -122,6 +122,8 @@ app.use(createMmrVerificationsRouter(io))
 app.use(homeRoutes)
 app.use(jobRoutes)
 app.use(adminStatsRoutes)
+app.use(searchRoutes)
+app.use(navItemsRoutes)
 
 // Socket.io
 initSocket(io)

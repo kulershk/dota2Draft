@@ -630,6 +630,22 @@ export function useApi() {
       return request(`/api/admin/stats/recent-pages?${qs}`)
     },
 
+    // Global search
+    search: (q: string, limit = 8) =>
+      request(`/api/search?q=${encodeURIComponent(q)}&limit=${limit}`),
+
+    // Nav items
+    getNavItems: () => request('/api/nav-items'),
+    getAdminNavItems: () => request('/api/admin/nav-items'),
+    createNavItem: (data: Record<string, any>) =>
+      request('/api/admin/nav-items', { method: 'POST', body: JSON.stringify(data) }),
+    updateNavItem: (id: number, data: Record<string, any>) =>
+      request(`/api/admin/nav-items/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteNavItem: (id: number) =>
+      request(`/api/admin/nav-items/${id}`, { method: 'DELETE' }),
+    reorderNavItems: (order: number[]) =>
+      request('/api/admin/nav-items/reorder', { method: 'PUT', body: JSON.stringify({ order }) }),
+
     // Home page data
     getHomeStats: () => request('/api/home/stats'),
     getFeaturedTournament: () => request('/api/home/featured-tournament'),

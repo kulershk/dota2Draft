@@ -68,6 +68,7 @@ const router = createRouter({
         { path: 'mmr-verifications', name: 'admin-mmr-verifications', meta: { permissions: ['manage_mmr_verifications'] }, component: () => import('@/pages/admin/AdminMmrVerificationsPage.vue') },
         { path: 'jobs', name: 'admin-jobs', meta: { permissions: ['manage_jobs'] }, component: () => import('@/pages/admin/AdminJobsPage.vue') },
         { path: 'request-stats', name: 'admin-request-stats', meta: { permissions: ['view_request_stats'] }, component: () => import('@/pages/admin/AdminRequestStatsPage.vue') },
+        { path: 'menu', name: 'admin-menu', meta: { permissions: ['manage_menu'] }, component: () => import('@/pages/admin/AdminMenuPage.vue') },
       ],
     },
   ],

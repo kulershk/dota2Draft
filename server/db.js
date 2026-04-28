@@ -892,6 +892,45 @@ export async function initDb() {
   try { await execute(`CREATE INDEX IF NOT EXISTS idx_socket_event_logs_ts ON socket_event_logs (ts DESC)`) } catch {}
   try { await execute(`CREATE INDEX IF NOT EXISTS idx_socket_event_logs_event_ts ON socket_event_logs (event, ts DESC)`) } catch {}
   try { await execute(`CREATE INDEX IF NOT EXISTS idx_socket_event_logs_path_ts ON socket_event_logs (path, ts DESC) WHERE path IS NOT NULL`) } catch {}
+
+  // ─── Customizable navigation menu ───────────────────────
+  await execute(`
+    CREATE TABLE IF NOT EXISTS nav_items (
+      id SERIAL PRIMARY KEY,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      label_key TEXT,
+      labels JSONB,
+      icon TEXT NOT NULL DEFAULT 'Circle',
+      path TEXT NOT NULL,
+      is_external BOOLEAN NOT NULL DEFAULT FALSE,
+      is_visible BOOLEAN NOT NULL DEFAULT TRUE,
+      active_match TEXT,
+      requires_auth BOOLEAN NOT NULL DEFAULT FALSE,
+      badge TEXT,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `)
+  try { await execute(`CREATE INDEX IF NOT EXISTS idx_nav_items_sort ON nav_items (sort_order, id)`) } catch {}
+
+  // Seed default nav items if empty (matches the previous hardcoded menu)
+  const navCount = await queryOne('SELECT COUNT(*)::int AS n FROM nav_items')
+  if (!navCount || navCount.n === 0) {
+    const seed = [
+      { sort_order: 10, label_key: 'competitions',      icon: 'Swords',    path: '/competitions', active_match: '^/(competitions|c/)' },
+      { sort_order: 20, label_key: 'navMatches',        icon: 'Calendar',  path: '/matches',      active_match: '^/matches', badge: 'my-matches' },
+      { sort_order: 30, label_key: 'newsNav',           icon: 'Newspaper', path: '/news',         active_match: '^/news' },
+      { sort_order: 40, label_key: 'leaderboard',       icon: 'Trophy',    path: '/leaderboard',  active_match: '^/leaderboard' },
+      { sort_order: 50, label_key: 'seasonsNav',        icon: 'Medal',     path: '/seasons',      active_match: '^/seasons' },
+      { sort_order: 60, label_key: 'queue',             icon: 'Swords',    path: '/queue',        active_match: '^/queue' },
+    ]
+    for (const it of seed) {
+      await execute(
+        `INSERT INTO nav_items (sort_order, label_key, icon, path, active_match, badge)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [it.sort_order, it.label_key, it.icon, it.path, it.active_match, it.badge || null]
+      )
+    }
+  }
 }
 
 async function createFreshCompetitionTables() {

@@ -19,6 +19,7 @@ export const ALL_PERMISSIONS = [
   'manage_seasons',
   'manage_mmr_verifications',
   'view_request_stats',
+  'manage_menu',
 ]
 
 export async function getPlayerPermissions(playerId) {
