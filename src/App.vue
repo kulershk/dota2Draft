@@ -312,9 +312,9 @@ onMounted(() => {
         <!-- Left: Logo + Divider + Nav Links -->
         <div class="flex items-center gap-7 h-full">
           <router-link to="/" class="flex items-center gap-2.5">
-            <img v-if="customLogoUrl" :src="customLogoUrl" class="w-7 h-7 rounded-md object-contain" />
-            <div v-else class="w-7 h-7 rounded-md bg-primary flex items-center justify-center">
-              <Gamepad2 class="w-4 h-4 text-primary-foreground" />
+            <img v-if="customLogoUrl" :src="customLogoUrl" class="w-[52px] h-[52px] rounded-md object-contain" />
+            <div v-else class="w-[52px] h-[52px] rounded-md bg-primary flex items-center justify-center">
+              <Gamepad2 class="w-7 h-7 text-primary-foreground" />
             </div>
           </router-link>
           <div class="w-px h-6 bg-border hidden sm:block" />
