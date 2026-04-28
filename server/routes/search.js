@@ -40,79 +40,107 @@ router.get('/api/search', async (req, res) => {
     players = rows
   }
 
-  // Match search: numeric id (queue match or competition match) or dotabuff_id
+  // Match search: by internal id (queue or tournament) or by Dota 2 match id
+  // (stored in match_games.dotabuff_id, typically 10 digits → overflows INT4
+  // so we only run the internal-id lookups when the value fits).
   let matches = []
   if (/^\d{1,12}$/.test(q)) {
-    const id = parseInt(q, 10)
-    const queueRows = await query(
-      `SELECT qm.id, qm.created_at, qm.completed_at, qm.status,
-              qp.name AS pool_name,
-              p1.name AS captain1_name, p1.id AS captain1_id,
-              p2.name AS captain2_name, p2.id AS captain2_id
-         FROM queue_matches qm
-         LEFT JOIN queue_pools qp ON qp.id = qm.pool_id
-         LEFT JOIN players p1 ON p1.id = qm.captain1_player_id
-         LEFT JOIN players p2 ON p2.id = qm.captain2_player_id
-         WHERE qm.id = $1
-         LIMIT 1`,
-      [id]
-    )
-    for (const r of queueRows) {
-      matches.push({
-        type: 'queue',
-        id: r.id,
-        path: `/queue/match/${r.id}`,
-        label: r.pool_name ? `${r.pool_name} #${r.id}` : `Queue match #${r.id}`,
-        subtitle: [r.captain1_name, r.captain2_name].filter(Boolean).join(' vs ') || null,
-        status: r.status,
-        date: r.completed_at || r.created_at,
-      })
+    const PG_INT4_MAX = 2147483647
+    const asNumber = Number(q)
+    const fitsInt = asNumber <= PG_INT4_MAX
+
+    if (fitsInt) {
+      const queueRows = await query(
+        `SELECT qm.id, qm.created_at, qm.completed_at, qm.status,
+                qp.name AS pool_name,
+                p1.name AS captain1_name, p1.id AS captain1_id,
+                p2.name AS captain2_name, p2.id AS captain2_id
+           FROM queue_matches qm
+           LEFT JOIN queue_pools qp ON qp.id = qm.pool_id
+           LEFT JOIN players p1 ON p1.id = qm.captain1_player_id
+           LEFT JOIN players p2 ON p2.id = qm.captain2_player_id
+           WHERE qm.id = $1
+           LIMIT 1`,
+        [asNumber]
+      )
+      for (const r of queueRows) {
+        matches.push({
+          type: 'queue',
+          id: r.id,
+          path: `/queue/match/${r.id}`,
+          label: r.pool_name ? `${r.pool_name} #${r.id}` : `Queue match #${r.id}`,
+          subtitle: [r.captain1_name, r.captain2_name].filter(Boolean).join(' vs ') || null,
+          status: r.status,
+          date: r.completed_at || r.created_at,
+        })
+      }
+      const tournamentRows = await query(
+        `SELECT m.id, m.competition_id, c.name AS competition_name, m.status,
+                cap1.name AS team1_name, cap2.name AS team2_name,
+                m.scheduled_at, m.created_at
+           FROM matches m
+           LEFT JOIN competitions c ON c.id = m.competition_id
+           LEFT JOIN captains cap1 ON cap1.id = m.team1_captain_id
+           LEFT JOIN captains cap2 ON cap2.id = m.team2_captain_id
+           WHERE m.id = $1
+           LIMIT 1`,
+        [asNumber]
+      )
+      for (const r of tournamentRows) {
+        matches.push({
+          type: 'tournament',
+          id: r.id,
+          path: r.competition_id ? `/c/${r.competition_id}/match/${r.id}` : null,
+          label: r.competition_name ? `${r.competition_name} #${r.id}` : `Match #${r.id}`,
+          subtitle: [r.team1_name, r.team2_name].filter(Boolean).join(' vs ') || null,
+          status: r.status,
+          date: r.scheduled_at || r.created_at,
+        })
+      }
     }
-    const tournamentRows = await query(
-      `SELECT m.id, m.competition_id, c.name AS competition_name, m.status,
+
+    // Dota 2 match id (in-game match ID). Joined to whichever wrapper exists.
+    const dotabuffRows = await query(
+      `SELECT mg.id AS match_game_id, mg.match_id, mg.dotabuff_id, mg.game_number,
+              mg.duration_minutes, mg.start_time,
+              m.competition_id, c.name AS competition_name, m.status AS match_status,
               cap1.name AS team1_name, cap2.name AS team2_name,
-              m.scheduled_at, m.created_at
-         FROM matches m
+              qm.id AS queue_match_id, qm.status AS queue_status,
+              qp.name AS pool_name,
+              qcap1.name AS queue_cap1_name, qcap2.name AS queue_cap2_name
+         FROM match_games mg
+         LEFT JOIN matches m ON m.id = mg.match_id
          LEFT JOIN competitions c ON c.id = m.competition_id
          LEFT JOIN captains cap1 ON cap1.id = m.team1_captain_id
          LEFT JOIN captains cap2 ON cap2.id = m.team2_captain_id
-         WHERE m.id = $1
-         LIMIT 1`,
-      [id]
-    )
-    for (const r of tournamentRows) {
-      matches.push({
-        type: 'tournament',
-        id: r.id,
-        path: r.competition_id ? `/c/${r.competition_id}/match/${r.id}` : null,
-        label: r.competition_name ? `${r.competition_name} #${r.id}` : `Match #${r.id}`,
-        subtitle: [r.team1_name, r.team2_name].filter(Boolean).join(' vs ') || null,
-        status: r.status,
-        date: r.scheduled_at || r.created_at,
-      })
-    }
-    const dotabuffRows = await query(
-      `SELECT mg.id, mg.match_id, mg.dotabuff_id, mg.game_number,
-              m.competition_id, qm.id AS queue_match_id
-         FROM match_games mg
-         LEFT JOIN matches m ON m.id = mg.match_id
          LEFT JOIN queue_matches qm ON qm.match_id = mg.match_id
+         LEFT JOIN queue_pools qp ON qp.id = qm.pool_id
+         LEFT JOIN players qcap1 ON qcap1.id = qm.captain1_player_id
+         LEFT JOIN players qcap2 ON qcap2.id = qm.captain2_player_id
          WHERE mg.dotabuff_id = $1
-         LIMIT 1`,
+         LIMIT 5`,
       [String(q)]
     )
     for (const r of dotabuffRows) {
       const path = r.queue_match_id
         ? `/queue/match/${r.queue_match_id}`
         : (r.competition_id ? `/c/${r.competition_id}/match/${r.match_id}` : null)
+      const teams = r.queue_match_id
+        ? [r.queue_cap1_name, r.queue_cap2_name]
+        : [r.team1_name, r.team2_name]
+      const wrapper = r.pool_name || r.competition_name || null
+      const subtitleParts = []
+      if (teams.filter(Boolean).length === 2) subtitleParts.push(teams.join(' vs '))
+      if (wrapper) subtitleParts.push(wrapper)
+      subtitleParts.push(`Game ${r.game_number}`)
       matches.push({
         type: 'dotabuff',
         id: r.dotabuff_id,
         path,
         label: `Dota match ${r.dotabuff_id}`,
-        subtitle: `Game ${r.game_number}`,
-        status: 'completed',
-        date: null,
+        subtitle: subtitleParts.join(' · '),
+        status: r.queue_status || r.match_status || 'completed',
+        date: r.start_time ? new Date(r.start_time * 1000).toISOString() : null,
       })
     }
   }
