@@ -71,6 +71,8 @@ const router = createRouter({
         { path: 'menu', name: 'admin-menu', meta: { permissions: ['manage_menu'] }, component: () => import('@/pages/admin/AdminMenuPage.vue') },
       ],
     },
+    // Catch-all 404 — must be last so all named routes match first.
+    { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('@/pages/NotFoundPage.vue') },
   ],
 })
 

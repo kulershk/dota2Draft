@@ -377,72 +377,7 @@ function statusBadge(s: number): string {
       </div>
     </div>
 
-    <!-- Top routes -->
-    <div class="card p-0 overflow-hidden">
-      <div class="px-4 py-3 border-b border-border flex items-center gap-2">
-        <h3 class="text-sm font-semibold text-foreground">{{ t('statsTopRoutes') }}</h3>
-        <span class="text-xs text-muted-foreground">({{ topRoutes.length }})</span>
-      </div>
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead class="bg-surface text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">
-            <tr>
-              <th class="text-left px-4 py-2.5 w-20">{{ t('statsMethod') }}</th>
-              <th class="text-left px-4 py-2.5">{{ t('statsPath') }}</th>
-              <th class="text-right px-4 py-2.5 w-24">{{ t('statsCount') }}</th>
-              <th class="text-right px-4 py-2.5 w-24">{{ t('statsErrors') }}</th>
-              <th class="text-right px-4 py-2.5 w-24">{{ t('statsAvg') }}</th>
-              <th class="text-right px-4 py-2.5 w-24">{{ t('statsP95') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(r, i) in topRoutes" :key="i" class="border-t border-border hover:bg-accent/30">
-              <td class="px-4 py-2"><span class="px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold" :class="methodBadge(r.method)">{{ r.method }}</span></td>
-              <td class="px-4 py-2 font-mono text-xs text-foreground">{{ r.path }}</td>
-              <td class="px-4 py-2 text-right tabular-nums">{{ r.count.toLocaleString() }}</td>
-              <td class="px-4 py-2 text-right tabular-nums" :class="r.errors > 0 ? 'text-red-400' : 'text-muted-foreground'">{{ r.errors }}</td>
-              <td class="px-4 py-2 text-right tabular-nums text-muted-foreground">{{ r.avg_ms }}ms</td>
-              <td class="px-4 py-2 text-right tabular-nums text-muted-foreground">{{ r.p95_ms }}ms</td>
-            </tr>
-            <tr v-if="topRoutes.length === 0">
-              <td colspan="6" class="px-4 py-6 text-center text-muted-foreground">{{ t('statsEmpty') }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Top pages -->
-    <div class="card p-0 overflow-hidden">
-      <div class="px-4 py-3 border-b border-border flex items-center gap-2">
-        <h3 class="text-sm font-semibold text-foreground">{{ t('statsTopPages') }}</h3>
-        <span class="text-xs text-muted-foreground">({{ topPages.length }})</span>
-        <span class="ml-auto text-[11px] text-muted-foreground">{{ t('statsTopPagesHint') }}</span>
-      </div>
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead class="bg-surface text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">
-            <tr>
-              <th class="text-left px-4 py-2.5">{{ t('statsPagePath') }}</th>
-              <th class="text-right px-4 py-2.5 w-24">{{ t('statsCount') }}</th>
-              <th class="text-right px-4 py-2.5 w-32">{{ t('statsUniqueUsers') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(p, i) in topPages" :key="i" class="border-t border-border hover:bg-accent/30">
-              <td class="px-4 py-2 font-mono text-xs text-foreground">{{ p.path }}</td>
-              <td class="px-4 py-2 text-right tabular-nums">{{ p.count.toLocaleString() }}</td>
-              <td class="px-4 py-2 text-right tabular-nums text-muted-foreground">{{ p.unique_users }}</td>
-            </tr>
-            <tr v-if="topPages.length === 0">
-              <td colspan="3" class="px-4 py-6 text-center text-muted-foreground">{{ t('statsEmpty') }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Top users + Top IPs -->
+    <!-- Top users + Top IPs (directly under the charts) -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
       <div v-if="filter?.kind !== 'user'" class="card p-0 overflow-hidden">
         <div class="px-4 py-3 border-b border-border flex items-center gap-2">
@@ -512,6 +447,71 @@ function statusBadge(s: number): string {
             </tr>
             <tr v-if="topIps.length === 0">
               <td colspan="4" class="px-4 py-6 text-center text-muted-foreground">{{ t('statsEmpty') }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Top routes -->
+    <div class="card p-0 overflow-hidden">
+      <div class="px-4 py-3 border-b border-border flex items-center gap-2">
+        <h3 class="text-sm font-semibold text-foreground">{{ t('statsTopRoutes') }}</h3>
+        <span class="text-xs text-muted-foreground">({{ topRoutes.length }})</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-surface text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">
+            <tr>
+              <th class="text-left px-4 py-2.5 w-20">{{ t('statsMethod') }}</th>
+              <th class="text-left px-4 py-2.5">{{ t('statsPath') }}</th>
+              <th class="text-right px-4 py-2.5 w-24">{{ t('statsCount') }}</th>
+              <th class="text-right px-4 py-2.5 w-24">{{ t('statsErrors') }}</th>
+              <th class="text-right px-4 py-2.5 w-24">{{ t('statsAvg') }}</th>
+              <th class="text-right px-4 py-2.5 w-24">{{ t('statsP95') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(r, i) in topRoutes" :key="i" class="border-t border-border hover:bg-accent/30">
+              <td class="px-4 py-2"><span class="px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold" :class="methodBadge(r.method)">{{ r.method }}</span></td>
+              <td class="px-4 py-2 font-mono text-xs text-foreground">{{ r.path }}</td>
+              <td class="px-4 py-2 text-right tabular-nums">{{ r.count.toLocaleString() }}</td>
+              <td class="px-4 py-2 text-right tabular-nums" :class="r.errors > 0 ? 'text-red-400' : 'text-muted-foreground'">{{ r.errors }}</td>
+              <td class="px-4 py-2 text-right tabular-nums text-muted-foreground">{{ r.avg_ms }}ms</td>
+              <td class="px-4 py-2 text-right tabular-nums text-muted-foreground">{{ r.p95_ms }}ms</td>
+            </tr>
+            <tr v-if="topRoutes.length === 0">
+              <td colspan="6" class="px-4 py-6 text-center text-muted-foreground">{{ t('statsEmpty') }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Top pages -->
+    <div class="card p-0 overflow-hidden">
+      <div class="px-4 py-3 border-b border-border flex items-center gap-2">
+        <h3 class="text-sm font-semibold text-foreground">{{ t('statsTopPages') }}</h3>
+        <span class="text-xs text-muted-foreground">({{ topPages.length }})</span>
+        <span class="ml-auto text-[11px] text-muted-foreground">{{ t('statsTopPagesHint') }}</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-surface text-[11px] font-semibold font-mono uppercase tracking-wider text-text-tertiary">
+            <tr>
+              <th class="text-left px-4 py-2.5">{{ t('statsPagePath') }}</th>
+              <th class="text-right px-4 py-2.5 w-24">{{ t('statsCount') }}</th>
+              <th class="text-right px-4 py-2.5 w-32">{{ t('statsUniqueUsers') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(p, i) in topPages" :key="i" class="border-t border-border hover:bg-accent/30">
+              <td class="px-4 py-2 font-mono text-xs text-foreground">{{ p.path }}</td>
+              <td class="px-4 py-2 text-right tabular-nums">{{ p.count.toLocaleString() }}</td>
+              <td class="px-4 py-2 text-right tabular-nums text-muted-foreground">{{ p.unique_users }}</td>
+            </tr>
+            <tr v-if="topPages.length === 0">
+              <td colspan="3" class="px-4 py-6 text-center text-muted-foreground">{{ t('statsEmpty') }}</td>
             </tr>
           </tbody>
         </table>
