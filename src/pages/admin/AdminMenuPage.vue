@@ -11,7 +11,7 @@ interface AdminNavItem {
   label_key: string | null
   labels: { en?: string; lv?: string; lt?: string } | null
   icon: string
-  path: string
+  path: string | null
   is_external: boolean
   is_visible: boolean
   active_match: string | null
@@ -68,7 +68,7 @@ const blank = (): AdminNavItem => ({
   label_key: '',
   labels: { en: '', lv: '', lt: '' },
   icon: 'Swords',
-  path: '/',
+  path: '',
   is_external: false,
   is_visible: true,
   active_match: '',
@@ -154,7 +154,7 @@ async function save() {
     labels: (editing.value.labels?.en || editing.value.labels?.lv || editing.value.labels?.lt)
       ? editing.value.labels : null,
     icon: editing.value.icon,
-    path: editing.value.path,
+    path: editing.value.path || null,
     is_external: editing.value.is_external,
     is_visible: editing.value.is_visible,
     active_match: editing.value.active_match || null,
@@ -225,7 +225,8 @@ onMounted(load)
             </td>
             <td class="px-4 py-2 font-mono text-xs text-muted-foreground">{{ item.icon }}</td>
             <td class="px-4 py-2 font-mono text-xs text-foreground">
-              {{ item.path }}
+              <template v-if="item.path">{{ item.path }}</template>
+              <span v-else class="text-muted-foreground italic font-sans">— {{ t('navMenuDropdownOnly') }}</span>
               <span v-if="item.is_external" class="ml-1 text-[10px] uppercase text-muted-foreground">({{ t('navMenuExternal') }})</span>
             </td>
             <td class="px-4 py-2 text-center">
@@ -292,6 +293,7 @@ onMounted(load)
           <div>
             <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{{ t('navMenuPath') }}</label>
             <input v-model="editing.path" type="text" class="input-field w-full mt-1" placeholder="/competitions or https://..." />
+            <p class="text-[11px] text-muted-foreground mt-1">{{ t('navMenuPathHint') }}</p>
           </div>
           <div>
             <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{{ t('navMenuActiveMatch') }}</label>

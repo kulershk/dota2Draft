@@ -42,7 +42,7 @@ function labelFor(item: NavItem): string {
     if (fromLabels) return fromLabels
   }
   if (item.label_key) return t(item.label_key)
-  return item.path
+  return item.path || '?'
 }
 
 function isActive(item: NavItem): boolean {
@@ -365,10 +365,10 @@ onMounted(() => {
           <div class="w-px h-6 bg-border hidden sm:block" />
           <nav class="hidden sm:flex items-center gap-1 h-full">
             <template v-for="root in navStore.tree.value" :key="root.id">
-              <!-- Item without children: simple link -->
+              <!-- Item without children: simple link (or label if no path) -->
               <template v-if="root.children.length === 0">
                 <a
-                  v-if="root.is_external"
+                  v-if="root.is_external && root.path"
                   :href="root.path"
                   target="_blank"
                   rel="noopener"
@@ -378,7 +378,7 @@ onMounted(() => {
                   {{ labelFor(root) }}
                 </a>
                 <router-link
-                  v-else
+                  v-else-if="root.path"
                   :to="root.path"
                   class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] tracking-wide transition-colors"
                   :class="isActive(root)
@@ -389,6 +389,13 @@ onMounted(() => {
                   {{ labelFor(root) }}
                   <span v-if="root.badge === 'my-matches' && myMatchCount > 0" class="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full px-1 text-[10px] font-bold bg-primary text-primary-foreground">{{ myMatchCount }}</span>
                 </router-link>
+                <span
+                  v-else
+                  class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] tracking-wide text-muted-foreground/60 border border-transparent select-none"
+                >
+                  <component :is="iconFor(root.icon)" class="w-[15px] h-[15px]" />
+                  {{ labelFor(root) }}
+                </span>
               </template>
 
               <!-- Item with children: dropdown trigger -->
@@ -399,6 +406,7 @@ onMounted(() => {
                 @mouseleave="scheduleCloseDropdown"
               >
                 <router-link
+                  v-if="root.path"
                   :to="root.path"
                   class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] tracking-wide transition-colors"
                   :class="isAnyActive(root) || openDropdownId === root.id
@@ -413,6 +421,22 @@ onMounted(() => {
                     :class="openDropdownId === root.id ? 'rotate-180' : ''"
                   />
                 </router-link>
+                <button
+                  v-else
+                  type="button"
+                  class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] tracking-wide transition-colors"
+                  :class="isAnyActive(root) || openDropdownId === root.id
+                    ? 'bg-primary/15 text-primary font-semibold border border-primary/30'
+                    : 'text-muted-foreground hover:text-foreground border border-transparent'"
+                  @click="toggleDropdown(root.id)"
+                >
+                  <component :is="iconFor(root.icon)" class="w-[15px] h-[15px]" />
+                  {{ labelFor(root) }}
+                  <ChevronDown
+                    class="w-3.5 h-3.5 transition-transform"
+                    :class="openDropdownId === root.id ? 'rotate-180' : ''"
+                  />
+                </button>
 
                 <!-- Dropdown panel -->
                 <div
@@ -430,7 +454,7 @@ onMounted(() => {
                       </p>
                       <template v-for="child in group.items" :key="child.id">
                         <a
-                          v-if="child.is_external"
+                          v-if="child.is_external && child.path"
                           :href="child.path"
                           target="_blank"
                           rel="noopener"
@@ -440,7 +464,7 @@ onMounted(() => {
                           <span class="flex-1 truncate">{{ labelFor(child) }}</span>
                         </a>
                         <router-link
-                          v-else
+                          v-else-if="child.path"
                           :to="child.path"
                           class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors"
                           :class="isActive(child)
@@ -450,6 +474,13 @@ onMounted(() => {
                           <component :is="iconFor(child.icon)" class="w-4 h-4 shrink-0" />
                           <span class="flex-1 truncate">{{ labelFor(child) }}</span>
                         </router-link>
+                        <span
+                          v-else
+                          class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground/60 select-none"
+                        >
+                          <component :is="iconFor(child.icon)" class="w-4 h-4 shrink-0" />
+                          <span class="flex-1 truncate">{{ labelFor(child) }}</span>
+                        </span>
                       </template>
                     </div>
                   </div>
@@ -602,7 +633,7 @@ onMounted(() => {
         </router-link>
         <template v-for="root in navStore.tree.value" :key="root.id">
           <a
-            v-if="root.is_external"
+            v-if="root.is_external && root.path"
             :href="root.path"
             target="_blank"
             rel="noopener"
@@ -614,6 +645,7 @@ onMounted(() => {
           </a>
           <template v-else>
             <router-link
+              v-if="root.path"
               :to="root.path"
               class="flex items-center gap-3 px-3 py-2.5 rounded text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
               @click="mobileMenuOpen = false"
@@ -622,10 +654,17 @@ onMounted(() => {
               {{ labelFor(root) }}
               <span v-if="root.badge === 'my-matches' && myMatchCount > 0" class="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full px-1 text-[10px] font-bold bg-primary text-primary-foreground">{{ myMatchCount }}</span>
             </router-link>
+            <div
+              v-else
+              class="flex items-center gap-3 px-3 py-2.5 text-sm font-semibold text-muted-foreground/80 uppercase tracking-wider"
+            >
+              <component :is="iconFor(root.icon)" class="w-[18px] h-[18px]" />
+              {{ labelFor(root) }}
+            </div>
             <!-- Mobile children: indented under their parent -->
             <template v-for="child in root.children" :key="child.id">
               <a
-                v-if="child.is_external"
+                v-if="child.is_external && child.path"
                 :href="child.path"
                 target="_blank"
                 rel="noopener"
@@ -636,7 +675,7 @@ onMounted(() => {
                 {{ labelFor(child) }}
               </a>
               <router-link
-                v-else
+                v-else-if="child.path"
                 :to="child.path"
                 class="flex items-center gap-3 pl-9 pr-3 py-2 rounded text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
                 @click="mobileMenuOpen = false"
@@ -644,6 +683,13 @@ onMounted(() => {
                 <component :is="iconFor(child.icon)" class="w-[15px] h-[15px]" />
                 {{ labelFor(child) }}
               </router-link>
+              <span
+                v-else
+                class="flex items-center gap-3 pl-9 pr-3 py-2 text-xs text-muted-foreground/60 select-none"
+              >
+                <component :is="iconFor(child.icon)" class="w-[15px] h-[15px]" />
+                {{ labelFor(child) }}
+              </span>
             </template>
           </template>
         </template>

@@ -51,12 +51,11 @@ router.post('/api/admin/nav-items', async (req, res) => {
     is_visible, active_match, requires_auth, badge, sort_order,
     parent_id, column_group,
   } = req.body || {}
-  if (typeof path !== 'string' || !path.trim()) {
-    return res.status(400).json({ error: 'path required' })
-  }
+  // path is optional — empty means "dropdown-only" trigger that doesn't navigate.
   if (typeof icon !== 'string' || !icon.trim()) {
     return res.status(400).json({ error: 'icon required' })
   }
+  const cleanPath = typeof path === 'string' && path.trim() ? path.trim() : null
   let order = Number(sort_order)
   if (!Number.isFinite(order)) {
     const max = await queryOne('SELECT COALESCE(MAX(sort_order), 0) AS m FROM nav_items')
@@ -72,7 +71,7 @@ router.post('/api/admin/nav-items', async (req, res) => {
       label_key || null,
       labels ? JSON.stringify(labels) : null,
       icon.trim(),
-      path.trim(),
+      cleanPath,
       !!is_external,
       is_visible !== false,
       active_match || null,
@@ -120,7 +119,7 @@ router.put('/api/admin/nav-items/:id', async (req, res) => {
     label_key: b.label_key !== undefined ? (b.label_key || null) : existing.label_key,
     labels: b.labels !== undefined ? (b.labels ? JSON.stringify(b.labels) : null) : existing.labels,
     icon: b.icon !== undefined ? String(b.icon) : existing.icon,
-    path: b.path !== undefined ? String(b.path) : existing.path,
+    path: b.path !== undefined ? (b.path && String(b.path).trim() ? String(b.path).trim() : null) : existing.path,
     is_external: b.is_external !== undefined ? !!b.is_external : existing.is_external,
     is_visible: b.is_visible !== undefined ? !!b.is_visible : existing.is_visible,
     active_match: b.active_match !== undefined ? (b.active_match || null) : existing.active_match,

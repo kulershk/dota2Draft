@@ -912,6 +912,8 @@ export async function initDb() {
   `)
   try { await execute(`ALTER TABLE nav_items ADD COLUMN parent_id INTEGER REFERENCES nav_items(id) ON DELETE SET NULL`) } catch {}
   try { await execute(`ALTER TABLE nav_items ADD COLUMN column_group TEXT`) } catch {}
+  // Allow path to be NULL for dropdown-only parent items.
+  try { await execute(`ALTER TABLE nav_items ALTER COLUMN path DROP NOT NULL`) } catch {}
   try { await execute(`CREATE INDEX IF NOT EXISTS idx_nav_items_sort ON nav_items (sort_order, id)`) } catch {}
   try { await execute(`CREATE INDEX IF NOT EXISTS idx_nav_items_parent ON nav_items (parent_id, sort_order)`) } catch {}
 

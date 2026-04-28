@@ -1096,7 +1096,7 @@ export default {
   reason: 'Iemesls',
 
   // Queue
-  queue: 'Matchmaking',
+  queue: 'Spēlēt',
   queueDesc: 'Pievienojies rindai, atrodi spēli, izveido komandu un spēlē.',
   queueAllSkillLevels: 'Visi līmeņi',
   queueAvailablePlayers: 'Pieejamie spēlētāji',
@@ -1410,6 +1410,8 @@ export default {
   navMenuLabelsHint: 'Pārrakstīšana pa valodām — atstāj tukšu, lai izmantotu i18n atslēgu.',
   navMenuIcon: 'Ikona',
   navMenuPath: 'Ceļš / URL',
+  navMenuPathHint: 'Atstāj tukšu, lai šis ieraksts kalpotu tikai kā nolaižamās izvēlnes pārslēgs un nepāradresētu, kad uz tā uzklikšķina.',
+  navMenuDropdownOnly: 'tikai izvēlne',
   navMenuActiveMatch: 'Aktīvā ceļa regex',
   navMenuActiveMatchHint: 'Regex, kas tiek salīdzināts ar pašreizējo ceļu, lai izceltu saiti kā aktīvu.',
   navMenuVisible: 'Redzams',

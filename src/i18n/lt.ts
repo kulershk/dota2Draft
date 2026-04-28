@@ -1096,7 +1096,7 @@ export default {
   reason: 'Priežastis',
 
   // Queue
-  queue: 'Matchmaking',
+  queue: 'Žaisti',
   queueDesc: 'Prisijunk prie eilės, rask žaidimą, sudaryk komandą ir žaisk.',
   queueAllSkillLevels: 'Visi lygiai',
   queueAvailablePlayers: 'Galimi žaidėjai',
@@ -1410,6 +1410,8 @@ export default {
   navMenuLabelsHint: 'Perrašymas pagal kalbas — palik tuščią, kad naudotum i18n raktą.',
   navMenuIcon: 'Piktograma',
   navMenuPath: 'Kelias / URL',
+  navMenuPathHint: 'Palik tuščią, kad įrašas veiktų tik kaip išskleidžiamo meniu jungiklis ir nenukreiptų paspaudus.',
+  navMenuDropdownOnly: 'tik meniu',
   navMenuActiveMatch: 'Aktyvaus kelio regex',
   navMenuActiveMatchHint: 'Regex, kuris lyginamas su dabartiniu keliu, kad nuoroda būtų pažymėta kaip aktyvi.',
   navMenuVisible: 'Matomas',

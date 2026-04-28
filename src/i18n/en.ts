@@ -1104,7 +1104,7 @@ export default {
   reason: 'Reason',
 
   // Queue
-  queue: 'Matchmaking',
+  queue: 'Play',
   queueDesc: 'Join a queue, get matched, draft your team, and play.',
   queueAllSkillLevels: 'All skill levels',
   queueAvailablePlayers: 'Available Players',
@@ -1421,6 +1421,8 @@ export default {
   navMenuLabelsHint: 'Per-locale overrides — leave blank to use the i18n key.',
   navMenuIcon: 'Icon',
   navMenuPath: 'Path / URL',
+  navMenuPathHint: 'Leave empty to make this a dropdown-only trigger that does not navigate when clicked.',
+  navMenuDropdownOnly: 'dropdown only',
   navMenuActiveMatch: 'Active path regex',
   navMenuActiveMatchHint: 'Regex matched against the current path to highlight the link as active.',
   navMenuVisible: 'Visible',

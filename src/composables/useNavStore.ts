@@ -7,7 +7,7 @@ export interface NavItem {
   label_key: string | null
   labels: { en?: string; lv?: string; lt?: string } | null
   icon: string
-  path: string
+  path: string | null
   is_external: boolean
   active_match: string | null
   requires_auth: boolean
