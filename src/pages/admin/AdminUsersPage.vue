@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Users, Search, ExternalLink, Ban, CheckCircle, LogIn, UserPlus, Pencil, ArrowUp, ArrowDown, Upload, RefreshCw } from 'lucide-vue-next'
+import { Users, Search, ExternalLink, Ban, CheckCircle, LogIn, UserPlus, Pencil, ArrowUp, ArrowDown, Upload, RefreshCw, Network } from 'lucide-vue-next'
 import RoleBadge from '@/components/common/RoleBadge.vue'
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -551,6 +551,9 @@ function formatRelativeTime(dateStr: string | null) {
                   <button v-else class="btn-ghost p-2 text-red-500" :title="t('unbanUser')" @click="promptToggleBan(user)">
                     <CheckCircle class="w-4 h-4" />
                   </button>
+                  <router-link :to="{ name: 'admin-multi-account', params: { id: user.id } }" class="btn-ghost p-2 inline-flex" :title="t('multiAccountInspect')">
+                    <Network class="w-4 h-4" />
+                  </router-link>
                   <button class="btn-ghost p-2" :title="t('loginAs')" @click="impersonateUser(user)">
                     <LogIn class="w-4 h-4" />
                   </button>

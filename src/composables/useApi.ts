@@ -596,6 +596,12 @@ export function useApi() {
       if (opts?.to) qs.set('to', opts.to)
       return request(`/api/admin/stats/socket-events?${qs}`)
     },
+    getMultiAccountInspection: (userId: number, opts?: { days?: number; limit?: number }) => {
+      const qs = new URLSearchParams()
+      qs.set('days', String(opts?.days ?? 30))
+      qs.set('limit', String(opts?.limit ?? 50))
+      return request(`/api/admin/users/${userId}/multi-account?${qs}`)
+    },
     getRequestStatsTopIps: (period: string, opts?: { limit?: number; userId?: number; from?: string; to?: string }) => {
       const qs = new URLSearchParams({ period })
       qs.set('limit', String(opts?.limit ?? 20))

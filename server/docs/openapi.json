@@ -2582,6 +2582,23 @@
           "responses": { "200": { "description": "Array of { event, count, unique_users }" } }
         }
       },
+      "/api/admin/users/{id}/multi-account": {
+        "get": {
+          "tags": ["Admin Stats"],
+          "summary": "Multi-account / alt detector for a single user",
+          "description": "Cross-references the target user's IPs in the request_logs table with other accounts that hit the same IPs in the window. Used to detect alts. Requires `view_request_stats` permission.",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [
+            { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } },
+            { "name": "days", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 365, "default": 30 } },
+            { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 } }
+          ],
+          "responses": {
+            "200": { "description": "{ user, days, user_ips: [...], linked_users: [...] }" },
+            "404": { "description": "Player not found" }
+          }
+        }
+      },
       "/api/admin/stats/top-pages": {
         "get": {
           "tags": ["Admin Stats"],

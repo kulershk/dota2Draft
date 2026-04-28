@@ -69,6 +69,7 @@ const router = createRouter({
         { path: 'jobs', name: 'admin-jobs', meta: { permissions: ['manage_jobs'] }, component: () => import('@/pages/admin/AdminJobsPage.vue') },
         { path: 'request-stats', name: 'admin-request-stats', meta: { permissions: ['view_request_stats'] }, component: () => import('@/pages/admin/AdminRequestStatsPage.vue') },
         { path: 'menu', name: 'admin-menu', meta: { permissions: ['manage_menu'] }, component: () => import('@/pages/admin/AdminMenuPage.vue') },
+        { path: 'users/:id/multi-account', name: 'admin-multi-account', meta: { permissions: ['view_request_stats'] }, component: () => import('@/pages/admin/AdminMultiAccountPage.vue') },
       ],
     },
     // Catch-all 404 — must be last so all named routes match first.

@@ -242,6 +242,129 @@ router.get('/api/admin/stats/top-ips', async (req, res) => {
   res.json(rows)
 })
 
+// Multi-account inspector: given a user, find the IPs they used and the
+// other users who shared those IPs. Used for detecting alts/multi-accounts.
+router.get('/api/admin/users/:id/multi-account', async (req, res) => {
+  if (!await requirePermission(req, res, 'view_request_stats')) return
+  const userId = Number(req.params.id)
+  if (!Number.isFinite(userId)) return res.status(400).json({ error: 'bad userId' })
+  const days = Math.min(Math.max(parseInt(req.query.days, 10) || 30, 1), 365)
+  const linkedLimit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200)
+
+  const player = await query(
+    `SELECT id, name, display_name, avatar_url, steam_id, mmr, is_banned
+       FROM players WHERE id = $1`,
+    [userId]
+  )
+  if (player.length === 0) return res.status(404).json({ error: 'Player not found' })
+
+  // Step 1: IPs this user has hit in the window.
+  const userIps = await query(
+    `SELECT ip,
+            COUNT(*)::int AS request_count,
+            MIN(ts) AS first_seen,
+            MAX(ts) AS last_seen
+       FROM request_logs
+       WHERE user_id = $1 AND ip IS NOT NULL
+         AND ts >= NOW() - ($2 || ' days')::interval
+       GROUP BY ip
+       ORDER BY request_count DESC`,
+    [userId, String(days)]
+  )
+
+  if (userIps.length === 0) {
+    return res.json({
+      user: player[0],
+      days,
+      user_ips: [],
+      linked_users: [],
+      shared_ips: [],
+    })
+  }
+
+  const ipList = userIps.map(r => r.ip)
+
+  // Step 2: other users who hit any of these IPs.
+  const linkedUsers = await query(
+    `SELECT rl.user_id,
+            p.name, p.display_name, p.avatar_url, p.steam_id, p.is_banned, p.mmr,
+            COUNT(*)::int AS shared_request_count,
+            COUNT(DISTINCT rl.ip)::int AS shared_ip_count,
+            MAX(rl.ts) AS last_seen,
+            ARRAY_AGG(DISTINCT rl.ip) AS shared_ips
+       FROM request_logs rl
+       JOIN players p ON p.id = rl.user_id
+       WHERE rl.user_id IS NOT NULL
+         AND rl.user_id <> $1
+         AND rl.ip = ANY($2::text[])
+         AND rl.ts >= NOW() - ($3 || ' days')::interval
+       GROUP BY rl.user_id, p.name, p.display_name, p.avatar_url, p.steam_id, p.is_banned, p.mmr
+       ORDER BY shared_ip_count DESC, shared_request_count DESC
+       LIMIT $4`,
+    [userId, ipList, String(days), linkedLimit]
+  )
+
+  // Step 3: per-IP breakdown — which other users hit each IP.
+  const sharedIps = await query(
+    `SELECT rl.ip,
+            rl.user_id,
+            p.name, p.display_name, p.avatar_url,
+            COUNT(*)::int AS request_count
+       FROM request_logs rl
+       LEFT JOIN players p ON p.id = rl.user_id
+       WHERE rl.ip = ANY($1::text[])
+         AND rl.user_id IS NOT NULL
+         AND rl.user_id <> $2
+         AND rl.ts >= NOW() - ($3 || ' days')::interval
+       GROUP BY rl.ip, rl.user_id, p.name, p.display_name, p.avatar_url
+       ORDER BY rl.ip, request_count DESC`,
+    [ipList, userId, String(days)]
+  )
+
+  // Group sharedIps by IP for easy frontend rendering.
+  const ipToOthers = {}
+  for (const row of sharedIps) {
+    if (!ipToOthers[row.ip]) ipToOthers[row.ip] = []
+    ipToOthers[row.ip].push({
+      user_id: row.user_id,
+      name: row.display_name || row.name,
+      avatar_url: row.avatar_url,
+      request_count: row.request_count,
+    })
+  }
+
+  res.json({
+    user: {
+      id: player[0].id,
+      name: player[0].display_name || player[0].name,
+      avatar_url: player[0].avatar_url,
+      steam_id: player[0].steam_id,
+      is_banned: !!player[0].is_banned,
+      mmr: player[0].mmr,
+    },
+    days,
+    user_ips: userIps.map(r => ({
+      ip: r.ip,
+      request_count: r.request_count,
+      first_seen: r.first_seen,
+      last_seen: r.last_seen,
+      other_users: ipToOthers[r.ip] || [],
+    })),
+    linked_users: linkedUsers.map(u => ({
+      user_id: u.user_id,
+      name: u.display_name || u.name,
+      avatar_url: u.avatar_url,
+      steam_id: u.steam_id,
+      is_banned: !!u.is_banned,
+      mmr: u.mmr,
+      shared_request_count: u.shared_request_count,
+      shared_ip_count: u.shared_ip_count,
+      shared_ips: u.shared_ips || [],
+      last_seen: u.last_seen,
+    })),
+  })
+})
+
 router.get('/api/admin/stats/top-pages', async (req, res) => {
   if (!await requirePermission(req, res, 'view_request_stats')) return
   const sf = buildSocketFilter(req)

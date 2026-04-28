@@ -878,6 +878,7 @@ export async function initDb() {
   try { await execute(`CREATE INDEX IF NOT EXISTS idx_request_logs_ts ON request_logs (ts DESC)`) } catch {}
   try { await execute(`CREATE INDEX IF NOT EXISTS idx_request_logs_path_ts ON request_logs (path, ts DESC)`) } catch {}
   try { await execute(`CREATE INDEX IF NOT EXISTS idx_request_logs_user_ts ON request_logs (user_id, ts DESC)`) } catch {}
+  try { await execute(`CREATE INDEX IF NOT EXISTS idx_request_logs_ip_ts ON request_logs (ip, ts DESC) WHERE ip IS NOT NULL`) } catch {}
 
   await execute(`
     CREATE TABLE IF NOT EXISTS socket_event_logs (
