@@ -1398,6 +1398,7 @@ export default {
   adminMenuDesc: 'Pielāgo navigāciju — pievieno, slēp, pārkārto vai pārdēvē saites.',
   searchPlaceholder: 'Meklēt spēlētājus, mačus…',
   searchPlayers: 'Spēlētāji',
+  searchTeams: 'Komandas',
   searchCompetitions: 'Turnīri',
   searchMatches: 'Mači',
   searchNoResults: 'Nav rezultātu',

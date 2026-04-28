@@ -5,7 +5,7 @@ const router = Router()
 
 router.get('/api/search', async (req, res) => {
   const q = (req.query.q || '').toString().trim()
-  if (!q || q.length < 2) return res.json({ players: [], matches: [], competitions: [] })
+  if (!q || q.length < 2) return res.json({ players: [], matches: [], competitions: [], teams: [] })
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 8, 1), 20)
 
   // Player search: numeric id, 17-digit steam_id, or fuzzy name
@@ -175,6 +175,45 @@ router.get('/api/search', async (req, res) => {
     path: `/c/${c.id}/info`,
   }))
 
+  // Team search: by team name, only public competitions, showing the
+  // tournament name. A "team" in this codebase is a row in the captains
+  // table — its profile is at /team/:captainId.
+  const teamLike = `%${q.replace(/[%_]/g, '\\$&')}%`
+  const teamRows = await query(
+    `SELECT cap.id, cap.team, cap.banner_url,
+            cap.competition_id,
+            c.name AS competition_name, c.status AS competition_status,
+            cap.player_id,
+            p.name AS captain_name, p.display_name AS captain_display_name
+       FROM captains cap
+       JOIN competitions c ON c.id = cap.competition_id
+       LEFT JOIN players p ON p.id = cap.player_id
+       WHERE c.is_public = TRUE
+         AND cap.team ILIKE $1
+       ORDER BY
+         CASE c.status
+           WHEN 'in_progress' THEN 0
+           WHEN 'active' THEN 0
+           WHEN 'registration' THEN 1
+           WHEN 'draft' THEN 2
+           WHEN 'completed' THEN 3
+           ELSE 4
+         END,
+         c.created_at DESC
+       LIMIT $2`,
+    [teamLike, limit]
+  )
+  const teams = teamRows.map(t => ({
+    id: t.id,
+    team: t.team,
+    banner_url: t.banner_url,
+    competition_id: t.competition_id,
+    competition_name: t.competition_name,
+    competition_status: t.competition_status,
+    captain_name: t.captain_display_name || t.captain_name || null,
+    path: `/team/${t.id}`,
+  }))
+
   res.json({
     players: players.map(p => ({
       id: p.id,
@@ -187,6 +226,7 @@ router.get('/api/search', async (req, res) => {
     })),
     matches,
     competitions,
+    teams,
   })
 })
 

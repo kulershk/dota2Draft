@@ -2,7 +2,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Search, User as UserIcon, Swords, Loader2, Trophy } from 'lucide-vue-next'
+import { Search, User as UserIcon, Swords, Loader2, Trophy, Users as TeamIcon } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 
 interface PlayerHit {
@@ -31,6 +31,16 @@ interface CompetitionHit {
   competition_type: string | null
   path: string
 }
+interface TeamHit {
+  id: number
+  team: string
+  banner_url: string | null
+  competition_id: number
+  competition_name: string | null
+  competition_status: string | null
+  captain_name: string | null
+  path: string
+}
 
 const { t } = useI18n()
 const router = useRouter()
@@ -40,6 +50,7 @@ const query = ref('')
 const players = ref<PlayerHit[]>([])
 const matches = ref<MatchHit[]>([])
 const competitions = ref<CompetitionHit[]>([])
+const teams = ref<TeamHit[]>([])
 const open = ref(false)
 const loading = ref(false)
 const activeIdx = ref(-1)
@@ -49,8 +60,9 @@ const wrapperEl = ref<HTMLDivElement | null>(null)
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
 const flatHits = computed(() => {
-  const out: Array<{ kind: 'player' | 'match' | 'competition'; data: PlayerHit | MatchHit | CompetitionHit }> = []
+  const out: Array<{ kind: 'player' | 'match' | 'competition' | 'team'; data: PlayerHit | MatchHit | CompetitionHit | TeamHit }> = []
   for (const p of players.value) out.push({ kind: 'player', data: p })
+  for (const tm of teams.value) out.push({ kind: 'team', data: tm })
   for (const c of competitions.value) out.push({ kind: 'competition', data: c })
   for (const m of matches.value) out.push({ kind: 'match', data: m })
   return out
@@ -66,6 +78,7 @@ watch(query, (q) => {
     players.value = []
     matches.value = []
     competitions.value = []
+    teams.value = []
     return
   }
   loading.value = true
@@ -75,23 +88,28 @@ watch(query, (q) => {
       players.value = res.players || []
       matches.value = res.matches || []
       competitions.value = res.competitions || []
+      teams.value = res.teams || []
     } catch {
       players.value = []
       matches.value = []
       competitions.value = []
+      teams.value = []
     } finally {
       loading.value = false
     }
   }, 200)
 })
 
-function navigateHit(hit: { kind: 'player' | 'match' | 'competition'; data: PlayerHit | MatchHit | CompetitionHit }) {
+function navigateHit(hit: { kind: 'player' | 'match' | 'competition' | 'team'; data: PlayerHit | MatchHit | CompetitionHit | TeamHit }) {
   if (hit.kind === 'player') {
     const p = hit.data as PlayerHit
     router.push({ name: 'player-profile', params: { id: p.id } })
   } else if (hit.kind === 'competition') {
     const c = hit.data as CompetitionHit
     router.push(c.path)
+  } else if (hit.kind === 'team') {
+    const tm = hit.data as TeamHit
+    router.push(tm.path)
   } else {
     const m = hit.data as MatchHit
     if (m.path) router.push(m.path)
@@ -109,6 +127,7 @@ function close() {
   players.value = []
   matches.value = []
   competitions.value = []
+  teams.value = []
 }
 
 function handleKey(e: KeyboardEvent) {
@@ -213,6 +232,31 @@ const shortcutLabel = isMac ? '⌘K' : 'Ctrl+K'
             </div>
           </button>
         </div>
+        <!-- Teams section -->
+        <div v-if="teams.length > 0">
+          <div class="px-3 py-2 text-[10px] font-mono font-semibold uppercase tracking-wider text-text-tertiary border-b border-border">
+            {{ t('searchTeams') }}
+          </div>
+          <button
+            v-for="(tm, i) in teams" :key="`t-${tm.id}`"
+            class="w-full flex items-center gap-3 px-3 py-2 text-left transition-colors"
+            :class="activeIdx === (players.length + i) ? 'bg-accent' : 'hover:bg-accent/40'"
+            @mouseenter="activeIdx = players.length + i"
+            @click="navigateHit({ kind: 'team', data: tm })"
+          >
+            <div class="w-7 h-7 rounded-md overflow-hidden bg-muted shrink-0 flex items-center justify-center">
+              <img v-if="tm.banner_url" :src="tm.banner_url" class="w-full h-full object-cover" />
+              <TeamIcon v-else class="w-3.5 h-3.5 text-muted-foreground" />
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium text-foreground truncate">{{ tm.team }}</div>
+              <div class="text-[11px] text-muted-foreground truncate">
+                <span v-if="tm.competition_name">{{ tm.competition_name }}</span>
+                <span v-if="tm.captain_name" class="ml-1">· {{ tm.captain_name }}</span>
+              </div>
+            </div>
+          </button>
+        </div>
         <!-- Competitions section -->
         <div v-if="competitions.length > 0">
           <div class="px-3 py-2 text-[10px] font-mono font-semibold uppercase tracking-wider text-text-tertiary border-b border-border">
@@ -221,8 +265,8 @@ const shortcutLabel = isMac ? '⌘K' : 'Ctrl+K'
           <button
             v-for="(c, i) in competitions" :key="`c-${c.id}`"
             class="w-full flex items-center gap-3 px-3 py-2 text-left transition-colors"
-            :class="activeIdx === (players.length + i) ? 'bg-accent' : 'hover:bg-accent/40'"
-            @mouseenter="activeIdx = players.length + i"
+            :class="activeIdx === (players.length + teams.length + i) ? 'bg-accent' : 'hover:bg-accent/40'"
+            @mouseenter="activeIdx = players.length + teams.length + i"
             @click="navigateHit({ kind: 'competition', data: c })"
           >
             <div class="w-7 h-7 rounded-md bg-muted shrink-0 flex items-center justify-center">
@@ -245,9 +289,9 @@ const shortcutLabel = isMac ? '⌘K' : 'Ctrl+K'
           <button
             v-for="(m, i) in matches" :key="`m-${m.type}-${m.id}`"
             class="w-full flex items-center gap-3 px-3 py-2 text-left transition-colors"
-            :class="activeIdx === (players.length + competitions.length + i) ? 'bg-accent' : 'hover:bg-accent/40'"
+            :class="activeIdx === (players.length + teams.length + competitions.length + i) ? 'bg-accent' : 'hover:bg-accent/40'"
             :disabled="!m.path"
-            @mouseenter="activeIdx = players.length + competitions.length + i"
+            @mouseenter="activeIdx = players.length + teams.length + competitions.length + i"
             @click="navigateHit({ kind: 'match', data: m })"
           >
             <div class="w-7 h-7 rounded-md bg-muted shrink-0 flex items-center justify-center">
