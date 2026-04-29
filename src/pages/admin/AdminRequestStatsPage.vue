@@ -38,6 +38,7 @@ type Summary = {
   requests: { total: number; unique_users: number; unique_ips: number; avg_ms: number; p95_ms: number }
   status_breakdown: { klass: number; count: number }[]
   socket: { total: number; unique_users: number }
+  logging_enabled: boolean
 }
 type RouteRow = { method: string; path: string; count: number; avg_ms: number; p95_ms: number; errors: number }
 type UserRow = { user_id: number | null; name: string; avatar_url: string | null; count: number; errors: number; last_seen: string }
@@ -308,7 +309,20 @@ function statusBadge(s: number): string {
     <!-- Header -->
     <div class="flex items-center justify-between gap-4 flex-wrap">
       <div>
-        <h1 class="text-2xl font-semibold text-foreground">{{ t('adminRequestStats') }}</h1>
+        <div class="flex items-center gap-2 flex-wrap">
+          <h1 class="text-2xl font-semibold text-foreground">{{ t('adminRequestStats') }}</h1>
+          <span
+            v-if="summary"
+            class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium border"
+            :class="summary.logging_enabled
+              ? 'bg-green-500/10 border-green-500/30 text-green-400'
+              : 'bg-red-500/10 border-red-500/30 text-red-400'"
+            :title="summary.logging_enabled ? t('statsLoggingEnabledHint') : t('statsLoggingDisabledHint')"
+          >
+            <span class="w-1.5 h-1.5 rounded-full" :class="summary.logging_enabled ? 'bg-green-400' : 'bg-red-400'"></span>
+            {{ summary.logging_enabled ? t('statsLoggingEnabled') : t('statsLoggingDisabled') }}
+          </span>
+        </div>
         <p class="text-sm text-muted-foreground mt-1">{{ t('adminRequestStatsDesc') }}</p>
       </div>
       <div class="flex items-center gap-2 flex-wrap justify-end">

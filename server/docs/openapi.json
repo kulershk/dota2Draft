@@ -2546,7 +2546,7 @@
         "get": {
           "tags": ["Admin Stats"],
           "summary": "Aggregate request/socket counts for the period",
-          "description": "Returns total requests, unique users/IPs, avg + p95 latency, status-class breakdown, and socket totals. Optional userId/ip filters scope to a single entity. Requires `view_request_stats` permission.",
+          "description": "Returns total requests, unique users/IPs, avg + p95 latency, status-class breakdown, socket totals, and a `logging_enabled` flag reflecting the server's `REQUEST_LOG_DISABLED` env var (false → no new rows are being recorded). Optional userId/ip filters scope to a single entity. Requires `view_request_stats` permission.",
           "security": [{ "bearerAuth": [] }],
           "parameters": [
             { "name": "period", "in": "query", "schema": { "type": "string", "enum": ["1h", "24h", "7d", "14d", "30d", "90d", "all", "custom"], "default": "24h" } },

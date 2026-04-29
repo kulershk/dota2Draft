@@ -121,6 +121,7 @@ router.get('/api/admin/stats/summary', async (req, res) => {
     requests: totals[0] || { total: 0, unique_users: 0, unique_ips: 0, avg_ms: 0, p95_ms: 0 },
     status_breakdown: status,
     socket: sockets[0] || { total: 0, unique_users: 0 },
+    logging_enabled: process.env.REQUEST_LOG_DISABLED !== 'true',
   })
 })
 
