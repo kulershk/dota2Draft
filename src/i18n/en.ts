@@ -1503,6 +1503,7 @@ export default {
   statsSocketEvents: 'Socket events',
   statsRequests: 'Requests',
   statsErrors: 'Errors',
+  statsAvgResponseMs: 'Avg response (ms)',
   statsMethod: 'Method',
   statsPath: 'Path',
   statsCount: 'Count',

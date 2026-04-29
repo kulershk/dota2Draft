@@ -1492,6 +1492,7 @@ export default {
   statsSocketEvents: 'Socket įvykiai',
   statsRequests: 'Užklausos',
   statsErrors: 'Klaidos',
+  statsAvgResponseMs: 'Vid. atsakas (ms)',
   statsMethod: 'Metodas',
   statsPath: 'Kelias',
   statsCount: 'Kiekis',

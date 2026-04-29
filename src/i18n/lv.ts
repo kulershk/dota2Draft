@@ -1492,6 +1492,7 @@ export default {
   statsSocketEvents: 'Socket notikumi',
   statsRequests: 'Pieprasījumi',
   statsErrors: 'Kļūdas',
+  statsAvgResponseMs: 'Vid. atbilde (ms)',
   statsMethod: 'Metode',
   statsPath: 'Ceļš',
   statsCount: 'Skaits',

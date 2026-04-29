@@ -207,6 +207,7 @@ const lineChartData = computed(() => {
         tension: 0.3,
         fill: true,
         pointRadius: 2,
+        yAxisID: 'y',
       },
       {
         label: t('statsErrors'),
@@ -216,6 +217,18 @@ const lineChartData = computed(() => {
         tension: 0.3,
         fill: true,
         pointRadius: 2,
+        yAxisID: 'y',
+      },
+      {
+        label: t('statsAvgResponseMs'),
+        data: timeseries.value.rows.map(r => r.avg_ms),
+        borderColor: 'rgb(234, 179, 8)',
+        backgroundColor: 'rgba(234, 179, 8, 0.15)',
+        tension: 0.3,
+        fill: false,
+        pointRadius: 2,
+        borderDash: [4, 3],
+        yAxisID: 'y1',
       },
     ],
   }
@@ -230,7 +243,20 @@ const lineChartOptions = computed(() => ({
   },
   scales: {
     x: { ticks: { color: 'rgb(156, 163, 175)', maxRotation: 0, autoSkip: true, maxTicksLimit: 12 }, grid: { color: 'rgba(156, 163, 175, 0.1)' } },
-    y: { beginAtZero: true, ticks: { color: 'rgb(156, 163, 175)' }, grid: { color: 'rgba(156, 163, 175, 0.1)' } },
+    y: {
+      type: 'linear' as const,
+      position: 'left' as const,
+      beginAtZero: true,
+      ticks: { color: 'rgb(156, 163, 175)' },
+      grid: { color: 'rgba(156, 163, 175, 0.1)' },
+    },
+    y1: {
+      type: 'linear' as const,
+      position: 'right' as const,
+      beginAtZero: true,
+      ticks: { color: 'rgb(234, 179, 8)', callback: (v: any) => `${v} ms` },
+      grid: { drawOnChartArea: false },
+    },
   },
   interaction: { mode: 'nearest' as const, axis: 'x' as const, intersect: false },
 }))
