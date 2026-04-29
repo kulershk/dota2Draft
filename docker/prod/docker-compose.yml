@@ -30,6 +30,7 @@ services:
       - TWITCH_CLIENT_SECRET=${TWITCH_CLIENT_SECRET}
       - DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
       - DISCORD_CLIENT_SECRET=${DISCORD_CLIENT_SECRET}
+      - REQUEST_LOG_DISABLED=${REQUEST_LOG_DISABLED:-false}
     volumes:
       - draft_uploads:/app/uploads
     depends_on:

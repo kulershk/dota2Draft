@@ -1,6 +1,8 @@
 import { execute } from '../db.js'
 import { getSessionPlayerId, getTokenFromReq } from './auth.js'
 
+const DISABLED = process.env.REQUEST_LOG_DISABLED === 'true'
+
 const FLUSH_INTERVAL_MS = 5_000
 const FLUSH_BATCH_SIZE = 100
 
@@ -32,6 +34,7 @@ function normalizePath(rawPath) {
 }
 
 export function requestLogger(req, res, next) {
+  if (DISABLED) return next()
   const start = Date.now()
   const path = normalizePath(req.originalUrl || req.url || '')
 
@@ -56,6 +59,7 @@ export function requestLogger(req, res, next) {
 }
 
 export function logSocketEvent({ event, userId, competitionId, path }) {
+  if (DISABLED) return
   if (!event) return
   socketQueue.push({
     event,
@@ -109,6 +113,7 @@ async function flushSocketEvents() {
 }
 
 export function startRequestLoggerWorkers() {
+  if (DISABLED) return
   setInterval(() => {
     flushRequests().catch(() => {})
     flushSocketEvents().catch(() => {})

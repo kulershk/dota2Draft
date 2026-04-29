@@ -60,7 +60,8 @@ app.set('io', io)
 
 app.use(cors())
 app.use(express.json())
-app.use(requestLogger)
+const REQUEST_LOG_DISABLED = process.env.REQUEST_LOG_DISABLED === 'true'
+if (!REQUEST_LOG_DISABLED) app.use(requestLogger)
 app.use(blockBanned)
 
 // Static files
@@ -175,7 +176,7 @@ server.on('upgrade', (req, socket, head) => {
 })
 
 initDb().then(async () => {
-  startRequestLoggerWorkers()
+  if (!REQUEST_LOG_DISABLED) startRequestLoggerWorkers()
   await botPool.init(io, botWss)
   // Schema is now in place — safe to resume live-stat polling for any matches
   // still flagged 'live' in the DB.
