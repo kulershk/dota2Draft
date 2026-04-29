@@ -7,17 +7,20 @@ import { useApi } from '@/composables/useApi'
 const { t } = useI18n()
 const api = useApi()
 
-const siteName = ref('')
-const logoUrl = ref('')
+// Hydrate from cache synchronously to avoid the empty-footer flash before
+// onMounted's fetch resolves.
+const _cached = (() => {
+  try { return JSON.parse(localStorage.getItem('draft_site_settings_v1') || 'null') || {} }
+  catch { return {} }
+})()
+const siteName = ref(_cached.site_name || '')
+const logoUrl = ref(_cached.site_logo_url || '')
 
 onMounted(() => {
-  const apply = (data: any) => {
+  api.getSiteSettingsCached().fresh.then(data => {
     siteName.value = data.site_name || ''
     logoUrl.value = data.site_logo_url || ''
-  }
-  const { cached, fresh } = api.getSiteSettingsCached()
-  if (cached) apply(cached)
-  fresh.then(apply).catch(() => {})
+  }).catch(() => {})
 })
 </script>
 

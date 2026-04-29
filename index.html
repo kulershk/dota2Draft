@@ -5,6 +5,20 @@
     <link rel="icon" id="favicon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>DOTA2.LV</title>
+    <script>
+      // Hydrate page title + favicon from the SWR site-settings cache before
+      // Vue mounts, so returning visitors don't see "DOTA2.LV" / vite.svg flash.
+      try {
+        var s = JSON.parse(localStorage.getItem('draft_site_settings_v1') || 'null');
+        if (s) {
+          if (s.site_name) document.title = s.site_name;
+          if (s.site_logo_url) {
+            var f = document.getElementById('favicon');
+            if (f) { f.href = s.site_logo_url; f.type = 'image/png'; }
+          }
+        }
+      } catch (e) {}
+    </script>
     <!-- Google Analytics -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-0VK4F10VN6"></script>
     <script>

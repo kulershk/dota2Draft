@@ -119,10 +119,17 @@ const claimError = ref('')
 const showClaimAdminButton = ref(false)
 const showLangMenu = ref(false)
 const showUserMenu = ref(false)
-const customSiteName = ref('')
-const customLogoUrl = ref('')
-const discordUrl = ref('')
-const heroBannerUrl = ref('')
+// Hydrate from the SWR cache synchronously so the first render already shows
+// the right logo / banner / site name — no flash of empty values before
+// onMounted's fetch resolves.
+const _cachedSiteSettings = (() => {
+  try { return JSON.parse(localStorage.getItem('draft_site_settings_v1') || 'null') || {} }
+  catch { return {} }
+})()
+const customSiteName = ref(_cachedSiteSettings.site_name || '')
+const customLogoUrl = ref(_cachedSiteSettings.site_logo_url || '')
+const discordUrl = ref(_cachedSiteSettings.site_discord_url || '')
+const heroBannerUrl = ref(_cachedSiteSettings.site_hero_banner_url || '')
 
 const languages = [
   { code: 'en', label: 'English' },
@@ -143,7 +150,9 @@ onMounted(async () => {
   // AdminCompetitionsPage, AdminFantasyPage) fetch on their own mount.
   // CompetitionLayout populates the single current comp via fetchCompData.
 
-  const applySiteSettings = (data: any) => {
+  // Refs were already hydrated from cache at setup time; this fetches the
+  // fresh payload in the background and reapplies if anything changed.
+  useApi().getSiteSettingsCached().fresh.then(data => {
     customSiteName.value = data.site_name || ''
     customLogoUrl.value = data.site_logo_url || ''
     discordUrl.value = data.site_discord_url || ''
@@ -156,10 +165,7 @@ onMounted(async () => {
         favicon.type = 'image/png'
       }
     }
-  }
-  const { cached, fresh } = useApi().getSiteSettingsCached()
-  if (cached) applySiteSettings(cached)
-  fresh.then(applySiteSettings).catch(() => {})
+  }).catch(() => {})
 
   const params = new URLSearchParams(window.location.search)
 
