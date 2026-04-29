@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { query, queryOne, execute } from '../db.js'
 import { createSession, getAuthPlayer } from '../middleware/auth.js'
-import { requirePermission } from '../middleware/permissions.js'
+import { requirePermission, getPlayerPermissions } from '../middleware/permissions.js'
 import { fetchSteamProfile, fetchSteamProfiles, parseSteamIds } from '../helpers/steam.js'
 import { socketPlayers, getOnlinePlayerIds, getPlayerActivities } from '../socket/state.js'
 
@@ -682,6 +682,14 @@ router.put('/api/players/:id', async (req, res) => {
   const banChanging = is_banned !== undefined && !!is_banned !== !!player.is_banned
   const newIsBanned = is_banned !== undefined ? !!is_banned : !!player.is_banned
 
+  // Toggling is_banned via PUT requires the dedicated ban_users permission;
+  // the dedicated /ban + /unban endpoints already enforce this. Block this
+  // sneak path so users with manage_users alone can't bypass.
+  if (banChanging) {
+    const canBan = !!admin.is_admin || (await getPlayerPermissions(admin.id)).has('ban_users')
+    if (!canBan) return res.status(403).json({ error: 'ban_users permission required to change ban status' })
+  }
+
   if (banChanging && newIsBanned) {
     await execute(
       `UPDATE players
@@ -737,7 +745,7 @@ router.put('/api/players/:id', async (req, res) => {
 })
 
 router.post('/api/admin/players/:id/ban', async (req, res) => {
-  const admin = await requirePermission(req, res, 'manage_users')
+  const admin = await requirePermission(req, res, 'ban_users')
   if (!admin) return
   const player = await queryOne('SELECT * FROM players WHERE id = $1', [req.params.id])
   if (!player) return res.status(404).json({ error: 'Player not found' })
@@ -752,7 +760,7 @@ router.post('/api/admin/players/:id/ban', async (req, res) => {
 })
 
 router.post('/api/admin/players/:id/unban', async (req, res) => {
-  const admin = await requirePermission(req, res, 'manage_users')
+  const admin = await requirePermission(req, res, 'ban_users')
   if (!admin) return
   const player = await queryOne('SELECT * FROM players WHERE id = $1', [req.params.id])
   if (!player) return res.status(404).json({ error: 'Player not found' })
@@ -766,9 +774,8 @@ router.post('/api/admin/players/:id/unban', async (req, res) => {
 })
 
 router.post('/api/admin/impersonate/:id', async (req, res) => {
-  const admin = await requirePermission(req, res, 'manage_users')
+  const admin = await requirePermission(req, res, 'impersonate_users')
   if (!admin) return
-  if (!admin.is_admin) return res.status(403).json({ error: 'Only root admins can impersonate' })
   const target = await queryOne('SELECT * FROM players WHERE id = $1', [req.params.id])
   if (!target) return res.status(404).json({ error: 'User not found' })
   const token = createSession(target.id)

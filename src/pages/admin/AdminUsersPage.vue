@@ -551,16 +551,16 @@ function formatRelativeTime(dateStr: string | null) {
                   <button v-if="user.steam_id" class="btn-ghost p-2" :title="t('syncProfile')" @click="syncSingleUser(user.id)">
                     <RefreshCw class="w-4 h-4" />
                   </button>
-                  <button v-if="!user.is_banned" class="btn-ghost p-2" :title="t('banUser')" @click="promptToggleBan(user)">
+                  <button v-if="!user.is_banned && store.hasPerm('ban_users')" class="btn-ghost p-2" :title="t('banUser')" @click="promptToggleBan(user)">
                     <Ban class="w-4 h-4" />
                   </button>
-                  <button v-else class="btn-ghost p-2 text-red-500" :title="t('unbanUser')" @click="promptToggleBan(user)">
+                  <button v-else-if="user.is_banned && store.hasPerm('ban_users')" class="btn-ghost p-2 text-red-500" :title="t('unbanUser')" @click="promptToggleBan(user)">
                     <CheckCircle class="w-4 h-4" />
                   </button>
                   <router-link v-if="store.hasPerm('view_request_stats')" :to="{ name: 'admin-multi-account', params: { id: user.id } }" class="btn-ghost p-2 inline-flex" :title="t('multiAccountInspect')">
                     <Network class="w-4 h-4" />
                   </router-link>
-                  <button class="btn-ghost p-2" :title="t('loginAs')" @click="impersonateUser(user)">
+                  <button v-if="store.hasPerm('impersonate_users')" class="btn-ghost p-2" :title="t('loginAs')" @click="impersonateUser(user)">
                     <LogIn class="w-4 h-4" />
                   </button>
                 </div>

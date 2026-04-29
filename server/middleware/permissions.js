@@ -20,6 +20,8 @@ export const ALL_PERMISSIONS = [
   'manage_mmr_verifications',
   'view_request_stats',
   'manage_menu',
+  'ban_users',
+  'impersonate_users',
 ]
 
 export async function getPlayerPermissions(playerId) {
