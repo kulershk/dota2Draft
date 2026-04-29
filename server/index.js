@@ -88,19 +88,24 @@ const APP_VERSION = (() => {
 })()
 app.get('/api/version', (req, res) => res.json({ version: APP_VERSION }))
 
-// API Docs
-const openApiSpec = JSON.parse(readFileSync(join(__dirname, 'docs', 'openapi.json'), 'utf-8'))
-app.get('/api/docs/openapi.json', (req, res) => res.json(openApiSpec))
-app.get('/api/docs/asyncapi.json', (req, res) => {
-  try {
-    const spec = JSON.parse(readFileSync(join(__dirname, 'docs', 'asyncapi.json'), 'utf-8'))
-    res.json(spec)
-  } catch (e) {
-    res.status(500).json({ error: 'Failed to load AsyncAPI spec' })
-  }
-})
-app.get('/api/docs/socket', (req, res) => res.sendFile(join(__dirname, 'docs', 'asyncapi.html')))
-app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openApiSpec, { customSiteTitle: 'Dota 2 Draft — REST API Docs' }))
+// API Docs — disabled in production. Set DOCS_ENABLED=true to override.
+const docsEnabled = process.env.DOCS_ENABLED === 'true' || process.env.NODE_ENV !== 'production'
+if (docsEnabled) {
+  const openApiSpec = JSON.parse(readFileSync(join(__dirname, 'docs', 'openapi.json'), 'utf-8'))
+  app.get('/api/docs/openapi.json', (req, res) => res.json(openApiSpec))
+  app.get('/api/docs/asyncapi.json', (req, res) => {
+    try {
+      const spec = JSON.parse(readFileSync(join(__dirname, 'docs', 'asyncapi.json'), 'utf-8'))
+      res.json(spec)
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to load AsyncAPI spec' })
+    }
+  })
+  app.get('/api/docs/socket', (req, res) => res.sendFile(join(__dirname, 'docs', 'asyncapi.html')))
+  app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openApiSpec, { customSiteTitle: 'Dota 2 Draft — REST API Docs' }))
+} else {
+  app.use('/api/docs', (req, res) => res.status(404).json({ error: 'Not found' }))
+}
 
 // Mount routes
 app.use(authRoutes)
