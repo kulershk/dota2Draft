@@ -773,6 +773,21 @@ function goBack() {
         </div>
       </div>
 
+      <!-- Tournament + Best-of strip -->
+      <div v-if="store.currentCompetition.value || bestOf" class="mb-4">
+        <router-link
+          v-if="store.currentCompetition.value"
+          :to="{ name: 'comp-info', params: { compId: store.currentCompetition.value.id } }"
+          class="block text-[10px] font-mono font-bold uppercase tracking-[2px] text-muted-foreground hover:text-primary transition-colors mb-1"
+        >
+          {{ store.currentCompetition.value.name }}
+        </router-link>
+        <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary/10 border border-primary/30 text-primary text-xs font-bold">
+          <Trophy class="w-3.5 h-3.5" />
+          {{ t('bestOfN', { n: bestOf }) || `Best of ${bestOf}` }}
+        </div>
+      </div>
+
       <!-- Team Rosters -->
       <div v-if="teamRosters.team1.length || teamRosters.team2.length" class="grid grid-cols-2 gap-4 mb-6">
         <template v-for="(teamKey, idx) in ['team1', 'team2'] as const" :key="teamKey">

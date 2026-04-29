@@ -1416,6 +1416,7 @@ export default {
   notFoundDesc: 'Puslapio, kurio ieškojai, nėra arba jis perkeltas.',
   notFoundGoBack: 'Atgal',
   notFoundGoHome: 'Pradžia',
+  bestOfN: 'Geriausias iš {n}',
   multiAccountTitle: 'Daugiabaiklinė paskyrų patikra',
   multiAccountDesc: 'Sulygina naudotojo IP su kitomis paskyromis, kurios naudojo tuos pačius IP nurodytu laikotarpiu.',
   multiAccountIpsUsed: 'Naudoti IP',

@@ -1427,6 +1427,7 @@ export default {
   notFoundDesc: 'The page you were looking for doesn\'t exist or has been moved.',
   notFoundGoBack: 'Go back',
   notFoundGoHome: 'Home',
+  bestOfN: 'Best of {n}',
   multiAccountTitle: 'Multi-account inspector',
   multiAccountDesc: 'Cross-references the user\'s IPs with other accounts that hit the same IPs in the period.',
   multiAccountIpsUsed: 'IPs used',

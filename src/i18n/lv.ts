@@ -1416,6 +1416,7 @@ export default {
   notFoundDesc: 'Lapa, kuru meklēji, neeksistē vai ir pārvietota.',
   notFoundGoBack: 'Atpakaļ',
   notFoundGoHome: 'Sākums',
+  bestOfN: 'Labākais no {n}',
   multiAccountTitle: 'Multi-konta inspektors',
   multiAccountDesc: 'Salīdzina lietotāja IP ar citiem kontiem, kas izmantojuši tos pašus IP norādītajā periodā.',
   multiAccountIpsUsed: 'Izmantotie IP',
