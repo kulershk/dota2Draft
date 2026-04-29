@@ -281,6 +281,50 @@
         }
       }
     },
+    "/api/health": {
+      "get": {
+        "tags": ["System"],
+        "summary": "Health check",
+        "description": "Returns 200 with `status: ok` when the process is up and the database is reachable (verified via `SELECT 1`). Returns 503 with `status: error` if the DB query fails. Suitable for container orchestrators (Docker/Traefik) and external uptime monitors.",
+        "responses": {
+          "200": {
+            "description": "Service is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "enum": ["ok"] },
+                    "version": { "type": "string" },
+                    "uptime": { "type": "number", "description": "Process uptime in seconds" },
+                    "db": { "type": "string", "enum": ["ok"] }
+                  },
+                  "required": ["status", "version", "uptime", "db"]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service is unhealthy (DB unreachable)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "enum": ["error"] },
+                    "version": { "type": "string" },
+                    "uptime": { "type": "number" },
+                    "db": { "type": "string", "enum": ["error"] },
+                    "error": { "type": "string" }
+                  },
+                  "required": ["status", "version", "uptime", "db"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/bots/avatar": {
       "post": {
         "tags": ["Admin"],

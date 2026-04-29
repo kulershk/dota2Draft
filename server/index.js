@@ -88,6 +88,16 @@ const APP_VERSION = (() => {
 })()
 app.get('/api/version', (req, res) => res.json({ version: APP_VERSION }))
 
+// Health check — verifies the process is up and the DB is reachable.
+app.get('/api/health', async (req, res) => {
+  try {
+    await queryOne('SELECT 1')
+    res.json({ status: 'ok', version: APP_VERSION, uptime: process.uptime(), db: 'ok' })
+  } catch (e) {
+    res.status(503).json({ status: 'error', version: APP_VERSION, uptime: process.uptime(), db: 'error', error: e.message })
+  }
+})
+
 // API Docs — disabled in production. Set DOCS_ENABLED=true to override.
 const docsEnabled = process.env.DOCS_ENABLED === 'true' || process.env.NODE_ENV !== 'production'
 if (docsEnabled) {
