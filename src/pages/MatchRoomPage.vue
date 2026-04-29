@@ -778,13 +778,19 @@ function goBack() {
         <router-link
           v-if="store.currentCompetition.value"
           :to="{ name: 'comp-info', params: { compId: store.currentCompetition.value.id } }"
-          class="block text-[10px] font-mono font-bold uppercase tracking-[2px] text-muted-foreground hover:text-primary transition-colors mb-1"
+          class="block text-lg font-bold text-foreground hover:text-primary transition-colors mb-1.5"
         >
           {{ store.currentCompetition.value.name }}
         </router-link>
-        <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary/10 border border-primary/30 text-primary text-xs font-bold">
-          <Trophy class="w-3.5 h-3.5" />
-          {{ t('bestOfN', { n: bestOf }) || `Best of ${bestOf}` }}
+        <div class="inline-flex items-center gap-2">
+          <span class="px-2 py-0.5 rounded-md bg-muted/50 border border-border text-[10px] font-mono font-bold uppercase tracking-wider text-muted-foreground">
+            Bo{{ bestOf }}
+          </span>
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-[#0A0F1C] border border-border/40">
+            <span class="text-base font-bold tabular-nums" :class="score1 > score2 ? 'text-green-400' : 'text-foreground/70'">{{ score1 }}</span>
+            <span class="text-muted-foreground/40 font-bold">:</span>
+            <span class="text-base font-bold tabular-nums" :class="score2 > score1 ? 'text-red-400' : 'text-foreground/70'">{{ score2 }}</span>
+          </div>
         </div>
       </div>
 
