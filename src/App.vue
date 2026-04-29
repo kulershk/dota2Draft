@@ -138,7 +138,10 @@ function switchLang(code: string) {
 
 onMounted(async () => {
   store.initSocket()
-  store.fetchCompetitions()
+  // Don't fetch the full competitions list here — it's slow (per-comp status
+  // sync + large JSONB fields). Pages that need the list (CompetitionsPage,
+  // AdminCompetitionsPage, AdminFantasyPage) fetch on their own mount.
+  // CompetitionLayout populates the single current comp via fetchCompData.
 
   useApi().getSiteSettings().then(data => {
     customSiteName.value = data.site_name || ''
