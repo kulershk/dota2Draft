@@ -716,6 +716,7 @@ function goBack() {
           :match-id-prefix="t('matchRoom') + ' #'"
           :status="match.status"
           :status-label="match.status === 'completed' ? t('matchCompleted') : match.status === 'live' ? t('matchLive') : t('matchPending')"
+          :tournament="store.currentCompetition.value ? { name: store.currentCompetition.value.name, to: { name: 'comp-info', params: { compId: store.currentCompetition.value.id } } } : null"
           :game-count="bestOf"
           :left="{
             id: match.team1_captain_id || 0,
@@ -773,25 +774,11 @@ function goBack() {
         </div>
       </div>
 
-      <!-- Tournament + Best-of strip -->
-      <div v-if="store.currentCompetition.value || bestOf" class="mb-4">
-        <router-link
-          v-if="store.currentCompetition.value"
-          :to="{ name: 'comp-info', params: { compId: store.currentCompetition.value.id } }"
-          class="block text-lg font-bold text-foreground hover:text-primary transition-colors mb-1.5"
-        >
-          {{ store.currentCompetition.value.name }}
-        </router-link>
-        <div class="inline-flex items-center gap-2">
-          <span class="px-2 py-0.5 rounded-md bg-muted/50 border border-border text-[10px] font-mono font-bold uppercase tracking-wider text-muted-foreground">
-            Bo{{ bestOf }}
-          </span>
-          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-[#0A0F1C] border border-border/40">
-            <span class="text-base font-bold tabular-nums" :class="score1 > score2 ? 'text-green-400' : 'text-foreground/70'">{{ score1 }}</span>
-            <span class="text-muted-foreground/40 font-bold">:</span>
-            <span class="text-base font-bold tabular-nums" :class="score2 > score1 ? 'text-red-400' : 'text-foreground/70'">{{ score2 }}</span>
-          </div>
-        </div>
+      <!-- Best-of pill -->
+      <div v-if="bestOf" class="mb-4">
+        <span class="px-2 py-0.5 rounded-md bg-muted/50 border border-border text-[10px] font-mono font-bold uppercase tracking-wider text-muted-foreground">
+          Bo{{ bestOf }}
+        </span>
       </div>
 
       <!-- Team Rosters -->

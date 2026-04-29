@@ -19,6 +19,7 @@ interface Props {
   status: string
   statusLabel: string
   season?: { name: string; slug: string } | null
+  tournament?: { name: string; to?: any } | null
   playerCount?: number | null
   gameCount?: number | null
   left: SidePerson
@@ -73,6 +74,16 @@ const rightLabelText = computed(() => props.rightLabel || t('queueDire').toUpper
 
     <!-- Hero card -->
     <div class="card p-7 flex flex-col gap-6">
+      <!-- Tournament name (above the title row) -->
+      <router-link
+        v-if="tournament && tournament.to"
+        :to="tournament.to"
+        class="-mb-3 text-lg font-bold text-foreground hover:text-primary transition-colors"
+      >
+        {{ tournament.name }}
+      </router-link>
+      <span v-else-if="tournament" class="-mb-3 text-lg font-bold text-foreground">{{ tournament.name }}</span>
+
       <!-- Meta row -->
       <div class="flex items-center justify-between flex-wrap gap-3">
         <div class="flex items-center gap-3">
