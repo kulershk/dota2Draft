@@ -127,7 +127,7 @@ const allNav = [
   { labelKey: 'permissionGroups', icon: ShieldCheck, path: '/admin/permissions', permissions: ['manage_permissions'] },
   { labelKey: 'lobbyBots', icon: Bot, path: '/admin/bots', permissions: ['manage_bots'] },
   { labelKey: 'adminGames', icon: Gamepad2, path: '/admin/games', permissions: ['manage_games'] },
-  { labelKey: 'adminFantasy', icon: Star, path: '/admin/fantasy', permissions: ['manage_competitions', 'manage_own_competitions', 'manage_fantasy'] },
+  { labelKey: 'adminFantasy', icon: Star, path: '/admin/fantasy', permissions: ['manage_fantasy'] },
   { labelKey: 'adminXpLog', icon: Zap, path: '/admin/xp-log', permissions: ['manage_xp_log'] },
   { labelKey: 'adminQueuePools', icon: Swords, path: '/admin/queue', permissions: ['manage_queue_pools'] },
   { labelKey: 'adminSeasons', icon: Medal, path: '/admin/seasons', permissions: ['manage_seasons'] },
