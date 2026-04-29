@@ -22,6 +22,8 @@ export const ALL_PERMISSIONS = [
   'manage_menu',
   'ban_users',
   'impersonate_users',
+  'manage_fantasy',
+  'manage_xp_log',
 ]
 
 export async function getPlayerPermissions(playerId) {

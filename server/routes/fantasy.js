@@ -191,7 +191,7 @@ export default function createFantasyRouter(io) {
     try {
       const compId = Number(req.params.compId)
       if (!compId) return res.status(400).json({ error: 'Invalid competition ID' })
-      const admin = await requireCompPermission(req, res, compId)
+      const admin = await requireCompPermission(req, res, compId, 'manage_fantasy')
       if (!admin) return
 
       const { name, matchIds = [], allowedCaptainIds = null } = req.body
@@ -253,7 +253,7 @@ export default function createFantasyRouter(io) {
       const compId = Number(req.params.compId)
       const stageId = Number(req.params.stageId)
       if (!compId || !stageId) return res.status(400).json({ error: 'Invalid IDs' })
-      const admin = await requireCompPermission(req, res, compId)
+      const admin = await requireCompPermission(req, res, compId, 'manage_fantasy')
       if (!admin) return
 
       const stage = await queryOne(
@@ -314,7 +314,7 @@ export default function createFantasyRouter(io) {
       const compId = Number(req.params.compId)
       const stageId = Number(req.params.stageId)
       if (!compId || !stageId) return res.status(400).json({ error: 'Invalid IDs' })
-      const admin = await requireCompPermission(req, res, compId)
+      const admin = await requireCompPermission(req, res, compId, 'manage_fantasy')
       if (!admin) return
 
       const stage = await queryOne(
@@ -403,7 +403,7 @@ export default function createFantasyRouter(io) {
       const compId = Number(req.params.compId)
       const stageId = Number(req.params.stageId)
       if (!compId || !stageId) return res.status(400).json({ error: 'Invalid IDs' })
-      const admin = await requireCompPermission(req, res, compId)
+      const admin = await requireCompPermission(req, res, compId, 'manage_fantasy')
       if (!admin) return
 
       const stage = await queryOne(
@@ -446,7 +446,7 @@ export default function createFantasyRouter(io) {
       const compId = Number(req.params.compId)
       const stageId = Number(req.params.stageId)
       if (!compId || !stageId) return res.status(400).json({ error: 'Invalid IDs' })
-      const admin = await requireCompPermission(req, res, compId)
+      const admin = await requireCompPermission(req, res, compId, 'manage_fantasy')
       if (!admin) return
 
       const stage = await queryOne(
@@ -762,7 +762,7 @@ export default function createFantasyRouter(io) {
     try {
       const compId = Number(req.params.compId)
       if (!compId) return res.status(400).json({ error: 'Invalid competition ID' })
-      const admin = await requireCompPermission(req, res, compId)
+      const admin = await requireCompPermission(req, res, compId, 'manage_fantasy')
       if (!admin) return
 
       const stages = await query(
@@ -837,7 +837,7 @@ export default function createFantasyRouter(io) {
       const userId = Number(req.params.userId)
       const stageId = Number(req.params.stageId)
       if (!compId || !userId || !stageId) return res.status(400).json({ error: 'Invalid IDs' })
-      const admin = await requireCompPermission(req, res, compId)
+      const admin = await requireCompPermission(req, res, compId, 'manage_fantasy')
       if (!admin) return
 
       const stage = await queryOne(
@@ -887,7 +887,7 @@ export default function createFantasyRouter(io) {
       const stageId = Number(req.params.stageId)
       const role = req.params.role
       if (!compId || !userId || !stageId) return res.status(400).json({ error: 'Invalid IDs' })
-      const admin = await requireCompPermission(req, res, compId)
+      const admin = await requireCompPermission(req, res, compId, 'manage_fantasy')
       if (!admin) return
 
       await execute(

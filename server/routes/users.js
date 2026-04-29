@@ -532,7 +532,7 @@ router.get('/api/players/:id/xp-log', async (req, res) => {
 
 // Admin XP log (all users)
 router.get('/api/admin/xp-log', async (req, res) => {
-  const admin = await requirePermission(req, res, 'manage_users')
+  const admin = await requirePermission(req, res, 'manage_xp_log')
   if (!admin) return
   const { player_id, competition_id, reason, limit: lim, offset: off } = req.query
   const conditions = []
