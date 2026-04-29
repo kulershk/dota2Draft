@@ -59,7 +59,8 @@ function addUser(playerId: number) {
 
 onMounted(async () => {
   try {
-    competitions.value = await api.getCompetitions()
+    const res = await api.getCompetitions({ limit: 200 })
+    competitions.value = res.rows || []
   } catch {}
 })
 

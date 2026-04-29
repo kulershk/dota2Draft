@@ -8,32 +8,61 @@ const router = Router()
 
 router.get('/api/competitions', async (req, res) => {
   const player = await getAuthPlayer(req)
-  // Finished competitions sink to the bottom; everything else stays in
-  // newest-first order.
-  const comps = await query(`
-    SELECT c.*, COALESCE(p.display_name, p.name) AS created_by_name, p.avatar_url AS created_by_avatar
+  // List endpoint — slim payload (no auction_state / tournament_state). Use
+  // GET /api/competitions/:id for the full record. Supports ?limit + ?offset
+  // for pagination. Default unbounded for backwards compatibility.
+  const rawLimit = parseInt(req.query.limit, 10)
+  const rawOffset = parseInt(req.query.offset, 10)
+  const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 200) : null
+  const offset = Number.isFinite(rawOffset) && rawOffset >= 0 ? rawOffset : 0
+  const search = (req.query.search || '').toString().trim()
+
+  const params = []
+  let where = '1=1'
+  if (search) {
+    params.push(`%${search.replace(/[%_]/g, '\\$&')}%`)
+    where += ` AND c.name ILIKE $${params.length}`
+  }
+
+  // Pull only what the list view needs — drop auction_state, tournament_state.
+  const allRows = await query(`
+    SELECT c.id, c.name, c.description, c.status, c.starts_at, c.registration_start,
+           c.registration_end, c.is_public, c.is_featured, c.competition_type,
+           c.rules_title, c.rules_content, c.created_by, c.created_at,
+           c.settings,
+           COALESCE(p.display_name, p.name) AS created_by_name, p.avatar_url AS created_by_avatar
     FROM competitions c
     LEFT JOIN players p ON p.id = c.created_by
+    WHERE ${where}
     ORDER BY
       CASE WHEN c.status = 'finished' THEN 1 ELSE 0 END,
       c.created_at DESC
-  `)
+  `, params)
+
   const canManageAll = player && await hasPermission(player, 'manage_competitions')
-  const visible = comps.filter(c => {
+  const visible = allRows.filter(c => {
     if (c.is_public) return true
     if (!player) return false
     if (player.is_admin || canManageAll) return true
     if (c.created_by === player.id) return true
     return false
   })
-  for (const c of visible) {
-    await computeAndSyncCompStatus(c)
-  }
-  res.json(visible.map(c => ({
-    ...c,
-    settings: parseCompSettings(c),
-    auction_state: parseAuctionState(c),
-  })))
+
+  // Status sync in parallel — most calls return early since stored is final.
+  await Promise.all(visible.map(c => computeAndSyncCompStatus(c)))
+
+  const total = visible.length
+  const sliced = limit !== null ? visible.slice(offset, offset + limit) : visible
+
+  res.json({
+    rows: sliced.map(c => ({
+      ...c,
+      settings: parseCompSettings(c),
+    })),
+    total,
+    limit: limit !== null ? limit : total,
+    offset,
+  })
 })
 
 router.get('/api/competitions/:id', async (req, res) => {

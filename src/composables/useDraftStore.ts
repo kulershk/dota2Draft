@@ -155,6 +155,7 @@ export interface CompetitionUser {
 }
 
 const competitions = ref<Competition[]>([])
+const competitionsTotal = ref(0)
 const currentCompetitionId = ref<number | null>(null)
 
 const settings = reactive<Settings>({
@@ -425,8 +426,11 @@ export function useDraftStore() {
 
   // ─── Competition Management ────────────────────────────
 
-  async function fetchCompetitions() {
-    competitions.value = await api.getCompetitions()
+  async function fetchCompetitions(opts?: { limit?: number; offset?: number; search?: string }) {
+    const res = await api.getCompetitions(opts)
+    competitions.value = res.rows || []
+    competitionsTotal.value = res.total ?? competitions.value.length
+    return res
   }
 
   async function joinCompetition(compId: number) {
@@ -594,6 +598,7 @@ export function useDraftStore() {
     currentCompetition,
     currentCompetitionId,
     competitions,
+    competitionsTotal,
     onlineCaptainIds,
     readyCaptainIds,
     settings,

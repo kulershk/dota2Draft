@@ -40,7 +40,16 @@ export function useApi() {
     claimDaily: () => request('/api/auth/daily-claim', { method: 'POST' }),
 
     // Competitions
-    getCompetitions: () => request('/api/competitions'),
+    getCompetitions: async (opts?: { limit?: number; offset?: number; search?: string }) => {
+      const qs = new URLSearchParams()
+      if (opts?.limit) qs.set('limit', String(opts.limit))
+      if (opts?.offset) qs.set('offset', String(opts.offset))
+      if (opts?.search) qs.set('search', opts.search)
+      const url = qs.toString() ? `/api/competitions?${qs}` : '/api/competitions'
+      const res = await request(url)
+      // New shape: { rows, total, limit, offset }
+      return res
+    },
     getCompetition: (id: number) => request(`/api/competitions/${id}`),
     createCompetition: (data: { name: string; description?: string; starts_at?: string; registration_start?: string; registration_end?: string; settings?: Record<string, any> }) =>
       request('/api/competitions', { method: 'POST', body: JSON.stringify(data) }),
