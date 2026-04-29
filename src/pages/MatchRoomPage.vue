@@ -9,8 +9,10 @@ import { getSocket, getServerNow } from '@/composables/useSocket'
 import { useDotaConstants } from '@/composables/useDotaConstants'
 import UserName from '@/components/common/UserName.vue'
 import TeamName from '@/components/common/TeamName.vue'
-import PositionIcon from '@/components/common/PositionIcon.vue'
 import DatePicker from '@/components/common/DatePicker.vue'
+import GameStatsTable from '@/components/match/GameStatsTable.vue'
+import DraftPhaseViewer from '@/components/match/DraftPhaseViewer.vue'
+import MatchHeaderCard from '@/components/match/MatchHeaderCard.vue'
 import { fmtDateTime, toLocalDatetime, localDatetimeToISO } from '@/utils/format'
 
 const { t } = useI18n()
@@ -199,7 +201,7 @@ function getPlayerStatuses(gameNumber: number) {
 }
 
 function getTeamPlayerStatuses(gameNumber: number, team: 'radiant' | 'dire') {
-  return getPlayerStatuses(gameNumber).filter(p => p.expectedTeam === team)
+  return getPlayerStatuses(gameNumber).filter((p: any) => p.expectedTeam === team)
 }
 
 function getLobbyTeamName(gameNumber: number, side: 'radiant' | 'dire'): string {
@@ -706,72 +708,68 @@ function goBack() {
     </div>
 
     <template v-else>
-      <!-- Match Overview Card -->
-      <div class="card px-6 py-5 flex flex-col gap-3 mb-6">
-        <div class="flex items-center gap-2 mb-1">
-          <Gamepad2 class="w-5 h-5 text-primary" />
-          <span class="text-lg font-semibold text-foreground">{{ t('matchRoom') }}</span>
-          <button v-if="canManageMatch" class="ml-auto p-1.5 rounded-md hover:bg-accent transition-colors" :class="showAdminPanel ? 'bg-accent text-primary' : 'text-muted-foreground'" @click="showAdminPanel = !showAdminPanel" :title="'Edit match settings'">
-            <Pencil class="w-4 h-4" />
+      <!-- Match Overview Card (shared with QueueMatchPage visual style) -->
+      <div class="mb-6">
+        <MatchHeaderCard
+          v-if="match.team1_captain_id || match.team2_captain_id"
+          :match-id="matchId"
+          :match-id-prefix="t('matchRoom') + ' #'"
+          :status="match.status"
+          :status-label="match.status === 'completed' ? t('matchCompleted') : match.status === 'live' ? t('matchLive') : t('matchPending')"
+          :game-count="bestOf"
+          :left="{
+            id: match.team1_captain_id || 0,
+            name: match.team1_name || t('tbd'),
+            type: 'team',
+            imageUrl: match.team1_banner || match.team1_avatar,
+          }"
+          :right="{
+            id: match.team2_captain_id || 0,
+            name: match.team2_name || t('tbd'),
+            type: 'team',
+            imageUrl: match.team2_banner || match.team2_avatar,
+          }"
+          :score-left="score1"
+          :score-right="score2"
+          :left-won="!!match.winner_captain_id && match.winner_captain_id === match.team1_captain_id"
+          :right-won="!!match.winner_captain_id && match.winner_captain_id === match.team2_captain_id"
+          :left-label="match.team1_name || t('tbd')"
+          :right-label="match.team2_name || t('tbd')"
+        />
+        <!-- Edit toggle for admins -->
+        <div v-if="canManageMatch" class="flex justify-end mt-2">
+          <button
+            class="btn-ghost text-xs flex items-center gap-1.5"
+            :class="showAdminPanel ? 'text-primary' : 'text-muted-foreground'"
+            @click="showAdminPanel = !showAdminPanel"
+          >
+            <Pencil class="w-3.5 h-3.5" />
+            {{ showAdminPanel ? t('hideAdminControls') || 'Hide admin controls' : t('showAdminControls') || 'Edit match settings' }}
           </button>
         </div>
-        <div class="flex items-center gap-4">
-          <div class="flex-1 flex items-center justify-end min-w-0">
-            <router-link v-if="match.team1_captain_id" :to="{ name: 'team-profile', params: { id: match.team1_captain_id } }" class="text-base font-semibold text-foreground hover:text-primary transition-colors truncate">
-              {{ match.team1_name || t('tbd') }}
-            </router-link>
-            <span v-else class="text-base font-semibold text-muted-foreground">{{ t('tbd') }}</span>
+        <!-- Admin controls panel -->
+        <div v-if="showAdminPanel && canManageMatch" class="card mt-3 px-4 py-3 flex items-center gap-3 flex-wrap">
+          <div class="flex items-center gap-1.5">
+            <span class="text-[11px] text-muted-foreground">Status:</span>
+            <select class="input-field text-xs py-1 px-2 w-auto" :value="match.status" @change="updateMatchField({ status: ($event.target as HTMLSelectElement).value })">
+              <option value="pending">Pending</option>
+              <option value="live">Live</option>
+              <option value="completed">Completed</option>
+            </select>
           </div>
-          <div class="flex items-center gap-3 shrink-0">
-            <div class="w-10 h-10 rounded-lg bg-accent overflow-hidden shrink-0">
-              <img v-if="match.team1_banner || match.team1_avatar" :src="match.team1_banner || match.team1_avatar" class="w-full h-full object-cover" />
-            </div>
-            <span class="text-3xl font-bold font-mono text-foreground">{{ score1 }} : {{ score2 }}</span>
-            <div class="w-10 h-10 rounded-lg bg-accent overflow-hidden shrink-0">
-              <img v-if="match.team2_banner || match.team2_avatar" :src="match.team2_banner || match.team2_avatar" class="w-full h-full object-cover" />
-            </div>
+          <div class="flex items-center gap-1.5">
+            <span class="text-[11px] text-muted-foreground">{{ t('scheduledTime') || 'Scheduled' }}:</span>
+            <DatePicker
+              mode="single"
+              show-time
+              :model-value="match.scheduled_at ? toLocalDatetime(match.scheduled_at) : ''"
+              @update:model-value="updateMatchField({ scheduled_at: $event ? localDatetimeToISO($event) : null })"
+            />
           </div>
-          <div class="flex-1 flex items-center justify-start min-w-0">
-            <router-link v-if="match.team2_captain_id" :to="{ name: 'team-profile', params: { id: match.team2_captain_id } }" class="text-base font-semibold text-foreground hover:text-primary transition-colors truncate">
-              {{ match.team2_name || t('tbd') }}
-            </router-link>
-            <span v-else class="text-base font-semibold text-muted-foreground">{{ t('tbd') }}</span>
-          </div>
-        </div>
-        <div class="flex items-center gap-4">
-          <div class="flex-1"></div>
-          <template v-if="showAdminPanel">
-            <div class="flex items-center gap-3 shrink-0 flex-wrap justify-center">
-              <div class="flex items-center gap-1.5">
-                <span class="text-[10px] text-muted-foreground">Status:</span>
-                <select class="input-field text-[10px] py-0.5 px-1.5 w-auto" :value="match.status" @change="updateMatchField({ status: ($event.target as HTMLSelectElement).value })">
-                  <option value="pending">Pending</option>
-                  <option value="live">Live</option>
-                  <option value="completed">Completed</option>
-                </select>
-              </div>
-              <div class="flex items-center gap-1.5">
-                <span class="text-[10px] text-muted-foreground">{{ t('scheduledTime') || 'Scheduled' }}:</span>
-                <DatePicker
-                  mode="single"
-                  show-time
-                  :model-value="match.scheduled_at ? toLocalDatetime(match.scheduled_at) : ''"
-                  @update:model-value="updateMatchField({ scheduled_at: $event ? localDatetimeToISO($event) : null })"
-                />
-              </div>
-              <label class="flex items-center gap-1.5 cursor-pointer">
-                <input type="checkbox" class="rounded" :checked="match.hidden" @change="updateMatchField({ hidden: ($event.target as HTMLInputElement).checked })" />
-                <span class="text-[10px] text-muted-foreground">{{ t('hidden') || 'Hidden' }}</span>
-              </label>
-            </div>
-          </template>
-          <template v-else>
-            <div class="flex items-center gap-2 shrink-0">
-              <span class="badge-info">{{ match.status === 'completed' ? t('matchCompleted') : match.status === 'live' ? t('matchLive') : t('matchPending') }}</span>
-              <span class="text-xs text-text-tertiary">Best of {{ bestOf }}</span>
-            </div>
-          </template>
-          <div class="flex-1"></div>
+          <label class="flex items-center gap-1.5 cursor-pointer">
+            <input type="checkbox" class="rounded" :checked="match.hidden" @change="updateMatchField({ hidden: ($event.target as HTMLInputElement).checked })" />
+            <span class="text-[11px] text-muted-foreground">{{ t('hidden') || 'Hidden' }}</span>
+          </label>
         </div>
       </div>
 
@@ -1343,138 +1341,20 @@ function goBack() {
               </div>
 
               <!-- Dota 2 Post-Game Scoreboard -->
-              <div class="overflow-x-auto rounded-lg">
-                <table class="w-full text-xs" style="border-collapse: separate; border-spacing: 0;">
-                  <thead>
-                    <tr class="text-[10px] text-muted-foreground">
-                      <th class="text-left py-1 px-1.5 min-w-[200px] sticky left-0 bg-card z-10"></th>
-                      <th class="text-center px-1 w-5"></th>
-                      <th class="text-center px-1.5">K/D/A</th>
-                      <th class="text-center px-1">LH/DN</th>
-                      <th class="text-center px-1">NET</th>
-                      <th class="text-center px-1">GPM/XPM</th>
-                      <th class="text-left px-1.5">{{ t('items') }}</th>
-                      <th class="text-center px-1">HD</th>
-                      <th class="text-center px-1">TD</th>
-                      <th class="text-center px-1">HH</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <template v-for="(side, sideIdx) in [true, false]" :key="sideIdx">
-                      <!-- Team header row -->
-                      <tr :class="side ? 'bg-green-500/10' : 'bg-red-500/10'">
-                        <td class="py-2 px-3 sticky left-0 z-10" :class="side ? 'bg-green-500/10 border-l-4 border-green-500' : 'bg-red-500/10 border-l-4 border-red-500'" :colspan="1">
-                          <div class="flex items-center gap-2">
-                            <span class="text-sm font-bold" :class="side ? 'text-green-500' : 'text-red-400'">{{ sideTeamName(game.game_number, side) }}</span>
-                            <Trophy v-if="teamWon(game.game_number, side)" class="w-4 h-4 text-amber-500" />
-                          </div>
-                        </td>
-                        <td :colspan="10" class="py-2 px-3 text-right" :class="side ? 'bg-green-500/10' : 'bg-red-500/10'">
-                          <span class="text-xs font-mono text-muted-foreground">{{ teamTotalKills(game.game_number, side) }} kills</span>
-                          <span class="text-xs font-mono text-amber-500 ml-3">{{ teamTotalNW(game.game_number, side) }}</span>
-                        </td>
-                      </tr>
-                      <!-- Player rows -->
-                      <tr
-                        v-for="p in sortedTeamStats(game.game_number, side)"
-                        :key="p.account_id"
-                        class="hover:bg-accent/30 transition-colors border-b"
-                        :class="side ? 'border-green-500/5' : 'border-red-500/5'"
-                      >
-                        <td class="py-1.5 px-1.5 sticky left-0 bg-card z-10">
-                          <div class="flex items-center gap-2">
-                            <div class="relative shrink-0">
-                              <img v-if="dota.heroImg(p.hero_id)" :src="dota.heroImg(p.hero_id)"
-                                class="w-[60px] h-[42px] rounded object-cover border" :class="side ? 'border-green-500/30' : 'border-red-500/30'" />
-                              <span class="absolute -bottom-1 -right-1 text-[9px] font-bold bg-surface text-foreground rounded-full w-5 h-5 flex items-center justify-center border border-border/50">{{ p.level }}</span>
-                            </div>
-                            <div class="flex flex-col min-w-0">
-                              <router-link v-if="p.profile_id" :to="{ name: 'player-profile', params: { id: p.profile_id } }"
-                                class="font-semibold truncate text-xs leading-tight hover:text-primary transition-colors" :class="p.win ? 'text-foreground' : 'text-muted-foreground'">
-                                {{ playerDisplayName(p) }}
-                              </router-link>
-                              <span v-else class="font-semibold truncate text-xs leading-tight" :class="p.win ? 'text-foreground' : 'text-muted-foreground'">{{ playerDisplayName(p) }}</span>
-                              <span class="text-[10px] text-muted-foreground/70 leading-tight">{{ dota.heroName(p.hero_id) }}</span>
-                            </div>
-                          </div>
-                        </td>
-                        <td class="text-center px-0.5">
-                          <PositionIcon v-if="playerPositions[game.game_number]?.[p.account_id]" :position="playerPositions[game.game_number][p.account_id]" />
-                        </td>
-                        <td class="text-center px-1.5 font-mono font-medium whitespace-nowrap">
-                          <span class="text-green-500">{{ p.kills }}</span><span class="text-muted-foreground">/</span><span class="text-red-400">{{ p.deaths }}</span><span class="text-muted-foreground">/</span><span>{{ p.assists }}</span>
-                        </td>
-                        <td class="text-center px-1 font-mono whitespace-nowrap">{{ p.last_hits }}<span class="text-muted-foreground">/</span>{{ p.denies }}</td>
-                        <td class="text-center px-1 font-mono font-medium text-amber-500">{{ (p.net_worth / 1000).toFixed(1) }}k</td>
-                        <td class="text-center px-1 font-mono whitespace-nowrap">{{ p.gpm }}<span class="text-muted-foreground">/</span>{{ p.xpm }}</td>
-                        <td class="py-1 px-1.5 whitespace-nowrap">
-                          <div class="inline-flex flex-col gap-px">
-                            <div class="flex gap-px">
-                              <template v-for="(itemId, idx) in [p.item_0, p.item_1, p.item_2]" :key="'t-' + idx">
-                                <img v-if="itemId && dota.itemImg(itemId)" :src="dota.itemImg(itemId)" :title="dota.itemName(itemId)" class="w-[36px] h-[27px] rounded-[2px] object-cover border border-border/20" />
-                                <div v-else class="w-[36px] h-[27px] rounded-[2px] bg-surface/60 border border-border/10"></div>
-                              </template>
-                              <img v-if="p.item_neutral && dota.itemImg(p.item_neutral)" :src="dota.itemImg(p.item_neutral)" :title="dota.itemName(p.item_neutral)"
-                                class="w-[27px] h-[27px] rounded-full object-cover border border-amber-500/30 ml-1" />
-                            </div>
-                            <div class="flex gap-px">
-                              <template v-for="(itemId, idx) in [p.item_3, p.item_4, p.item_5]" :key="'b-' + idx">
-                                <img v-if="itemId && dota.itemImg(itemId)" :src="dota.itemImg(itemId)" :title="dota.itemName(itemId)" class="w-[36px] h-[27px] rounded-[2px] object-cover border border-border/20" />
-                                <div v-else class="w-[36px] h-[27px] rounded-[2px] bg-surface/60 border border-border/10"></div>
-                              </template>
-                              <template v-for="(itemId, idx) in [p.backpack_0, p.backpack_1, p.backpack_2]" :key="'bp-' + idx">
-                                <img v-if="itemId && dota.itemImg(itemId)" :src="dota.itemImg(itemId)" :title="dota.itemName(itemId)" class="w-[27px] h-[21px] rounded-[1px] object-cover border border-border/10 opacity-40 ml-px" />
-                              </template>
-                            </div>
-                          </div>
-                        </td>
-                        <td class="text-center px-1 font-mono">{{ (p.hero_damage / 1000).toFixed(1) }}k</td>
-                        <td class="text-center px-1 font-mono">{{ (p.tower_damage / 1000).toFixed(1) }}k</td>
-                        <td class="text-center px-1 font-mono">{{ (p.hero_healing / 1000).toFixed(1) }}k</td>
-                      </tr>
-                    </template>
-                  </tbody>
-                </table>
-              </div>
-
+              <GameStatsTable
+                :stats="gameStats[game.game_number]"
+                :player-positions="playerPositions[game.game_number]"
+                :team1-name="sideTeamName(game.game_number, true)"
+                :team2-name="sideTeamName(game.game_number, false)"
+                :dota="dota"
+              />
 
               <!-- Draft: Stratz-style phases -->
-              <div v-if="gamePicksBans[game.game_number]?.length" class="mt-3">
-                <p class="text-sm font-bold text-foreground mb-2">{{ t('draft') || 'Draft' }}</p>
-                <div class="flex flex-wrap gap-2">
-                  <div v-for="phase in getDraftPhases(game.game_number)" :key="phase.label" class="rounded-lg bg-surface/80 px-3 py-2">
-                    <span class="text-[10px] font-medium text-muted-foreground mb-1.5 block">{{ phase.label }}</span>
-                    <!-- Row 1: Dire (team 1) -->
-                    <div class="flex items-center gap-0.5 mb-1">
-                      <template v-for="pb in phase.items.filter((p: any) => p.team === 1)" :key="pb.order">
-                        <div class="relative overflow-hidden rounded-sm" :title="dota.heroName(pb.hero_id)" style="width: 44px; height: 24px;">
-                          <img v-if="dota.heroImg(pb.hero_id)" :src="dota.heroImg(pb.hero_id)"
-                            class="w-full h-full object-cover"
-                            :class="!pb.is_pick ? 'opacity-40' : ''" />
-                          <svg v-if="!pb.is_pick" class="absolute inset-0 w-full h-full" viewBox="0 0 44 24" preserveAspectRatio="none">
-                            <line x1="0" y1="0" x2="44" y2="24" stroke="rgb(239 68 68)" stroke-width="2.5" />
-                          </svg>
-                        </div>
-                        <span class="text-[10px] font-mono font-bold text-muted-foreground mr-1.5">{{ pb.order + 1 }}</span>
-                      </template>
-                    </div>
-                    <!-- Row 2: Radiant (team 0) -->
-                    <div class="flex items-center gap-0.5">
-                      <template v-for="pb in phase.items.filter((p: any) => p.team === 0)" :key="pb.order">
-                        <div class="relative overflow-hidden rounded-sm" :title="dota.heroName(pb.hero_id)" style="width: 44px; height: 24px;">
-                          <img v-if="dota.heroImg(pb.hero_id)" :src="dota.heroImg(pb.hero_id)"
-                            class="w-full h-full object-cover"
-                            :class="!pb.is_pick ? 'opacity-40' : ''" />
-                          <svg v-if="!pb.is_pick" class="absolute inset-0 w-full h-full" viewBox="0 0 44 24" preserveAspectRatio="none">
-                            <line x1="0" y1="0" x2="44" y2="24" stroke="rgb(239 68 68)" stroke-width="2.5" />
-                          </svg>
-                        </div>
-                        <span class="text-[10px] font-mono font-bold text-muted-foreground mr-1.5">{{ pb.order + 1 }}</span>
-                      </template>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <DraftPhaseViewer
+                v-if="gamePicksBans[game.game_number]?.length"
+                :phases="getDraftPhases(game.game_number)"
+                :dota="dota"
+              />
             </div>
           </div>
       </div>

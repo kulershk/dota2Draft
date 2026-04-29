@@ -2,11 +2,13 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ArrowLeft, ExternalLink, Clock, Trophy, Swords, Loader2, ChevronDown, Shield, Medal, Users } from 'lucide-vue-next'
+import { ExternalLink, Clock, Trophy, Loader2, ChevronDown } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { useDotaConstants } from '@/composables/useDotaConstants'
-import PositionIcon from '@/components/common/PositionIcon.vue'
-import UserName from '@/components/common/UserName.vue'
+import GameStatsTable from '@/components/match/GameStatsTable.vue'
+import DraftPhaseViewer from '@/components/match/DraftPhaseViewer.vue'
+import MatchHeaderCard from '@/components/match/MatchHeaderCard.vue'
+import TeamRosterTable from '@/components/match/TeamRosterTable.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -132,26 +134,6 @@ const playerPositions = computed(() => {
   return positions
 })
 
-function sortedTeamStats(gameNumber: number, isRadiant: boolean) {
-  const stats = gameStats.value[gameNumber]?.filter((s: any) => s.is_radiant === isRadiant) || []
-  const positions = playerPositions.value[gameNumber]
-  if (!positions) return stats
-  return [...stats].sort((a: any, b: any) => (positions[a.account_id] || 9) - (positions[b.account_id] || 9))
-}
-
-function teamTotalKills(gameNumber: number, isRadiant: boolean): number {
-  return (gameStats.value[gameNumber] || []).filter((s: any) => s.is_radiant === isRadiant).reduce((sum: number, p: any) => sum + (p.kills || 0), 0)
-}
-
-function teamTotalNW(gameNumber: number, isRadiant: boolean): string {
-  const total = (gameStats.value[gameNumber] || []).filter((s: any) => s.is_radiant === isRadiant).reduce((sum: number, p: any) => sum + (p.net_worth || 0), 0)
-  return (total / 1000).toFixed(1) + 'k'
-}
-
-function teamWon(gameNumber: number, isRadiant: boolean): boolean {
-  return !!(gameStats.value[gameNumber] || []).find((s: any) => s.is_radiant === isRadiant && s.win)
-}
-
 function getGameDuration(gameNumber: number): string {
   const stats = gameStats.value[gameNumber]
   if (!stats?.length) return ''
@@ -206,185 +188,75 @@ onMounted(async () => {
 
       <template v-else-if="match">
 
-        <!-- Breadcrumb -->
-        <button
-          class="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors mb-3"
-          @click="router.push('/queue')"
-        >
-          <ArrowLeft class="w-3.5 h-3.5 text-primary" />
-          <span class="text-primary font-semibold">{{ t('queueBackToMatches') }}</span>
-          <span v-if="match.pool_name || match.created_at" class="text-muted-foreground">·</span>
-          <span v-if="match.pool_name" class="text-muted-foreground">{{ match.pool_name }}</span>
-          <span v-if="match.pool_name && match.created_at" class="text-muted-foreground/50">·</span>
-          <span v-if="match.created_at" class="text-muted-foreground/80 font-mono">{{ formatDate(match.created_at) }}</span>
-        </button>
-
-        <!-- Hero card -->
-        <div class="card p-7 mb-5 flex flex-col gap-6">
-          <!-- Meta row -->
-          <div class="flex items-center justify-between flex-wrap gap-3">
-            <div class="flex items-center gap-3">
-              <Swords class="w-5 h-5 text-primary" />
-              <h1 class="text-lg font-bold">{{ t('queueMatchHash') }}{{ match.id }}</h1>
-              <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded" :class="statusColor(match.status)">
-                {{ match.status === 'completed' ? t('matchCompleted') : match.status === 'live' ? t('matchLive') : match.status }}
-              </span>
-              <router-link
-                v-if="season"
-                :to="{ name: 'season-leaderboard', params: { slug: season.slug } }"
-                class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[11px] font-bold hover:bg-amber-500/25 transition-colors"
-              >
-                <Medal class="w-3 h-3" />
-                {{ season.name }}
-              </router-link>
-            </div>
-            <div class="flex items-center gap-4 text-[11px] text-muted-foreground font-mono">
-              <span class="flex items-center gap-1.5">
-                <Users class="w-3.5 h-3.5" /> {{ team1.length + team2.length }}
-              </span>
-              <span v-if="games.length" class="flex items-center gap-1.5">
-                <Clock class="w-3.5 h-3.5" /> {{ games.length }}{{ games.length === 1 ? ' game' : ' games' }}
-              </span>
-            </div>
-          </div>
-
-          <!-- Score row -->
-          <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-6">
-            <div class="flex items-center gap-3 min-w-0">
-              <div class="w-10 h-10 rounded-lg bg-green-500/15 border border-green-500/30 flex items-center justify-center shrink-0">
-                <Shield class="w-5 h-5 text-green-500" />
-              </div>
-              <div class="min-w-0">
-                <router-link :to="{ name: 'player-profile', params: { id: match.captain1_player_id } }" class="font-bold truncate block hover:text-primary transition-colors">
-                  {{ match.captain1_display_name || match.captain1_name }}
-                </router-link>
-                <div class="text-[10px] font-mono text-muted-foreground tabular-nums">
-                  <span class="text-green-400 font-bold">{{ t('queueRadiant').toUpperCase() }}</span>
-                  <span class="mx-1.5">·</span>
-                  <span>{{ teamAvgMmr(team1) }} MMR</span>
-                  <template v-if="hasPointChanges">
-                    <span class="mx-1.5">·</span>
-                    <span>{{ teamAvgPoints(team1) }} {{ t('seasonPoints').toUpperCase() }}</span>
-                  </template>
-                </div>
-              </div>
-            </div>
-            <div class="flex items-center gap-4 px-5 py-3 rounded-2xl bg-[#0A0F1C] border border-border/40">
-              <span class="text-4xl font-bold tabular-nums" :class="team1Won ? 'text-green-400' : 'text-foreground/70'">{{ team1Wins }}</span>
-              <span class="text-muted-foreground/40 text-2xl font-bold">·</span>
-              <span class="text-4xl font-bold tabular-nums" :class="team2Won ? 'text-red-400' : 'text-foreground/70'">{{ team2Wins }}</span>
-            </div>
-            <div class="flex items-center gap-3 min-w-0 justify-end">
-              <div class="min-w-0 text-right">
-                <router-link :to="{ name: 'player-profile', params: { id: match.captain2_player_id } }" class="font-bold truncate block hover:text-primary transition-colors">
-                  {{ match.captain2_display_name || match.captain2_name }}
-                </router-link>
-                <div class="text-[10px] font-mono text-muted-foreground tabular-nums">
-                  <template v-if="hasPointChanges">
-                    <span>{{ teamAvgPoints(team2) }} {{ t('seasonPoints').toUpperCase() }}</span>
-                    <span class="mx-1.5">·</span>
-                  </template>
-                  <span>{{ teamAvgMmr(team2) }} MMR</span>
-                  <span class="mx-1.5">·</span>
-                  <span class="text-red-400 font-bold">{{ t('queueDire').toUpperCase() }}</span>
-                </div>
-              </div>
-              <div class="w-10 h-10 rounded-lg bg-red-500/15 border border-red-500/30 flex items-center justify-center shrink-0">
-                <Shield class="w-5 h-5 text-red-500" />
-              </div>
-            </div>
-          </div>
-        </div>
+        <MatchHeaderCard
+          class="mb-5"
+          :back="{
+            onClick: () => router.push('/queue'),
+            label: t('queueBackToMatches'),
+            subtitle: [match.pool_name, match.created_at && formatDate(match.created_at)].filter(Boolean).join(' · '),
+          }"
+          :match-id="match.id"
+          :match-id-prefix="t('queueMatchHash')"
+          :status="match.status"
+          :status-label="match.status === 'completed' ? t('matchCompleted') : match.status === 'live' ? t('matchLive') : match.status"
+          :season="season"
+          :player-count="team1.length + team2.length"
+          :game-count="games.length || null"
+          :left="{
+            id: match.captain1_player_id,
+            name: match.captain1_display_name || match.captain1_name,
+            type: 'player',
+            mmr: teamAvgMmr(team1),
+            points: hasPointChanges ? teamAvgPoints(team1) : undefined,
+          }"
+          :right="{
+            id: match.captain2_player_id,
+            name: match.captain2_display_name || match.captain2_name,
+            type: 'player',
+            mmr: teamAvgMmr(team2),
+            points: hasPointChanges ? teamAvgPoints(team2) : undefined,
+          }"
+          :score-left="team1Wins"
+          :score-right="team2Wins"
+          :left-won="team1Won"
+          :right-won="team2Won"
+          :has-points="hasPointChanges"
+        />
 
         <!-- Two team result cards -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          <!-- Radiant -->
-          <div class="card overflow-hidden border-green-500/40">
-            <div class="flex items-center justify-between px-5 py-4 bg-green-500/10 border-b border-green-500/30">
-              <div class="flex items-center gap-2">
-                <Shield class="w-4 h-4 text-green-500" />
-                <span class="font-bold text-sm">{{ match.captain1_display_name || match.captain1_name }}</span>
-                <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ml-1"
-                      :class="team1Won ? 'bg-green-500/15 text-green-500' : 'bg-muted/40 text-muted-foreground'">
-                  {{ team1Won ? t('queueResultVictory') : (team2Won ? t('queueResultDefeat') : t('matchLive')) }}
-                </span>
-              </div>
-            </div>
-            <div class="px-5 py-2.5 grid items-center text-[10px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border/30"
-                 :style="hasPointChanges ? 'grid-template-columns: 1fr 80px 90px 80px;' : 'grid-template-columns: 1fr 100px;'">
-              <span>{{ t('player') }}</span>
-              <span class="text-right">MMR</span>
-              <template v-if="hasPointChanges">
-                <span class="text-right">{{ t('seasonPoints') }}</span>
-                <span class="text-right">{{ t('seasonChange') }}</span>
-              </template>
-            </div>
-            <div>
-              <div v-for="(p, idx) in team1" :key="p.playerId || idx"
-                   class="px-5 py-2.5 grid items-center border-b border-border/20 last:border-b-0 hover:bg-accent/15 transition-colors"
-                   :style="hasPointChanges ? 'grid-template-columns: 1fr 80px 90px 80px;' : 'grid-template-columns: 1fr 100px;'">
-                <div class="flex items-center gap-2 min-w-0">
-                  <UserName :id="p.playerId" :name="p.name" :avatar-url="p.avatarUrl" :verified="p.mmr_verified_at" size="md" class="min-w-0" />
-                  <span v-if="idx === 0" class="text-[9px] font-bold text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded shrink-0">CPT</span>
-                </div>
-                <span class="text-right text-xs font-mono text-muted-foreground tabular-nums">{{ p.mmr }}</span>
-                <template v-if="hasPointChanges">
-                  <span class="text-right text-xs font-mono font-bold tabular-nums">
-                    <template v-if="Number.isFinite(Number(p.points_after))">{{ Math.round(Number(p.points_after)) }}</template>
-                    <template v-else>—</template>
-                  </span>
-                  <span class="text-right text-xs font-mono font-bold tabular-nums"
-                        :class="Number(p.season_delta) > 0 ? 'text-green-500' : (Number(p.season_delta) < 0 ? 'text-red-500' : 'text-muted-foreground')">
-                    {{ fmtSignedDelta(p.season_delta) || '—' }}
-                  </span>
-                </template>
-              </div>
-            </div>
-          </div>
-
-          <!-- Dire -->
-          <div class="card overflow-hidden border-red-500/40">
-            <div class="flex items-center justify-between px-5 py-4 bg-red-500/10 border-b border-red-500/30">
-              <div class="flex items-center gap-2">
-                <Shield class="w-4 h-4 text-red-500" />
-                <span class="font-bold text-sm">{{ match.captain2_display_name || match.captain2_name }}</span>
-                <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ml-1"
-                      :class="team2Won ? 'bg-green-500/15 text-green-500' : 'bg-muted/40 text-muted-foreground'">
-                  {{ team2Won ? t('queueResultVictory') : (team1Won ? t('queueResultDefeat') : t('matchLive')) }}
-                </span>
-              </div>
-            </div>
-            <div class="px-5 py-2.5 grid items-center text-[10px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border/30"
-                 :style="hasPointChanges ? 'grid-template-columns: 1fr 80px 90px 80px;' : 'grid-template-columns: 1fr 100px;'">
-              <span>{{ t('player') }}</span>
-              <span class="text-right">MMR</span>
-              <template v-if="hasPointChanges">
-                <span class="text-right">{{ t('seasonPoints') }}</span>
-                <span class="text-right">{{ t('seasonChange') }}</span>
-              </template>
-            </div>
-            <div>
-              <div v-for="(p, idx) in team2" :key="p.playerId || idx"
-                   class="px-5 py-2.5 grid items-center border-b border-border/20 last:border-b-0 hover:bg-accent/15 transition-colors"
-                   :style="hasPointChanges ? 'grid-template-columns: 1fr 80px 90px 80px;' : 'grid-template-columns: 1fr 100px;'">
-                <div class="flex items-center gap-2 min-w-0">
-                  <UserName :id="p.playerId" :name="p.name" :avatar-url="p.avatarUrl" :verified="p.mmr_verified_at" size="md" class="min-w-0" />
-                  <span v-if="idx === 0" class="text-[9px] font-bold text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded shrink-0">CPT</span>
-                </div>
-                <span class="text-right text-xs font-mono text-muted-foreground tabular-nums">{{ p.mmr }}</span>
-                <template v-if="hasPointChanges">
-                  <span class="text-right text-xs font-mono font-bold tabular-nums">
-                    <template v-if="Number.isFinite(Number(p.points_after))">{{ Math.round(Number(p.points_after)) }}</template>
-                    <template v-else>—</template>
-                  </span>
-                  <span class="text-right text-xs font-mono font-bold tabular-nums"
-                        :class="Number(p.season_delta) > 0 ? 'text-green-500' : (Number(p.season_delta) < 0 ? 'text-red-500' : 'text-muted-foreground')">
-                    {{ fmtSignedDelta(p.season_delta) || '—' }}
-                  </span>
-                </template>
-              </div>
-            </div>
-          </div>
+          <TeamRosterTable
+            team-color="green"
+            :team-name="match.captain1_display_name || match.captain1_name"
+            :team-result-label="team1Won ? t('queueResultVictory') : (team2Won ? t('queueResultDefeat') : t('matchLive'))"
+            :team-won="team1Won"
+            :has-point-changes="hasPointChanges"
+            :players="team1.map((p: any) => ({
+              id: p.playerId,
+              name: p.name,
+              avatarUrl: p.avatarUrl,
+              mmr: p.mmr,
+              pointsAfter: p.points_after,
+              seasonDelta: p.season_delta,
+              verified: p.mmr_verified_at,
+            }))"
+          />
+          <TeamRosterTable
+            team-color="red"
+            :team-name="match.captain2_display_name || match.captain2_name"
+            :team-result-label="team2Won ? t('queueResultVictory') : (team1Won ? t('queueResultDefeat') : t('matchLive'))"
+            :team-won="team2Won"
+            :has-point-changes="hasPointChanges"
+            :players="team2.map((p: any) => ({
+              id: p.playerId,
+              name: p.name,
+              avatarUrl: p.avatarUrl,
+              mmr: p.mmr,
+              pointsAfter: p.points_after,
+              seasonDelta: p.season_delta,
+              verified: p.mmr_verified_at,
+            }))"
+          />
         </div>
 
         <!-- Games -->
@@ -433,121 +305,17 @@ onMounted(async () => {
                   </div>
 
                   <!-- Stats table -->
-                  <div class="overflow-x-auto">
-                    <table class="w-full text-xs">
-                      <thead>
-                        <tr class="text-muted-foreground border-b border-border/20">
-                          <th class="text-left py-1 px-1.5 min-w-[200px] sticky left-0 bg-card z-10"></th>
-                          <th class="text-center px-1 w-5"></th>
-                          <th class="text-center px-1.5">K/D/A</th>
-                          <th class="text-center px-1">LH/DN</th>
-                          <th class="text-center px-1">NET</th>
-                          <th class="text-center px-1">GPM/XPM</th>
-                          <th class="text-left px-1.5">{{ t('items') }}</th>
-                          <th class="text-center px-1">HD</th>
-                          <th class="text-center px-1">TD</th>
-                          <th class="text-center px-1">HH</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <template v-for="side in [true, false]" :key="side">
-                          <!-- Team header -->
-                          <tr :class="side ? 'bg-green-500/10' : 'bg-red-500/10'">
-                            <td class="py-2 px-3 sticky left-0 z-10" :class="side ? 'bg-green-500/10 border-l-4 border-green-500' : 'bg-red-500/10 border-l-4 border-red-500'" :colspan="1">
-                              <div class="flex items-center gap-2">
-                                <span class="text-sm font-bold" :class="side ? 'text-green-500' : 'text-red-400'">{{ side ? t('queueRadiant') : t('queueDire') }}</span>
-                                <Trophy v-if="teamWon(game.game_number, side)" class="w-4 h-4 text-amber-500" />
-                              </div>
-                            </td>
-                            <td :colspan="9" class="py-2 px-3 text-right" :class="side ? 'bg-green-500/10' : 'bg-red-500/10'">
-                              <span class="text-xs font-mono text-muted-foreground">{{ teamTotalKills(game.game_number, side) }} kills</span>
-                              <span class="text-xs font-mono text-amber-500 ml-3">{{ teamTotalNW(game.game_number, side) }}</span>
-                            </td>
-                          </tr>
-                          <!-- Player rows -->
-                          <tr v-for="p in sortedTeamStats(game.game_number, side)" :key="p.account_id" class="border-b border-border/10 hover:bg-accent/20">
-                            <!-- Hero + Name -->
-                            <td class="py-1.5 px-1.5 sticky left-0 bg-card z-10">
-                              <div class="flex items-center gap-2">
-                                <div class="relative shrink-0">
-                                  <img v-if="dota.heroImg(p.hero_id)" :src="dota.heroImg(p.hero_id)" class="w-[60px] h-[42px] rounded object-cover border" />
-                                  <span class="absolute -bottom-1 -right-1 text-[9px] font-bold bg-surface text-foreground rounded-full w-5 h-5 flex items-center justify-center border border-border/50">{{ p.level }}</span>
-                                </div>
-                                <div class="flex flex-col min-w-0">
-                                  <router-link v-if="p.profile_id" :to="{ name: 'player-profile', params: { id: p.profile_id } }" class="font-semibold truncate text-xs leading-tight hover:underline" :class="p.win ? 'text-foreground' : 'text-muted-foreground'">
-                                    {{ playerDisplayName(p) }}
-                                  </router-link>
-                                  <span v-else class="font-semibold truncate text-xs leading-tight" :class="p.win ? 'text-foreground' : 'text-muted-foreground'">{{ playerDisplayName(p) }}</span>
-                                  <span class="text-[10px] text-muted-foreground/70 leading-tight">{{ dota.heroName(p.hero_id) }}</span>
-                                </div>
-                              </div>
-                            </td>
-                            <!-- Position -->
-                            <td class="text-center px-0.5">
-                              <PositionIcon v-if="playerPositions[game.game_number]?.[p.account_id]" :position="playerPositions[game.game_number][p.account_id]" />
-                            </td>
-                            <!-- KDA -->
-                            <td class="text-center px-1.5 font-mono font-medium whitespace-nowrap">
-                              <span class="text-green-500">{{ p.kills }}</span><span class="text-muted-foreground">/</span><span class="text-red-400">{{ p.deaths }}</span><span class="text-muted-foreground">/</span><span>{{ p.assists }}</span>
-                            </td>
-                            <!-- LH/DN -->
-                            <td class="text-center px-1 font-mono whitespace-nowrap">{{ p.last_hits }}<span class="text-muted-foreground">/</span>{{ p.denies }}</td>
-                            <!-- NW -->
-                            <td class="text-center px-1 font-mono font-medium text-amber-500">{{ (p.net_worth / 1000).toFixed(1) }}k</td>
-                            <!-- GPM/XPM -->
-                            <td class="text-center px-1 font-mono whitespace-nowrap">{{ p.gpm }}<span class="text-muted-foreground">/</span>{{ p.xpm }}</td>
-                            <!-- Items -->
-                            <td class="py-1 px-1.5 whitespace-nowrap">
-                              <div class="inline-flex flex-col gap-px">
-                                <div class="flex gap-px">
-                                  <template v-for="(itemId, idx) in [p.item_0, p.item_1, p.item_2]" :key="'t-' + idx">
-                                    <img v-if="itemId && dota.itemImg(itemId)" :src="dota.itemImg(itemId)" :title="dota.itemName(itemId)" class="w-[36px] h-[27px] rounded-[2px] object-cover border border-border/20" />
-                                    <div v-else class="w-[36px] h-[27px] rounded-[2px] bg-surface/60 border border-border/10"></div>
-                                  </template>
-                                  <img v-if="p.item_neutral && dota.itemImg(p.item_neutral)" :src="dota.itemImg(p.item_neutral)" :title="dota.itemName(p.item_neutral)" class="w-[27px] h-[27px] rounded-full object-cover border border-amber-500/30 ml-1" />
-                                </div>
-                                <div class="flex gap-px">
-                                  <template v-for="(itemId, idx) in [p.item_3, p.item_4, p.item_5]" :key="'b-' + idx">
-                                    <img v-if="itemId && dota.itemImg(itemId)" :src="dota.itemImg(itemId)" :title="dota.itemName(itemId)" class="w-[36px] h-[27px] rounded-[2px] object-cover border border-border/20" />
-                                    <div v-else class="w-[36px] h-[27px] rounded-[2px] bg-surface/60 border border-border/10"></div>
-                                  </template>
-                                  <template v-for="(itemId, idx) in [p.backpack_0, p.backpack_1, p.backpack_2]" :key="'bp-' + idx">
-                                    <img v-if="itemId && dota.itemImg(itemId)" :src="dota.itemImg(itemId)" :title="dota.itemName(itemId)" class="w-[27px] h-[21px] rounded-[1px] object-cover border border-border/10 opacity-40 ml-px" />
-                                  </template>
-                                </div>
-                              </div>
-                            </td>
-                            <!-- HD -->
-                            <td class="text-center px-1 font-mono">{{ (p.hero_damage / 1000).toFixed(1) }}k</td>
-                            <!-- TD -->
-                            <td class="text-center px-1 font-mono">{{ (p.tower_damage / 1000).toFixed(1) }}k</td>
-                            <!-- HH -->
-                            <td class="text-center px-1 font-mono">{{ (p.hero_healing / 1000).toFixed(1) }}k</td>
-                          </tr>
-                        </template>
-                      </tbody>
-                    </table>
-                  </div>
+                  <GameStatsTable
+                    :stats="gameStats[game.game_number]"
+                    :player-positions="playerPositions[game.game_number]"
+                    :team1-name="t('queueRadiant')"
+                    :team2-name="t('queueDire')"
+                    :dota="dota"
+                  />
 
                   <!-- Draft -->
                   <div v-if="gamePicksBans[game.game_number]?.length" class="px-5 py-3 border-t border-border/20">
-                    <p class="text-sm font-bold text-foreground mb-2">{{ t('draft') || 'Draft' }}</p>
-                    <div class="flex flex-wrap gap-2">
-                      <div v-for="phase in getDraftPhases(game.game_number)" :key="phase.label" class="rounded-lg bg-surface/80 px-3 py-2">
-                        <span class="text-[10px] font-medium text-muted-foreground mb-1.5 block">{{ phase.label }}</span>
-                        <div v-for="teamSide in [1, 0]" :key="teamSide" class="flex items-center gap-0.5 mb-0.5">
-                          <template v-for="pb in phase.items.filter((p: any) => p.team === teamSide)" :key="pb.order">
-                            <div class="relative overflow-hidden rounded-sm" :title="dota.heroName(pb.hero_id)" style="width: 44px; height: 24px;">
-                              <img v-if="dota.heroImg(pb.hero_id)" :src="dota.heroImg(pb.hero_id)" class="w-full h-full object-cover" :class="!pb.is_pick ? 'opacity-40' : ''" />
-                              <svg v-if="!pb.is_pick" class="absolute inset-0 w-full h-full" viewBox="0 0 44 24" preserveAspectRatio="none">
-                                <line x1="0" y1="0" x2="44" y2="24" stroke="rgb(239 68 68)" stroke-width="2.5" />
-                              </svg>
-                            </div>
-                            <span class="text-[10px] font-mono font-bold text-muted-foreground mr-1.5">{{ pb.order + 1 }}</span>
-                          </template>
-                        </div>
-                      </div>
-                    </div>
+                    <DraftPhaseViewer :phases="getDraftPhases(game.game_number)" :dota="dota" />
                   </div>
                 </template>
               </div>
