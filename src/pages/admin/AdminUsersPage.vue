@@ -155,10 +155,14 @@ async function saveEditUser() {
   if (!editUser.value) return
   savingUser.value = true
   try {
-    await Promise.all([
-      api.setPlayerGroups(editUser.value.id, editUserGroupIds.value),
+    const calls: Promise<any>[] = [
       api.updatePlayer(editUser.value.id, { display_name: editUserDisplayName.value, mmr: editUserMmr.value, roles: editUserRoles.value }),
-    ])
+    ]
+    // Only attempt to update permission groups if this admin can manage them.
+    if (store.hasPerm('manage_permissions')) {
+      calls.push(api.setPlayerGroups(editUser.value.id, editUserGroupIds.value))
+    }
+    await Promise.all(calls)
     editUser.value = null
     await fetchUsers()
   } finally {
@@ -750,8 +754,8 @@ function formatRelativeTime(dateStr: string | null) {
           </div>
         </div>
 
-        <!-- Permission Groups -->
-        <div class="flex flex-col gap-1.5">
+        <!-- Permission Groups (only shown to admins with manage_permissions) -->
+        <div v-if="store.hasPerm('manage_permissions')" class="flex flex-col gap-1.5">
           <label class="block text-xs font-medium text-muted-foreground">{{ t('permissionGroups') }}</label>
           <!-- Assigned groups as tags -->
           <div v-if="editUserGroupIds.length > 0" class="flex flex-wrap gap-1.5 mb-1">
