@@ -143,7 +143,7 @@ onMounted(async () => {
   // AdminCompetitionsPage, AdminFantasyPage) fetch on their own mount.
   // CompetitionLayout populates the single current comp via fetchCompData.
 
-  useApi().getSiteSettings().then(data => {
+  const applySiteSettings = (data: any) => {
     customSiteName.value = data.site_name || ''
     customLogoUrl.value = data.site_logo_url || ''
     discordUrl.value = data.site_discord_url || ''
@@ -156,7 +156,10 @@ onMounted(async () => {
         favicon.type = 'image/png'
       }
     }
-  }).catch(() => {})
+  }
+  const { cached, fresh } = useApi().getSiteSettingsCached()
+  if (cached) applySiteSettings(cached)
+  fresh.then(applySiteSettings).catch(() => {})
 
   const params = new URLSearchParams(window.location.search)
 

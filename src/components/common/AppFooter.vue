@@ -10,12 +10,14 @@ const api = useApi()
 const siteName = ref('')
 const logoUrl = ref('')
 
-onMounted(async () => {
-  try {
-    const data = await api.getSiteSettings()
+onMounted(() => {
+  const apply = (data: any) => {
     siteName.value = data.site_name || ''
     logoUrl.value = data.site_logo_url || ''
-  } catch {}
+  }
+  const { cached, fresh } = api.getSiteSettingsCached()
+  if (cached) apply(cached)
+  fresh.then(apply).catch(() => {})
 })
 </script>
 

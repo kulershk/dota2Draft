@@ -12,6 +12,14 @@ export function onBannedAction(fn: (reason: string | null) => void): () => void 
   return () => bannedListeners.delete(fn)
 }
 
+// localStorage key + helper for the SWR site-settings cache. Cleared after
+// any admin write so admins (and other tabs on the same browser) pick up
+// fresh values on the next read.
+const SITE_SETTINGS_CACHE_KEY = 'draft_site_settings_v1'
+function invalidateSiteSettingsCache() {
+  try { localStorage.removeItem(SITE_SETTINGS_CACHE_KEY) } catch {}
+}
+
 async function request(path: string, options?: RequestInit) {
   const res = await fetch(path, {
     headers: getAuthHeaders(),
@@ -286,8 +294,29 @@ export function useApi() {
 
     // Site Settings
     getSiteSettings: () => request('/api/site-settings'),
-    updateSiteSettings: (data: Record<string, string>) =>
-      request('/api/site-settings', { method: 'PUT', body: JSON.stringify(data) }),
+    // Stale-while-revalidate variant: returns cached payload from localStorage
+    // immediately (or null on first ever visit) and a `fresh` promise that
+    // resolves to the up-to-date payload and writes it back to localStorage.
+    // Use for non-admin reads where rendering instantly from a slightly stale
+    // value beats waiting on the network. Admins editing settings should
+    // continue to use getSiteSettings() for the live value.
+    getSiteSettingsCached: (): { cached: any | null; fresh: Promise<any> } => {
+      let cached: any = null
+      try {
+        const raw = localStorage.getItem(SITE_SETTINGS_CACHE_KEY)
+        if (raw) cached = JSON.parse(raw)
+      } catch {}
+      const fresh = request('/api/site-settings').then((data: any) => {
+        try { localStorage.setItem(SITE_SETTINGS_CACHE_KEY, JSON.stringify(data)) } catch {}
+        return data
+      })
+      return { cached, fresh }
+    },
+    updateSiteSettings: async (data: Record<string, string>) => {
+      const r = await request('/api/site-settings', { method: 'PUT', body: JSON.stringify(data) })
+      invalidateSiteSettingsCache()
+      return r
+    },
     uploadSiteLogo: async (file: File) => {
       const form = new FormData()
       form.append('logo', file)
@@ -301,10 +330,14 @@ export function useApi() {
         const err = await res.json().catch(() => ({ error: res.statusText }))
         throw new Error(err.error || 'Upload failed')
       }
+      invalidateSiteSettingsCache()
       return res.json()
     },
-    deleteSiteLogo: () =>
-      request('/api/site-settings/logo', { method: 'DELETE' }),
+    deleteSiteLogo: async () => {
+      const r = await request('/api/site-settings/logo', { method: 'DELETE' })
+      invalidateSiteSettingsCache()
+      return r
+    },
     uploadSiteHeroBanner: async (file: File) => {
       const form = new FormData()
       form.append('banner', file)
@@ -318,10 +351,14 @@ export function useApi() {
         const err = await res.json().catch(() => ({ error: res.statusText }))
         throw new Error(err.error || 'Upload failed')
       }
+      invalidateSiteSettingsCache()
       return res.json()
     },
-    deleteSiteHeroBanner: () =>
-      request('/api/site-settings/hero-banner', { method: 'DELETE' }),
+    deleteSiteHeroBanner: async () => {
+      const r = await request('/api/site-settings/hero-banner', { method: 'DELETE' })
+      invalidateSiteSettingsCache()
+      return r
+    },
 
     // Twitch OAuth
     getTwitchLinkUrl: () => request('/api/auth/twitch/link'),
@@ -567,12 +604,19 @@ export function useApi() {
         const err = await res.json().catch(() => ({ error: res.statusText }))
         throw new Error(err.error || 'Upload failed')
       }
+      invalidateSiteSettingsCache()
       return res.json()
     },
-    updateSponsor: (id: number, data: { alt?: string; link?: string }) =>
-      request(`/api/site-settings/sponsors/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    deleteSponsor: (id: number) =>
-      request(`/api/site-settings/sponsors/${id}`, { method: 'DELETE' }),
+    updateSponsor: async (id: number, data: { alt?: string; link?: string }) => {
+      const r = await request(`/api/site-settings/sponsors/${id}`, { method: 'PUT', body: JSON.stringify(data) })
+      invalidateSiteSettingsCache()
+      return r
+    },
+    deleteSponsor: async (id: number) => {
+      const r = await request(`/api/site-settings/sponsors/${id}`, { method: 'DELETE' })
+      invalidateSiteSettingsCache()
+      return r
+    },
 
     // Admin Request Stats
     getRequestStatsSummary: (period: string, opts?: { userId?: number; ip?: string; from?: string; to?: string }) => {
