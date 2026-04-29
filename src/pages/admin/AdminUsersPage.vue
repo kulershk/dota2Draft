@@ -93,11 +93,13 @@ const onlinePlayerIds = ref<number[]>([])
 async function fetchUsers() {
   loading.value = true
   try {
-    const [usrs, grps, online] = await Promise.all([
+    const canManagePerms = store.hasPerm('manage_permissions')
+    const calls: Promise<any>[] = [
       api.getUsers(),
-      api.getPermissionGroups(),
+      canManagePerms ? api.getPermissionGroups() : Promise.resolve([]),
       api.getOnlineUsers(),
-    ])
+    ]
+    const [usrs, grps, online] = await Promise.all(calls)
     users.value = usrs
     allGroups.value = grps
     onlinePlayerIds.value = online.onlinePlayerIds || []
