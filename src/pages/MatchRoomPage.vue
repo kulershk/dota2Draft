@@ -814,47 +814,69 @@ function goBack() {
                 Penalty {{ t('penaltyLevel', { n: teamKey === 'team1' ? match.penalty_radiant : match.penalty_dire }) }}
               </span>
             </div>
-            <!-- Players (with subtle hover tint to match the header color) -->
-            <div class="px-4 py-2 flex flex-col gap-2">
-            <div v-for="p in teamRosters[teamKey]" :key="p.id" class="flex flex-col gap-0.5 py-0.5">
-              <div class="flex items-center gap-2">
-                <!-- Check if this player has a match-level standin -->
-                <template v-if="standins.find((s: any) => s.original_player_id === p.id && !s.match_game_id)">
-                  <div class="flex items-center gap-1.5 min-w-0 line-through opacity-50">
-                    <UserName :id="p.id" :name="p.name" :avatar-url="p.avatar_url" size="sm" no-link />
-                  </div>
-                  <span class="text-muted-foreground text-xs">→</span>
-                  <UserName :id="standins.find((s: any) => s.original_player_id === p.id && !s.match_game_id)!.standin_player_id" :name="standins.find((s: any) => s.original_player_id === p.id && !s.match_game_id)!.standin_display_name" :avatar-url="standins.find((s: any) => s.original_player_id === p.id && !s.match_game_id)!.standin_avatar" size="sm" />
-                  <span class="text-[9px] text-muted-foreground">({{ t('allGames') }})</span>
-                  <button v-if="showAdminPanel || myCaptainTeamKey === teamKey" class="ml-auto text-destructive hover:text-destructive/80" @click="removeStandin(standins.find((s: any) => s.original_player_id === p.id && !s.match_game_id)!.id)">
+            <!-- Column headers (matches QueueMatchPage's TeamRosterTable) -->
+            <div class="px-5 py-2.5 grid items-center text-[10px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border/30"
+                 style="grid-template-columns: 1fr 100px;">
+              <span>{{ t('player') }}</span>
+              <span class="text-right">MMR</span>
+            </div>
+            <!-- Player rows -->
+            <div>
+              <div v-for="p in teamRosters[teamKey]" :key="p.id"
+                   class="px-5 py-2.5 grid items-center border-b border-border/20 last:border-b-0 hover:bg-accent/15 transition-colors"
+                   style="grid-template-columns: 1fr 100px;">
+                <!-- Player column -->
+                <div class="flex items-center gap-2 min-w-0">
+                  <!-- Match-level standin: strikethrough original, show replacement -->
+                  <template v-if="standins.find((s: any) => s.original_player_id === p.id && !s.match_game_id)">
+                    <div class="flex items-center gap-1.5 min-w-0 line-through opacity-50">
+                      <UserName :id="p.id" :name="p.name" :avatar-url="p.avatar_url" size="md" no-link />
+                    </div>
+                    <span class="text-muted-foreground text-xs">→</span>
+                    <UserName
+                      :id="standins.find((s: any) => s.original_player_id === p.id && !s.match_game_id)!.standin_player_id"
+                      :name="standins.find((s: any) => s.original_player_id === p.id && !s.match_game_id)!.standin_display_name"
+                      :avatar-url="standins.find((s: any) => s.original_player_id === p.id && !s.match_game_id)!.standin_avatar"
+                      size="md"
+                    />
+                    <span class="text-[9px] text-muted-foreground shrink-0">({{ t('allGames') }})</span>
+                    <button
+                      v-if="showAdminPanel || myCaptainTeamKey === teamKey"
+                      class="ml-auto text-destructive hover:text-destructive/80 shrink-0"
+                      @click="removeStandin(standins.find((s: any) => s.original_player_id === p.id && !s.match_game_id)!.id)"
+                    >
+                      <X class="w-3 h-3" />
+                    </button>
+                  </template>
+                  <template v-else>
+                    <UserName :id="p.id" :name="p.name" :avatar-url="p.avatar_url" size="md" class="min-w-0" />
+                    <span v-if="p.is_captain" class="text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0"
+                          :class="teamKey === 'team1' ? 'text-green-400 bg-green-500/10' : 'text-red-400 bg-red-500/10'">CPT</span>
+                    <button
+                      v-if="showAdminPanel || myCaptainTeamKey === teamKey"
+                      class="ml-auto text-[10px] text-muted-foreground hover:text-primary transition-colors px-1.5 py-0.5 rounded hover:bg-accent shrink-0"
+                      @click="addingStandin = { team: teamKey, originalPlayerId: p.id, captainId: teamKey === 'team1' ? match.team1_captain_id : match.team2_captain_id }"
+                    >standin</button>
+                  </template>
+                </div>
+                <!-- MMR column -->
+                <span class="text-right text-xs font-mono text-muted-foreground tabular-nums">{{ p.mmr ?? '—' }}</span>
+                <!-- Game-specific standins (full-width sub-row) -->
+                <div v-for="gs in standins.filter((s: any) => s.original_player_id === p.id && s.match_game_id)" :key="gs.id"
+                     class="col-span-2 flex items-center gap-2 pl-6 text-[10px] mt-1">
+                  <span class="text-muted-foreground">G{{ allGames.find((g: any) => g.id === gs.match_game_id)?.game_number || '?' }}:</span>
+                  <span class="line-through opacity-50">{{ p.name }}</span>
+                  <span class="text-muted-foreground">→</span>
+                  <span>{{ gs.standin_display_name }}</span>
+                  <button v-if="(showAdminPanel || myCaptainTeamKey === teamKey) && !gameStartedById(gs.match_game_id)" class="text-destructive hover:text-destructive/80" @click="removeStandin(gs.id)">
                     <X class="w-3 h-3" />
                   </button>
-                </template>
-                <template v-else>
-                  <UserName :id="p.id" :name="p.name" :avatar-url="p.avatar_url" size="sm" />
-                  <span v-if="p.is_captain" class="text-[10px] font-medium text-primary bg-primary/10 px-1.5 py-0.5 rounded">C</span>
-                  <span v-if="p.mmr && !showAdminPanel && myCaptainTeamKey !== teamKey" class="text-[10px] text-muted-foreground ml-auto">{{ p.mmr }}</span>
-                  <!-- Standin button (admin or own team captain) -->
-                  <button
-                    v-if="showAdminPanel || myCaptainTeamKey === teamKey"
-                    class="ml-auto text-[10px] text-muted-foreground hover:text-primary transition-colors px-1.5 py-0.5 rounded hover:bg-accent"
-                    @click="addingStandin = { team: teamKey, originalPlayerId: p.id, captainId: teamKey === 'team1' ? match.team1_captain_id : match.team2_captain_id }"
-                  >standin</button>
-                </template>
-              </div>
-              <!-- Game-specific standins for this player -->
-              <div v-for="gs in standins.filter((s: any) => s.original_player_id === p.id && s.match_game_id)" :key="gs.id" class="flex items-center gap-2 pl-4 text-[10px]">
-                <span class="text-muted-foreground">G{{ allGames.find((g: any) => g.id === gs.match_game_id)?.game_number || '?' }}:</span>
-                <span class="line-through opacity-50">{{ p.name }}</span>
-                <span class="text-muted-foreground">→</span>
-                <span>{{ gs.standin_display_name }}</span>
-                <button v-if="(showAdminPanel || myCaptainTeamKey === teamKey) && !gameStartedById(gs.match_game_id)" class="text-destructive hover:text-destructive/80" @click="removeStandin(gs.id)">
-                  <X class="w-3 h-3" />
-                </button>
+                </div>
               </div>
             </div>
             <!-- Standin search (inline when selecting for this team) -->
-            <div v-if="(showAdminPanel || myCaptainTeamKey === teamKey) && addingStandin?.team === teamKey" class="flex flex-col gap-1.5 mt-1 pt-2 border-t border-border/30">
+            <div v-if="(showAdminPanel || myCaptainTeamKey === teamKey) && addingStandin?.team === teamKey"
+                 class="flex flex-col gap-1.5 px-5 py-3 border-t border-border/30">
               <div class="flex items-center gap-2 text-[10px] text-muted-foreground">
                 <span>Replacing <strong class="text-foreground">{{ teamRosters[teamKey].find((p: any) => p.id === addingStandin!.originalPlayerId)?.name }}</strong></span>
                 <button class="text-destructive hover:underline" @click="addingStandin = null; standinSearch = ''; standinResults = []">{{ t('cancel') }}</button>
@@ -877,7 +899,6 @@ function goBack() {
                   <span class="font-medium text-foreground">{{ sp.display_name || sp.name }}</span>
                 </button>
               </div>
-            </div>
             </div>
           </div>
         </template>
