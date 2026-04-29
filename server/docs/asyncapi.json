@@ -1244,6 +1244,71 @@
           }
         }
       }
+    },
+    "bot:statusChanged": {
+      "subscribe": {
+        "summary": "Bot connection / availability state changed (PRIVATE — sent only to sockets in the `perm:manage_bots` room).",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "botId": { "type": "integer" },
+              "status": { "type": "string", "enum": ["connecting", "available", "in_use", "offline", "error"] },
+              "errorMessage": { "type": "string", "nullable": true }
+            },
+            "required": ["botId", "status"]
+          }
+        }
+      }
+    },
+    "bot:log": {
+      "subscribe": {
+        "summary": "Stdout/stderr line from a lobby bot (PRIVATE — sent only to sockets in the `perm:manage_bots` room). May include Steam IDs, lobby IDs, and operational error text — never broadcast to non-admins.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "botId": { "type": "integer" },
+              "ts": { "type": "integer", "description": "Server epoch ms" },
+              "level": { "type": "string", "enum": ["info", "warn", "error"] },
+              "message": { "type": "string" }
+            },
+            "required": ["botId", "message"]
+          }
+        }
+      }
+    },
+    "mmrVerification:new": {
+      "subscribe": {
+        "summary": "A user submitted a new MMR verification (PRIVATE — sent only to sockets in the `perm:manage_mmr_verifications` room).",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "integer" },
+              "playerId": { "type": "integer" }
+            },
+            "required": ["id", "playerId"]
+          }
+        }
+      }
+    },
+    "mmrVerification:reviewed": {
+      "subscribe": {
+        "summary": "An MMR verification's status changed (PRIVATE — sent only to sockets in the `perm:manage_mmr_verifications` room). Fired on cancel/approve/reject.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "integer" },
+              "playerId": { "type": "integer" },
+              "status": { "type": "string", "enum": ["cancelled", "approved", "rejected"] },
+              "mmr": { "type": "integer", "description": "Set when status=approved" }
+            },
+            "required": ["id", "playerId", "status"]
+          }
+        }
+      }
     }
   }
 }

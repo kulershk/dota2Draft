@@ -47,7 +47,7 @@ export default function createMmrVerificationsRouter(io) {
         VALUES ($1, $2, $3) RETURNING *
       `, [player.id, Math.round(submitted), screenshotUrl])
 
-      if (io) io.emit('mmrVerification:new', { id: created.id, playerId: player.id })
+      if (io) io.to('perm:manage_mmr_verifications').emit('mmrVerification:new', { id: created.id, playerId: player.id })
       res.status(201).json(created)
     } catch (e) {
       if (req.file) try { fs.unlinkSync(req.file.path) } catch {}
@@ -90,7 +90,7 @@ export default function createMmrVerificationsRouter(io) {
           SET status = 'cancelled', reviewed_at = NOW(), review_note = COALESCE($1, 'Cancelled by player')
         WHERE id = $2
       `, [req.body?.note || null, v.id])
-      if (io) io.emit('mmrVerification:reviewed', { id: v.id, playerId: player.id, status: 'cancelled' })
+      if (io) io.to('perm:manage_mmr_verifications').emit('mmrVerification:reviewed', { id: v.id, playerId: player.id, status: 'cancelled' })
       res.json({ ok: true })
     } catch (e) {
       res.status(500).json({ error: e.message })
@@ -151,7 +151,7 @@ export default function createMmrVerificationsRouter(io) {
         'UPDATE players SET mmr = $1, mmr_verified_at = COALESCE(mmr_verified_at, NOW()) WHERE id = $2',
         [v.submitted_mmr, v.player_id]
       )
-      if (io) io.emit('mmrVerification:reviewed', { id: v.id, playerId: v.player_id, status: 'approved', mmr: v.submitted_mmr })
+      if (io) io.to('perm:manage_mmr_verifications').emit('mmrVerification:reviewed', { id: v.id, playerId: v.player_id, status: 'approved', mmr: v.submitted_mmr })
       res.json({ ok: true, player_id: v.player_id, mmr: v.submitted_mmr })
     } catch (e) {
       res.status(500).json({ error: e.message })
@@ -171,7 +171,7 @@ export default function createMmrVerificationsRouter(io) {
         SET status = 'rejected', reviewed_by = $1, reviewed_at = NOW(), review_note = $2
         WHERE id = $3
       `, [admin.id, req.body.note || null, v.id])
-      if (io) io.emit('mmrVerification:reviewed', { id: v.id, playerId: v.player_id, status: 'rejected' })
+      if (io) io.to('perm:manage_mmr_verifications').emit('mmrVerification:reviewed', { id: v.id, playerId: v.player_id, status: 'rejected' })
       res.json({ ok: true })
     } catch (e) {
       res.status(500).json({ error: e.message })

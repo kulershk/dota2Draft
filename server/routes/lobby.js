@@ -79,7 +79,7 @@ export default function createLobbyRouter(io) {
       }
       // Force bot status to available
       await execute("UPDATE lobby_bots SET status = 'available' WHERE id = $1", [botId])
-      if (io) io.emit('bot:statusChanged', { botId, status: 'available' })
+      if (io) io.to('perm:manage_bots').emit('bot:statusChanged', { botId, status: 'available' })
       res.json({ ok: true })
     } catch (e) {
       res.status(400).json({ error: e.message })

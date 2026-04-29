@@ -212,7 +212,7 @@ class BotPool {
     await execute(`UPDATE lobby_bots SET ${setClauses} WHERE id = $${values.length}`, values)
 
     if (this.io) {
-      this.io.emit('bot:statusChanged', { botId, status: data.status, errorMessage: data.error || null })
+      this.io.to('perm:manage_bots').emit('bot:statusChanged', { botId, status: data.status, errorMessage: data.error || null })
     }
 
     // When a bot comes back online, re-sync its active lobbies so Go can rejoin them
@@ -295,7 +295,7 @@ class BotPool {
     if (logs.length > 500) logs.shift()
     console.log(`[Bot ${botId}] ${data.message}`)
     if (this.io) {
-      this.io.emit('bot:log', { botId, ...entry })
+      this.io.to('perm:manage_bots').emit('bot:log', { botId, ...entry })
     }
   }
 
@@ -1237,7 +1237,7 @@ class BotPool {
     const bot = await queryOne('SELECT * FROM lobby_bots WHERE id = $1', [botId])
     if (!bot) throw new Error('Bot not found')
     await execute("UPDATE lobby_bots SET status = 'connecting', error_message = NULL WHERE id = $1", [botId])
-    if (this.io) this.io.emit('bot:statusChanged', { botId, status: 'connecting' })
+    if (this.io) this.io.to('perm:manage_bots').emit('bot:statusChanged', { botId, status: 'connecting' })
     this._sendToGo('connect_bot', {
       botId: String(botId),
       username: bot.username,
@@ -1251,7 +1251,7 @@ class BotPool {
   async disconnectBot(botId) {
     this._sendToGo('disconnect_bot', { botId: String(botId) })
     await execute("UPDATE lobby_bots SET status = 'offline' WHERE id = $1", [botId])
-    if (this.io) this.io.emit('bot:statusChanged', { botId, status: 'offline' })
+    if (this.io) this.io.to('perm:manage_bots').emit('bot:statusChanged', { botId, status: 'offline' })
   }
 
   async submitSteamGuard(botId, code) {

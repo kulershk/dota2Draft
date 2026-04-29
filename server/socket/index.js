@@ -1,5 +1,6 @@
 import { queryOne, execute } from '../db.js'
 import { getSessionPlayerId } from '../middleware/auth.js'
+import { getPlayerPermissions } from '../middleware/permissions.js'
 import { getFullAuctionState, getAuctionLog, getCaptains, getCompetition } from '../helpers/competition.js'
 import {
   socketPlayers, socketCompetitions, compOnlineCaptains, compReadyCaptains,
@@ -9,6 +10,12 @@ import { registerAuctionHandlers } from './auction.js'
 import { registerMatchReadyHandlers } from './matchReady.js'
 import { registerQueueHandlers } from './queue.js'
 import { logSocketEvent } from '../middleware/requestLogger.js'
+
+// Permissions that gate access to private socket events. Sockets join
+// `perm:<name>` rooms for each one the player holds (or all of them if
+// is_admin), and admin-scoped emits target those rooms — keeps bot logs,
+// MMR verification activity, etc. off non-admin sockets.
+const PRIVATE_PERMS = ['manage_bots', 'manage_mmr_verifications']
 
 export function initSocket(io) {
   io.on('connection', (socket) => {
@@ -38,11 +45,26 @@ export function initSocket(io) {
     async function applyAuthToken(token) {
       const playerId = getSessionPlayerId(token)
       if (!playerId) return null
-      const player = await queryOne('SELECT id, is_banned FROM players WHERE id = $1', [playerId])
+      const player = await queryOne('SELECT id, is_banned, is_admin FROM players WHERE id = $1', [playerId])
       if (!player) return null
       socketPlayers.set(socket.id, player.id)
       if (player.is_banned) bannedSockets.add(socket.id)
       else bannedSockets.delete(socket.id)
+
+      // Leave any previously-joined permission rooms before re-keying — the
+      // new token might belong to a different player with different perms.
+      for (const p of PRIVATE_PERMS) socket.leave(`perm:${p}`)
+
+      // Banned users get no admin events even if they hold the permission.
+      if (!player.is_banned) {
+        if (player.is_admin) {
+          for (const p of PRIVATE_PERMS) socket.join(`perm:${p}`)
+        } else {
+          const perms = await getPlayerPermissions(player.id).catch(() => new Set())
+          for (const p of PRIVATE_PERMS) if (perms.has(p)) socket.join(`perm:${p}`)
+        }
+      }
+
       execute('UPDATE players SET last_online = NOW() WHERE id = $1', [player.id]).catch(() => {})
       return player
     }
