@@ -2,7 +2,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ChevronDown, ChevronUp, Check, Gamepad2, X, ArrowLeft, Trophy, ExternalLink, Clock, Calendar, CheckCircle, AlertCircle, RefreshCw, Pencil, Play, Square, RotateCcw } from 'lucide-vue-next'
+import { ChevronDown, ChevronUp, Check, Gamepad2, X, ArrowLeft, Trophy, ExternalLink, Clock, Calendar, CheckCircle, AlertCircle, RefreshCw, Pencil, Play, Square, RotateCcw, Shield } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { getSocket, getServerNow } from '@/composables/useSocket'
@@ -776,12 +776,25 @@ function goBack() {
       <!-- Team Rosters -->
       <div v-if="teamRosters.team1.length || teamRosters.team2.length" class="grid grid-cols-2 gap-4 mb-6">
         <template v-for="(teamKey, idx) in ['team1', 'team2'] as const" :key="teamKey">
-          <div class="card px-4 py-3 flex flex-col gap-2">
-            <!-- Team name + penalty -->
-            <div class="flex items-center gap-2 mb-1">
+          <div class="card overflow-hidden p-0" :class="teamKey === 'team1' ? 'border-green-500/40' : 'border-red-500/40'">
+            <!-- Team header bar (colored) -->
+            <div class="flex items-center gap-2 px-4 py-3 border-b"
+                 :class="teamKey === 'team1' ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'">
+              <Shield class="w-4 h-4 shrink-0" :class="teamKey === 'team1' ? 'text-green-500' : 'text-red-400'" />
               <TeamName v-if="teamKey === 'team1' && match.team1_captain_id" :id="match.team1_captain_id" :name="match.team1_name || t('tbd')" :banner-url="match.team1_banner" :avatar-url="match.team1_avatar" />
               <TeamName v-else-if="teamKey === 'team2' && match.team2_captain_id" :id="match.team2_captain_id" :name="match.team2_name || t('tbd')" :banner-url="match.team2_banner" :avatar-url="match.team2_avatar" />
               <span v-else class="text-sm font-semibold text-muted-foreground truncate">{{ t('tbd') }}</span>
+              <!-- Win/Loss/Pending badge -->
+              <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ml-1"
+                    :class="(match.winner_captain_id && match.winner_captain_id === (teamKey === 'team1' ? match.team1_captain_id : match.team2_captain_id))
+                      ? 'bg-green-500/15 text-green-500'
+                      : 'bg-muted/40 text-muted-foreground'">
+                {{ match.winner_captain_id
+                  ? (match.winner_captain_id === (teamKey === 'team1' ? match.team1_captain_id : match.team2_captain_id)
+                    ? (t('queueResultVictory') || 'Victory')
+                    : (t('queueResultDefeat') || 'Defeat'))
+                  : (match.status === 'live' ? t('matchLive') : t('matchPending')) }}
+              </span>
               <!-- Penalty: dropdown in edit mode, red text otherwise -->
               <select
                 v-if="showAdminPanel"
@@ -797,11 +810,12 @@ function goBack() {
                 <option :value="2">{{ t('penaltyLevel', { n: 2 }) }}</option>
                 <option :value="3">{{ t('penaltyLevel', { n: 3 }) }}</option>
               </select>
-              <span v-else-if="(teamKey === 'team1' ? match.penalty_radiant : match.penalty_dire)" class="text-[10px] font-semibold text-destructive">
+              <span v-else-if="(teamKey === 'team1' ? match.penalty_radiant : match.penalty_dire)" class="text-[10px] font-semibold text-destructive ml-auto">
                 Penalty {{ t('penaltyLevel', { n: teamKey === 'team1' ? match.penalty_radiant : match.penalty_dire }) }}
               </span>
             </div>
-            <!-- Players -->
+            <!-- Players (with subtle hover tint to match the header color) -->
+            <div class="px-4 py-2 flex flex-col gap-2">
             <div v-for="p in teamRosters[teamKey]" :key="p.id" class="flex flex-col gap-0.5 py-0.5">
               <div class="flex items-center gap-2">
                 <!-- Check if this player has a match-level standin -->
@@ -863,6 +877,7 @@ function goBack() {
                   <span class="font-medium text-foreground">{{ sp.display_name || sp.name }}</span>
                 </button>
               </div>
+            </div>
             </div>
           </div>
         </template>
