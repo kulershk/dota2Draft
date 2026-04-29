@@ -776,9 +776,16 @@ function goBack() {
       <!-- Team Rosters -->
       <div v-if="teamRosters.team1.length || teamRosters.team2.length" class="grid grid-cols-2 gap-4 mb-6">
         <template v-for="(teamKey, idx) in ['team1', 'team2'] as const" :key="teamKey">
-          <div class="card overflow-hidden p-0" :class="teamKey === 'team1' ? 'border-green-500/40' : 'border-red-500/40'">
+          <div class="card overflow-hidden p-0 relative" :class="teamKey === 'team1' ? 'border-green-500/40' : 'border-red-500/40'">
+            <!-- Faded team logo background -->
+            <img
+              v-if="(teamKey === 'team1' ? (match.team1_banner || match.team1_avatar) : (match.team2_banner || match.team2_avatar))"
+              :src="teamKey === 'team1' ? (match.team1_banner || match.team1_avatar) : (match.team2_banner || match.team2_avatar)"
+              class="absolute inset-0 w-full h-full object-cover opacity-[0.08] pointer-events-none select-none"
+              aria-hidden="true"
+            />
             <!-- Team header bar (colored) -->
-            <div class="flex items-center gap-2 px-4 py-3 border-b"
+            <div class="relative flex items-center gap-2 px-4 py-3 border-b"
                  :class="teamKey === 'team1' ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'">
               <Shield class="w-4 h-4 shrink-0" :class="teamKey === 'team1' ? 'text-green-500' : 'text-red-400'" />
               <TeamName v-if="teamKey === 'team1' && match.team1_captain_id" :id="match.team1_captain_id" :name="match.team1_name || t('tbd')" :banner-url="match.team1_banner" :avatar-url="match.team1_avatar" />
