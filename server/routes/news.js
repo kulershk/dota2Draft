@@ -16,12 +16,26 @@ export default function createNewsRouter(io) {
   })
 
   router.get('/api/news', async (req, res) => {
+    const rawLimit = parseInt(req.query.limit, 10)
+    const rawOffset = parseInt(req.query.offset, 10)
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 100) : null
+    const offset = Number.isFinite(rawOffset) && rawOffset >= 0 ? rawOffset : 0
+
+    const params = []
+    let limitClause = ''
+    if (limit !== null) {
+      params.push(limit)
+      limitClause += ` LIMIT $${params.length}`
+      params.push(offset)
+      limitClause += ` OFFSET $${params.length}`
+    }
+
     const news = await query(`
       SELECT n.*, COALESCE(p.display_name, p.name) AS created_by_name, p.avatar_url AS created_by_avatar
       FROM news n
       LEFT JOIN players p ON p.id = n.created_by
-      ORDER BY n.created_at DESC
-    `)
+      ORDER BY n.created_at DESC${limitClause}
+    `, params)
     res.json(news)
   })
 

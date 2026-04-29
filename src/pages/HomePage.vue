@@ -100,7 +100,7 @@ async function loadAll() {
     api.getHomeStats().catch(() => null),
     api.getQueueHistory({ limit: 6 }).catch(() => []),
     api.getFeaturedTournament().catch(() => null),
-    api.getNews().catch(() => []),
+    api.getNews({ limit: 3 }).catch(() => []),
     api.getHomeTopPlayers(5).catch(() => ({ players: [], season: null })),
     api.getHomeHeroPickRate(7, 3).catch(() => ({ days: 7, heroes: [] })),
     api.getUpcomingMatches().catch(() => []),

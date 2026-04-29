@@ -395,7 +395,13 @@ export function useApi() {
       request(`/api/competitions/${compId}/streams/${streamId}`, { method: 'DELETE' }),
 
     // News
-    getNews: () => request('/api/news'),
+    getNews: (opts?: { limit?: number; offset?: number }) => {
+      const qs = new URLSearchParams()
+      if (opts?.limit) qs.set('limit', String(opts.limit))
+      if (opts?.offset) qs.set('offset', String(opts.offset))
+      const url = qs.toString() ? `/api/news?${qs}` : '/api/news'
+      return request(url)
+    },
     getNewsPost: (id: number) => request(`/api/news/${id}`),
     uploadNewsImage: async (file: File) => {
       const form = new FormData()
