@@ -1,10 +1,35 @@
 #!/bin/bash
 # Database restore script for Dota 2 Draft
-# Usage: ./restore.sh [backup_file]
-#   ./restore.sh                          # lists available backups to choose from
-#   ./restore.sh backup/draft_2026-04-01_12-00-00.sql.gz  # restore specific file
+# Usage: ./restore.sh [--dev] [backup_file]
+#   ./restore.sh                          # prod containers, lists backups to choose from
+#   ./restore.sh --dev                    # dev containers, lists backups to choose from
+#   ./restore.sh backup/draft_2026-04-01_12-00-00.sql.gz       # prod, specific file
+#   ./restore.sh --dev backup/draft_2026-04-01_12-00-00.sql.gz # dev, specific file
 
 BACKUP_DIR="$(dirname "$0")/backup"
+
+# Default: prod container names. Pass --dev to target the dev compose stack.
+DB_CONTAINER="draft-db"
+APP_CONTAINER="draft-app"
+ENV_LABEL="prod"
+
+# Parse --dev flag from any position, shift it out of the arg list
+ARGS=()
+for arg in "$@"; do
+  case "$arg" in
+    --dev)
+      DB_CONTAINER="draft-dev-db"
+      APP_CONTAINER="draft-dev-app"
+      ENV_LABEL="dev"
+      ;;
+    *)
+      ARGS+=("$arg")
+      ;;
+  esac
+done
+set -- "${ARGS[@]}"
+
+echo "Target: $ENV_LABEL ($DB_CONTAINER / $APP_CONTAINER)"
 
 # If no argument, list backups and let user pick
 if [ -z "$1" ]; then
@@ -47,12 +72,12 @@ fi
 echo "Restoring..."
 
 # Stop the app so it doesn't hold DB connections
-echo "Stopping app container..."
-docker stop draft-app 2>/dev/null || docker stop draft-dev-app 2>/dev/null || true
+echo "Stopping app container ($APP_CONTAINER)..."
+docker stop "$APP_CONTAINER" 2>/dev/null || true
 
 # Drop all tables/sequences/functions in the draft database
 echo "Dropping all existing objects..."
-docker exec draft-db psql -U draft -d draft -c "
+docker exec "$DB_CONTAINER" psql -U draft -d draft -c "
   DO \$\$ DECLARE r RECORD;
   BEGIN
     FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
@@ -65,13 +90,13 @@ docker exec draft-db psql -U draft -d draft -c "
 
 # Restore the backup
 echo "Loading backup..."
-gunzip -c "$BACKUP_FILE" | docker exec -i draft-db psql -U draft -d draft -v ON_ERROR_STOP=1
+gunzip -c "$BACKUP_FILE" | docker exec -i "$DB_CONTAINER" psql -U draft -d draft -v ON_ERROR_STOP=1
 
 RESULT=$?
 
 # Restart the app
-echo "Starting app container..."
-docker start draft-app 2>/dev/null || docker start draft-dev-app 2>/dev/null || true
+echo "Starting app container ($APP_CONTAINER)..."
+docker start "$APP_CONTAINER" 2>/dev/null || true
 
 if [ $RESULT -eq 0 ]; then
   echo "Restore complete!"
