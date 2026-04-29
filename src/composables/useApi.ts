@@ -138,7 +138,15 @@ export function useApi() {
     adminRetryQueueLobby: (queueMatchId: number) =>
       request(`/api/admin/queue/matches/${queueMatchId}/retry-lobby`, { method: 'POST' }),
     getUpcomingMatches: () => request('/api/upcoming-matches'),
-    getAllMatches: (status?: string) => request(`/api/matches${status && status !== 'all' ? `?status=${status}` : ''}`),
+    getAllMatches: (opts?: { status?: string; limit?: number; offset?: number; search?: string }) => {
+      const qs = new URLSearchParams()
+      if (opts?.status && opts.status !== 'all') qs.set('status', opts.status)
+      if (opts?.limit) qs.set('limit', String(opts.limit))
+      if (opts?.offset) qs.set('offset', String(opts.offset))
+      if (opts?.search) qs.set('search', opts.search)
+      const url = qs.toString() ? `/api/matches?${qs}` : '/api/matches'
+      return request(url)
+    },
     getMyUpcomingMatchCount: () => request('/api/matches/my-upcoming-count'),
     addTournamentStage: (compId: number, data: { name: string; format: string; groups?: any[]; bestOf?: number; seeds?: number[] }) =>
       request(`/api/competitions/${compId}/tournament/stages`, { method: 'POST', body: JSON.stringify(data) }),

@@ -3,7 +3,6 @@ import { Swords, Search, Calendar, ChevronLeft, ChevronRight } from 'lucide-vue-
 import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
-import { getServerNow } from '@/composables/useSocket'
 import { formatMatchDate } from '@/utils/format'
 import { MATCH_STATUS } from '@/utils/constants'
 import TeamName from '@/components/common/TeamName.vue'
@@ -12,18 +11,30 @@ const { t } = useI18n()
 const api = useApi()
 
 const matches = ref<any[]>([])
+const total = ref(0)
 const searchQuery = ref('')
 const statusFilter = ref('all')
 const loading = ref(true)
 const page = ref(1)
-const PAGE_SIZE = 20
+const PAGE_SIZE = 30
+let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+const totalPages = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
 
 async function fetchMatches() {
   loading.value = true
   try {
-    matches.value = await api.getAllMatches()
+    const res = await api.getAllMatches({
+      status: statusFilter.value,
+      search: searchQuery.value || undefined,
+      limit: PAGE_SIZE,
+      offset: (page.value - 1) * PAGE_SIZE,
+    })
+    matches.value = res.rows || []
+    total.value = res.total ?? matches.value.length
   } catch {
     matches.value = []
+    total.value = 0
   } finally {
     loading.value = false
   }
@@ -31,46 +42,13 @@ async function fetchMatches() {
 
 onMounted(fetchMatches)
 
-const filteredMatches = computed(() => {
-  let list = matches.value
-  if (statusFilter.value !== 'all') {
-    list = list.filter((m: any) => m.status === statusFilter.value)
-  }
-  if (searchQuery.value) {
-    const q = searchQuery.value.toLowerCase()
-    list = list.filter((m: any) =>
-      (m.team1_name || '').toLowerCase().includes(q) ||
-      (m.team2_name || '').toLowerCase().includes(q) ||
-      (m.competition_name || '').toLowerCase().includes(q)
-    )
-  }
-  // Sort: live first, then upcoming (closest scheduled_at first), completed last
-  const statusOrder: Record<string, number> = { live: 0, pending: 1, completed: 2 }
-  const now = getServerNow()
-  return [...list].sort((a, b) => {
-    const oa = statusOrder[a.status] ?? 1
-    const ob = statusOrder[b.status] ?? 1
-    if (oa !== ob) return oa - ob
-    // Within upcoming: closest scheduled_at first
-    if (a.status === 'pending') {
-      const ta = a.scheduled_at ? new Date(a.scheduled_at).getTime() : Infinity
-      const tb = b.scheduled_at ? new Date(b.scheduled_at).getTime() : Infinity
-      return ta - tb
-    }
-    // Within completed: most recent by last game finished, fall back to scheduled_at
-    if (a.status === 'completed') {
-      const ta = a.last_game_at ? new Date(a.last_game_at).getTime() : (a.scheduled_at ? new Date(a.scheduled_at).getTime() : 0)
-      const tb = b.last_game_at ? new Date(b.last_game_at).getTime() : (b.scheduled_at ? new Date(b.scheduled_at).getTime() : 0)
-      return tb - ta
-    }
-    return 0
-  })
+watch([statusFilter, page], fetchMatches)
+
+watch(searchQuery, () => {
+  page.value = 1
+  if (debounceTimer) clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(fetchMatches, 250)
 })
-
-const totalPages = computed(() => Math.max(1, Math.ceil(filteredMatches.value.length / PAGE_SIZE)))
-const paginatedMatches = computed(() => filteredMatches.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE))
-
-watch([searchQuery, statusFilter], () => { page.value = 1 })
 </script>
 
 <template>
@@ -86,7 +64,7 @@ watch([searchQuery, statusFilter], () => { page.value = 1 })
         <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <input v-model="searchQuery" type="text" :placeholder="t('search')" class="input-field pl-9 w-full" />
       </div>
-      <select v-model="statusFilter" class="input-field w-full sm:w-auto">
+      <select v-model="statusFilter" class="input-field w-full sm:w-auto" @change="page = 1">
         <option value="all">{{ t('allStatuses') }}</option>
         <option :value="MATCH_STATUS.LIVE">{{ t('matchLive') }}</option>
         <option :value="MATCH_STATUS.COMPLETED">{{ t('matchCompleted') }}</option>
@@ -99,12 +77,12 @@ watch([searchQuery, statusFilter], () => { page.value = 1 })
       <div v-if="loading" class="px-4 py-10 text-center text-sm text-muted-foreground">
         {{ t('loading') }}
       </div>
-      <div v-else-if="filteredMatches.length === 0" class="px-4 py-10 text-center text-sm text-muted-foreground">
+      <div v-else-if="matches.length === 0" class="px-4 py-10 text-center text-sm text-muted-foreground">
         {{ t('noResults') }}
       </div>
       <div v-else class="divide-y divide-border">
         <router-link
-          v-for="match in paginatedMatches"
+          v-for="match in matches"
           :key="match.id"
           :to="`/c/${match.competition_id}/match/${match.id}`"
           class="relative flex items-center px-4 py-4 md:px-6 md:py-4 hover:bg-accent/30 transition-colors gap-3"
@@ -155,7 +133,7 @@ watch([searchQuery, statusFilter], () => { page.value = 1 })
         <button class="p-1.5 rounded hover:bg-accent disabled:opacity-30" :disabled="page <= 1" @click="page--">
           <ChevronLeft class="w-4 h-4 text-muted-foreground" />
         </button>
-        <span class="text-xs text-muted-foreground font-mono">{{ page }} / {{ totalPages }}</span>
+        <span class="text-xs text-muted-foreground font-mono">{{ page }} / {{ totalPages }} · {{ total }}</span>
         <button class="p-1.5 rounded hover:bg-accent disabled:opacity-30" :disabled="page >= totalPages" @click="page++">
           <ChevronRight class="w-4 h-4 text-muted-foreground" />
         </button>

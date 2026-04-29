@@ -95,16 +95,44 @@ export default function createTournamentRouter(io) {
     })
   })
 
-  // All matches across all competitions (with filters)
+  // All matches across all competitions (with filters + pagination + search)
   router.get('/api/matches', async (req, res) => {
     try {
-      const { status } = req.query
-      let where = 'm.hidden = false'
+      const { status, search } = req.query
+      const rawLimit = parseInt(req.query.limit, 10)
+      const rawOffset = parseInt(req.query.offset, 10)
+      const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 30, 1), 100)
+      const offset = Number.isFinite(rawOffset) && rawOffset >= 0 ? rawOffset : 0
+
       const params = []
+      let where = 'm.hidden = false AND (m.team1_captain_id IS NOT NULL OR m.team2_captain_id IS NOT NULL)'
       if (status && status !== 'all') {
         params.push(status)
         where += ` AND m.status = $${params.length}`
       }
+      if (search) {
+        const like = `%${String(search).replace(/[%_]/g, '\\$&')}%`
+        params.push(like)
+        const idx = params.length
+        where += ` AND (t1.team ILIKE $${idx} OR t2.team ILIKE $${idx} OR c.name ILIKE $${idx})`
+      }
+
+      // Count first (cheap — single aggregation, same WHERE).
+      const countRow = await queryOne(`
+        SELECT COUNT(*)::int AS total
+        FROM matches m
+        JOIN competitions c ON c.id = m.competition_id
+        LEFT JOIN captains t1 ON t1.id = m.team1_captain_id
+        LEFT JOIN captains t2 ON t2.id = m.team2_captain_id
+        WHERE ${where}
+      `, params)
+      const total = countRow?.total || 0
+
+      params.push(limit)
+      const limitParam = params.length
+      params.push(offset)
+      const offsetParam = params.length
+
       const matches = await query(`
         SELECT m.id, m.scheduled_at, m.status, m.best_of, m.score1, m.score2,
           m.competition_id, m.team1_captain_id, m.team2_captain_id,
@@ -112,50 +140,50 @@ export default function createTournamentRouter(io) {
           c.name AS competition_name,
           t1.team AS team1_name, COALESCE(p1.avatar_url, '') AS team1_avatar, t1.banner_url AS team1_banner,
           t2.team AS team2_name, COALESCE(p2.avatar_url, '') AS team2_avatar, t2.banner_url AS team2_banner,
-          (
-            SELECT COALESCE(MAX(to_timestamp(g.start_time)), MAX(g.created_at))
-            FROM match_games g WHERE g.match_id = m.id
-          ) AS last_game_at
+          lg.last_game_at
         FROM matches m
         JOIN competitions c ON c.id = m.competition_id
         LEFT JOIN captains t1 ON t1.id = m.team1_captain_id
         LEFT JOIN players p1 ON p1.id = t1.player_id
         LEFT JOIN captains t2 ON t2.id = m.team2_captain_id
         LEFT JOIN players p2 ON p2.id = t2.player_id
+        LEFT JOIN LATERAL (
+          SELECT COALESCE(MAX(to_timestamp(g.start_time)), MAX(g.created_at)) AS last_game_at
+          FROM match_games g WHERE g.match_id = m.id
+        ) lg ON true
         WHERE ${where}
-          AND (m.team1_captain_id IS NOT NULL OR m.team2_captain_id IS NOT NULL)
         ORDER BY
-          CASE WHEN m.status = 'live' THEN 0 ELSE 1 END,
-          m.scheduled_at DESC NULLS LAST,
+          CASE m.status WHEN 'live' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END,
+          CASE WHEN m.status = 'pending' THEN m.scheduled_at END ASC NULLS LAST,
+          CASE WHEN m.status = 'completed' THEN COALESCE(lg.last_game_at, m.scheduled_at) END DESC NULLS LAST,
           m.id DESC
-        LIMIT 200
+        LIMIT $${limitParam} OFFSET $${offsetParam}
       `, params)
+
       // Mark matches the current user is in
       const playerId = getSessionPlayerId(getTokenFromReq(req))
       if (playerId) {
         const captainIds = [...new Set(matches.flatMap(m => [m.team1_captain_id, m.team2_captain_id].filter(Boolean)))]
         const myTeamCaptainIds = new Set()
         if (captainIds.length > 0) {
-          // Check if user is a captain of any team in these matches
-          const capRows = await query('SELECT id FROM captains WHERE id = ANY($1) AND player_id = $2', [captainIds, playerId])
+          const [capRows, draftRows, selfCapRows] = await Promise.all([
+            query('SELECT id FROM captains WHERE id = ANY($1) AND player_id = $2', [captainIds, playerId]),
+            query('SELECT DISTINCT drafted_by FROM competition_players WHERE player_id = $1 AND drafted_by = ANY($2) AND drafted_by IS NOT NULL', [playerId, captainIds]),
+            query(`SELECT c.id FROM captains c
+                   JOIN competition_players cp ON cp.competition_id = c.competition_id AND cp.player_id = c.player_id
+                   WHERE c.id = ANY($1) AND c.player_id = $2`,
+              [captainIds, playerId]),
+          ])
           for (const r of capRows) myTeamCaptainIds.add(r.id)
-          // Check if user is drafted onto a team (drafted_by set)
-          const draftRows = await query('SELECT DISTINCT drafted_by FROM competition_players WHERE player_id = $1 AND drafted_by = ANY($2) AND drafted_by IS NOT NULL', [playerId, captainIds])
           for (const r of draftRows) myTeamCaptainIds.add(r.drafted_by)
-          // Check if user is on a team as the captain's own player entry (drafted_by may be NULL for captains)
-          const selfCapRows = await query(
-            `SELECT c.id FROM captains c
-             JOIN competition_players cp ON cp.competition_id = c.competition_id AND cp.player_id = c.player_id
-             WHERE c.id = ANY($1) AND c.player_id = $2`,
-            [captainIds, playerId]
-          )
           for (const r of selfCapRows) myTeamCaptainIds.add(r.id)
         }
         for (const m of matches) {
           m.my_match = myTeamCaptainIds.has(m.team1_captain_id) || myTeamCaptainIds.has(m.team2_captain_id)
         }
       }
-      res.json(matches)
+
+      res.json({ rows: matches, total, limit, offset })
     } catch (err) {
       console.error('Error fetching all matches:', err)
       res.status(500).json({ error: 'Failed to fetch matches' })
