@@ -9,13 +9,29 @@ import { upload } from '../middleware/upload.js'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const router = Router()
 
+// In-memory cache for /api/site-settings. The payload is hit on every page
+// load but only changes when an admin edits site settings, so a short TTL
+// plus explicit invalidation on writes makes this effectively free.
+let siteSettingsCache = null
+let siteSettingsCacheExpiry = 0
+const SITE_SETTINGS_TTL_MS = 60_000
+
+function invalidateSiteSettings() {
+  siteSettingsCache = null
+  siteSettingsCacheExpiry = 0
+}
+
 router.get('/api/site-settings', async (req, res) => {
+  const now = Date.now()
+  if (siteSettingsCache && now < siteSettingsCacheExpiry) {
+    return res.json(siteSettingsCache)
+  }
   const rows = await query("SELECT key, value FROM settings WHERE key LIKE 'site_%'")
   const obj = {}
   for (const r of rows) obj[r.key] = r.value
   let sponsors = []
   try { sponsors = JSON.parse(obj.site_sponsors || '[]') } catch { sponsors = [] }
-  res.json({
+  const payload = {
     site_title: obj.site_title || '',
     site_subtitle: obj.site_subtitle || '',
     site_hero_paragraph: obj.site_hero_paragraph || '',
@@ -24,7 +40,10 @@ router.get('/api/site-settings', async (req, res) => {
     site_logo_url: obj.site_logo_url || '',
     site_hero_banner_url: obj.site_hero_banner_url || '',
     site_sponsors: sponsors,
-  })
+  }
+  siteSettingsCache = payload
+  siteSettingsCacheExpiry = now + SITE_SETTINGS_TTL_MS
+  res.json(payload)
 })
 
 router.put('/api/site-settings', async (req, res) => {
@@ -45,6 +64,7 @@ router.put('/api/site-settings', async (req, res) => {
       )
     }
   }
+  invalidateSiteSettings()
   res.json({ ok: true })
 })
 
@@ -57,6 +77,7 @@ router.post('/api/site-settings/logo', upload.single('logo'), async (req, res) =
     "INSERT INTO settings (key, value) VALUES ('site_logo_url', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
     [logoUrl]
   )
+  invalidateSiteSettings()
   res.json({ site_logo_url: logoUrl })
 })
 
@@ -70,6 +91,7 @@ router.post('/api/site-settings/hero-banner', upload.single('banner'), async (re
     "INSERT INTO settings (key, value) VALUES ('site_hero_banner_url', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
     [bannerUrl]
   )
+  invalidateSiteSettings()
   res.json({ site_hero_banner_url: bannerUrl })
 })
 
@@ -82,6 +104,7 @@ router.delete('/api/site-settings/hero-banner', async (req, res) => {
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
   }
   await execute("DELETE FROM settings WHERE key = 'site_hero_banner_url'")
+  invalidateSiteSettings()
   res.json({ ok: true })
 })
 
@@ -94,6 +117,7 @@ router.delete('/api/site-settings/logo', async (req, res) => {
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
   }
   await execute("DELETE FROM settings WHERE key = 'site_logo_url'")
+  invalidateSiteSettings()
   res.json({ ok: true })
 })
 
@@ -110,6 +134,7 @@ async function saveSponsors(arr) {
     "INSERT INTO settings (key, value) VALUES ('site_sponsors', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
     [JSON.stringify(arr || [])]
   )
+  invalidateSiteSettings()
 }
 
 router.post('/api/site-settings/sponsors', upload.single('logo'), async (req, res) => {
