@@ -1235,6 +1235,24 @@ function goBack() {
           <span v-if="winnerName(game)" class="text-xs text-muted-foreground ml-1">{{ winnerName(game) }}</span>
           <span v-else class="text-xs text-text-tertiary ml-1">—</span>
           <div class="ml-auto flex items-center gap-1">
+            <!-- + Add standin (per game) -->
+            <select
+              v-if="(canManageMatch || isCaptainInMatch) && game.id && !gameStarted(game.game_number)"
+              class="input-field text-[10px] py-0.5 px-1 w-auto"
+              :title="t('addStandin')"
+              @change="($event.target as HTMLSelectElement).value && (addingStandin = { team: 'team1', originalPlayerId: Number(($event.target as HTMLSelectElement).value.split(':')[0]), captainId: Number(($event.target as HTMLSelectElement).value.split(':')[1]), matchGameId: game.id }); ($event.target as HTMLSelectElement).value = ''"
+            >
+              <option value="">+ {{ t('addStandin') }}</option>
+              <template v-for="teamKey in (['team1', 'team2'] as const)" :key="teamKey">
+                <template v-if="canManageMatch || myCaptainTeamKey === teamKey">
+                  <option
+                    v-for="p in teamRosters[teamKey].filter((p: any) => !standins.find((s: any) => s.original_player_id === p.id && s.match_game_id === game.id))"
+                    :key="p.id"
+                    :value="`${p.id}:${teamKey === 'team1' ? match.team1_captain_id : match.team2_captain_id}`"
+                  >{{ p.name }}</option>
+                </template>
+              </template>
+            </select>
             <button
               v-if="showAdminPanel && canManageMatch && game.dotabuff_id"
               class="p-1 rounded-md text-text-tertiary hover:text-foreground hover:bg-accent transition-colors"
@@ -1283,8 +1301,12 @@ function goBack() {
           </div>
         </div>
 
-        <!-- Per-game standins (admin or captain) -->
-        <div v-if="(canManageMatch || isCaptainInMatch) && game.id" class="px-5 py-2 border-b border-border/30 bg-accent/10">
+        <!-- Per-game standins display + inline search (no add-trigger here; the
+             '+ Add standin' select lives in the game header above) -->
+        <div
+          v-if="(canManageMatch || isCaptainInMatch) && game.id && (standins.some((s: any) => s.match_game_id === game.id) || addingStandin?.matchGameId === game.id)"
+          class="px-5 py-2 border-b border-border/30 bg-accent/10"
+        >
           <div class="flex items-center gap-2 flex-wrap">
             <span class="text-[10px] font-medium text-muted-foreground">{{ t('gameStandins') }}:</span>
             <template v-for="gs in standins.filter((s: any) => s.match_game_id === game.id)" :key="gs.id">
@@ -1297,24 +1319,6 @@ function goBack() {
                 </button>
               </span>
             </template>
-            <template v-if="!gameStarted(game.game_number)">
-              <div class="flex items-center gap-1">
-                <select
-                  class="input-field text-[10px] py-0.5 px-1"
-                  @change="($event.target as HTMLSelectElement).value && (addingStandin = { team: 'team1', originalPlayerId: Number(($event.target as HTMLSelectElement).value.split(':')[0]), captainId: Number(($event.target as HTMLSelectElement).value.split(':')[1]), matchGameId: game.id }); ($event.target as HTMLSelectElement).value = ''"
-                >
-                  <option value="">+ {{ t('addStandin') }}</option>
-                  <template v-for="teamKey in (['team1', 'team2'] as const)" :key="teamKey">
-                    <template v-if="canManageMatch || myCaptainTeamKey === teamKey">
-                      <option v-for="p in teamRosters[teamKey].filter((p: any) => !standins.find((s: any) => s.original_player_id === p.id && s.match_game_id === game.id))" :key="p.id"
-                        :value="`${p.id}:${teamKey === 'team1' ? match.team1_captain_id : match.team2_captain_id}`"
-                      >{{ p.name }}</option>
-                    </template>
-                  </template>
-                </select>
-              </div>
-            </template>
-            <span v-else class="text-[10px] text-muted-foreground italic">{{ t('gameAlreadyStarted') }}</span>
           </div>
           <!-- Inline search for game-specific standin -->
           <div v-if="addingStandin?.matchGameId === game.id" class="flex flex-col gap-1.5 mt-2 pt-2 border-t border-border/30">
