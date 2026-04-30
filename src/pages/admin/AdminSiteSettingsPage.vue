@@ -14,6 +14,7 @@ const siteHeroParagraph = ref('')
 const discordUrl = ref('')
 const logoUrl = ref('')
 const heroBannerUrl = ref('')
+const socketsEnabled = ref(true)
 const saving = ref(false)
 const saved = ref(false)
 const uploadingLogo = ref(false)
@@ -39,6 +40,7 @@ onMounted(async () => {
   logoUrl.value = data.site_logo_url || ''
   heroBannerUrl.value = data.site_hero_banner_url || ''
   sponsors.value = data.site_sponsors || []
+  socketsEnabled.value = data.sockets_enabled !== false
 })
 
 function pickSponsorFile(e: Event) {
@@ -86,6 +88,7 @@ async function saveSettings() {
       site_subtitle: siteSubtitle.value,
       site_hero_paragraph: siteHeroParagraph.value,
       site_discord_url: discordUrl.value,
+      sockets_enabled: socketsEnabled.value,
     })
     saved.value = true
     setTimeout(() => { saved.value = false }, 3000)
@@ -165,6 +168,28 @@ async function removeBanner() {
           <input type="text" v-model="siteName" class="input-field w-full" :placeholder="t('appTitle')" />
           <p class="text-[11px] text-muted-foreground mt-1">{{ t('siteNameHint') }}</p>
         </div>
+      </div>
+    </div>
+
+    <!-- System / Realtime kill switch -->
+    <div class="card">
+      <div class="flex items-center gap-2 px-5 py-3 border-b border-border">
+        <Settings class="w-4 h-4 text-foreground" />
+        <span class="text-sm font-semibold text-foreground">{{ t('siteSystemSection') }}</span>
+      </div>
+      <div class="px-5 py-4">
+        <label class="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            class="mt-1"
+            :checked="socketsEnabled"
+            @change="socketsEnabled = ($event.target as HTMLInputElement).checked"
+          />
+          <span class="flex-1">
+            <span class="block text-sm font-medium text-foreground">{{ t('siteSocketsEnabled') }}</span>
+            <span class="block text-[11px] text-muted-foreground mt-0.5">{{ t('siteSocketsEnabledHint') }}</span>
+          </span>
+        </label>
       </div>
     </div>
 

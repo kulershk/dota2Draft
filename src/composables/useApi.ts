@@ -312,7 +312,7 @@ export function useApi() {
       })
       return { cached, fresh }
     },
-    updateSiteSettings: async (data: Record<string, string>) => {
+    updateSiteSettings: async (data: Record<string, string | boolean>) => {
       const r = await request('/api/site-settings', { method: 'PUT', body: JSON.stringify(data) })
       invalidateSiteSettingsCache()
       return r

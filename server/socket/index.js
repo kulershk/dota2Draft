@@ -17,7 +17,20 @@ import { logSocketEvent } from '../middleware/requestLogger.js'
 // MMR verification activity, etc. off non-admin sockets.
 const PRIVATE_PERMS = ['manage_bots', 'manage_mmr_verifications']
 
+// Global kill switch. When false, the connection-gate middleware below
+// rejects new socket handshakes; routes/settings.js also calls
+// io.disconnectSockets(true) on toggle to drop existing connections.
+// Hydrated from `site_sockets_enabled` at server boot.
+let socketsEnabled = true
+export function setSocketsEnabled(value) { socketsEnabled = !!value }
+export function getSocketsEnabled() { return socketsEnabled }
+
 export function initSocket(io) {
+  io.use((socket, next) => {
+    if (!socketsEnabled) return next(new Error('sockets_disabled'))
+    next()
+  })
+
   io.on('connection', (socket) => {
     console.log(`Client connected: ${socket.id}`)
 

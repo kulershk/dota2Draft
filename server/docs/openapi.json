@@ -1746,14 +1746,37 @@
       "get": {
         "tags": ["Settings"],
         "summary": "Get site settings",
-        "responses": { "200": { "description": "Site settings" } }
+        "description": "Returns the public site-settings payload. `sockets_enabled` is the realtime kill switch — when `false`, the server refuses new Socket.io handshakes and the in-flight ones have been disconnected.",
+        "responses": {
+          "200": {
+            "description": "Site settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "site_title": { "type": "string" },
+                    "site_subtitle": { "type": "string" },
+                    "site_hero_paragraph": { "type": "string" },
+                    "site_discord_url": { "type": "string" },
+                    "site_name": { "type": "string" },
+                    "site_logo_url": { "type": "string" },
+                    "site_hero_banner_url": { "type": "string" },
+                    "site_sponsors": { "type": "array", "items": { "type": "object" } },
+                    "sockets_enabled": { "type": "boolean", "description": "Realtime kill switch. Default true." }
+                  }
+                }
+              }
+            }
+          }
+        }
       },
       "put": {
         "tags": ["Settings"],
         "summary": "Update site settings",
         "security": [{ "bearerAuth": [] }],
-        "description": "Requires manage_site_settings permission",
-        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "site_title": { "type": "string" }, "site_subtitle": { "type": "string" }, "site_discord_url": { "type": "string" }, "site_name": { "type": "string" } } } } } },
+        "description": "Requires manage_site_settings permission. Setting `sockets_enabled: false` immediately disconnects all currently-connected Socket.io clients and refuses new handshakes until re-enabled. The flag is persisted, so it survives server restarts.",
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "site_title": { "type": "string" }, "site_subtitle": { "type": "string" }, "site_hero_paragraph": { "type": "string" }, "site_discord_url": { "type": "string" }, "site_name": { "type": "string" }, "sockets_enabled": { "type": "boolean" } } } } } },
         "responses": { "200": { "description": "Updated" } }
       }
     },

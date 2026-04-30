@@ -43,7 +43,7 @@ import { fetchOpenDotaMatch, saveMatchGameStats, requestOpenDotaParse } from './
 import { queryOne } from './db.js'
 
 // Socket
-import { initSocket } from './socket/index.js'
+import { initSocket, setSocketsEnabled } from './socket/index.js'
 import { setLivePollerIo, resumeActiveMatches as resumeLivePolling } from './services/liveMatchPoller.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -183,6 +183,12 @@ server.on('upgrade', (req, socket, head) => {
 
 initDb().then(async () => {
   if (!REQUEST_LOG_DISABLED) startRequestLoggerWorkers()
+  // Restore the realtime kill switch from DB so a previously-disabled
+  // state survives restarts.
+  try {
+    const row = await queryOne("SELECT value FROM settings WHERE key = 'site_sockets_enabled'")
+    setSocketsEnabled(row?.value !== 'false')
+  } catch {}
   await botPool.init(io, botWss)
   // Schema is now in place — safe to resume live-stat polling for any matches
   // still flagged 'live' in the DB.

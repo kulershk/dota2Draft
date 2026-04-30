@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url'
 import { query, queryOne, execute } from '../db.js'
 import { requirePermission } from '../middleware/permissions.js'
 import { upload } from '../middleware/upload.js'
+import { setSocketsEnabled, getSocketsEnabled } from '../socket/index.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const router = Router()
@@ -40,6 +41,9 @@ router.get('/api/site-settings', async (req, res) => {
     site_logo_url: obj.site_logo_url || '',
     site_hero_banner_url: obj.site_hero_banner_url || '',
     site_sponsors: sponsors,
+    // Boolean view of the persisted 'site_sockets_enabled' string. Default
+    // is true if the row has never been written.
+    sockets_enabled: obj.site_sockets_enabled !== 'false',
   }
   siteSettingsCache = payload
   siteSettingsCacheExpiry = now + SITE_SETTINGS_TTL_MS
@@ -49,7 +53,7 @@ router.get('/api/site-settings', async (req, res) => {
 router.put('/api/site-settings', async (req, res) => {
   const admin = await requirePermission(req, res, 'manage_site_settings')
   if (!admin) return
-  const { site_title, site_subtitle, site_hero_paragraph, site_discord_url, site_name } = req.body
+  const { site_title, site_subtitle, site_hero_paragraph, site_discord_url, site_name, sockets_enabled } = req.body
   for (const [key, value] of [
     ['site_title', site_title],
     ['site_subtitle', site_subtitle],
@@ -62,6 +66,23 @@ router.put('/api/site-settings', async (req, res) => {
         "INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2",
         [key, value || '']
       )
+    }
+  }
+  // Real-time kill switch. Persist as a string ('true'/'false'), update the
+  // in-memory flag the connection-gate middleware reads, and on toggle to
+  // false drop every currently-connected socket so the change takes effect
+  // immediately rather than only blocking new handshakes.
+  if (sockets_enabled !== undefined) {
+    const next = !!sockets_enabled
+    await execute(
+      "INSERT INTO settings (key, value) VALUES ('site_sockets_enabled', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
+      [next ? 'true' : 'false']
+    )
+    const wasEnabled = getSocketsEnabled()
+    setSocketsEnabled(next)
+    if (wasEnabled && !next) {
+      const io = req.app.get('io')
+      if (io) io.disconnectSockets(true)
     }
   }
   invalidateSiteSettings()
