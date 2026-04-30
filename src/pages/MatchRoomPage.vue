@@ -775,13 +775,6 @@ function goBack() {
         </div>
       </div>
 
-      <!-- Best-of pill -->
-      <div v-if="bestOf" class="mb-4">
-        <span class="px-2 py-0.5 rounded-md bg-muted/50 border border-border text-[10px] font-mono font-bold uppercase tracking-wider text-muted-foreground">
-          Bo{{ bestOf }}
-        </span>
-      </div>
-
       <!-- Team Rosters -->
       <div v-if="teamRosters.team1.length || teamRosters.team2.length" class="grid grid-cols-2 gap-4 mb-6">
         <template v-for="(teamKey, idx) in ['team1', 'team2'] as const" :key="teamKey">
