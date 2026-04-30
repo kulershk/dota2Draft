@@ -107,10 +107,10 @@ const rightLabelText = computed(() => props.rightLabel || t('queueDire').toUpper
       <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-6">
         <!-- Left -->
         <div class="flex items-center gap-3 min-w-0">
-          <div class="w-10 h-10 rounded-lg shrink-0 overflow-hidden flex items-center justify-center"
+          <div class="w-20 h-20 rounded-lg shrink-0 overflow-hidden flex items-center justify-center"
                :class="left.imageUrl ? 'border border-green-500/30' : 'bg-green-500/15 border border-green-500/30'">
             <img v-if="left.imageUrl" :src="left.imageUrl" class="w-full h-full object-cover" />
-            <Shield v-else class="w-5 h-5 text-green-500" />
+            <Shield v-else class="w-10 h-10 text-green-500" />
           </div>
           <div class="min-w-0">
             <router-link :to="sideHref(left)" class="font-bold truncate block hover:text-primary transition-colors">
@@ -168,10 +168,10 @@ const rightLabelText = computed(() => props.rightLabel || t('queueDire').toUpper
               <span class="text-red-400 font-bold">{{ rightLabelText }}</span>
             </div>
           </div>
-          <div class="w-10 h-10 rounded-lg shrink-0 overflow-hidden flex items-center justify-center"
+          <div class="w-20 h-20 rounded-lg shrink-0 overflow-hidden flex items-center justify-center"
                :class="right.imageUrl ? 'border border-red-500/30' : 'bg-red-500/15 border border-red-500/30'">
             <img v-if="right.imageUrl" :src="right.imageUrl" class="w-full h-full object-cover" />
-            <Shield v-else class="w-5 h-5 text-red-500" />
+            <Shield v-else class="w-10 h-10 text-red-500" />
           </div>
         </div>
       </div>
