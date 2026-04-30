@@ -717,6 +717,7 @@ function goBack() {
           :status="match.status"
           :status-label="match.status === 'completed' ? t('matchCompleted') : match.status === 'live' ? t('matchLive') : t('matchPending')"
           :tournament="store.currentCompetition.value ? { name: store.currentCompetition.value.name, to: { name: 'comp-info', params: { compId: store.currentCompetition.value.id } } } : null"
+          :best-of="bestOf"
           :game-count="bestOf"
           :left="{
             id: match.team1_captain_id || 0,

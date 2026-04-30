@@ -20,6 +20,7 @@ interface Props {
   statusLabel: string
   season?: { name: string; slug: string } | null
   tournament?: { name: string; to?: any } | null
+  bestOf?: number | null
   playerCount?: number | null
   gameCount?: number | null
   left: SidePerson
@@ -74,16 +75,6 @@ const rightLabelText = computed(() => props.rightLabel || t('queueDire').toUpper
 
     <!-- Hero card -->
     <div class="card p-7 flex flex-col gap-6">
-      <!-- Tournament name (above the title row) -->
-      <router-link
-        v-if="tournament && tournament.to"
-        :to="tournament.to"
-        class="-mb-3 text-lg font-bold text-foreground hover:text-primary transition-colors"
-      >
-        {{ tournament.name }}
-      </router-link>
-      <span v-else-if="tournament" class="-mb-3 text-lg font-bold text-foreground">{{ tournament.name }}</span>
-
       <!-- Meta row -->
       <div class="flex items-center justify-between flex-wrap gap-3">
         <div class="flex items-center gap-3">
@@ -138,11 +129,24 @@ const rightLabelText = computed(() => props.rightLabel || t('queueDire').toUpper
           </div>
         </div>
 
-        <!-- Score -->
-        <div class="flex items-center gap-4 px-5 py-3 rounded-2xl bg-[#0A0F1C] border border-border/40">
-          <span class="text-4xl font-bold tabular-nums" :class="leftWon ? 'text-green-400' : 'text-foreground/70'">{{ scoreLeft }}</span>
-          <span class="text-muted-foreground/40 text-2xl font-bold">·</span>
-          <span class="text-4xl font-bold tabular-nums" :class="rightWon ? 'text-red-400' : 'text-foreground/70'">{{ scoreRight }}</span>
+        <!-- Score column: tournament name + Bo{N} stacked above the score box -->
+        <div class="flex flex-col items-center gap-1.5">
+          <router-link
+            v-if="tournament && tournament.to"
+            :to="tournament.to"
+            class="text-sm font-bold text-foreground hover:text-primary transition-colors text-center"
+          >
+            {{ tournament.name }}
+          </router-link>
+          <span v-else-if="tournament" class="text-sm font-bold text-foreground text-center">{{ tournament.name }}</span>
+          <span v-if="bestOf" class="text-[10px] font-mono font-bold tracking-widest text-muted-foreground">
+            BO{{ bestOf }}
+          </span>
+          <div class="flex items-center gap-4 px-5 py-3 rounded-2xl bg-[#0A0F1C] border border-border/40">
+            <span class="text-4xl font-bold tabular-nums" :class="leftWon ? 'text-green-400' : 'text-foreground/70'">{{ scoreLeft }}</span>
+            <span class="text-muted-foreground/40 text-2xl font-bold">·</span>
+            <span class="text-4xl font-bold tabular-nums" :class="rightWon ? 'text-red-400' : 'text-foreground/70'">{{ scoreRight }}</span>
+          </div>
         </div>
 
         <!-- Right -->
