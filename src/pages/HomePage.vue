@@ -65,10 +65,16 @@ const news = ref<NewsCard[]>([])
 const topPlayers = ref<{ players: TopPlayer[]; season: { id: number; name: string; slug: string } | null }>({ players: [], season: null })
 const heroPickRate = ref<{ days: number; heroes: { hero_id: number; picks: number; pick_rate: string }[] }>({ days: 7, heroes: [] })
 const upcomingNext = ref<any | null>(null)
-const sponsors = ref<Sponsor[]>([])
-const heroTitle = ref('Latvian Dota 2 League')
-const heroSubtitle = ref('')
-const heroParagraph = ref('')
+// Hydrate from the SWR site-settings cache synchronously so the hero text
+// doesn't flash the i18n fallback before loadAll() resolves.
+const _cachedSettings = (() => {
+  try { return JSON.parse(localStorage.getItem('draft_site_settings_v1') || 'null') || {} }
+  catch { return {} }
+})()
+const sponsors = ref<Sponsor[]>(_cachedSettings.site_sponsors || [])
+const heroTitle = ref(_cachedSettings.site_title || 'Latvian Dota 2 League')
+const heroSubtitle = ref(_cachedSettings.site_subtitle || '')
+const heroParagraph = ref(_cachedSettings.site_hero_paragraph || '')
 
 // Daily check-in
 const daily = ref<{ claimed_today: boolean; streak: number; next_xp: number } | null>(null)
