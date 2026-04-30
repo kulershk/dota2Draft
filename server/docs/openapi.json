@@ -284,8 +284,8 @@
     "/api/health": {
       "get": {
         "tags": ["System"],
-        "summary": "Health check",
-        "description": "Returns 200 with `status: ok` when the process is up and the database is reachable (verified via `SELECT 1`). Returns 503 with `status: error` if the DB query fails. Suitable for container orchestrators (Docker/Traefik) and external uptime monitors.",
+        "summary": "Health check (readiness)",
+        "description": "Returns 200 with `status: ok` when the process is up and the database is reachable (verified via `SELECT 1`). Returns 503 with `status: error` if the DB query fails. Suitable for readiness probes and external uptime monitors. For pure liveness (process-up only, no DB), use `/api/live` instead.",
         "responses": {
           "200": {
             "description": "Service is healthy",
@@ -318,6 +318,31 @@
                     "error": { "type": "string" }
                   },
                   "required": ["status", "version", "uptime", "db"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/live": {
+      "get": {
+        "tags": ["System"],
+        "summary": "Liveness probe",
+        "description": "Returns 200 with `status: ok` whenever the process is responsive. Does NOT touch the database, so a transient DB outage will not flip this endpoint to unhealthy. Use this for container liveness probes; use `/api/health` for readiness/uptime monitoring.",
+        "responses": {
+          "200": {
+            "description": "Process is up",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "enum": ["ok"] },
+                    "version": { "type": "string" },
+                    "uptime": { "type": "number", "description": "Process uptime in seconds" }
+                  },
+                  "required": ["status", "version", "uptime"]
                 }
               }
             }

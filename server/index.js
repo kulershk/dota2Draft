@@ -99,6 +99,12 @@ app.get('/api/health', async (req, res) => {
   }
 })
 
+// Liveness probe — only confirms the process is up. Skips the DB so a
+// transient DB outage doesn't trigger a container restart.
+app.get('/api/live', (req, res) => {
+  res.json({ status: 'ok', version: APP_VERSION, uptime: process.uptime() })
+})
+
 // API Docs — disabled in production. Set DOCS_ENABLED=true to override.
 const docsEnabled = process.env.DOCS_ENABLED === 'true' || process.env.NODE_ENV !== 'production'
 if (docsEnabled) {
