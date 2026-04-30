@@ -672,7 +672,7 @@ export default {
   allGames: 'visas spēles',
   gameStandins: 'Spēles aizvietotāji',
   gameAlreadyStarted: 'Spēle jau sākusies',
-  addStandin: 'aizvietotājs',
+  addStandin: 'Pievienot aizvietotāju',
   picksBans: 'Piki un bani',
   heroDamage: 'Varoņa bojājumi',
   towerDamage: 'Torņa bojājumi',

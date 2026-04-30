@@ -865,7 +865,7 @@ function goBack() {
                       v-if="showAdminPanel || myCaptainTeamKey === teamKey"
                       class="ml-auto text-[10px] text-muted-foreground hover:text-primary transition-colors px-1.5 py-0.5 rounded hover:bg-accent shrink-0"
                       @click="addingStandin = { team: teamKey, originalPlayerId: p.id, captainId: teamKey === 'team1' ? match.team1_captain_id : match.team2_captain_id }"
-                    >standin</button>
+                    >{{ t('addStandin') }}</button>
                   </template>
                 </div>
                 <!-- MMR column -->

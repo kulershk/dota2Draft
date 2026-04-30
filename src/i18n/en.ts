@@ -673,7 +673,7 @@ export default {
   allGames: 'all games',
   gameStandins: 'Game standins',
   gameAlreadyStarted: 'Game already started',
-  addStandin: 'standin',
+  addStandin: 'Add standin',
   picksBans: 'Picks & Bans',
   draft: 'Draft',
   heroDamage: 'Hero Damage',

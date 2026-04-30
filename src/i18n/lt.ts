@@ -672,7 +672,7 @@ export default {
   allGames: 'visi žaidimai',
   gameStandins: 'Žaidimo pakaitiniai',
   gameAlreadyStarted: 'Žaidimas jau prasidėjo',
-  addStandin: 'pakaitinis',
+  addStandin: 'Pridėti pakaitinį',
   picksBans: 'Pikai ir banai',
   heroDamage: 'Herojaus žala',
   towerDamage: 'Bokšto žala',
