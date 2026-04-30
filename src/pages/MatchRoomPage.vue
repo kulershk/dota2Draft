@@ -740,12 +740,12 @@ function goBack() {
           <template #headerActions>
             <button
               v-if="canManageMatch"
-              class="btn-ghost text-xs flex items-center gap-1.5"
-              :class="showAdminPanel ? 'text-primary' : 'text-muted-foreground'"
+              class="btn-ghost p-1.5"
+              :class="showAdminPanel ? 'text-primary' : 'text-muted-foreground hover:text-foreground'"
+              :title="showAdminPanel ? t('hideAdminControls') || 'Hide admin controls' : t('showAdminControls') || 'Edit match settings'"
               @click="showAdminPanel = !showAdminPanel"
             >
               <Pencil class="w-3.5 h-3.5" />
-              {{ showAdminPanel ? t('hideAdminControls') || 'Hide admin controls' : t('showAdminControls') || 'Edit match settings' }}
             </button>
           </template>
         </MatchHeaderCard>
