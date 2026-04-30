@@ -129,24 +129,24 @@ const rightLabelText = computed(() => props.rightLabel || t('queueDire').toUpper
           </div>
         </div>
 
-        <!-- Score column: tournament name + Bo{N} stacked above the score box -->
+        <!-- Score column: tournament name above, Bo{N} below the score box -->
         <div class="flex flex-col items-center gap-1.5">
           <router-link
             v-if="tournament && tournament.to"
             :to="tournament.to"
-            class="text-sm font-bold text-foreground hover:text-primary transition-colors text-center"
+            class="text-xl font-bold text-foreground hover:text-primary transition-colors text-center"
           >
             {{ tournament.name }}
           </router-link>
-          <span v-else-if="tournament" class="text-sm font-bold text-foreground text-center">{{ tournament.name }}</span>
-          <span v-if="bestOf" class="text-[10px] font-mono font-bold tracking-widest text-muted-foreground">
-            BO{{ bestOf }}
-          </span>
+          <span v-else-if="tournament" class="text-xl font-bold text-foreground text-center">{{ tournament.name }}</span>
           <div class="flex items-center gap-4 px-5 py-3 rounded-2xl bg-[#0A0F1C] border border-border/40">
             <span class="text-4xl font-bold tabular-nums" :class="leftWon ? 'text-green-400' : 'text-foreground/70'">{{ scoreLeft }}</span>
             <span class="text-muted-foreground/40 text-2xl font-bold">·</span>
             <span class="text-4xl font-bold tabular-nums" :class="rightWon ? 'text-red-400' : 'text-foreground/70'">{{ scoreRight }}</span>
           </div>
+          <span v-if="bestOf" class="text-[10px] font-mono font-bold tracking-widest text-muted-foreground">
+            BO{{ bestOf }}
+          </span>
         </div>
 
         <!-- Right -->
