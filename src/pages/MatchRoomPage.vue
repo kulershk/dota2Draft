@@ -850,7 +850,7 @@ function goBack() {
                     />
                     <span class="text-[9px] text-muted-foreground shrink-0">({{ t('allGames') }})</span>
                     <button
-                      v-if="showAdminPanel || myCaptainTeamKey === teamKey"
+                      v-if="canManageMatch || myCaptainTeamKey === teamKey"
                       class="ml-auto text-destructive hover:text-destructive/80 shrink-0"
                       @click="removeStandin(standins.find((s: any) => s.original_player_id === p.id && !s.match_game_id)!.id)"
                     >
@@ -862,7 +862,7 @@ function goBack() {
                     <span v-if="p.is_captain" class="text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0"
                           :class="teamKey === 'team1' ? 'text-green-400 bg-green-500/10' : 'text-red-400 bg-red-500/10'">CPT</span>
                     <button
-                      v-if="showAdminPanel || myCaptainTeamKey === teamKey"
+                      v-if="canManageMatch || myCaptainTeamKey === teamKey"
                       class="ml-auto text-[10px] text-muted-foreground hover:text-primary transition-colors px-1.5 py-0.5 rounded hover:bg-accent shrink-0"
                       @click="addingStandin = { team: teamKey, originalPlayerId: p.id, captainId: teamKey === 'team1' ? match.team1_captain_id : match.team2_captain_id }"
                     >{{ t('addStandin') }}</button>
@@ -877,14 +877,14 @@ function goBack() {
                   <span class="line-through opacity-50">{{ p.name }}</span>
                   <span class="text-muted-foreground">→</span>
                   <span>{{ gs.standin_display_name }}</span>
-                  <button v-if="(showAdminPanel || myCaptainTeamKey === teamKey) && !gameStartedById(gs.match_game_id)" class="text-destructive hover:text-destructive/80" @click="removeStandin(gs.id)">
+                  <button v-if="(canManageMatch || myCaptainTeamKey === teamKey) && !gameStartedById(gs.match_game_id)" class="text-destructive hover:text-destructive/80" @click="removeStandin(gs.id)">
                     <X class="w-3 h-3" />
                   </button>
                 </div>
               </div>
             </div>
             <!-- Standin search (inline when selecting for this team) -->
-            <div v-if="(showAdminPanel || myCaptainTeamKey === teamKey) && addingStandin?.team === teamKey"
+            <div v-if="(canManageMatch || myCaptainTeamKey === teamKey) && addingStandin?.team === teamKey"
                  class="flex flex-col gap-1.5 px-5 py-3 border-t border-border/30">
               <div class="flex items-center gap-2 text-[10px] text-muted-foreground">
                 <span>Replacing <strong class="text-foreground">{{ teamRosters[teamKey].find((p: any) => p.id === addingStandin!.originalPlayerId)?.name }}</strong></span>
@@ -1284,7 +1284,7 @@ function goBack() {
         </div>
 
         <!-- Per-game standins (admin or captain) -->
-        <div v-if="(showAdminPanel || isCaptainInMatch) && game.id" class="px-5 py-2 border-b border-border/30 bg-accent/10">
+        <div v-if="(canManageMatch || isCaptainInMatch) && game.id" class="px-5 py-2 border-b border-border/30 bg-accent/10">
           <div class="flex items-center gap-2 flex-wrap">
             <span class="text-[10px] font-medium text-muted-foreground">{{ t('gameStandins') }}:</span>
             <template v-for="gs in standins.filter((s: any) => s.match_game_id === game.id)" :key="gs.id">
@@ -1292,7 +1292,7 @@ function goBack() {
                 <span class="line-through opacity-50">{{ gs.original_display_name }}</span>
                 <span class="text-muted-foreground">→</span>
                 <span>{{ gs.standin_display_name }}</span>
-                <button v-if="(showAdminPanel || gs.captain_id === myCaptainId) && !gameStartedById(gs.match_game_id)" class="text-destructive hover:text-destructive/80" @click="removeStandin(gs.id)">
+                <button v-if="(canManageMatch || gs.captain_id === myCaptainId) && !gameStartedById(gs.match_game_id)" class="text-destructive hover:text-destructive/80" @click="removeStandin(gs.id)">
                   <X class="w-3 h-3" />
                 </button>
               </span>
@@ -1305,7 +1305,7 @@ function goBack() {
                 >
                   <option value="">+ {{ t('addStandin') }}</option>
                   <template v-for="teamKey in (['team1', 'team2'] as const)" :key="teamKey">
-                    <template v-if="showAdminPanel || myCaptainTeamKey === teamKey">
+                    <template v-if="canManageMatch || myCaptainTeamKey === teamKey">
                       <option v-for="p in teamRosters[teamKey].filter((p: any) => !standins.find((s: any) => s.original_player_id === p.id && s.match_game_id === game.id))" :key="p.id"
                         :value="`${p.id}:${teamKey === 'team1' ? match.team1_captain_id : match.team2_captain_id}`"
                       >{{ p.name }}</option>
