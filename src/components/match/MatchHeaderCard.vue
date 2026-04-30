@@ -99,6 +99,7 @@ const rightLabelText = computed(() => props.rightLabel || t('queueDire').toUpper
           <span v-if="gameCount" class="flex items-center gap-1.5">
             <Clock class="w-3.5 h-3.5" /> {{ gameCount }}{{ gameCount === 1 ? ' game' : ' games' }}
           </span>
+          <slot name="headerActions" />
         </div>
       </div>
 

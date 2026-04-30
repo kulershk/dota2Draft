@@ -718,7 +718,6 @@ function goBack() {
           :status-label="match.status === 'completed' ? t('matchCompleted') : match.status === 'live' ? t('matchLive') : t('matchPending')"
           :tournament="store.currentCompetition.value ? { name: store.currentCompetition.value.name, to: { name: 'comp-info', params: { compId: store.currentCompetition.value.id } } } : null"
           :best-of="bestOf"
-          :game-count="bestOf"
           :left="{
             id: match.team1_captain_id || 0,
             name: match.team1_name || t('tbd'),
@@ -737,18 +736,19 @@ function goBack() {
           :right-won="!!match.winner_captain_id && match.winner_captain_id === match.team2_captain_id"
           :left-label="match.team1_name || t('tbd')"
           :right-label="match.team2_name || t('tbd')"
-        />
-        <!-- Edit toggle for admins -->
-        <div v-if="canManageMatch" class="flex justify-end mt-2">
-          <button
-            class="btn-ghost text-xs flex items-center gap-1.5"
-            :class="showAdminPanel ? 'text-primary' : 'text-muted-foreground'"
-            @click="showAdminPanel = !showAdminPanel"
-          >
-            <Pencil class="w-3.5 h-3.5" />
-            {{ showAdminPanel ? t('hideAdminControls') || 'Hide admin controls' : t('showAdminControls') || 'Edit match settings' }}
-          </button>
-        </div>
+        >
+          <template #headerActions>
+            <button
+              v-if="canManageMatch"
+              class="btn-ghost text-xs flex items-center gap-1.5"
+              :class="showAdminPanel ? 'text-primary' : 'text-muted-foreground'"
+              @click="showAdminPanel = !showAdminPanel"
+            >
+              <Pencil class="w-3.5 h-3.5" />
+              {{ showAdminPanel ? t('hideAdminControls') || 'Hide admin controls' : t('showAdminControls') || 'Edit match settings' }}
+            </button>
+          </template>
+        </MatchHeaderCard>
         <!-- Admin controls panel -->
         <div v-if="showAdminPanel && canManageMatch" class="card mt-3 px-4 py-3 flex items-center gap-3 flex-wrap">
           <div class="flex items-center gap-1.5">
