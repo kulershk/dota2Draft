@@ -13,6 +13,8 @@ const SKIP_PATH_PREFIXES = [
   '/api/docs',
   '/api/admin/stats',
   '/api/version',
+  '/api/health',
+  '/api/live',
   '/uploads',
   '/assets',
 ]
