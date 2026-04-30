@@ -680,17 +680,6 @@ async function removeStandin(id: number) {
   await fetchStandins()
 }
 
-// Roster-row scope picker for standin: 'all' = match-wide, 'g:<id>' = per-game.
-// Sets addingStandin so the inline search panel below opens for the player.
-function pickStandinScope(p: any, teamKey: 'team1' | 'team2', sel: HTMLSelectElement) {
-  const v = sel.value
-  if (!v || !match.value) return
-  const captainId = teamKey === 'team1' ? match.value.team1_captain_id : match.value.team2_captain_id
-  const base: any = { team: teamKey, originalPlayerId: p.id, captainId }
-  if (v.startsWith('g:')) base.matchGameId = Number(v.slice(2))
-  addingStandin.value = base
-}
-
 function goBack() {
   const cId = compId.value
   if (cId) {
@@ -872,22 +861,11 @@ function goBack() {
                     <UserName :id="p.id" :name="p.name" :avatar-url="p.avatar_url" size="md" class="min-w-0" />
                     <span v-if="p.is_captain" class="text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0"
                           :class="teamKey === 'team1' ? 'text-green-400 bg-green-500/10' : 'text-red-400 bg-red-500/10'">CPT</span>
-                    <select
+                    <button
                       v-if="canManageMatch || myCaptainTeamKey === teamKey"
-                      class="ml-auto input-field text-[10px] py-0.5 px-1 shrink-0 w-auto"
-                      @change="pickStandinScope(p, teamKey, ($event.target as HTMLSelectElement)); ($event.target as HTMLSelectElement).value = ''"
-                    >
-                      <option value="">+ {{ t('addStandin') }}</option>
-                      <option
-                        v-if="!standins.find((s: any) => s.original_player_id === p.id && !s.match_game_id)"
-                        value="all"
-                      >{{ t('allGames') }}</option>
-                      <option
-                        v-for="g in allGames.filter((g: any) => g.id && !standins.find((s: any) => s.original_player_id === p.id && s.match_game_id === g.id) && !gameStartedById(g.id))"
-                        :key="g.id"
-                        :value="`g:${g.id}`"
-                      >G{{ g.game_number }}</option>
-                    </select>
+                      class="ml-auto text-[10px] text-muted-foreground hover:text-primary transition-colors px-1.5 py-0.5 rounded hover:bg-accent shrink-0"
+                      @click="addingStandin = { team: teamKey, originalPlayerId: p.id, captainId: teamKey === 'team1' ? match.team1_captain_id : match.team2_captain_id }"
+                    >{{ t('addStandin') }}</button>
                   </template>
                 </div>
                 <!-- MMR column -->
@@ -909,15 +887,7 @@ function goBack() {
             <div v-if="(canManageMatch || myCaptainTeamKey === teamKey) && addingStandin?.team === teamKey"
                  class="flex flex-col gap-1.5 px-5 py-3 border-t border-border/30">
               <div class="flex items-center gap-2 text-[10px] text-muted-foreground">
-                <span>
-                  Replacing <strong class="text-foreground">{{ teamRosters[teamKey].find((p: any) => p.id === addingStandin!.originalPlayerId)?.name }}</strong>
-                  <template v-if="addingStandin!.matchGameId">
-                    in <strong class="text-foreground">G{{ allGames.find((g: any) => g.id === addingStandin!.matchGameId)?.game_number }}</strong>
-                  </template>
-                  <template v-else>
-                    ({{ t('allGames') }})
-                  </template>
-                </span>
+                <span>Replacing <strong class="text-foreground">{{ teamRosters[teamKey].find((p: any) => p.id === addingStandin!.originalPlayerId)?.name }}</strong></span>
                 <button class="text-destructive hover:underline" @click="addingStandin = null; standinSearch = ''; standinResults = []">{{ t('cancel') }}</button>
               </div>
               <input
