@@ -512,6 +512,8 @@ export function useApi() {
       request(`/api/admin/matches/${matchId}/live-server-id`, { method: 'POST', body: JSON.stringify({ server_steam_id }) }),
     restartMatchLive: (matchId: number) =>
       request(`/api/admin/matches/${matchId}/live-restart`, { method: 'POST' }),
+    debugMatchLive: (matchId: number) =>
+      request(`/api/admin/matches/${matchId}/live-debug`),
     getQueueMatchGameStats: (queueMatchId: number, gameNumber: number) =>
       request(`/api/queue/match/${queueMatchId}/games/${gameNumber}/stats`),
 

@@ -34,6 +34,28 @@ export function getLiveSnapshot(matchId) {
   return active.get(matchId)?.snapshot || null
 }
 
+// Diagnostic: full state of the in-memory poller context for one match.
+// Returns null when not currently polling.
+export function getPollerDebug(matchId) {
+  const ctx = active.get(matchId)
+  if (!ctx) return null
+  return {
+    matchId: ctx.matchId,
+    queueMatchId: ctx.queueMatchId,
+    serverSteamId: ctx.serverSteamId,
+    bootstrapAttempts: ctx.attempts,
+    bootstrapMax: MAX_BOOTSTRAP_ATTEMPTS,
+    hasSnapshot: !!ctx.snapshot,
+    lastTickAgeMs: ctx.snapshot ? (Date.now() - ctx.snapshot.updated_at) : null,
+    knownSteamIds: ctx.steamIds.length,
+  }
+}
+
+// Diagnostic: list every match currently being polled.
+export function getActivePollerIds() {
+  return [...active.keys()]
+}
+
 // Push a freshly-discovered server_steam_id into the running poller context
 // so the next tick can call GetRealtimeStats directly instead of staying in
 // the bootstrap loop. Called from botPool when _onMatchIdCaptured or

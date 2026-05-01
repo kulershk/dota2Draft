@@ -6,7 +6,7 @@ import { getCompetition, getCaptains, parseCompSettings } from '../helpers/compe
 import { awardXp, getTeamPlayerIds, computeStagePlacements, awardStagePlacements } from '../helpers/xp.js'
 import { advanceWinner, repairBracketAdvancement, generateEliminationBracket, generateGroupMatches, generateDoubleEliminationBracket, customBracketWouldCycle, validateCustomBracketStage } from '../helpers/tournament.js'
 import { fetchAndSaveGameStats } from '../helpers/opendota.js'
-import { getLiveSnapshot, startPolling as startLivePolling, stopPolling as stopLivePolling, updateServerSteamId as updateLivePollerServerSteamId } from '../services/liveMatchPoller.js'
+import { getLiveSnapshot, startPolling as startLivePolling, stopPolling as stopLivePolling, updateServerSteamId as updateLivePollerServerSteamId, getPollerDebug, getActivePollerIds } from '../services/liveMatchPoller.js'
 
 export default function createTournamentRouter(io) {
   const router = Router()
@@ -75,6 +75,65 @@ export default function createTournamentRouter(io) {
     } catch (e) {
       res.status(500).json({ error: e.message })
     }
+  })
+
+  // ── Admin: diagnose live poller state for a match ──
+  // Returns a snapshot of the in-memory poller context PLUS the persisted
+  // match_lobbies.server_steam_id so we can see why polling isn't producing
+  // data after a deploy or for a stuck match. Permissions: any caller with
+  // a permission that grants access to this match's admin actions.
+  router.get('/api/admin/matches/:matchId/live-debug', async (req, res) => {
+    const matchId = Number(req.params.matchId)
+    if (!matchId) return res.status(400).json({ error: 'Invalid matchId' })
+
+    const player = await getAuthPlayer(req)
+    if (!player) return res.status(401).json({ error: 'Not authenticated' })
+
+    const match = await queryOne('SELECT id, competition_id FROM matches WHERE id = $1', [matchId])
+    if (!match) return res.status(404).json({ error: 'Match not found' })
+
+    let allowed = !!player.is_admin
+    if (!allowed) {
+      if (match.competition_id) {
+        if (await _checkPerm(player, 'manage_competitions')) allowed = true
+        else if (await _checkPerm(player, 'manage_own_competitions')) {
+          const comp = await queryOne('SELECT created_by FROM competitions WHERE id = $1', [match.competition_id])
+          if (comp && comp.created_by === player.id) allowed = true
+        }
+      } else {
+        if (await _checkPerm(player, 'manage_queue_pools')) allowed = true
+        else if (await _checkPerm(player, 'manage_own_queue_pools')) {
+          const qm = await queryOne('SELECT pool_id FROM queue_matches WHERE match_id = $1', [matchId])
+          if (qm) {
+            const pool = await queryOne('SELECT created_by FROM queue_pools WHERE id = $1', [qm.pool_id])
+            if (pool && pool.created_by === player.id) allowed = true
+          }
+        }
+      }
+    }
+    if (!allowed) return res.status(403).json({ error: 'Permission denied' })
+
+    const lobby = await queryOne(
+      `SELECT id, status, dota_match_id, server_steam_id, created_at, updated_at
+         FROM match_lobbies
+        WHERE match_id = $1
+        ORDER BY id DESC
+        LIMIT 1`,
+      [matchId]
+    )
+    const game = await queryOne(
+      'SELECT winner_captain_id FROM match_games WHERE match_id = $1 ORDER BY game_number DESC LIMIT 1',
+      [matchId]
+    )
+
+    res.json({
+      matchId,
+      hasSteamApiKey: !!process.env.STEAM_API_KEY,
+      poller: getPollerDebug(matchId),
+      activePollers: getActivePollerIds(),
+      latestLobby: lobby || null,
+      latestGameWinnerSet: !!game?.winner_captain_id,
+    })
   })
 
   // ── Admin: stop and restart polling for a match (clears bootstrap state) ──
