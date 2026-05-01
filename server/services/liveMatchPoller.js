@@ -29,6 +29,24 @@ export function getLiveSnapshot(matchId) {
   return active.get(matchId)?.snapshot || null
 }
 
+// Push a freshly-discovered server_steam_id into the running poller context
+// so the next tick can call GetRealtimeStats directly instead of staying in
+// the bootstrap loop. Called from botPool when _onMatchIdCaptured or
+// _onLobbyServerId surface the value AFTER startPolling already kicked off.
+// No-op if the matchId isn't currently being polled (use startPolling instead).
+export function updateServerSteamId(matchId, serverSteamId) {
+  const ctx = active.get(matchId)
+  if (!ctx) return false
+  const next = String(serverSteamId || '').trim()
+  if (!next || next === '0') return false
+  if (ctx.serverSteamId === next) return false
+  ctx.serverSteamId = next
+  // Reset attempts so the bootstrap timeout doesn't carry over.
+  ctx.attempts = 0
+  console.log(`[livePoller] match ${matchId} — server_steam_id ${next} injected into running poller`)
+  return true
+}
+
 // Look up the queue_matches.id for back-compat fields in the broadcast payload
 // (older clients keyed off queueMatchId). Returns null for tournament matches.
 async function findQueueMatchId(matchId) {

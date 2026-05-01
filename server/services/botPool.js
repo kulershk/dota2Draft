@@ -6,7 +6,7 @@ import { fetchSteamMatchDetails } from '../helpers/steam.js'
 import { awardXp, getTeamPlayerIds, awardStagePlacements } from '../helpers/xp.js'
 import { getCompetition, parseCompSettings } from '../helpers/competition.js'
 import { applyMatchToSeason } from './seasonRankingApply.js'
-import { startPolling as startLivePolling, stopPolling as stopLivePolling } from './liveMatchPoller.js'
+import { startPolling as startLivePolling, stopPolling as stopLivePolling, updateServerSteamId as updateLivePollerServerSteamId } from './liveMatchPoller.js'
 import SteamCommunity from 'steamcommunity'
 import { LoginSession, EAuthTokenPlatformType } from 'steam-session'
 
@@ -431,6 +431,10 @@ class BotPool {
           await execute('UPDATE match_lobbies SET server_steam_id = $1 WHERE id = $2', [String(serverSteamId), lobby.id])
           console.log(`[livePoller] match ${lobby.match_id} — server_steam_id ${serverSteamId} captured from bot game_started`)
         } catch (e) { console.error('[livePoller] save server_steam_id failed:', e.message) }
+        // Also push into a poller that's already running for this match so
+        // it can call GetRealtimeStats on the next tick instead of looping
+        // in the player-summary bootstrap fallback.
+        try { updateLivePollerServerSteamId(lobby.match_id, String(serverSteamId)) } catch {}
       }
 
       if (lobby.competition_id) {
@@ -550,9 +554,15 @@ class BotPool {
         try { await execute('UPDATE queue_matches SET server_steam_id = $1 WHERE id = $2', [serverSteamId, qm.id]) } catch {}
       }
       console.log(`[livePoller] match ${lobby.match_id} — server_steam_id ${serverSteamId} captured from bot lobby_server_id`)
-      // If polling never started (e.g. game_started fired without serverSteamId
-      // and the bootstrap loop gave up), kick it off now.
-      try { startLivePolling(lobby.match_id) } catch (e) { console.error('[livePoller] start failed:', e.message) }
+      // Two paths depending on whether polling is already running:
+      //   • Not yet started → startPolling will pick up the freshly persisted value.
+      //   • Already running (most common — game_started fires before lobby_server_id)
+      //     → updateServerSteamId injects it into the live ctx so the next tick
+      //       hits GetRealtimeStats directly instead of looping bootstrap.
+      const injected = updateLivePollerServerSteamId(lobby.match_id, serverSteamId)
+      if (!injected) {
+        try { startLivePolling(lobby.match_id) } catch (e) { console.error('[livePoller] start failed:', e.message) }
+      }
     } catch (e) {
       console.error('[Bot] _onLobbyServerId error:', e.message)
     }
