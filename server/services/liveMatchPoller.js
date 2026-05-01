@@ -17,7 +17,12 @@
 import { query, queryOne, execute } from '../db.js'
 
 const POLL_MS = 12_000              // every 12s — well under Steam's ~1 req/sec
-const MAX_BOOTSTRAP_ATTEMPTS = 30   // give up finding server_steam_id after ~6 min
+// Bootstrap budget: time we keep retrying GetPlayerSummaries when the bot
+// didn't report a server_steam_id. Tournament drafts with strategy time can
+// run 10–15 min before players actually load onto the match server (and
+// before `gameserversteamid` becomes visible in the Steam Web API), so we
+// give it 15 min. Each attempt is a cheap profile lookup.
+const MAX_BOOTSTRAP_ATTEMPTS = 75   // 75 × 12s = 15 min
 
 // matchId -> { intervalId, snapshot, attempts, serverSteamId, queueMatchId }
 const active = new Map()
