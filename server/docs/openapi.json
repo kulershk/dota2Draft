@@ -2030,6 +2030,17 @@
         "responses": { "200": { "description": "Deleted" } }
       }
     },
+    "/api/queue/match/{id}/live": {
+      "get": {
+        "tags": ["Queue"],
+        "summary": "Public: latest live snapshot for a queue match",
+        "description": "Returns the in-memory snapshot from liveMatchPoller — team scores, game time, game state, and per-player heroes/level/KDA/NW/items. Returns 200 + null when the poller is not running for this match (match isn't live, or STEAM_API_KEY missing). Used by the match page on mount so a refresh / late-join sees current state without waiting up to 12s for the next poll tick.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": { "description": "Snapshot or null", "content": { "application/json": { "schema": { "type": "object", "nullable": true } } } }
+        }
+      }
+    },
     "/api/queue/match/{id}": {
       "get": {
         "tags": ["Queue"],

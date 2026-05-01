@@ -506,6 +506,7 @@ export function useApi() {
       return request(`/api/queue/players/stats?${qs}`) as Promise<Array<{ playerId: number; wins: number; losses: number }>>
     },
     getQueueMatch: (id: number) => request(`/api/queue/match/${id}`),
+    getQueueMatchLive: (id: number) => request(`/api/queue/match/${id}/live`),
     getQueueMatchGameStats: (queueMatchId: number, gameNumber: number) =>
       request(`/api/queue/match/${queueMatchId}/games/${gameNumber}/stats`),
 

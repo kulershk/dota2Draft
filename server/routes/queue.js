@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { query, queryOne, execute } from '../db.js'
 import { requirePermission, hasPermission } from '../middleware/permissions.js'
 import { getAuthPlayer } from '../middleware/auth.js'
+import { getLiveSnapshot } from '../services/liveMatchPoller.js'
 
 // Resolves the caller's queue-admin scope. Returns:
 //   { player, canManageAll: true,  ownedPoolIds: null }  — full perm
@@ -298,6 +299,17 @@ export default function createQueueRouter(io) {
     delete qm.season_is_active
 
     res.json({ ...qm, games, season })
+  })
+
+  // ── Public: latest live snapshot for a queue match ──
+  // Returns the in-memory snapshot from liveMatchPoller (per-player heroes,
+  // KDA, NW, level, items, plus team scores and game time). Used by the match
+  // page on mount so a refresh / late-join sees current state without waiting
+  // up to 12s for the next poll tick. Returns 200 + null if no live data.
+  router.get('/api/queue/match/:id/live', async (req, res) => {
+    const id = Number(req.params.id)
+    if (!id) return res.status(400).json({ error: 'Invalid id' })
+    res.json(getLiveSnapshot(id))
   })
 
   // ── Public: game stats for a queue match ──

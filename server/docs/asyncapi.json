@@ -1203,7 +1203,24 @@
               "radiant_score":  { "type": "integer", "nullable": true },
               "dire_score":     { "type": "integer", "nullable": true },
               "game_time":      { "type": "integer", "nullable": true, "description": "Steam game_time in seconds; negative during pre-game" },
-              "game_state":     { "type": "integer", "nullable": true },
+              "game_state":     { "type": "integer", "nullable": true, "description": "Dota DOTA_GameState enum (1=init, 2=wait, 3=hero-selection, 4=strategy, 5=playing, 6=post-game)" },
+              "players":        { "type": "array", "description": "Per-player snapshot from GetRealtimeStats (joined from both teams)", "items": {
+                "type": "object",
+                "properties": {
+                  "account_id": { "type": "integer", "nullable": true, "description": "Steam 32-bit account id" },
+                  "team":       { "type": "string", "enum": ["radiant", "dire"] },
+                  "hero_id":    { "type": "integer" },
+                  "level":      { "type": "integer" },
+                  "kills":      { "type": "integer" },
+                  "deaths":     { "type": "integer" },
+                  "assists":    { "type": "integer" },
+                  "last_hits":  { "type": "integer" },
+                  "denies":     { "type": "integer" },
+                  "net_worth":  { "type": "integer" },
+                  "gold":       { "type": "integer" },
+                  "items":      { "type": "array", "items": { "type": "integer" }, "description": "Up to 6 inventory item ids" }
+                }
+              } },
               "updated_at":     { "type": "integer", "description": "Unix ms when the snapshot was taken on the server" }
             }
           }
@@ -1212,19 +1229,9 @@
     },
     "home:liveStats": {
       "subscribe": {
-        "summary": "Global broadcast: same payload as queue:liveStats — used by the homepage Live Matches strip to update scores in place without subscribing to per-match rooms",
+        "summary": "Global broadcast: same payload as queue:liveStats (including players[]) — used by the homepage Live Matches strip and per-match page to update without subscribing to per-match rooms",
         "message": {
-          "payload": {
-            "type": "object",
-            "properties": {
-              "queueMatchId":   { "type": "integer" },
-              "radiant_score":  { "type": "integer", "nullable": true },
-              "dire_score":     { "type": "integer", "nullable": true },
-              "game_time":      { "type": "integer", "nullable": true },
-              "game_state":     { "type": "integer", "nullable": true },
-              "updated_at":     { "type": "integer" }
-            }
-          }
+          "payload": { "type": "object", "description": "Same shape as queue:liveStats." }
         }
       }
     },

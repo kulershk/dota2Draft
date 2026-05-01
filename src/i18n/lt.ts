@@ -1646,4 +1646,12 @@ export default {
   mmrVerificationFullscreenHint: 'Ekrano nuotrauka turi būti viso ekrano Dota 2 kliento nuotrauka, kurioje matosi jūsų profilis ir MMR — ne langinis, ne apkarpytas.',
   mmrVerificationOrPaste: 'arba įklijuokite iš mainų srities (Ctrl+V)',
   mmrVerificationClear: 'Pašalinti',
+  // Queue match live banner
+  liveStale: 'Pasenęs',
+  liveStateInit: 'Inicijuojama',
+  liveStateWaitForPlayers: 'Laukiama žaidėjų',
+  liveStateHeroSelection: 'Draftas',
+  liveStateStrategyTime: 'Strategijos laikas',
+  liveStatePlaying: 'Žaidžia',
+  liveStatePostGame: 'Po žaidimo',
 }

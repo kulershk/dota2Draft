@@ -1657,4 +1657,12 @@ export default {
   mmrVerificationFullscreenHint: 'Screenshot must be a fullscreen capture of the Dota 2 client showing your profile and MMR — not a windowed shot, not cropped.',
   mmrVerificationOrPaste: 'or paste from clipboard (Ctrl+V)',
   mmrVerificationClear: 'Remove',
+  // Queue match live banner
+  liveStale: 'Stale',
+  liveStateInit: 'Initializing',
+  liveStateWaitForPlayers: 'Waiting for players',
+  liveStateHeroSelection: 'Drafting',
+  liveStateStrategyTime: 'Strategy time',
+  liveStatePlaying: 'In game',
+  liveStatePostGame: 'Post-game',
 }

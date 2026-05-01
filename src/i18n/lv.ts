@@ -1646,4 +1646,12 @@ export default {
   mmrVerificationFullscreenHint: 'Ekrānuzņēmumam jābūt pilnekrāna Dota 2 klienta uzņēmumam, kurā redzams jūsu profils un MMR — nevis logā, nevis apgriezts.',
   mmrVerificationOrPaste: 'vai ielīmē no starpliktuves (Ctrl+V)',
   mmrVerificationClear: 'Noņemt',
+  // Queue match live banner
+  liveStale: 'Novecojis',
+  liveStateInit: 'Inicializē',
+  liveStateWaitForPlayers: 'Gaida spēlētājus',
+  liveStateHeroSelection: 'Drafts',
+  liveStateStrategyTime: 'Stratēģijas laiks',
+  liveStatePlaying: 'Spēlē',
+  liveStatePostGame: 'Pēc spēles',
 }

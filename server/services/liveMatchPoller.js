@@ -86,11 +86,36 @@ export async function startPolling(queueMatchId) {
         return
       }
 
+      // Flatten per-player rows from both teams. team_number 0 = radiant, 1 = dire
+      // per the GetRealtimeStats schema. Items array can be missing on early ticks.
+      const players = []
+      const teams = stats.teams || []
+      for (let i = 0; i < teams.length; i++) {
+        const team = i === 0 ? 'radiant' : 'dire'
+        for (const p of (teams[i].players || [])) {
+          players.push({
+            account_id:  p.accountid ?? null,
+            team,
+            hero_id:     p.heroid ?? 0,
+            level:       p.level ?? 0,
+            kills:       p.kill_count ?? 0,
+            deaths:      p.death_count ?? 0,
+            assists:     p.assists_count ?? 0,
+            last_hits:   p.lh_count ?? 0,
+            denies:      p.denies_count ?? 0,
+            net_worth:   p.net_worth ?? 0,
+            gold:        p.gold ?? 0,
+            items:       Array.isArray(p.items) ? p.items.slice(0, 6) : [],
+          })
+        }
+      }
+
       ctx.snapshot = {
         radiant_score: stats.teams?.[0]?.score ?? null,
         dire_score:    stats.teams?.[1]?.score ?? null,
         game_time:     stats.match?.game_time ?? null,
         game_state:    stats.match?.game_state ?? null,
+        players,
         updated_at:    Date.now(),
       }
 
