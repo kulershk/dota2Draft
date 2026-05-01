@@ -508,6 +508,10 @@ export function useApi() {
     getQueueMatch: (id: number) => request(`/api/queue/match/${id}`),
     getQueueMatchLive: (id: number) => request(`/api/queue/match/${id}/live`),
     getMatchLive: (matchId: number) => request(`/api/matches/${matchId}/live`),
+    setMatchLiveServerSteamId: (matchId: number, server_steam_id: string) =>
+      request(`/api/admin/matches/${matchId}/live-server-id`, { method: 'POST', body: JSON.stringify({ server_steam_id }) }),
+    restartMatchLive: (matchId: number) =>
+      request(`/api/admin/matches/${matchId}/live-restart`, { method: 'POST' }),
     getQueueMatchGameStats: (queueMatchId: number, gameNumber: number) =>
       request(`/api/queue/match/${queueMatchId}/games/${gameNumber}/stats`),
 

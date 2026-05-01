@@ -1654,4 +1654,13 @@ export default {
   liveStateStrategyTime: 'Strategijos laikas',
   liveStatePlaying: 'Žaidžia',
   liveStatePostGame: 'Po žaidimo',
+  // Live-match admin recovery
+  liveAdminTitle: 'Tiesioginis stebėjimas užstrigęs',
+  liveAdminHint: 'Tiesioginių duomenų dar nėra. Įklijuokite server_steam_id iš serverio žurnalo (ieškokite "[livePoller] match X — server_steam_id Y captured"), kad apeitumėte žaidėjų profilio tikrinimą, kuris nepavyksta, kai Game Details privatūs.',
+  liveAdminInject: 'Įvesti',
+  liveAdminRestart: 'Perkrauti polerį',
+  liveAdminRestartHint: 'Sustabdo ir vėl paleidžia polerį. Naudinga, kai bootstrap ciklas pasidavė.',
+  liveAdminInjectedRunning: 'Įvesta — kito ciklo metu bus ištraukti duomenys.',
+  liveAdminInjectedStarted: 'Pradėta poliuoti su šiuo serverio ID.',
+  liveAdminRestarted: 'Poleris perkrautas.',
 }

@@ -1,12 +1,12 @@
 import { Router } from 'express'
 import { query, queryOne, execute } from '../db.js'
-import { requireCompPermission, requirePermission } from '../middleware/permissions.js'
+import { requireCompPermission, requirePermission, hasPermission as _checkPerm } from '../middleware/permissions.js'
 import { getSessionPlayerId, getTokenFromReq, getAuthPlayer } from '../middleware/auth.js'
 import { getCompetition, getCaptains, parseCompSettings } from '../helpers/competition.js'
 import { awardXp, getTeamPlayerIds, computeStagePlacements, awardStagePlacements } from '../helpers/xp.js'
 import { advanceWinner, repairBracketAdvancement, generateEliminationBracket, generateGroupMatches, generateDoubleEliminationBracket, customBracketWouldCycle, validateCustomBracketStage } from '../helpers/tournament.js'
 import { fetchAndSaveGameStats } from '../helpers/opendota.js'
-import { getLiveSnapshot } from '../services/liveMatchPoller.js'
+import { getLiveSnapshot, startPolling as startLivePolling, stopPolling as stopLivePolling, updateServerSteamId as updateLivePollerServerSteamId } from '../services/liveMatchPoller.js'
 
 export default function createTournamentRouter(io) {
   const router = Router()
@@ -18,6 +18,105 @@ export default function createTournamentRouter(io) {
     const id = Number(req.params.matchId)
     if (!id) return res.status(400).json({ error: 'Invalid matchId' })
     res.json(getLiveSnapshot(id))
+  })
+
+  // ── Admin: manually inject server_steam_id for a stuck match ──
+  // When the bot's GC didn't surface a server_steam_id and the bootstrap
+  // loop is failing (private Game Details on every player), an admin can
+  // grab the id from server logs / a manual lookup and paste it here.
+  // Persists it on the latest match_lobbies row and pushes it into the
+  // running poller (or starts polling fresh if not running).
+  // Permissions: admin, manage_competitions / manage_own_competitions for
+  // tournament matches, manage_queue_pools / manage_own_queue_pools for
+  // queue matches.
+  router.post('/api/admin/matches/:matchId/live-server-id', async (req, res) => {
+    const matchId = Number(req.params.matchId)
+    const sid = String(req.body?.server_steam_id || '').trim()
+    if (!matchId || !sid || sid === '0') return res.status(400).json({ error: 'matchId and server_steam_id required' })
+
+    const player = await getAuthPlayer(req)
+    if (!player) return res.status(401).json({ error: 'Not authenticated' })
+
+    const match = await queryOne('SELECT id, competition_id FROM matches WHERE id = $1', [matchId])
+    if (!match) return res.status(404).json({ error: 'Match not found' })
+
+    let allowed = !!player.is_admin
+    if (!allowed) {
+      if (match.competition_id) {
+        // Tournament: full or own-comp.
+        if (await _checkPerm(player, 'manage_competitions')) allowed = true
+        else if (await _checkPerm(player, 'manage_own_competitions')) {
+          const comp = await queryOne('SELECT created_by FROM competitions WHERE id = $1', [match.competition_id])
+          if (comp && comp.created_by === player.id) allowed = true
+        }
+      } else {
+        // Queue: full or own-pool.
+        if (await _checkPerm(player, 'manage_queue_pools')) allowed = true
+        else if (await _checkPerm(player, 'manage_own_queue_pools')) {
+          const qm = await queryOne('SELECT pool_id FROM queue_matches WHERE match_id = $1', [matchId])
+          if (qm) {
+            const pool = await queryOne('SELECT created_by FROM queue_pools WHERE id = $1', [qm.pool_id])
+            if (pool && pool.created_by === player.id) allowed = true
+          }
+        }
+      }
+    }
+    if (!allowed) return res.status(403).json({ error: 'Permission denied' })
+
+    try {
+      await execute(
+        `UPDATE match_lobbies SET server_steam_id = $1
+          WHERE id = (SELECT id FROM match_lobbies WHERE match_id = $2 ORDER BY id DESC LIMIT 1)`,
+        [sid, matchId]
+      )
+      const injected = updateLivePollerServerSteamId(matchId, sid)
+      if (!injected) await startLivePolling(matchId)
+      res.json({ ok: true, injected })
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  // ── Admin: stop and restart polling for a match (clears bootstrap state) ──
+  // Useful if the previous attempt gave up after 30 attempts.
+  router.post('/api/admin/matches/:matchId/live-restart', async (req, res) => {
+    const matchId = Number(req.params.matchId)
+    if (!matchId) return res.status(400).json({ error: 'Invalid matchId' })
+
+    const player = await getAuthPlayer(req)
+    if (!player) return res.status(401).json({ error: 'Not authenticated' })
+
+    const match = await queryOne('SELECT id, competition_id FROM matches WHERE id = $1', [matchId])
+    if (!match) return res.status(404).json({ error: 'Match not found' })
+
+    let allowed = !!player.is_admin
+    if (!allowed) {
+      if (match.competition_id) {
+        if (await _checkPerm(player, 'manage_competitions')) allowed = true
+        else if (await _checkPerm(player, 'manage_own_competitions')) {
+          const comp = await queryOne('SELECT created_by FROM competitions WHERE id = $1', [match.competition_id])
+          if (comp && comp.created_by === player.id) allowed = true
+        }
+      } else {
+        if (await _checkPerm(player, 'manage_queue_pools')) allowed = true
+        else if (await _checkPerm(player, 'manage_own_queue_pools')) {
+          const qm = await queryOne('SELECT pool_id FROM queue_matches WHERE match_id = $1', [matchId])
+          if (qm) {
+            const pool = await queryOne('SELECT created_by FROM queue_pools WHERE id = $1', [qm.pool_id])
+            if (pool && pool.created_by === player.id) allowed = true
+          }
+        }
+      }
+    }
+    if (!allowed) return res.status(403).json({ error: 'Permission denied' })
+
+    try {
+      stopLivePolling(matchId)
+      await startLivePolling(matchId)
+      res.json({ ok: true })
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
   })
 
   router.get('/api/competitions/:compId/tournament', async (req, res) => {

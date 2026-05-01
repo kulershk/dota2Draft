@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Radio, Clock } from 'lucide-vue-next'
+import { Radio, Clock, RefreshCw, Wrench } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { useDotaConstants } from '@/composables/useDotaConstants'
+import { useDraftStore } from '@/composables/useDraftStore'
 import { getSocket } from '@/composables/useSocket'
 
 interface LivePlayer {
@@ -51,7 +52,58 @@ const props = defineProps<{
 const { t } = useI18n()
 const api = useApi()
 const dota = useDotaConstants()
+const store = useDraftStore()
 dota.loadConstants()
+
+// Show admin "stuck poller" recovery UI when the user has any of the perms
+// that gate the /api/admin/matches/:id/live-* endpoints.
+const showAdminControls = computed(() =>
+  store.hasPerm('manage_competitions') ||
+  store.hasPerm('manage_own_competitions') ||
+  store.hasPerm('manage_queue_pools') ||
+  store.hasPerm('manage_own_queue_pools')
+)
+const adminServerId = ref('')
+const adminBusy = ref(false)
+const adminError = ref<string | null>(null)
+const adminInfo = ref<string | null>(null)
+
+async function adminSetServerId() {
+  const sid = adminServerId.value.trim()
+  if (!sid) return
+  adminBusy.value = true
+  adminError.value = null
+  adminInfo.value = null
+  try {
+    const r = await api.setMatchLiveServerSteamId(props.matchId, sid)
+    adminInfo.value = r?.injected ? t('liveAdminInjectedRunning') : t('liveAdminInjectedStarted')
+    adminServerId.value = ''
+    // Try to fetch a snapshot ~next tick so the banner shows up.
+    setTimeout(async () => {
+      try {
+        const snap = await api.getMatchLive(props.matchId)
+        if (snap) live.value = snap
+      } catch {}
+    }, 13_000)
+  } catch (e: any) {
+    adminError.value = e.message || 'Failed'
+  } finally {
+    adminBusy.value = false
+  }
+}
+async function adminRestart() {
+  adminBusy.value = true
+  adminError.value = null
+  adminInfo.value = null
+  try {
+    await api.restartMatchLive(props.matchId)
+    adminInfo.value = t('liveAdminRestarted')
+  } catch (e: any) {
+    adminError.value = e.message || 'Failed'
+  } finally {
+    adminBusy.value = false
+  }
+}
 
 const live = ref<LiveSnapshot | null>(null)
 const now = ref(Date.now())
@@ -165,6 +217,47 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <!-- Admin-only recovery card when the poller couldn't bootstrap and the
+       banner has no snapshot. Lets an admin paste server_steam_id from logs
+       (e.g. "[livePoller] match X — server_steam_id Y captured ...") to skip
+       the GetPlayerSummaries fallback that fails on private profiles. -->
+  <div v-if="!live && showAdminControls" class="card border-dashed border-amber-500/40 mb-5 px-4 py-3">
+    <div class="flex items-center gap-2 text-amber-400 text-xs font-semibold mb-2">
+      <Wrench class="w-3.5 h-3.5" />
+      {{ t('liveAdminTitle') }}
+    </div>
+    <p class="text-[11px] text-muted-foreground mb-3">{{ t('liveAdminHint') }}</p>
+    <div class="flex items-center gap-2 flex-wrap">
+      <input
+        v-model="adminServerId"
+        type="text"
+        inputmode="numeric"
+        class="input-field text-xs flex-1 min-w-[180px]"
+        placeholder="90285229288918030"
+        :disabled="adminBusy"
+        @keyup.enter="adminSetServerId"
+      />
+      <button
+        class="btn-primary text-xs px-3 py-1.5 flex items-center gap-1.5 disabled:opacity-40"
+        :disabled="adminBusy || !adminServerId.trim()"
+        @click="adminSetServerId"
+      >
+        {{ t('liveAdminInject') }}
+      </button>
+      <button
+        class="btn-outline text-xs px-3 py-1.5 flex items-center gap-1.5 disabled:opacity-40"
+        :disabled="adminBusy"
+        @click="adminRestart"
+        :title="t('liveAdminRestartHint')"
+      >
+        <RefreshCw class="w-3.5 h-3.5" :class="adminBusy && 'animate-spin'" />
+        {{ t('liveAdminRestart') }}
+      </button>
+    </div>
+    <p v-if="adminError" class="text-[11px] text-destructive mt-2">{{ adminError }}</p>
+    <p v-else-if="adminInfo" class="text-[11px] text-emerald-500 mt-2">{{ adminInfo }}</p>
+  </div>
+
   <div v-if="live" class="card overflow-hidden mb-5 transition-opacity" :class="liveStale ? 'opacity-60' : 'opacity-100'">
     <div class="px-5 py-3 flex items-center gap-3 border-b border-border/30 bg-gradient-to-r from-red-500/10 via-transparent to-transparent">
       <span class="flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"

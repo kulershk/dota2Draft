@@ -2052,6 +2052,42 @@
         }
       }
     },
+    "/api/admin/matches/{matchId}/live-server-id": {
+      "post": {
+        "tags": ["Tournaments"],
+        "summary": "Admin: manually inject server_steam_id for a stuck match",
+        "description": "When the bot didn't surface a server_steam_id and the player-summary bootstrap failed (private Steam Game Details), an admin can paste the value here. Persists onto the latest match_lobbies row and pushes it into the running poller (or starts polling fresh). Permissions: admin, manage_competitions / manage_own_competitions for tournament matches, manage_queue_pools / manage_own_queue_pools for queue matches.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "matchId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": {
+            "type": "object", "required": ["server_steam_id"],
+            "properties": { "server_steam_id": { "type": "string", "description": "The lobby's server_steam_id from server logs" } }
+          } } }
+        },
+        "responses": {
+          "200": { "description": "Updated. Response.injected=true if an existing poller picked it up, false if a fresh poll was started." },
+          "400": { "description": "Missing matchId or server_steam_id" },
+          "403": { "description": "Permission denied" },
+          "404": { "description": "Match not found" }
+        }
+      }
+    },
+    "/api/admin/matches/{matchId}/live-restart": {
+      "post": {
+        "tags": ["Tournaments"],
+        "summary": "Admin: stop and restart the live poller for a match",
+        "description": "Useful when the bootstrap loop has given up after 30 attempts. Same permissions as /live-server-id.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "matchId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": { "description": "Poller restarted" },
+          "403": { "description": "Permission denied" },
+          "404": { "description": "Match not found" }
+        }
+      }
+    },
     "/api/queue/match/{id}": {
       "get": {
         "tags": ["Queue"],

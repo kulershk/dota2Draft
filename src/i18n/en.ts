@@ -1665,4 +1665,13 @@ export default {
   liveStateStrategyTime: 'Strategy time',
   liveStatePlaying: 'In game',
   liveStatePostGame: 'Post-game',
+  // Live-match admin recovery
+  liveAdminTitle: 'Live poller stuck',
+  liveAdminHint: 'No live data yet. Paste the server_steam_id from server logs (look for "[livePoller] match X — server_steam_id Y captured") to bypass the player-summary bootstrap that fails when players have private Game Details.',
+  liveAdminInject: 'Inject',
+  liveAdminRestart: 'Restart poller',
+  liveAdminRestartHint: 'Stop and restart the live poller. Useful after the bootstrap loop gave up.',
+  liveAdminInjectedRunning: 'Injected — next tick will fetch live stats.',
+  liveAdminInjectedStarted: 'Started polling with this server id.',
+  liveAdminRestarted: 'Poller restarted.',
 }

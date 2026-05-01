@@ -1654,4 +1654,13 @@ export default {
   liveStateStrategyTime: 'Stratēģijas laiks',
   liveStatePlaying: 'Spēlē',
   liveStatePostGame: 'Pēc spēles',
+  // Live-match admin recovery
+  liveAdminTitle: 'Tiešraides pollerā nav datu',
+  liveAdminHint: 'Nav tiešraides datu. Ielīmējiet server_steam_id no servera žurnāla (meklējiet "[livePoller] match X — server_steam_id Y captured"), lai apietu spēlētāju profila pārbaudi, kura neizdodas, kad Game Details ir privāti.',
+  liveAdminInject: 'Ievadīt',
+  liveAdminRestart: 'Pārstartēt polleru',
+  liveAdminRestartHint: 'Apstādina un atsāk tiešraides polleru. Noderīgi pēc tam, kad bootstrap cilpa ir padevusies.',
+  liveAdminInjectedRunning: 'Ievadīts — nākamajā tikā tiks ielādēti dati.',
+  liveAdminInjectedStarted: 'Sākta polēšana ar šo serveri.',
+  liveAdminRestarted: 'Pollers pārstartēts.',
 }
