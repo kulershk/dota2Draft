@@ -1653,4 +1653,8 @@ export default {
   seasonVerifiedMmrOnlyHint: 'Only players whose MMR has been verified can queue into pools assigned to this season.',
   queuePoolVerifiedOnly: 'Verified only',
   queuePoolVerifiedOnlyHint: 'This pool only accepts players with a verified MMR.',
+  // MMR verification screenshot upload
+  mmrVerificationFullscreenHint: 'Screenshot must be a fullscreen capture of the Dota 2 client showing your profile and MMR — not a windowed shot, not cropped.',
+  mmrVerificationOrPaste: 'or paste from clipboard (Ctrl+V)',
+  mmrVerificationClear: 'Remove',
 }

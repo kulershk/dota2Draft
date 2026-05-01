@@ -1642,4 +1642,8 @@ export default {
   seasonVerifiedMmrOnlyHint: 'Šiam sezonui priskirtuose puluose gali žaisti tik žaidėjai su patvirtintu MMR.',
   queuePoolVerifiedOnly: 'Tik patvirtinti',
   queuePoolVerifiedOnlyHint: 'Šis pulas priima tik žaidėjus su patvirtintu MMR.',
+  // MMR verification screenshot upload
+  mmrVerificationFullscreenHint: 'Ekrano nuotrauka turi būti viso ekrano Dota 2 kliento nuotrauka, kurioje matosi jūsų profilis ir MMR — ne langinis, ne apkarpytas.',
+  mmrVerificationOrPaste: 'arba įklijuokite iš mainų srities (Ctrl+V)',
+  mmrVerificationClear: 'Pašalinti',
 }

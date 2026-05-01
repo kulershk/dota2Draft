@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Settings, Save, Twitch, User, LinkIcon, Unlink, MessageCircle, Shield, Upload, CheckCircle2, XCircle, Clock, Eye, ExternalLink } from 'lucide-vue-next'
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
@@ -36,9 +36,42 @@ async function loadVerifications() {
   try { verifications.value = await api.getMyMmrVerifications() } catch { verifications.value = [] }
 }
 
+// Local preview URL for the chosen / pasted screenshot — kept in sync with verifFile.
+const verifPreviewUrl = ref<string | null>(null)
+function setVerifFile(file: File | null) {
+  if (verifPreviewUrl.value) URL.revokeObjectURL(verifPreviewUrl.value)
+  verifFile.value = file
+  verifPreviewUrl.value = file ? URL.createObjectURL(file) : null
+}
+
 function onPickFile(e: Event) {
   const input = e.target as HTMLInputElement
-  verifFile.value = input.files && input.files[0] || null
+  setVerifFile(input.files && input.files[0] || null)
+}
+
+// Accept Ctrl+V / Cmd+V image pastes anywhere inside the form drop zone, not
+// just inside the file input. Browsers expose pasted screenshots as ClipboardItem
+// (or DataTransferItem with kind=='file' and an image MIME type).
+function onPasteScreenshot(e: ClipboardEvent) {
+  const items = e.clipboardData?.items
+  if (!items) return
+  for (const item of items) {
+    if (item.kind === 'file' && item.type.startsWith('image/')) {
+      const file = item.getAsFile()
+      if (!file) continue
+      // Browsers sometimes give pasted images empty filenames — synthesize one.
+      const named = file.name ? file : new File([file], `paste-${Date.now()}.${(item.type.split('/')[1] || 'png')}`, { type: item.type })
+      setVerifFile(named)
+      e.preventDefault()
+      return
+    }
+  }
+}
+
+function clearVerifFile() {
+  setVerifFile(null)
+  const fileInput = document.getElementById('mmrVerifFileInput') as HTMLInputElement | null
+  if (fileInput) fileInput.value = ''
 }
 
 const cancelling = ref(false)
@@ -68,9 +101,7 @@ async function submitVerification() {
     await api.submitMmrVerification(verifMmr.value, verifFile.value)
     verifMessage.value = { type: 'ok', text: t('mmrVerificationSubmitted') }
     verifMmr.value = null
-    verifFile.value = null
-    const fileInput = document.getElementById('mmrVerifFileInput') as HTMLInputElement | null
-    if (fileInput) fileInput.value = ''
+    clearVerifFile()
     await loadVerifications()
   } catch (e: any) {
     verifMessage.value = { type: 'err', text: e.message || 'Submission failed' }
@@ -91,7 +122,19 @@ const discordMessage = ref('')
 
 const allRoles = ['Carry', 'Mid', 'Offlane', 'Pos4', 'Pos5']
 
+// Window-level paste so the user can drop a screenshot into the MMR form
+// without having to focus a specific input first. Skip while there's already
+// a pending verification (the form is hidden then) or text input is active.
+function onWindowPaste(e: ClipboardEvent) {
+  if (pendingVerification.value) return
+  const tag = (document.activeElement as HTMLElement)?.tagName?.toLowerCase()
+  if (tag === 'textarea' || ((document.activeElement as HTMLInputElement)?.type === 'text')) return
+  onPasteScreenshot(e)
+}
+
 onMounted(async () => {
+  window.addEventListener('paste', onWindowPaste)
+
   await store.authReady
   if (store.currentUser.value) {
     info.value = store.currentUser.value.info || ''
@@ -119,6 +162,11 @@ onMounted(async () => {
     discordMessage.value = t('discordLinkFailed')
     cleanUrl()
   }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('paste', onWindowPaste)
+  if (verifPreviewUrl.value) URL.revokeObjectURL(verifPreviewUrl.value)
 })
 
 function cleanUrl() {
@@ -296,31 +344,52 @@ const hasDiscord = computed(() => !!store.currentUser.value?.discord_username)
             </button>
           </div>
 
-          <!-- Submission form -->
-          <div class="grid grid-cols-1 md:grid-cols-[160px_1fr_auto] gap-3 items-end">
-            <div>
-              <label class="block text-[11px] font-medium text-muted-foreground mb-1">{{ t('mmrVerificationMmrLabel') }}</label>
-              <input
-                v-model.number="verifMmr" type="number" min="0" max="13000"
-                class="input-field w-full" :placeholder="t('mmrVerificationMmrPlaceholder')"
-              />
+          <!-- Submission form (paste is handled at window level — works without focusing) -->
+          <div class="flex flex-col gap-3">
+            <div class="flex items-center gap-2 px-3 py-2 rounded-md bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-200">
+              <Eye class="w-3.5 h-3.5 shrink-0" />
+              <span>{{ t('mmrVerificationFullscreenHint') }}</span>
             </div>
-            <div>
-              <label class="block text-[11px] font-medium text-muted-foreground mb-1">{{ t('mmrVerificationScreenshotLabel') }}</label>
-              <input
-                id="mmrVerifFileInput" type="file" accept="image/*" @change="onPickFile"
-                class="block w-full text-xs text-muted-foreground file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-primary file:text-[#0A0F1C] file:font-semibold hover:file:brightness-110 file:cursor-pointer"
-              />
+            <div class="grid grid-cols-1 md:grid-cols-[160px_1fr_auto] gap-3 items-end">
+              <div>
+                <label class="block text-[11px] font-medium text-muted-foreground mb-1">{{ t('mmrVerificationMmrLabel') }}</label>
+                <input
+                  v-model.number="verifMmr" type="number" min="0" max="13000"
+                  class="input-field w-full" :placeholder="t('mmrVerificationMmrPlaceholder')"
+                />
+              </div>
+              <div>
+                <label class="block text-[11px] font-medium text-muted-foreground mb-1">{{ t('mmrVerificationScreenshotLabel') }}</label>
+                <div class="flex items-center gap-2">
+                  <input
+                    id="mmrVerifFileInput" type="file" accept="image/*" @change="onPickFile"
+                    class="block flex-1 text-xs text-muted-foreground file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-primary file:text-[#0A0F1C] file:font-semibold hover:file:brightness-110 file:cursor-pointer"
+                  />
+                  <span class="text-[10px] text-muted-foreground whitespace-nowrap hidden md:inline">{{ t('mmrVerificationOrPaste') }}</span>
+                </div>
+                <p class="text-[10px] text-muted-foreground mt-1 md:hidden">{{ t('mmrVerificationOrPaste') }}</p>
+              </div>
+              <button
+                type="button"
+                class="btn-primary px-3 py-2 text-sm flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                :disabled="verifSubmitting || !verifMmr || !verifFile"
+                @click="submitVerification"
+              >
+                <Upload class="w-3.5 h-3.5" />
+                {{ verifSubmitting ? `${t('saving')}…` : t('mmrVerificationSubmit') }}
+              </button>
             </div>
-            <button
-              type="button"
-              class="btn-primary px-3 py-2 text-sm flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
-              :disabled="verifSubmitting || !verifMmr || !verifFile"
-              @click="submitVerification"
-            >
-              <Upload class="w-3.5 h-3.5" />
-              {{ verifSubmitting ? `${t('saving')}…` : t('mmrVerificationSubmit') }}
-            </button>
+            <!-- Preview of selected / pasted screenshot -->
+            <div v-if="verifPreviewUrl" class="flex items-start gap-3 p-2 rounded-md bg-accent/30 border border-border/40">
+              <img :src="verifPreviewUrl" class="w-32 h-20 object-cover rounded border border-border/40" alt="screenshot preview" />
+              <div class="flex-1 min-w-0">
+                <p class="text-[11px] font-semibold text-foreground truncate">{{ verifFile?.name }}</p>
+                <p class="text-[10px] text-muted-foreground">{{ verifFile ? Math.round(verifFile.size / 1024) + ' KB' : '' }}</p>
+                <button type="button" class="text-[10px] text-destructive hover:underline mt-1" @click="clearVerifFile">
+                  {{ t('mmrVerificationClear') }}
+                </button>
+              </div>
+            </div>
           </div>
 
           <div v-if="verifMessage" class="text-xs" :class="verifMessage.type === 'ok' ? 'text-green-500' : 'text-destructive'">

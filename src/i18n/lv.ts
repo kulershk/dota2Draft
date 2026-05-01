@@ -1642,4 +1642,8 @@ export default {
   seasonVerifiedMmrOnlyHint: 'Šai sezonai piesaistītajos pūlos drīkst pievienoties tikai spēlētāji ar apstiprinātu MMR.',
   queuePoolVerifiedOnly: 'Tikai apstiprināti',
   queuePoolVerifiedOnlyHint: 'Šis pūls pieņem tikai spēlētājus ar apstiprinātu MMR.',
+  // MMR verification screenshot upload
+  mmrVerificationFullscreenHint: 'Ekrānuzņēmumam jābūt pilnekrāna Dota 2 klienta uzņēmumam, kurā redzams jūsu profils un MMR — nevis logā, nevis apgriezts.',
+  mmrVerificationOrPaste: 'vai ielīmē no starpliktuves (Ctrl+V)',
+  mmrVerificationClear: 'Noņemt',
 }
