@@ -186,6 +186,14 @@ export function stopPolling(matchId) {
   if (!ctx) return
   if (ctx.intervalId) clearInterval(ctx.intervalId)
   active.delete(matchId)
+  // Notify clients so the LIVE banner clears immediately instead of waiting
+  // 30s to fade to "Stale". Same routing fields as the broadcast payloads.
+  if (ioRef) {
+    const payload = { matchId, queueMatchId: ctx.queueMatchId }
+    ioRef.emit('home:liveStatsEnd', payload)
+    ioRef.to(`match:${matchId}`).emit('match:liveStatsEnd', payload)
+    if (ctx.queueMatchId) ioRef.to(`queue-match:${ctx.queueMatchId}`).emit('queue:liveStatsEnd', payload)
+  }
 }
 
 // Derive server_steam_id by polling Steam Web API for the first player

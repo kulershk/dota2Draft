@@ -115,6 +115,29 @@ function onLiveStats(payload: any) {
   now.value = Date.now()
 }
 
+// Server signals the poller stopped (game ended, server restart, bootstrap
+// gave up) — clear the banner instead of letting it sit and fade to "Stale".
+function onLiveStatsEnd(payload: any) {
+  if (!payload) return
+  if (Number(payload.matchId) !== props.matchId) return
+  live.value = null
+}
+
+// On every (re)connect, refetch the snapshot. After a server deploy or
+// network blip, the in-memory snapshot can be 30s+ stale before the next
+// broadcast arrives — refetching closes that window. Skip the very first
+// connect since onMounted already fetches.
+let connectsSeen = 0
+async function onConnect() {
+  connectsSeen++
+  if (connectsSeen <= 1) return
+  try {
+    const snap = await api.getMatchLive(props.matchId)
+    live.value = snap || null
+    now.value = Date.now()
+  } catch { /* still polling will fix it on next tick */ }
+}
+
 onMounted(async () => {
   // Initial fetch so refresh / late-join doesn't go blank for ~12s.
   try {
@@ -124,12 +147,19 @@ onMounted(async () => {
 
   const sock = getSocket()
   sock?.on('home:liveStats', onLiveStats)
+  sock?.on('home:liveStatsEnd', onLiveStatsEnd)
+  sock?.on('connect', onConnect)
+  // Count an existing-connected socket as the "first" connect so future
+  // reconnects do trigger a refetch.
+  if (sock?.connected) connectsSeen = 1
   nowTicker = setInterval(() => { now.value = Date.now() }, 1000)
 })
 
 onBeforeUnmount(() => {
   const sock = getSocket()
   sock?.off('home:liveStats', onLiveStats)
+  sock?.off('home:liveStatsEnd', onLiveStatsEnd)
+  sock?.off('connect', onConnect)
   if (nowTicker) clearInterval(nowTicker)
 })
 </script>

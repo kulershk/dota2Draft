@@ -1243,6 +1243,32 @@
         }
       }
     },
+    "home:liveStatsEnd": {
+      "subscribe": {
+        "summary": "Global broadcast: liveMatchPoller stopped tracking this match. Fired when the game ends, the server gave up bootstrapping server_steam_id, or the process was shutting down. Clients should clear the LIVE banner immediately rather than letting it fade to stale.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "matchId":      { "type": "integer" },
+              "queueMatchId": { "type": "integer", "nullable": true }
+            }
+          }
+        }
+      }
+    },
+    "match:liveStatsEnd": {
+      "subscribe": {
+        "summary": "Broadcast to match:${matchId}: same signal as home:liveStatsEnd, scoped to the per-match room.",
+        "message": { "payload": { "type": "object", "description": "Same shape as home:liveStatsEnd." } }
+      }
+    },
+    "queue:liveStatsEnd": {
+      "subscribe": {
+        "summary": "Broadcast to queue-match:${queueMatchId}: same signal as home:liveStatsEnd, scoped to the queue-match room.",
+        "message": { "payload": { "type": "object", "description": "Same shape as home:liveStatsEnd." } }
+      }
+    },
     "season:rankUpdated": {
       "subscribe": {
         "summary": "Broadcast: a season's rankings changed. Fired after a queue match completes (with the participating playerIds), after a manual admin point adjustment (with the affected playerId), or after a recompute (with recomputed: true). Clients with an open leaderboard or profile should refetch.",
