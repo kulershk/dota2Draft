@@ -1,63 +1,85 @@
-// Live realtime score poller for queue matches.
+// Live realtime score poller for in-game matches (queue or tournament).
 //
 // Steam exposes IDOTA2MatchStats_570/GetRealtimeStats which returns per-team
-// kills, building HP, players, hero IDs, current game time — but only when
-// you have the match's `server_steam_id`. The Go bot doesn't surface that
-// directly, so we fall back to scraping it from a player's `gameserversteamid`
-// via ISteamUser/GetPlayerSummaries.
+// kills, building HP, players (hero, KDA, NW, items), current game time —
+// but only when you have the match's `server_steam_id`. The Go bot reports
+// it on game_started; we fall back to scraping it from a player's
+// `gameserversteamid` via ISteamUser/GetPlayerSummaries.
 //
 // Once we have a server_steam_id, we poll Steam every POLL_MS while the match
 // is live, cache the latest snapshot in memory, and broadcast it over socket
-// so the home page + queue match page can show real-time scores.
+// so home page + match room + queue match page can show real-time scores.
+//
+// Keyed by `matches.id` — works for both queue matches (one per queue_match)
+// and tournament matches (one per matches row). The persistence column is
+// `match_lobbies.server_steam_id` (latest lobby per match).
 
 import { query, queryOne, execute } from '../db.js'
 
 const POLL_MS = 12_000              // every 12s — well under Steam's ~1 req/sec
 const MAX_BOOTSTRAP_ATTEMPTS = 30   // give up finding server_steam_id after ~6 min
 
-// queueMatchId -> { intervalId, snapshot, attempts, serverSteamId }
+// matchId -> { intervalId, snapshot, attempts, serverSteamId, queueMatchId }
 const active = new Map()
 let ioRef = null
 
 export function setLivePollerIo(io) { ioRef = io }
 
-export function getLiveSnapshot(queueMatchId) {
-  return active.get(queueMatchId)?.snapshot || null
+export function getLiveSnapshot(matchId) {
+  return active.get(matchId)?.snapshot || null
 }
 
-export async function startPolling(queueMatchId) {
-  if (!process.env.STEAM_API_KEY) {
-    console.warn(`[livePoller] STEAM_API_KEY not set — skipping match ${queueMatchId}`)
-    return
-  }
-  if (active.has(queueMatchId)) {
-    console.log(`[livePoller] already polling match ${queueMatchId}`)
-    return
-  }
-  const qm = await queryOne(
-    'SELECT id, server_steam_id, team1_players, team2_players FROM queue_matches WHERE id = $1',
-    [queueMatchId]
-  )
-  if (!qm) {
-    console.warn(`[livePoller] queue match ${queueMatchId} not found`)
-    return
-  }
+// Look up the queue_matches.id for back-compat fields in the broadcast payload
+// (older clients keyed off queueMatchId). Returns null for tournament matches.
+async function findQueueMatchId(matchId) {
+  const row = await queryOne('SELECT id FROM queue_matches WHERE match_id = $1', [matchId])
+  return row?.id || null
+}
 
-  const steamIds = [
-    ...((qm.team1_players || []).map(p => p.steamId).filter(Boolean)),
-    ...((qm.team2_players || []).map(p => p.steamId).filter(Boolean)),
-  ]
-  console.log(`[livePoller] starting match ${queueMatchId} — ${steamIds.length} steam ids, server_steam_id=${qm.server_steam_id || 'pending'}`)
+// Pull the steam_ids from the most-recent match_lobbies row for this match,
+// covers both queue and tournament paths since both write players_expected.
+async function fetchSteamIdsForMatch(matchId) {
+  const row = await queryOne(
+    `SELECT players_expected, server_steam_id
+       FROM match_lobbies
+      WHERE match_id = $1
+      ORDER BY id DESC
+      LIMIT 1`,
+    [matchId]
+  )
+  const expected = row?.players_expected || []
+  const ids = []
+  for (const p of expected) {
+    const sid = p?.steam_id || p?.steamId
+    if (sid) ids.push(String(sid))
+  }
+  return { steamIds: ids, serverSteamId: row?.server_steam_id ? String(row.server_steam_id) : null }
+}
+
+export async function startPolling(matchId) {
+  if (!process.env.STEAM_API_KEY) {
+    console.warn(`[livePoller] STEAM_API_KEY not set — skipping match ${matchId}`)
+    return
+  }
+  if (active.has(matchId)) {
+    console.log(`[livePoller] already polling match ${matchId}`)
+    return
+  }
+  const { steamIds, serverSteamId } = await fetchSteamIdsForMatch(matchId)
+  const queueMatchId = await findQueueMatchId(matchId)
+
+  console.log(`[livePoller] starting match ${matchId} — ${steamIds.length} steam ids, server_steam_id=${serverSteamId || 'pending'}, queueMatchId=${queueMatchId || 'none'}`)
 
   const ctx = {
+    matchId,
     queueMatchId,
-    serverSteamId: qm.server_steam_id ? String(qm.server_steam_id) : null,
+    serverSteamId,
     steamIds,
     snapshot: null,
     attempts: 0,
     intervalId: null,
   }
-  active.set(queueMatchId, ctx)
+  active.set(matchId, ctx)
 
   const tick = async () => {
     try {
@@ -65,16 +87,28 @@ export async function startPolling(queueMatchId) {
       if (!ctx.serverSteamId) {
         ctx.attempts++
         if (ctx.attempts > MAX_BOOTSTRAP_ATTEMPTS) {
-          console.warn(`[livePoller] giving up on queue match ${queueMatchId} — no server_steam_id after ${ctx.attempts} attempts`)
-          return stopPolling(queueMatchId)
+          console.warn(`[livePoller] giving up on match ${matchId} — no server_steam_id after ${ctx.attempts} attempts`)
+          return stopPolling(matchId)
         }
         const result = await deriveServerSteamId(ctx.steamIds)
         if (result.serverSteamId) {
           ctx.serverSteamId = result.serverSteamId
-          console.log(`[livePoller] match ${queueMatchId} — captured server_steam_id ${ctx.serverSteamId} from player ${result.fromSteamId}`)
-          await execute('UPDATE queue_matches SET server_steam_id = $1 WHERE id = $2', [ctx.serverSteamId, queueMatchId])
+          console.log(`[livePoller] match ${matchId} — captured server_steam_id ${ctx.serverSteamId} from player ${result.fromSteamId}`)
+          // Persist on the most-recent match_lobbies row so resume can use it.
+          try {
+            await execute(
+              `UPDATE match_lobbies SET server_steam_id = $1
+                WHERE id = (SELECT id FROM match_lobbies WHERE match_id = $2 ORDER BY id DESC LIMIT 1)`,
+              [ctx.serverSteamId, matchId]
+            )
+          } catch (e) { console.error('[livePoller] persist server_steam_id failed:', e.message) }
+          // Mirror onto queue_matches.server_steam_id when applicable so older
+          // queue-match queries that read from there still work.
+          if (ctx.queueMatchId) {
+            try { await execute('UPDATE queue_matches SET server_steam_id = $1 WHERE id = $2', [ctx.serverSteamId, ctx.queueMatchId]) } catch {}
+          }
         } else {
-          console.log(`[livePoller] match ${queueMatchId} attempt ${ctx.attempts}/${MAX_BOOTSTRAP_ATTEMPTS} — no player in-game yet (${result.diagnostic})`)
+          console.log(`[livePoller] match ${matchId} attempt ${ctx.attempts}/${MAX_BOOTSTRAP_ATTEMPTS} — no player in-game yet (${result.diagnostic})`)
           return // try again next tick
         }
       }
@@ -82,7 +116,7 @@ export async function startPolling(queueMatchId) {
       // 2. Pull realtime stats
       const stats = await fetchRealtimeStats(ctx.serverSteamId)
       if (!stats) {
-        console.log(`[livePoller] match ${queueMatchId} — GetRealtimeStats returned no data`)
+        console.log(`[livePoller] match ${matchId} — GetRealtimeStats returned no data`)
         return
       }
 
@@ -119,15 +153,26 @@ export async function startPolling(queueMatchId) {
         updated_at:    Date.now(),
       }
 
-      // 3. Broadcast to anyone watching (home page + per-match page)
+      // 3. Broadcast to anyone watching. matchId is the new canonical id;
+      // queueMatchId is included when applicable for backwards-compat.
       if (ioRef) {
-        const payload = { queueMatchId, ...ctx.snapshot }
+        const payload = {
+          matchId,
+          queueMatchId: ctx.queueMatchId,
+          ...ctx.snapshot,
+        }
         ioRef.emit('home:liveStats', payload)
-        ioRef.to(`queue-match:${queueMatchId}`).emit('queue:liveStats', payload)
+        // Per-room broadcasts: tournament rooms hang off comp:${compId} but
+        // are too broad for live-stats; instead use a match-scoped room and
+        // a queue-match room for the existing queue page.
+        ioRef.to(`match:${matchId}`).emit('match:liveStats', payload)
+        if (ctx.queueMatchId) {
+          ioRef.to(`queue-match:${ctx.queueMatchId}`).emit('queue:liveStats', payload)
+        }
       }
     } catch (e) {
       // Don't kill the poller on transient API errors — just log.
-      console.error(`[livePoller] tick failed for queue match ${queueMatchId}:`, e.message)
+      console.error(`[livePoller] tick failed for match ${matchId}:`, e.message)
     }
   }
 
@@ -136,11 +181,11 @@ export async function startPolling(queueMatchId) {
   ctx.intervalId = setInterval(tick, POLL_MS)
 }
 
-export function stopPolling(queueMatchId) {
-  const ctx = active.get(queueMatchId)
+export function stopPolling(matchId) {
+  const ctx = active.get(matchId)
   if (!ctx) return
   if (ctx.intervalId) clearInterval(ctx.intervalId)
-  active.delete(queueMatchId)
+  active.delete(matchId)
 }
 
 // Derive server_steam_id by polling Steam Web API for the first player
@@ -185,13 +230,22 @@ async function fetchRealtimeStats(serverSteamId) {
   }
 }
 
-// On startup, resume polling for any queue match still flagged as live.
+// On startup, resume polling for any match whose latest lobby launched the
+// game (status='completed' + dota_match_id set) within the last 4 hours and
+// whose match_games row hasn't been resolved yet (no winner).
 export async function resumeActiveMatches() {
   try {
-    const live = await query(
-      `SELECT id FROM queue_matches WHERE status = 'live' AND created_at > NOW() - INTERVAL '4 hours'`
-    )
-    for (const row of live) startPolling(row.id)
+    const live = await query(`
+      SELECT DISTINCT ml.match_id
+        FROM match_lobbies ml
+        LEFT JOIN match_games mg
+          ON mg.match_id = ml.match_id AND mg.game_number = ml.game_number
+       WHERE ml.status = 'completed'
+         AND ml.dota_match_id IS NOT NULL
+         AND ml.created_at > NOW() - INTERVAL '4 hours'
+         AND (mg.winner_captain_id IS NULL)
+    `)
+    for (const row of live) startPolling(row.match_id)
     if (live.length) console.log(`[livePoller] resumed polling ${live.length} live match(es)`)
   } catch (e) {
     console.error('[livePoller] resume failed:', e.message)

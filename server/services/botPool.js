@@ -422,6 +422,17 @@ class BotPool {
         gameNumber: lobby.game_number,
         dotaMatchId,
       })
+      // Persist server_steam_id from bot's game_started payload onto the
+      // match_lobbies row so livePoller can skip the bootstrap loop. Same
+      // path for tournament + queue matches.
+      const serverSteamId = data.serverSteamId || data.server_steamid || data.serverSteamID
+      if (serverSteamId) {
+        try {
+          await execute('UPDATE match_lobbies SET server_steam_id = $1 WHERE id = $2', [String(serverSteamId), lobby.id])
+          console.log(`[livePoller] match ${lobby.match_id} — server_steam_id ${serverSteamId} captured from bot game_started`)
+        } catch (e) { console.error('[livePoller] save server_steam_id failed:', e.message) }
+      }
+
       if (lobby.competition_id) {
         this.io.to(`comp:${lobby.competition_id}`).emit('tournament:updated')
       } else {
@@ -436,25 +447,16 @@ class BotPool {
           // does not restore the stale "lobby created" banner via queue:getState.
           // playerInMatch stays set until _autoFillGameWinner runs (re-queue gating).
           activeQueueMatches.delete(qm.id)
-          // Persist server_steam_id immediately if the Go bot included it in
-          // the game_started payload — this lets the live poller skip the
-          // 6-minute bootstrap loop where it tries to derive it from player
-          // summaries (which fails when players have Game Details = Friends).
-          const serverSteamId = data.serverSteamId || data.server_steamid || data.serverSteamID
+          // Mirror onto queue_matches.server_steam_id for any legacy reader.
           if (serverSteamId) {
-            try {
-              await execute(
-                'UPDATE queue_matches SET server_steam_id = $1 WHERE id = $2',
-                [String(serverSteamId), qm.id]
-              )
-              console.log(`[livePoller] match ${qm.id} — server_steam_id ${serverSteamId} captured from bot game_started`)
-            } catch (e) { console.error('[livePoller] save server_steam_id failed:', e.message) }
+            try { await execute('UPDATE queue_matches SET server_steam_id = $1 WHERE id = $2', [String(serverSteamId), qm.id]) } catch {}
           }
-          // Kick off live-stats polling — uses the bot-provided server_steam_id
-          // when present, otherwise falls back to deriving from player summaries.
-          try { startLivePolling(qm.id) } catch (e) { console.error('[livePoller] start failed:', e.message) }
         }
       }
+
+      // Kick off live-stats polling for ALL matches (queue or tournament). The
+      // poller is keyed by matches.id and reads server_steam_id off match_lobbies.
+      try { startLivePolling(lobby.match_id) } catch (e) { console.error('[livePoller] start failed:', e.message) }
     }
 
     // Schedule OpenDota stats fetch
@@ -529,26 +531,28 @@ class BotPool {
   }
 
   // Bot has captured the matchmaking server's SteamID from the lobby cache.
-  // Persist it on the queue match so the live-stats poller can call Steam's
+  // Persist it on the lobby row so the live-stats poller can call Steam's
   // GetRealtimeStats directly, skipping the player-summary derive path that
-  // depends on player privacy settings.
+  // depends on player privacy settings. Works for both queue and tournament
+  // matches since both use match_lobbies.
   async _onLobbyServerId(data) {
     const lobbyId = Number(data.lobbyId)
     const serverSteamId = String(data.serverSteamId || '').trim()
     if (!lobbyId || !serverSteamId || serverSteamId === '0') return
     try {
-      const lobby = await queryOne('SELECT match_id FROM match_lobbies WHERE id = $1', [lobbyId])
+      const lobby = await queryOne('SELECT match_id, server_steam_id FROM match_lobbies WHERE id = $1', [lobbyId])
       if (!lobby?.match_id) return
-      const qm = await queryOne('SELECT id, server_steam_id FROM queue_matches WHERE match_id = $1', [lobby.match_id])
-      if (!qm) return
-      if (String(qm.server_steam_id || '') === serverSteamId) return // already set
-      await execute('UPDATE queue_matches SET server_steam_id = $1 WHERE id = $2', [serverSteamId, qm.id])
-      console.log(`[livePoller] match ${qm.id} — server_steam_id ${serverSteamId} captured from bot lobby_server_id`)
-      // If the match is already live and polling is running, the next tick
-      // will pick up the saved value automatically. If polling never started
-      // (e.g. game_started fired without serverSteamId and the bootstrap loop
-      // gave up), kick it off now.
-      try { startLivePolling(qm.id) } catch (e) { console.error('[livePoller] start failed:', e.message) }
+      if (String(lobby.server_steam_id || '') === serverSteamId) return // already set
+      await execute('UPDATE match_lobbies SET server_steam_id = $1 WHERE id = $2', [serverSteamId, lobbyId])
+      // Mirror onto queue_matches when applicable (legacy column).
+      const qm = await queryOne('SELECT id FROM queue_matches WHERE match_id = $1', [lobby.match_id])
+      if (qm) {
+        try { await execute('UPDATE queue_matches SET server_steam_id = $1 WHERE id = $2', [serverSteamId, qm.id]) } catch {}
+      }
+      console.log(`[livePoller] match ${lobby.match_id} — server_steam_id ${serverSteamId} captured from bot lobby_server_id`)
+      // If polling never started (e.g. game_started fired without serverSteamId
+      // and the bootstrap loop gave up), kick it off now.
+      try { startLivePolling(lobby.match_id) } catch (e) { console.error('[livePoller] start failed:', e.message) }
     } catch (e) {
       console.error('[Bot] _onLobbyServerId error:', e.message)
     }
@@ -926,6 +930,11 @@ class BotPool {
 
   async _autoFillGameWinner(matchId, gameNumber, radiantWin, matchData) {
     try {
+      // The game just ended — stop polling. The next game (if any) will
+      // restart polling with a fresh server_steam_id when the bot reports
+      // game_started for game N+1. Works for both queue and tournament.
+      try { stopLivePolling(matchId) } catch {}
+
       const match = await queryOne('SELECT * FROM matches WHERE id = $1', [matchId])
       if (!match) return
 
@@ -1043,8 +1052,7 @@ class BotPool {
         }
         // Update queue match status
         await execute("UPDATE queue_matches SET status = 'completed', completed_at = NOW() WHERE id = $1", [queueMatchXp.id])
-        // Stop the live poller — match is no longer in-game.
-        try { stopLivePolling(queueMatchXp.id) } catch {}
+        // (live poller already stopped at the top of _autoFillGameWinner)
 
         // Apply season rating change (only if this match's pool was assigned to a season).
         // applyMatchToSeason is idempotent against queue_match_id, so a retry can't double-apply.

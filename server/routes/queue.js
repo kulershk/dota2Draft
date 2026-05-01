@@ -306,10 +306,13 @@ export default function createQueueRouter(io) {
   // KDA, NW, level, items, plus team scores and game time). Used by the match
   // page on mount so a refresh / late-join sees current state without waiting
   // up to 12s for the next poll tick. Returns 200 + null if no live data.
+  // The poller is keyed by matches.id, so we look up the queue_match's match_id.
   router.get('/api/queue/match/:id/live', async (req, res) => {
     const id = Number(req.params.id)
     if (!id) return res.status(400).json({ error: 'Invalid id' })
-    res.json(getLiveSnapshot(id))
+    const qm = await queryOne('SELECT match_id FROM queue_matches WHERE id = $1', [id])
+    if (!qm?.match_id) return res.json(null)
+    res.json(getLiveSnapshot(qm.match_id))
   })
 
   // ── Public: game stats for a queue match ──

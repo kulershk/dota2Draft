@@ -13,6 +13,7 @@ import DatePicker from '@/components/common/DatePicker.vue'
 import GameStatsTable from '@/components/match/GameStatsTable.vue'
 import DraftPhaseViewer from '@/components/match/DraftPhaseViewer.vue'
 import MatchHeaderCard from '@/components/match/MatchHeaderCard.vue'
+import LiveMatchBanner from '@/components/match/LiveMatchBanner.vue'
 import { fmtDateTime, toLocalDatetime, localDatetimeToISO } from '@/utils/format'
 
 const { t } = useI18n()
@@ -774,6 +775,16 @@ function goBack() {
           </label>
         </div>
       </div>
+
+      <!-- Live banner (renders only while liveMatchPoller has a snapshot) -->
+      <LiveMatchBanner
+        v-if="match.status === 'live'"
+        :match-id="match.id"
+        :team1-players="teamRosters.team1"
+        :team2-players="teamRosters.team2"
+        :team1-name="match.team1_name"
+        :team2-name="match.team2_name"
+      />
 
       <!-- Team Rosters -->
       <div v-if="teamRosters.team1.length || teamRosters.team2.length" class="grid grid-cols-2 gap-4 mb-6">

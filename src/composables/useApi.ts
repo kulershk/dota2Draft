@@ -507,6 +507,7 @@ export function useApi() {
     },
     getQueueMatch: (id: number) => request(`/api/queue/match/${id}`),
     getQueueMatchLive: (id: number) => request(`/api/queue/match/${id}/live`),
+    getMatchLive: (matchId: number) => request(`/api/matches/${matchId}/live`),
     getQueueMatchGameStats: (queueMatchId: number, gameNumber: number) =>
       request(`/api/queue/match/${queueMatchId}/games/${gameNumber}/stats`),
 

@@ -2033,9 +2033,20 @@
     "/api/queue/match/{id}/live": {
       "get": {
         "tags": ["Queue"],
-        "summary": "Public: latest live snapshot for a queue match",
-        "description": "Returns the in-memory snapshot from liveMatchPoller — team scores, game time, game state, and per-player heroes/level/KDA/NW/items. Returns 200 + null when the poller is not running for this match (match isn't live, or STEAM_API_KEY missing). Used by the match page on mount so a refresh / late-join sees current state without waiting up to 12s for the next poll tick.",
+        "summary": "Public: latest live snapshot for a queue match (back-compat)",
+        "description": "Translates queue_match.id → matches.id internally and returns the same snapshot as /api/matches/{matchId}/live. Returns 200 + null when no poll is active.",
         "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": { "description": "Snapshot or null", "content": { "application/json": { "schema": { "type": "object", "nullable": true } } } }
+        }
+      }
+    },
+    "/api/matches/{matchId}/live": {
+      "get": {
+        "tags": ["Tournaments"],
+        "summary": "Public: latest live snapshot for any match (queue or tournament)",
+        "description": "Returns the in-memory snapshot from liveMatchPoller — team scores, game time, game state, and per-player heroes/level/KDA/NW/items. Returns 200 + null when the poller is not running (match not live, or STEAM_API_KEY missing). Used by both QueueMatchPage and MatchRoomPage on mount so a refresh / late-join sees current state without waiting up to 12s for the next poll tick.",
+        "parameters": [{ "name": "matchId", "in": "path", "required": true, "schema": { "type": "integer" }, "description": "matches.id (not queue_matches.id)" }],
         "responses": {
           "200": { "description": "Snapshot or null", "content": { "application/json": { "schema": { "type": "object", "nullable": true } } } }
         }

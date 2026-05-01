@@ -1229,7 +1229,15 @@
     },
     "home:liveStats": {
       "subscribe": {
-        "summary": "Global broadcast: same payload as queue:liveStats (including players[]) — used by the homepage Live Matches strip and per-match page to update without subscribing to per-match rooms",
+        "summary": "Global broadcast: same payload as queue:liveStats (including players[]) — used by the homepage Live Matches strip and per-match page to update without subscribing to per-match rooms. Payload now keys on matchId (matches.id) and includes queueMatchId only when the match is queue-backed.",
+        "message": {
+          "payload": { "type": "object", "description": "Same shape as queue:liveStats, plus a top-level matchId field." }
+        }
+      }
+    },
+    "match:liveStats": {
+      "subscribe": {
+        "summary": "Broadcast to match:${matchId}: realtime live-game snapshot for tournament matches (no queue_match row). Same payload shape as queue:liveStats and home:liveStats.",
         "message": {
           "payload": { "type": "object", "description": "Same shape as queue:liveStats." }
         }

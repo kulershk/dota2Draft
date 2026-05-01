@@ -6,9 +6,19 @@ import { getCompetition, getCaptains, parseCompSettings } from '../helpers/compe
 import { awardXp, getTeamPlayerIds, computeStagePlacements, awardStagePlacements } from '../helpers/xp.js'
 import { advanceWinner, repairBracketAdvancement, generateEliminationBracket, generateGroupMatches, generateDoubleEliminationBracket, customBracketWouldCycle, validateCustomBracketStage } from '../helpers/tournament.js'
 import { fetchAndSaveGameStats } from '../helpers/opendota.js'
+import { getLiveSnapshot } from '../services/liveMatchPoller.js'
 
 export default function createTournamentRouter(io) {
   const router = Router()
+
+  // ── Public: latest live snapshot for any match (queue OR tournament) ──
+  // Same shape as /api/queue/match/:id/live but keyed by matches.id directly.
+  // Returns 200 + null when no poll is currently active for this match.
+  router.get('/api/matches/:matchId/live', async (req, res) => {
+    const id = Number(req.params.matchId)
+    if (!id) return res.status(400).json({ error: 'Invalid matchId' })
+    res.json(getLiveSnapshot(id))
+  })
 
   router.get('/api/competitions/:compId/tournament', async (req, res) => {
     const compId = Number(req.params.compId)

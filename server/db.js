@@ -619,6 +619,10 @@ export async function initDb() {
     )
   `)
 
+  // match_lobbies migration: server_steam_id (used by liveMatchPoller for both
+  // queue matches and tournament matches — the bot reports it on game_started)
+  try { await execute('ALTER TABLE match_lobbies ADD COLUMN server_steam_id TEXT DEFAULT NULL') } catch {}
+
   // lobby_bots migration: add sentry_hash and login_key
   {
     const has = await queryOne(

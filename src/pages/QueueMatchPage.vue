@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ExternalLink, Clock, Trophy, Loader2, ChevronDown, Radio } from 'lucide-vue-next'
+import { ExternalLink, Clock, Trophy, Loader2, ChevronDown } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { useDotaConstants } from '@/composables/useDotaConstants'
-import { getSocket } from '@/composables/useSocket'
+import LiveMatchBanner from '@/components/match/LiveMatchBanner.vue'
 import GameStatsTable from '@/components/match/GameStatsTable.vue'
 import DraftPhaseViewer from '@/components/match/DraftPhaseViewer.vue'
 import MatchHeaderCard from '@/components/match/MatchHeaderCard.vue'
@@ -22,86 +22,10 @@ const match = ref<any>(null)
 const loading = ref(true)
 const error = ref<string | null>(null)
 
-// Live realtime snapshot from liveMatchPoller (Steam GetRealtimeStats).
-// Updated every 12s while the match is live.
-interface LivePlayer {
-  account_id: number | null
-  team: 'radiant' | 'dire'
-  hero_id: number
-  level: number
-  kills: number
-  deaths: number
-  assists: number
-  last_hits: number
-  denies: number
-  net_worth: number
-  gold: number
-  items: number[]
-}
-interface LiveSnapshot {
-  radiant_score: number | null
-  dire_score: number | null
-  game_time: number | null
-  game_state: number | null
-  players: LivePlayer[]
-  updated_at: number
-}
-const live = ref<LiveSnapshot | null>(null)
-const now = ref(Date.now())
-let nowTicker: ReturnType<typeof setInterval> | null = null
-
-const liveStale = computed(() => {
-  if (!live.value) return true
-  return now.value - live.value.updated_at > 30_000
+const liveActive = computed(() => {
+  const s = match.value?.status
+  return s === 'live' || s === 'lobby_creating' || s === 'picking'
 })
-
-const liveByAccountId = computed<Record<number, LivePlayer>>(() => {
-  const map: Record<number, LivePlayer> = {}
-  for (const p of (live.value?.players || [])) {
-    if (p.account_id) map[p.account_id] = p
-  }
-  return map
-})
-
-function liveForRosterPlayer(rosterPlayer: any): LivePlayer | null {
-  // queue_matches.team1_players entries carry steamId (64-bit). The realtime
-  // API returns accountid (32-bit). Convert by subtracting the Steam offset.
-  const steamId64 = rosterPlayer?.steamId || rosterPlayer?.steam_id
-  if (!steamId64) return null
-  // BigInt safe — JS Number loses precision past 2^53 but Dota account IDs
-  // fit. SteamID64 base = 76561197960265728. Cast via BigInt then back.
-  try {
-    const accountId = Number(BigInt(steamId64) - 76561197960265728n)
-    if (!Number.isFinite(accountId) || accountId <= 0) return null
-    return liveByAccountId.value[accountId] || null
-  } catch {
-    return null
-  }
-}
-
-function fmtGameTime(seconds: number | null): string {
-  if (seconds == null) return '--:--'
-  const negative = seconds < 0
-  const s = Math.abs(seconds)
-  const m = Math.floor(s / 60)
-  const ss = s % 60
-  const t = `${m}:${ss.toString().padStart(2, '0')}`
-  return negative ? `-${t}` : t
-}
-
-function gameStateLabel(state: number | null): string {
-  // From Dota 2's DOTA_GameState enum — most common values during live play.
-  // 4 = pre-game (strategy time, post-pick), 5 = playing.
-  switch (state) {
-    case 1: return t('liveStateInit')
-    case 2: return t('liveStateWaitForPlayers')
-    case 3: return t('liveStateHeroSelection')
-    case 4: return t('liveStateStrategyTime')
-    case 5: return t('liveStatePlaying')
-    case 6: return t('liveStatePostGame')
-    default: return ''
-  }
-}
 
 const team1 = computed(() => match.value?.team1_players || [])
 const team2 = computed(() => match.value?.team2_players || [])
@@ -238,16 +162,6 @@ function getDraftPhases(gameNumber: number) {
   return phases
 }
 
-function onLiveStats(payload: any) {
-  if (!match.value) return
-  if (Number(payload?.queueMatchId) !== match.value.id) return
-  // The poller broadcasts the same shape the snapshot endpoint returns, plus
-  // queueMatchId — strip that and adopt the rest.
-  const { queueMatchId: _qmid, ...snap } = payload
-  live.value = snap as LiveSnapshot
-  now.value = Date.now()
-}
-
 onMounted(async () => {
   try {
     match.value = await api.getQueueMatch(Number(route.params.id))
@@ -257,28 +171,10 @@ onMounted(async () => {
       expandedGame.value = firstWithStats.game_number
       loadStats(firstWithStats.game_number)
     }
-    // Live state — only fetch + subscribe while the match is in flight.
-    if (match.value?.status === 'live' || match.value?.status === 'lobby_creating' || match.value?.status === 'picking') {
-      try {
-        const snap = await api.getQueueMatchLive(match.value.id)
-        if (snap) live.value = snap
-      } catch { /* no live data yet — broadcasts will fill in */ }
-      const sock = getSocket()
-      // The poller emits to every socket via 'home:liveStats'; we filter by id.
-      sock?.on('home:liveStats', onLiveStats)
-      // Tick `now` every second so the stale check + live game time stay fresh.
-      nowTicker = setInterval(() => { now.value = Date.now() }, 1000)
-    }
   } catch (e: any) {
     error.value = e.message || 'Match not found'
   }
   loading.value = false
-})
-
-onBeforeUnmount(() => {
-  const sock = getSocket()
-  sock?.off('home:liveStats', onLiveStats)
-  if (nowTicker) clearInterval(nowTicker)
 })
 </script>
 
@@ -333,79 +229,14 @@ onBeforeUnmount(() => {
           :has-points="hasPointChanges"
         />
 
-        <!-- Live banner: realtime poll from Steam GetRealtimeStats. Only renders
-             while we have a snapshot (poller running). Fades to muted after 30s
-             of no updates so a stale snapshot is visually obvious. -->
-        <div v-if="live" class="card overflow-hidden mb-5 transition-opacity" :class="liveStale ? 'opacity-60' : 'opacity-100'">
-          <div class="px-5 py-3 flex items-center gap-3 border-b border-border/30 bg-gradient-to-r from-red-500/10 via-transparent to-transparent">
-            <span class="flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
-                  :class="liveStale ? 'bg-muted/40 text-muted-foreground' : 'bg-red-500/15 text-red-400'">
-              <Radio class="w-3 h-3" :class="!liveStale && 'animate-pulse'" />
-              {{ liveStale ? t('liveStale') : t('matchLive') }}
-            </span>
-            <span v-if="gameStateLabel(live.game_state)" class="text-xs text-muted-foreground">{{ gameStateLabel(live.game_state) }}</span>
-            <span class="ml-auto flex items-center gap-1 font-mono text-sm tabular-nums">
-              <Clock class="w-3.5 h-3.5 text-muted-foreground" />
-              {{ fmtGameTime(live.game_time) }}
-            </span>
-          </div>
-          <div class="px-5 py-4 flex items-center justify-center gap-6">
-            <div class="text-right">
-              <div class="text-[10px] uppercase tracking-wider font-bold text-green-400">{{ t('queueRadiant') }}</div>
-              <div class="text-3xl font-bold tabular-nums leading-none mt-1">{{ live.radiant_score ?? '–' }}</div>
-            </div>
-            <div class="text-xs text-muted-foreground/40 font-bold">VS</div>
-            <div class="text-left">
-              <div class="text-[10px] uppercase tracking-wider font-bold text-red-400">{{ t('queueDire') }}</div>
-              <div class="text-3xl font-bold tabular-nums leading-none mt-1">{{ live.dire_score ?? '–' }}</div>
-            </div>
-          </div>
-          <!-- Per-player live cards (hero portrait + level + KDA + NW). Match by
-               steamId → accountid; rosters that don't yet have a hero picked
-               just show the placeholder via heroImg falling back to ''. -->
-          <div class="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border/30 border-t border-border/30">
-            <div class="flex flex-col">
-              <div v-for="p in team1" :key="`r-${p.playerId || p.steamId}`"
-                class="flex items-center gap-2.5 px-4 py-2 hover:bg-accent/20 transition-colors">
-                <img v-if="liveForRosterPlayer(p) && dota.heroImg(liveForRosterPlayer(p)!.hero_id)"
-                  :src="dota.heroImg(liveForRosterPlayer(p)!.hero_id)"
-                  class="w-10 h-6 rounded object-cover shrink-0"
-                  :title="dota.heroName(liveForRosterPlayer(p)!.hero_id)" />
-                <div v-else class="w-10 h-6 rounded bg-muted/40 shrink-0" />
-                <span class="text-xs font-medium truncate flex-1 min-w-0">{{ p.name }}</span>
-                <span v-if="liveForRosterPlayer(p)" class="text-[10px] tabular-nums text-amber-400 font-semibold">
-                  {{ liveForRosterPlayer(p)!.level }}
-                </span>
-                <span v-if="liveForRosterPlayer(p)" class="text-[11px] tabular-nums font-mono">
-                  {{ liveForRosterPlayer(p)!.kills }}/{{ liveForRosterPlayer(p)!.deaths }}/{{ liveForRosterPlayer(p)!.assists }}
-                </span>
-                <span v-if="liveForRosterPlayer(p)" class="text-[10px] tabular-nums text-muted-foreground w-12 text-right">
-                  {{ Math.round(liveForRosterPlayer(p)!.net_worth / 100) / 10 }}k
-                </span>
-              </div>
-            </div>
-            <div class="flex flex-col">
-              <div v-for="p in team2" :key="`d-${p.playerId || p.steamId}`"
-                class="flex items-center gap-2.5 px-4 py-2 hover:bg-accent/20 transition-colors">
-                <img v-if="liveForRosterPlayer(p) && dota.heroImg(liveForRosterPlayer(p)!.hero_id)"
-                  :src="dota.heroImg(liveForRosterPlayer(p)!.hero_id)"
-                  class="w-10 h-6 rounded object-cover shrink-0"
-                  :title="dota.heroName(liveForRosterPlayer(p)!.hero_id)" />
-                <div v-else class="w-10 h-6 rounded bg-muted/40 shrink-0" />
-                <span class="text-xs font-medium truncate flex-1 min-w-0">{{ p.name }}</span>
-                <span v-if="liveForRosterPlayer(p)" class="text-[10px] tabular-nums text-amber-400 font-semibold">
-                  {{ liveForRosterPlayer(p)!.level }}
-                </span>
-                <span v-if="liveForRosterPlayer(p)" class="text-[11px] tabular-nums font-mono">
-                  {{ liveForRosterPlayer(p)!.kills }}/{{ liveForRosterPlayer(p)!.deaths }}/{{ liveForRosterPlayer(p)!.assists }}
-                </span>
-                <span v-if="liveForRosterPlayer(p)" class="text-[10px] tabular-nums text-muted-foreground w-12 text-right">
-                  {{ Math.round(liveForRosterPlayer(p)!.net_worth / 100) / 10 }}k
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
+        <LiveMatchBanner
+          v-if="liveActive && match.match_id"
+          :match-id="match.match_id"
+          :team1-players="team1"
+          :team2-players="team2"
+          :team1-name="match.captain1_display_name || match.captain1_name"
+          :team2-name="match.captain2_display_name || match.captain2_name"
+        />
 
         <!-- Two team result cards -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
