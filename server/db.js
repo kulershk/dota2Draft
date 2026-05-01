@@ -48,7 +48,23 @@ export async function initDb() {
       created_by INTEGER REFERENCES players(id) ON DELETE SET NULL,
       created_at TIMESTAMP DEFAULT NOW()
     );
+
+    CREATE TABLE IF NOT EXISTS leagues (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      dota_league_id INTEGER NOT NULL,
+      public BOOLEAN NOT NULL DEFAULT FALSE,
+      created_by INTEGER REFERENCES players(id) ON DELETE SET NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
   `)
+  // leagues migration: add public column for existing DBs
+  {
+    const has = await queryOne(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'leagues' AND column_name = 'public'`
+    )
+    if (!has) await execute('ALTER TABLE leagues ADD COLUMN public BOOLEAN NOT NULL DEFAULT FALSE')
+  }
 
   // Ensure global settings
   const hasAdminPw = await queryOne("SELECT 1 FROM settings WHERE key = 'adminPassword'")
@@ -676,6 +692,7 @@ export async function initDb() {
       xp_participate INTEGER DEFAULT 5,
       accept_timer INTEGER DEFAULT 20,
       decline_ban_minutes INTEGER DEFAULT 5,
+      created_by INTEGER NULL REFERENCES players(id) ON DELETE SET NULL,
       created_at TIMESTAMP DEFAULT NOW()
     )
   `)
@@ -689,6 +706,7 @@ export async function initDb() {
   try { await execute('ALTER TABLE queue_pools ADD COLUMN lobby_penalty_dire INTEGER DEFAULT 0') } catch {}
   try { await execute('ALTER TABLE queue_pools ADD COLUMN accept_timer INTEGER DEFAULT 20') } catch {}
   try { await execute('ALTER TABLE queue_pools ADD COLUMN decline_ban_minutes INTEGER DEFAULT 5') } catch {}
+  try { await execute('ALTER TABLE queue_pools ADD COLUMN created_by INTEGER NULL REFERENCES players(id) ON DELETE SET NULL') } catch {}
 
   // Drop FK constraints on winner_captain_id so queue matches can store player IDs
   try { await execute('ALTER TABLE match_games DROP CONSTRAINT IF EXISTS match_games_winner_captain_id_fkey') } catch {}
@@ -742,15 +760,42 @@ export async function initDb() {
 
   // Queue bans — admin can kick or temporarily ban players from joining queue.
   // banned_until IS NULL means permanent until an admin unbans.
+  // pool_id IS NULL means the ban applies to every pool ("global"); a non-null
+  // pool_id scopes the ban to that one pool. A player can have multiple rows
+  // (one global + several per-pool, or several per-pool).
   await execute(`
     CREATE TABLE IF NOT EXISTS queue_bans (
-      player_id INTEGER PRIMARY KEY REFERENCES players(id) ON DELETE CASCADE,
+      id SERIAL PRIMARY KEY,
+      player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      pool_id INTEGER NULL REFERENCES queue_pools(id) ON DELETE CASCADE,
       banned_until TIMESTAMP NULL,
       reason TEXT NULL,
       banned_by INTEGER NULL REFERENCES players(id) ON DELETE SET NULL,
       created_at TIMESTAMP DEFAULT NOW()
     )
   `)
+  // Migration for existing DBs that still have the old (player_id PK, no pool_id) shape:
+  {
+    const hasId = await queryOne(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'queue_bans' AND column_name = 'id'`
+    )
+    if (!hasId) {
+      // 1) Drop the player_id-as-PK constraint so we can replace it.
+      try { await execute('ALTER TABLE queue_bans DROP CONSTRAINT IF EXISTS queue_bans_pkey') } catch {}
+      // 2) Add surrogate id and promote it to PK.
+      await execute('ALTER TABLE queue_bans ADD COLUMN id SERIAL')
+      await execute('ALTER TABLE queue_bans ADD PRIMARY KEY (id)')
+    }
+    const hasPoolId = await queryOne(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'queue_bans' AND column_name = 'pool_id'`
+    )
+    if (!hasPoolId) {
+      await execute('ALTER TABLE queue_bans ADD COLUMN pool_id INTEGER NULL REFERENCES queue_pools(id) ON DELETE CASCADE')
+    }
+  }
+  // At most one global ban per player; at most one ban per (player, pool).
+  await execute(`CREATE UNIQUE INDEX IF NOT EXISTS queue_bans_player_global ON queue_bans (player_id) WHERE pool_id IS NULL`)
+  await execute(`CREATE UNIQUE INDEX IF NOT EXISTS queue_bans_player_pool ON queue_bans (player_id, pool_id) WHERE pool_id IS NOT NULL`)
 
   // ─── Seasons ─────────────────────────────────────────────
   // Independent ELO ladders. Each queue_pool may be assigned to a season.

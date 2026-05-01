@@ -163,6 +163,9 @@ const editCaptain = ref({ id: 0, team: '', budget: 1000 })
 // All users (for promote dropdown)
 const allUsers = ref<any[]>([])
 
+// Leagues for the lobbyLeagueId dropdown
+const leagues = ref<{ id: number; name: string; dota_league_id: number }[]>([])
+
 onMounted(async () => {
   await store.joinCompetition(compId.value)
   await store.fetchCompData()
@@ -180,6 +183,8 @@ onMounted(async () => {
   compRegStart.value = comp.registration_start ? toLocalDatetime(comp.registration_start) : ''
   compRegEnd.value = comp.registration_end ? toLocalDatetime(comp.registration_end) : ''
   Object.assign(localSettings, comp.settings)
+  // Load leagues for the dropdown (public endpoint)
+  try { leagues.value = await api.getLeagues() } catch { /* non-blocking */ }
   loaded.value = true
   // Load all users for promote
   allUsers.value = await api.getUsers()
@@ -681,7 +686,15 @@ watch(activeTab, (tab) => {
             <option :value="10">{{ t('regionRussia') }}</option>
           </select>
         </div>
-        <InputGroup :label="t('lobbyLeagueId')" :model-value="String(localSettings.lobbyLeagueId)" placeholder="0" @update:model-value="localSettings.lobbyLeagueId = Number($event)" :hint="t('lobbyLeagueIdHint')" />
+        <div class="flex flex-col gap-1.5">
+          <label class="label-text">{{ t('lobbyLeagueId') }}</label>
+          <select class="input-field" :value="localSettings.lobbyLeagueId" @change="localSettings.lobbyLeagueId = Number(($event.target as HTMLSelectElement).value)">
+            <option :value="0">{{ t('lobbyLeagueNone') }}</option>
+            <option v-for="lg in leagues" :key="lg.id" :value="lg.dota_league_id">{{ lg.name }} (#{{ lg.dota_league_id }})</option>
+            <option v-if="localSettings.lobbyLeagueId && !leagues.some(l => l.dota_league_id === localSettings.lobbyLeagueId)" :value="localSettings.lobbyLeagueId">#{{ localSettings.lobbyLeagueId }}</option>
+          </select>
+          <p class="text-xs text-muted-foreground">{{ t('lobbyLeagueIdHint') }}</p>
+        </div>
         <div class="flex flex-col gap-1.5">
           <label class="label-text">{{ t('lobbyDotaTvDelay') }}</label>
           <select class="input-field" :value="localSettings.lobbyDotaTvDelay" @change="localSettings.lobbyDotaTvDelay = Number(($event.target as HTMLSelectElement).value)">
@@ -713,8 +726,24 @@ watch(activeTab, (tab) => {
           </select>
         </div>
         <div class="flex flex-col md:flex-row gap-4">
-          <InputGroup class="flex-1" :label="t('lobbyPenaltyRadiant')" :model-value="String(localSettings.lobbyPenaltyRadiant)" placeholder="0" @update:model-value="localSettings.lobbyPenaltyRadiant = Number($event)" />
-          <InputGroup class="flex-1" :label="t('lobbyPenaltyDire')" :model-value="String(localSettings.lobbyPenaltyDire)" placeholder="0" @update:model-value="localSettings.lobbyPenaltyDire = Number($event)" />
+          <div class="flex-1 flex flex-col gap-1.5">
+            <label class="label-text">{{ t('lobbyPenaltyRadiant') }}</label>
+            <select class="input-field" :value="localSettings.lobbyPenaltyRadiant" @change="localSettings.lobbyPenaltyRadiant = Number(($event.target as HTMLSelectElement).value)">
+              <option :value="0">{{ t('penaltyNone') }}</option>
+              <option :value="1">{{ t('penaltyLevel', { n: 1 }) }}</option>
+              <option :value="2">{{ t('penaltyLevel', { n: 2 }) }}</option>
+              <option :value="3">{{ t('penaltyLevel', { n: 3 }) }}</option>
+            </select>
+          </div>
+          <div class="flex-1 flex flex-col gap-1.5">
+            <label class="label-text">{{ t('lobbyPenaltyDire') }}</label>
+            <select class="input-field" :value="localSettings.lobbyPenaltyDire" @change="localSettings.lobbyPenaltyDire = Number(($event.target as HTMLSelectElement).value)">
+              <option :value="0">{{ t('penaltyNone') }}</option>
+              <option :value="1">{{ t('penaltyLevel', { n: 1 }) }}</option>
+              <option :value="2">{{ t('penaltyLevel', { n: 2 }) }}</option>
+              <option :value="3">{{ t('penaltyLevel', { n: 3 }) }}</option>
+            </select>
+          </div>
         </div>
         <div class="flex flex-col gap-1.5">
           <label class="label-text">{{ t('lobbyPauseSetting') }}</label>

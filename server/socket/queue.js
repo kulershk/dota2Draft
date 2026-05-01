@@ -60,13 +60,17 @@ export function registerQueueHandlers(socket, io) {
       if (pool.min_mmr > 0 && player.mmr < pool.min_mmr) return socket.emit('queue:error', { message: `Minimum MMR for this pool is ${pool.min_mmr}` })
       if (pool.max_mmr > 0 && player.mmr > pool.max_mmr) return socket.emit('queue:error', { message: `Maximum MMR for this pool is ${pool.max_mmr}` })
 
-      // Check queue ban
+      // Check queue ban — global (pool_id IS NULL) or scoped to this pool.
       const ban = await queryOne(
         `SELECT qb.banned_until, qb.reason, ab.name AS banned_by_name
            FROM queue_bans qb
            LEFT JOIN players ab ON ab.id = qb.banned_by
-          WHERE qb.player_id = $1 AND (qb.banned_until IS NULL OR qb.banned_until > NOW())`,
-        [playerId]
+          WHERE qb.player_id = $1
+            AND (qb.pool_id IS NULL OR qb.pool_id = $2)
+            AND (qb.banned_until IS NULL OR qb.banned_until > NOW())
+          ORDER BY qb.banned_until DESC NULLS FIRST
+          LIMIT 1`,
+        [playerId, poolId]
       )
       if (ban) {
         // Also re-broadcast myState so the client's banner shows up even if
@@ -281,11 +285,15 @@ export function registerQueueHandlers(socket, io) {
     // with a live countdown before the user even tries to join.
     let ban = null
     try {
+      // Only surface GLOBAL bans here — the no-pool snapshot. Pool-scoped bans
+      // are reported when the player tries to join that pool.
       const row = await queryOne(
         `SELECT qb.banned_until, qb.reason, ab.name AS banned_by_name
            FROM queue_bans qb
            LEFT JOIN players ab ON ab.id = qb.banned_by
-          WHERE qb.player_id = $1 AND (qb.banned_until IS NULL OR qb.banned_until > NOW())`,
+          WHERE qb.player_id = $1
+            AND qb.pool_id IS NULL
+            AND (qb.banned_until IS NULL OR qb.banned_until > NOW())`,
         [playerId]
       )
       if (row) {
@@ -561,9 +569,12 @@ function broadcastQueueUpdate(io, poolId) {
 // Public: kick a player from whatever queue they're in. Used by admin routes.
 // Removes them from the in-memory queue state, drops their sockets out of the
 // queue room, and notifies them individually so their client can reset UI.
-export function kickPlayerFromQueue(io, playerId, reason = null) {
+// onlyInPool: if non-null, only kick when the player is queued in that specific
+// pool. null means kick from whichever pool they're currently in.
+export function kickPlayerFromQueue(io, playerId, reason = null, onlyInPool = null) {
   const poolId = playerInQueue.get(playerId)
   if (!poolId) return false
+  if (onlyInPool != null && poolId !== onlyInPool) return false
 
   const q = poolQueues.get(poolId)
   if (q) q.delete(playerId)
@@ -691,13 +702,14 @@ async function resolveReadyCheck(id, io, { reason }) {
   if (rc.declineBanMinutes > 0 && bannedPlayers.length > 0) {
     const reasonText = reason === 'declined' ? 'Declined ready check' : 'Did not accept ready check in time'
     try {
+      // Pool-scoped: only blocks the offender from re-queuing into THIS pool.
       await execute(
-        `INSERT INTO queue_bans (player_id, banned_until, reason, banned_by)
-         SELECT unnest($1::int[]), NOW() + ($2 || ' minutes')::interval, $3, NULL
-         ON CONFLICT (player_id) DO UPDATE
+        `INSERT INTO queue_bans (player_id, pool_id, banned_until, reason, banned_by)
+         SELECT unnest($1::int[]), $4, NOW() + ($2 || ' minutes')::interval, $3, NULL
+         ON CONFLICT (player_id, pool_id) WHERE pool_id IS NOT NULL DO UPDATE
            SET banned_until = GREATEST(COALESCE(queue_bans.banned_until, NOW()), EXCLUDED.banned_until),
                reason = EXCLUDED.reason`,
-        [bannedPlayers.map(p => p.playerId), rc.declineBanMinutes, reasonText]
+        [bannedPlayers.map(p => p.playerId), rc.declineBanMinutes, reasonText, rc.poolId]
       )
     } catch (e) {
       console.error('[Queue] Failed to record decline bans:', e.message)

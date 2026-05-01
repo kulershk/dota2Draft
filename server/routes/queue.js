@@ -1,7 +1,25 @@
 import { Router } from 'express'
 import { query, queryOne, execute } from '../db.js'
-import { requirePermission } from '../middleware/permissions.js'
+import { requirePermission, hasPermission } from '../middleware/permissions.js'
 import { getAuthPlayer } from '../middleware/auth.js'
+
+// Resolves the caller's queue-admin scope. Returns:
+//   { player, canManageAll: true,  ownedPoolIds: null }  — full perm
+//   { player, canManageAll: false, ownedPoolIds: Set<id> } — own perm only
+// Writes the 401/403 response and returns null when the caller has neither perm.
+async function getQueueAdminScope(req, res) {
+  const player = await getAuthPlayer(req)
+  if (!player) { res.status(401).json({ error: 'Not authenticated' }); return null }
+  if (player.is_admin || await hasPermission(player, 'manage_queue_pools')) {
+    return { player, canManageAll: true, ownedPoolIds: null }
+  }
+  if (await hasPermission(player, 'manage_own_queue_pools')) {
+    const rows = await query('SELECT id FROM queue_pools WHERE created_by = $1', [player.id])
+    return { player, canManageAll: false, ownedPoolIds: new Set(rows.map(r => r.id)) }
+  }
+  res.status(403).json({ error: 'Permission denied' })
+  return null
+}
 import { activeQueueMatches, playerInMatch, playerInQueue, poolQueues, getPoolQueuePlayers, clearPickTimer } from '../socket/queueState.js'
 import { socketPlayers } from '../socket/state.js'
 import { botPool } from '../services/botPool.js'
@@ -301,10 +319,12 @@ export default function createQueueRouter(io) {
 
   // ── Admin: list all pools ──
   router.get('/api/admin/queue/pools', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_queue_pools')
-    if (!admin) return
+    const scope = await getQueueAdminScope(req, res)
+    if (!scope) return
     try {
-      const pools = await query('SELECT * FROM queue_pools ORDER BY id')
+      const pools = scope.canManageAll
+        ? await query('SELECT * FROM queue_pools ORDER BY id')
+        : await query('SELECT * FROM queue_pools WHERE created_by = $1 ORDER BY id', [scope.player.id])
       res.json(pools)
     } catch (e) {
       res.status(500).json({ error: e.message })
@@ -313,8 +333,9 @@ export default function createQueueRouter(io) {
 
   // ── Admin: create pool ──
   router.post('/api/admin/queue/pools', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_queue_pools')
-    if (!admin) return
+    const scope = await getQueueAdminScope(req, res)
+    if (!scope) return
+    const admin = scope.player
 
     const {
       name, enabled, min_mmr, max_mmr, pick_timer, best_of, team_size,
@@ -341,8 +362,8 @@ export default function createQueueRouter(io) {
           lobby_series_type, lobby_timeout_minutes,
           xp_win, xp_participate,
           accept_timer, decline_ban_minutes,
-          season_id
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
+          season_id, created_by
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
         RETURNING *
       `, [
         name, enabled !== false, min_mmr || 0, max_mmr || 0,
@@ -354,7 +375,7 @@ export default function createQueueRouter(io) {
         lobby_series_type || 0, lobby_timeout_minutes || 10,
         xp_win ?? 15, xp_participate ?? 5,
         accept_timer ?? 20, decline_ban_minutes ?? 5,
-        season_id || null,
+        season_id || null, admin.id,
       ])
       res.status(201).json(pool)
     } catch (e) {
@@ -364,13 +385,16 @@ export default function createQueueRouter(io) {
 
   // ── Admin: update pool ──
   router.put('/api/admin/queue/pools/:id', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_queue_pools')
-    if (!admin) return
+    const scope = await getQueueAdminScope(req, res)
+    if (!scope) return
 
     try {
       const poolId = Number(req.params.id)
       const existing = await queryOne('SELECT * FROM queue_pools WHERE id = $1', [poolId])
       if (!existing) return res.status(404).json({ error: 'Pool not found' })
+      if (!scope.canManageAll && existing.created_by !== scope.player.id) {
+        return res.status(403).json({ error: 'Permission denied — you can only edit pools you created' })
+      }
 
       const fields = [
         'name', 'enabled', 'min_mmr', 'max_mmr', 'pick_timer', 'best_of', 'team_size',
@@ -406,10 +430,16 @@ export default function createQueueRouter(io) {
 
   // ── Admin: delete pool ──
   router.delete('/api/admin/queue/pools/:id', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_queue_pools')
-    if (!admin) return
+    const scope = await getQueueAdminScope(req, res)
+    if (!scope) return
     try {
-      await execute('DELETE FROM queue_pools WHERE id = $1', [req.params.id])
+      const poolId = Number(req.params.id)
+      const existing = await queryOne('SELECT created_by FROM queue_pools WHERE id = $1', [poolId])
+      if (!existing) return res.status(404).json({ error: 'Pool not found' })
+      if (!scope.canManageAll && existing.created_by !== scope.player.id) {
+        return res.status(403).json({ error: 'Permission denied — you can only delete pools you created' })
+      }
+      await execute('DELETE FROM queue_pools WHERE id = $1', [poolId])
       res.json({ ok: true })
     } catch (e) {
       res.status(500).json({ error: e.message })
@@ -418,10 +448,19 @@ export default function createQueueRouter(io) {
 
   // ── Admin: list active queue matches ──
   router.get('/api/admin/queue/matches', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_queue_pools')
-    if (!admin) return
+    const scope = await getQueueAdminScope(req, res)
+    if (!scope) return
 
     try {
+      // Filter to owned pools when caller has only manage_own_queue_pools.
+      const params = []
+      let scopeFilter = ''
+      if (!scope.canManageAll) {
+        const ids = [...scope.ownedPoolIds]
+        if (ids.length === 0) return res.json([])
+        params.push(ids)
+        scopeFilter = ` AND qm.pool_id = ANY($${params.length}::int[])`
+      }
       // Get matches from DB that are still active
       const dbMatches = await query(`
         SELECT qm.*,
@@ -442,8 +481,9 @@ export default function createQueueRouter(io) {
            ORDER BY id DESC LIMIT 1
         ) ml ON TRUE
         WHERE qm.status IN ('picking', 'lobby_creating', 'live')
+          ${scopeFilter}
         ORDER BY qm.created_at DESC
-      `)
+      `, params)
 
       // Enrich with in-memory state where available
       const result = dbMatches.map(qm => {
@@ -467,15 +507,18 @@ export default function createQueueRouter(io) {
 
   // ── Admin: cancel a queue match ──
   router.post('/api/admin/queue/matches/:id/cancel', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_queue_pools')
-    if (!admin) return
+    const scope = await getQueueAdminScope(req, res)
+    if (!scope) return
 
     const qmId = Number(req.params.id)
     try {
       // Refuse cancel once the bot has started the match and left the lobby.
       // match_lobbies.status flips to 'completed' on game_started — past that
       // point, the Dota match is running on its own and there's nothing to cancel.
-      const qmRow = await queryOne('SELECT match_id FROM queue_matches WHERE id = $1', [qmId])
+      const qmRow = await queryOne('SELECT match_id, pool_id FROM queue_matches WHERE id = $1', [qmId])
+      if (qmRow && !scope.canManageAll && !scope.ownedPoolIds.has(qmRow.pool_id)) {
+        return res.status(403).json({ error: 'Permission denied — match is not in a pool you own' })
+      }
       if (qmRow?.match_id) {
         const latestLobby = await queryOne(
           'SELECT status FROM match_lobbies WHERE match_id = $1 ORDER BY id DESC LIMIT 1',
@@ -550,12 +593,15 @@ export default function createQueueRouter(io) {
 
   // ── Admin: manually retry lobby creation for a queue match ──
   router.post('/api/admin/queue/matches/:id/retry-lobby', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_queue_pools')
-    if (!admin) return
+    const scope = await getQueueAdminScope(req, res)
+    if (!scope) return
     const qmId = Number(req.params.id)
     try {
-      const qm = await queryOne('SELECT match_id, status FROM queue_matches WHERE id = $1', [qmId])
+      const qm = await queryOne('SELECT match_id, status, pool_id FROM queue_matches WHERE id = $1', [qmId])
       if (!qm) return res.status(404).json({ error: 'Queue match not found' })
+      if (!scope.canManageAll && !scope.ownedPoolIds.has(qm.pool_id)) {
+        return res.status(403).json({ error: 'Permission denied — match is not in a pool you own' })
+      }
       if (!qm.match_id) return res.status(400).json({ error: 'No match row linked to this queue match yet' })
       if (qm.status === 'cancelled' || qm.status === 'completed') {
         return res.status(409).json({ error: `Queue match is ${qm.status}` })
@@ -579,11 +625,12 @@ export default function createQueueRouter(io) {
 
   // ── Admin: list currently queued players across all pools ──
   router.get('/api/admin/queue/players', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_queue_pools')
-    if (!admin) return
+    const scope = await getQueueAdminScope(req, res)
+    if (!scope) return
     try {
       const out = []
       for (const [poolId] of poolQueues) {
+        if (!scope.canManageAll && !scope.ownedPoolIds.has(poolId)) continue
         const players = getPoolQueuePlayers(poolId)
         for (const p of players) out.push({ ...p, poolId })
       }
@@ -595,12 +642,20 @@ export default function createQueueRouter(io) {
 
   // ── Admin: kick player from whatever queue they're in ──
   router.post('/api/admin/queue/kick/:playerId', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_queue_pools')
-    if (!admin) return
+    const scope = await getQueueAdminScope(req, res)
+    if (!scope) return
     const playerId = Number(req.params.playerId)
     const reason = req.body?.reason || null
     try {
-      const kicked = kickPlayerFromQueue(io, playerId, reason)
+      // Own-perm callers can only kick from their pools.
+      const onlyInPool = scope.canManageAll
+        ? null
+        : (() => {
+            const poolId = playerInQueue.get(playerId)
+            return poolId && scope.ownedPoolIds.has(poolId) ? poolId : -1
+          })()
+      if (onlyInPool === -1) return res.status(403).json({ error: 'Player is not in a pool you own' })
+      const kicked = kickPlayerFromQueue(io, playerId, reason, onlyInPool)
       res.json({ ok: true, kicked })
     } catch (e) {
       res.status(500).json({ error: e.message })
@@ -608,20 +663,41 @@ export default function createQueueRouter(io) {
   })
 
   // ── Admin: list active queue bans ──
+  // Optional ?pool_id=N to filter to one pool (use 'global' to filter to NULL).
+  // own_queue_pools holders only see bans on pools they own (global bans are hidden).
   router.get('/api/admin/queue/bans', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_queue_pools')
-    if (!admin) return
+    const scope = await getQueueAdminScope(req, res)
+    if (!scope) return
     try {
+      const params = []
+      const conditions = ['(qb.banned_until IS NULL OR qb.banned_until > NOW())']
+
+      if (scope.canManageAll) {
+        if (req.query.pool_id === 'global') {
+          conditions.push('qb.pool_id IS NULL')
+        } else if (req.query.pool_id) {
+          params.push(Number(req.query.pool_id))
+          conditions.push(`qb.pool_id = $${params.length}`)
+        }
+      } else {
+        const ids = [...scope.ownedPoolIds]
+        if (ids.length === 0) return res.json([])
+        params.push(ids)
+        conditions.push(`qb.pool_id = ANY($${params.length}::int[])`)
+      }
+
       const rows = await query(`
-        SELECT qb.player_id, qb.banned_until, qb.reason, qb.created_at,
+        SELECT qb.id, qb.player_id, qb.pool_id, qb.banned_until, qb.reason, qb.created_at,
                p.name, p.display_name, p.avatar_url,
+               qp.name AS pool_name,
                ab.name AS banned_by_name
           FROM queue_bans qb
           JOIN players p ON p.id = qb.player_id
+          LEFT JOIN queue_pools qp ON qp.id = qb.pool_id
           LEFT JOIN players ab ON ab.id = qb.banned_by
-         WHERE qb.banned_until IS NULL OR qb.banned_until > NOW()
+         WHERE ${conditions.join(' AND ')}
          ORDER BY qb.created_at DESC
-      `)
+      `, params)
       res.json(rows)
     } catch (e) {
       res.status(500).json({ error: e.message })
@@ -629,30 +705,46 @@ export default function createQueueRouter(io) {
   })
 
   // ── Admin: create / update a queue ban ──
-  // body: { player_id, duration_minutes (0 or null = permanent), reason }
+  // body: { player_id, pool_id (null = applies to all pools), duration_minutes (0 or null = permanent), reason }
+  // own_queue_pools holders cannot create global bans (pool_id required) and the
+  // pool_id must be one they own.
   router.post('/api/admin/queue/bans', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_queue_pools')
-    if (!admin) return
-    const { player_id, duration_minutes, reason } = req.body || {}
+    const scope = await getQueueAdminScope(req, res)
+    if (!scope) return
+    const admin = scope.player
+    const { player_id, pool_id, duration_minutes, reason } = req.body || {}
     const pid = Number(player_id)
     if (!pid) return res.status(400).json({ error: 'player_id required' })
+
+    const poolId = pool_id == null ? null : Number(pool_id)
+    if (poolId != null && !Number.isFinite(poolId)) return res.status(400).json({ error: 'pool_id must be an integer or null' })
+
+    if (!scope.canManageAll) {
+      if (poolId == null) return res.status(403).json({ error: 'You can only create bans for pools you own — global bans require manage_queue_pools' })
+      if (!scope.ownedPoolIds.has(poolId)) return res.status(403).json({ error: 'You can only create bans for pools you own' })
+    }
 
     const mins = Number(duration_minutes) || 0
     const bannedUntil = mins > 0 ? new Date(Date.now() + mins * 60_000) : null
 
+    // Use the partial unique index that matches (NULL vs NOT NULL pool_id).
+    const conflictTarget = poolId == null
+      ? '(player_id) WHERE pool_id IS NULL'
+      : '(player_id, pool_id) WHERE pool_id IS NOT NULL'
+
     try {
       await execute(`
-        INSERT INTO queue_bans (player_id, banned_until, reason, banned_by)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT (player_id) DO UPDATE SET
+        INSERT INTO queue_bans (player_id, pool_id, banned_until, reason, banned_by)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT ${conflictTarget} DO UPDATE SET
           banned_until = EXCLUDED.banned_until,
           reason = EXCLUDED.reason,
           banned_by = EXCLUDED.banned_by,
           created_at = NOW()
-      `, [pid, bannedUntil, reason || null, admin.id])
+      `, [pid, poolId, bannedUntil, reason || null, admin.id])
 
-      // Kick them out if currently queued
-      try { kickPlayerFromQueue(io, pid, reason || 'Banned from queue') } catch {}
+      // Kick them out if currently queued in the affected pool (or any, for global).
+      try { kickPlayerFromQueue(io, pid, reason || 'Banned from queue', poolId) } catch {}
 
       // Push the new ban state to any connected sockets of this player so
       // their client can immediately show the blocking banner + countdown.
@@ -689,22 +781,35 @@ export default function createQueueRouter(io) {
     }
   })
 
-  // ── Admin: remove a queue ban ──
-  router.delete('/api/admin/queue/bans/:playerId', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_queue_pools')
-    if (!admin) return
-    const pid = Number(req.params.playerId)
+  // ── Admin: remove a queue ban (by ban id) ──
+  router.delete('/api/admin/queue/bans/:id', async (req, res) => {
+    const scope = await getQueueAdminScope(req, res)
+    if (!scope) return
+    const id = Number(req.params.id)
+    if (!id) return res.status(400).json({ error: 'Invalid id' })
     try {
-      await execute('DELETE FROM queue_bans WHERE player_id = $1', [pid])
-      // Push cleared ban to the player's sockets
-      for (const [sid, playerId] of socketPlayers) {
-        if (playerId === pid) {
-          const s = io.sockets.sockets.get(sid)
-          if (s) s.emit('queue:myState', {
-            inQueue: false, poolId: null, poolName: null,
-            inMatch: false, queueMatchId: null, count: 0, players: [],
-            ban: null,
-          })
+      const ban = await queryOne('SELECT player_id, pool_id FROM queue_bans WHERE id = $1', [id])
+      if (!ban) return res.status(404).json({ error: 'Ban not found' })
+      if (!scope.canManageAll) {
+        if (ban.pool_id == null) return res.status(403).json({ error: 'Cannot remove global bans without manage_queue_pools' })
+        if (!scope.ownedPoolIds.has(ban.pool_id)) return res.status(403).json({ error: 'Ban is not on a pool you own' })
+      }
+      await execute('DELETE FROM queue_bans WHERE id = $1', [id])
+      // If the player has no remaining active bans, push cleared state to their sockets.
+      const remaining = await queryOne(
+        `SELECT 1 FROM queue_bans WHERE player_id = $1 AND (banned_until IS NULL OR banned_until > NOW()) LIMIT 1`,
+        [ban.player_id]
+      )
+      if (!remaining) {
+        for (const [sid, playerId] of socketPlayers) {
+          if (playerId === ban.player_id) {
+            const s = io.sockets.sockets.get(sid)
+            if (s) s.emit('queue:myState', {
+              inQueue: false, poolId: null, poolName: null,
+              inMatch: false, queueMatchId: null, count: 0, players: [],
+              ban: null,
+            })
+          }
         }
       }
       res.json({ ok: true })

@@ -1,12 +1,16 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Plus, Trash2, Pencil, X, Check, Ban, RefreshCw, Swords, Loader2, UserX, Clock, Search } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
+import { useDraftStore } from '@/composables/useDraftStore'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 
 const { t } = useI18n()
 const api = useApi()
+const store = useDraftStore()
+const canManageAllPools = computed(() => store.hasPerm('manage_queue_pools'))
+const canEditPool = (pool: any) => canManageAllPools.value || pool.created_by === store.currentUser.value?.id
 const pools = ref<any[]>([])
 const editingId = ref<number | null>(null)
 const showCreate = ref(false)
@@ -17,11 +21,13 @@ const bans = ref<any[]>([])
 const banForm = ref<{
   player_id: number | null
   player_label: string
+  pool_id: number | null
   duration_minutes: number
   reason: string
 }>({
   player_id: null,
   player_label: '',
+  pool_id: null,
   duration_minutes: 60,
   reason: '',
 })
@@ -32,6 +38,16 @@ let banSearchTimer: ReturnType<typeof setTimeout> | null = null
 let refreshInterval: ReturnType<typeof setInterval> | null = null
 
 const seasons = ref<Array<{ id: number; name: string; is_active: boolean }>>([])
+const leagues = ref<Array<{ id: number; name: string; dota_league_id: number }>>([])
+
+type QueueTab = 'pools' | 'queue' | 'matches'
+const TAB_STORAGE_KEY = 'admin_queue_tab'
+const validTab = (v: string | null): QueueTab => (v === 'pools' || v === 'queue' || v === 'matches' ? v : 'pools')
+const activeTab = ref<QueueTab>(validTab(typeof window !== 'undefined' ? localStorage.getItem(TAB_STORAGE_KEY) : null))
+function setTab(tab: QueueTab) {
+  activeTab.value = tab
+  try { localStorage.setItem(TAB_STORAGE_KEY, tab) } catch {}
+}
 
 const form = ref<Record<string, any>>({
   name: '',
@@ -142,10 +158,15 @@ async function kickQueued(playerId: number) {
   } catch (e: any) { alert(e.message) }
 }
 
-function openBanModal(prefill?: { id: number; name: string }) {
+function openBanModal(prefill?: { id: number; name: string; poolId?: number | null }) {
+  // Default ban scope: the pool we're banning from (if known), otherwise the
+  // first available pool. Never null when the caller can't manage all pools —
+  // they aren't allowed to create global bans.
+  const defaultPool = prefill?.poolId ?? (pools.value[0]?.id ?? null)
   banForm.value = {
     player_id: prefill?.id || null,
     player_label: prefill?.name || '',
+    pool_id: defaultPool,
     duration_minutes: 60,
     reason: '',
   }
@@ -184,6 +205,7 @@ async function submitBan() {
   try {
     await api.addAdminQueueBan({
       player_id: Number(banForm.value.player_id),
+      pool_id: banForm.value.pool_id,
       duration_minutes: Number(banForm.value.duration_minutes) || 0,
       reason: banForm.value.reason,
     })
@@ -192,9 +214,9 @@ async function submitBan() {
   } catch (e: any) { alert(e.message) }
 }
 
-async function unban(playerId: number) {
+async function unban(banId: number) {
   try {
-    await api.removeAdminQueueBan(playerId)
+    await api.removeAdminQueueBan(banId)
     await fetchBans()
   } catch (e: any) { alert(e.message) }
 }
@@ -272,9 +294,14 @@ async function fetchSeasons() {
   try { seasons.value = (await api.getAdminSeasons()).filter((s: any) => s.is_active) } catch { seasons.value = [] }
 }
 
+async function fetchLeagues() {
+  try { leagues.value = await api.getLeagues() } catch { leagues.value = [] }
+}
+
 onMounted(() => {
   fetchPools()
   fetchSeasons()
+  fetchLeagues()
   fetchActiveMatches()
   fetchQueuedPlayers()
   fetchBans()
@@ -292,9 +319,46 @@ onUnmounted(() => {
 
 <template>
   <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[var(--admin-content-max,1200px)] w-full">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-semibold text-foreground">{{ t('adminQueuePools') }}</h1>
+        <p class="text-sm text-muted-foreground mt-1">{{ t('queueAdminSubtitle') }}</p>
+      </div>
+      <button v-if="activeTab === 'pools'" class="btn-primary flex items-center gap-1.5 text-sm" @click="startCreate">
+        <Plus class="w-4 h-4" /> {{ t('queueCreatePool') }}
+      </button>
+    </div>
+
+    <!-- Tabs -->
+    <div class="flex gap-1 border-b border-border overflow-x-auto">
+      <button
+        class="px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px flex items-center gap-2"
+        :class="activeTab === 'pools' ? 'text-primary border-primary' : 'text-muted-foreground border-transparent hover:text-foreground hover:border-border'"
+        @click="setTab('pools')"
+      >
+        {{ t('queueTabPools') }}
+        <span v-if="pools.length > 0" class="text-[10px] font-semibold bg-accent text-muted-foreground px-1.5 rounded-full">{{ pools.length }}</span>
+      </button>
+      <button
+        class="px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px flex items-center gap-2"
+        :class="activeTab === 'queue' ? 'text-primary border-primary' : 'text-muted-foreground border-transparent hover:text-foreground hover:border-border'"
+        @click="setTab('queue')"
+      >
+        {{ t('queueTabInQueue') }}
+        <span v-if="queuedPlayers.length > 0" class="text-[10px] font-semibold bg-primary/15 text-primary px-1.5 rounded-full">{{ queuedPlayers.length }}</span>
+      </button>
+      <button
+        class="px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px flex items-center gap-2"
+        :class="activeTab === 'matches' ? 'text-primary border-primary' : 'text-muted-foreground border-transparent hover:text-foreground hover:border-border'"
+        @click="setTab('matches')"
+      >
+        {{ t('queueTabActiveMatches') }}
+        <span v-if="activeMatches.length > 0" class="text-[10px] font-semibold bg-primary/15 text-primary px-1.5 rounded-full">{{ activeMatches.length }}</span>
+      </button>
+    </div>
 
     <!-- ═══════════════════ Active Queue Matches ═══════════════════ -->
-    <div>
+    <div v-if="activeTab === 'matches'">
       <div class="flex items-center justify-between mb-4">
         <div class="flex items-center gap-3">
           <h2 class="text-xl font-bold">{{ t('queueAdminActiveMatches') }}</h2>
@@ -407,7 +471,7 @@ onUnmounted(() => {
     </div>
 
     <!-- ═══════════════════ Currently Queued Players ═══════════════════ -->
-    <div>
+    <div v-if="activeTab === 'queue'">
       <div class="flex items-center justify-between mb-4">
         <div class="flex items-center gap-3">
           <h2 class="text-xl font-bold">{{ t('queueAdminQueuedPlayers') }}</h2>
@@ -430,7 +494,7 @@ onUnmounted(() => {
             <button class="flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" @click="kickQueued(p.playerId)">
               <UserX class="w-3.5 h-3.5" /> {{ t('queueAdminKick') }}
             </button>
-            <button class="flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold text-destructive hover:bg-destructive/10 transition-colors" @click="openBanModal({ id: p.playerId, name: p.name })">
+            <button class="flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold text-destructive hover:bg-destructive/10 transition-colors" @click="openBanModal({ id: p.playerId, name: p.name, poolId: p.poolId })">
               <Ban class="w-3.5 h-3.5" /> {{ t('queueAdminBan') }}
             </button>
           </div>
@@ -439,7 +503,7 @@ onUnmounted(() => {
     </div>
 
     <!-- ═══════════════════ Queue Bans ═══════════════════ -->
-    <div>
+    <div v-if="activeTab === 'queue'">
       <div class="flex items-center justify-between mb-4">
         <div class="flex items-center gap-3">
           <h2 class="text-xl font-bold">{{ t('queueAdminBans') }}</h2>
@@ -460,16 +524,20 @@ onUnmounted(() => {
         <p class="text-sm text-muted-foreground">{{ t('queueAdminNoBans') }}</p>
       </div>
       <div v-else class="card mb-8 overflow-hidden">
-        <div v-for="b in bans" :key="b.player_id" class="flex items-center gap-3 px-4 py-2 border-b border-border/30 last:border-b-0">
+        <div v-for="b in bans" :key="b.id" class="flex items-center gap-3 px-4 py-2 border-b border-border/30 last:border-b-0">
           <img v-if="b.avatar_url" :src="b.avatar_url" class="w-6 h-6 rounded-full" />
           <span class="font-medium text-sm">{{ b.display_name || b.name }}</span>
           <span class="text-[10px] text-muted-foreground">#{{ b.player_id }}</span>
+          <span class="text-[11px] px-1.5 py-0.5 rounded font-semibold"
+            :class="b.pool_id == null ? 'bg-amber-500/15 text-amber-500' : 'bg-primary/15 text-primary'">
+            {{ b.pool_id == null ? t('queueAdminBanScopeAll') : (b.pool_name || `pool #${b.pool_id}`) }}
+          </span>
           <span class="text-[11px] flex items-center gap-1 px-1.5 py-0.5 rounded bg-destructive/10 text-destructive">
             <Clock class="w-3 h-3" /> {{ formatBanUntil(b.banned_until) }}
           </span>
           <span v-if="b.reason" class="text-[11px] text-muted-foreground italic truncate max-w-[260px]">{{ b.reason }}</span>
           <span v-if="b.banned_by_name" class="text-[10px] text-muted-foreground ml-auto">by {{ b.banned_by_name }}</span>
-          <button class="ml-2 p-1.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors" :title="t('queueAdminUnban')" @click="unban(b.player_id)">
+          <button class="ml-2 p-1.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors" :title="t('queueAdminUnban')" @click="unban(b.id)">
             <X class="w-3.5 h-3.5" />
           </button>
         </div>
@@ -477,15 +545,8 @@ onUnmounted(() => {
     </div>
 
     <!-- ═══════════════════ Queue Pools ═══════════════════ -->
-    <div class="flex items-center justify-between mb-6">
-      <h2 class="text-xl font-bold">{{ t('adminQueuePools') }}</h2>
-      <button class="btn-primary flex items-center gap-1.5 text-sm" @click="startCreate">
-        <Plus class="w-4 h-4" /> {{ t('queueCreatePool') }}
-      </button>
-    </div>
-
     <!-- Pool List -->
-    <div class="flex flex-col gap-3 mb-6">
+    <div v-if="activeTab === 'pools'" class="flex flex-col gap-3 mb-6">
       <div v-for="pool in pools" :key="pool.id" class="card px-4 py-3">
         <div class="flex items-center justify-between">
           <div>
@@ -501,7 +562,7 @@ onUnmounted(() => {
               | League: {{ pool.lobby_league_id || 'None' }}
             </span>
           </div>
-          <div class="flex items-center gap-2">
+          <div v-if="canEditPool(pool)" class="flex items-center gap-2">
             <button class="p-1.5 rounded hover:bg-accent" @click="startEdit(pool)"><Pencil class="w-4 h-4" /></button>
             <button class="p-1.5 rounded hover:bg-destructive/10 text-destructive" @click="deletePool(pool.id)"><Trash2 class="w-4 h-4" /></button>
           </div>
@@ -511,7 +572,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Create / Edit Form -->
-    <div v-if="showCreate || editingId" class="card px-6 py-5">
+    <div v-if="activeTab === 'pools' && (showCreate || editingId)" class="card px-6 py-5">
       <div class="flex items-center justify-between mb-4">
         <h3 class="text-lg font-semibold">{{ editingId ? t('queueEditPool') : t('queueCreatePool') }}</h3>
         <button @click="cancelEdit" class="p-1 rounded hover:bg-accent"><X class="w-4 h-4" /></button>
@@ -607,27 +668,33 @@ onUnmounted(() => {
           </select>
         </div>
         <div class="flex flex-col gap-1">
-          <label class="text-xs text-muted-foreground">{{ t('leagueId') }}</label>
-          <input class="input-field" type="number" v-model.number="form.lobby_league_id" />
+          <label class="text-xs text-muted-foreground">{{ t('lobbyLeagueId') }}</label>
+          <select class="input-field" v-model.number="form.lobby_league_id">
+            <option :value="0">{{ t('lobbyLeagueNone') }}</option>
+            <option v-for="lg in leagues" :key="lg.id" :value="lg.dota_league_id">{{ lg.name }} (#{{ lg.dota_league_id }})</option>
+            <option v-if="form.lobby_league_id && !leagues.some(l => l.dota_league_id === form.lobby_league_id)" :value="form.lobby_league_id">#{{ form.lobby_league_id }}</option>
+          </select>
         </div>
         <div class="flex flex-col gap-1">
           <label class="text-xs text-muted-foreground">{{ t('lobbyTimeout') }} (min)</label>
           <input class="input-field" type="number" v-model.number="form.lobby_timeout_minutes" />
         </div>
         <div class="flex flex-col gap-1">
-          <label class="text-xs text-muted-foreground">DotaTV Delay</label>
+          <label class="text-xs text-muted-foreground">{{ t('lobbyDotaTvDelay') }}</label>
           <select class="input-field" v-model.number="form.lobby_dotv_delay">
-            <option :value="0">None</option>
-            <option :value="1">2 min</option>
-            <option :value="2">5 min</option>
+            <option :value="0">{{ t('dotaTvNone') }}</option>
+            <option :value="1">{{ t('dotaTv10min') }}</option>
+            <option :value="2">{{ t('dotaTv5min') }}</option>
+            <option :value="3">{{ t('dotaTv2min') }}</option>
           </select>
         </div>
         <div class="flex flex-col gap-1">
-          <label class="text-xs text-muted-foreground">Series Type</label>
+          <label class="text-xs text-muted-foreground">{{ t('lobbySeriesType') }}</label>
           <select class="input-field" v-model.number="form.lobby_series_type">
-            <option :value="0">None</option>
-            <option :value="1">Bo3</option>
-            <option :value="2">Bo5</option>
+            <option :value="0">{{ t('seriesNone') }}</option>
+            <option :value="1">{{ t('seriesBo2') }}</option>
+            <option :value="2">{{ t('seriesBo3') }}</option>
+            <option :value="3">{{ t('seriesBo5') }}</option>
           </select>
         </div>
         <div class="flex items-center gap-4 col-span-2 flex-wrap">
@@ -637,11 +704,11 @@ onUnmounted(() => {
           </label>
           <label class="flex items-center gap-1.5">
             <input type="checkbox" :checked="form.lobby_cheats" @change="form.lobby_cheats = ($event.target as HTMLInputElement).checked" />
-            <span class="text-sm">Cheats</span>
+            <span class="text-sm">{{ t('lobbyCheats') }}</span>
           </label>
           <label class="flex items-center gap-1.5">
             <input type="checkbox" :checked="form.lobby_allow_spectating" @change="form.lobby_allow_spectating = ($event.target as HTMLInputElement).checked" />
-            <span class="text-sm">Allow Spectating</span>
+            <span class="text-sm">{{ t('lobbyAllowSpectating') }}</span>
           </label>
         </div>
         <p class="text-xs text-muted-foreground col-span-2 -mt-2">{{ t('lobbyAutoAssignTeamsHint') }}</p>
@@ -671,11 +738,21 @@ onUnmounted(() => {
         </div>
         <div class="flex flex-col gap-1">
           <label class="text-xs text-muted-foreground">{{ t('lobbyPenaltyRadiant') }}</label>
-          <input class="input-field" type="number" v-model.number="form.lobby_penalty_radiant" />
+          <select class="input-field" v-model.number="form.lobby_penalty_radiant">
+            <option :value="0">{{ t('penaltyNone') }}</option>
+            <option :value="1">{{ t('penaltyLevel', { n: 1 }) }}</option>
+            <option :value="2">{{ t('penaltyLevel', { n: 2 }) }}</option>
+            <option :value="3">{{ t('penaltyLevel', { n: 3 }) }}</option>
+          </select>
         </div>
         <div class="flex flex-col gap-1">
           <label class="text-xs text-muted-foreground">{{ t('lobbyPenaltyDire') }}</label>
-          <input class="input-field" type="number" v-model.number="form.lobby_penalty_dire" />
+          <select class="input-field" v-model.number="form.lobby_penalty_dire">
+            <option :value="0">{{ t('penaltyNone') }}</option>
+            <option :value="1">{{ t('penaltyLevel', { n: 1 }) }}</option>
+            <option :value="2">{{ t('penaltyLevel', { n: 2 }) }}</option>
+            <option :value="3">{{ t('penaltyLevel', { n: 3 }) }}</option>
+          </select>
         </div>
       </div>
 
@@ -730,6 +807,16 @@ onUnmounted(() => {
               </button>
             </div>
           </div>
+        </div>
+
+        <!-- Pool scope -->
+        <div class="flex flex-col gap-1.5">
+          <label class="text-[11px] font-semibold uppercase text-muted-foreground">{{ t('queueAdminBanScope') }}</label>
+          <select class="bg-accent/40 border border-border/40 rounded px-3 py-2 text-sm" v-model="banForm.pool_id">
+            <option v-if="canManageAllPools" :value="null">{{ t('queueAdminBanScopeAll') }}</option>
+            <option v-for="p in pools" :key="p.id" :value="p.id">{{ p.name }}</option>
+          </select>
+          <p class="text-xs text-muted-foreground">{{ t('queueAdminBanScopeHint') }}</p>
         </div>
 
         <!-- Duration -->

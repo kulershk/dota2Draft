@@ -470,6 +470,15 @@ export function useApi() {
     deleteNews: (id: number) =>
       request(`/api/news/${id}`, { method: 'DELETE' }),
 
+    // Leagues
+    getLeagues: () => request('/api/leagues'),
+    createLeague: (data: { name: string; dota_league_id: number; public?: boolean }) =>
+      request('/api/leagues', { method: 'POST', body: JSON.stringify(data) }),
+    updateLeague: (id: number, data: { name?: string; dota_league_id?: number; public?: boolean }) =>
+      request(`/api/leagues/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteLeague: (id: number) =>
+      request(`/api/leagues/${id}`, { method: 'DELETE' }),
+
     // News Comments
     getComments: (newsId: number) => request(`/api/news/${newsId}/comments`),
     addComment: (newsId: number, content: string) =>
@@ -514,11 +523,14 @@ export function useApi() {
     getAdminQueuePlayers: () => request('/api/admin/queue/players'),
     adminKickFromQueue: (playerId: number, reason?: string) =>
       request(`/api/admin/queue/kick/${playerId}`, { method: 'POST', body: JSON.stringify({ reason }) }),
-    getAdminQueueBans: () => request('/api/admin/queue/bans'),
-    addAdminQueueBan: (data: { player_id: number; duration_minutes?: number; reason?: string }) =>
+    getAdminQueueBans: (poolId?: number | 'global') => {
+      const qs = poolId == null ? '' : `?pool_id=${poolId}`
+      return request(`/api/admin/queue/bans${qs}`)
+    },
+    addAdminQueueBan: (data: { player_id: number; pool_id?: number | null; duration_minutes?: number; reason?: string }) =>
       request('/api/admin/queue/bans', { method: 'POST', body: JSON.stringify(data) }),
-    removeAdminQueueBan: (playerId: number) =>
-      request(`/api/admin/queue/bans/${playerId}`, { method: 'DELETE' }),
+    removeAdminQueueBan: (banId: number) =>
+      request(`/api/admin/queue/bans/${banId}`, { method: 'DELETE' }),
 
     // Seasons (public)
     getPublicSeasons: () => request('/api/seasons'),

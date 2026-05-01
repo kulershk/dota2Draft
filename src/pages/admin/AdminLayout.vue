@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Newspaper, Users, Trophy, ChevronRight, Settings, ShieldCheck, Bot, Gamepad2, Star, Zap, Swords, Activity, Medal, Shield, BarChart3, Menu as MenuIcon } from 'lucide-vue-next'
+import { Newspaper, Users, Trophy, ChevronRight, ChevronDown, Settings, ShieldCheck, Bot, Gamepad2, Star, Zap, Swords, Activity, Medal, Shield, BarChart3, Menu as MenuIcon, Award, Wrench } from 'lucide-vue-next'
 import { computed, ref, onBeforeUnmount, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -119,27 +119,87 @@ onBeforeUnmount(() => {
   document.body.style.userSelect = ''
 })
 
-const allNav = [
-  { labelKey: 'adminCompetitions', icon: Trophy, path: '/admin/competitions', permissions: ['manage_competitions', 'manage_own_competitions'] },
-  { labelKey: 'users', icon: Users, path: '/admin/users', permissions: ['manage_users'] },
-  { labelKey: 'newsAnnouncements', icon: Newspaper, path: '/admin/news', permissions: ['manage_news'] },
-  { labelKey: 'siteSettings', icon: Settings, path: '/admin/settings', permissions: ['manage_site_settings'] },
-  { labelKey: 'permissionGroups', icon: ShieldCheck, path: '/admin/permissions', permissions: ['manage_permissions'] },
-  { labelKey: 'lobbyBots', icon: Bot, path: '/admin/bots', permissions: ['manage_bots'] },
-  { labelKey: 'adminGames', icon: Gamepad2, path: '/admin/games', permissions: ['manage_games'] },
-  { labelKey: 'adminFantasy', icon: Star, path: '/admin/fantasy', permissions: ['manage_fantasy'] },
-  { labelKey: 'adminXpLog', icon: Zap, path: '/admin/xp-log', permissions: ['manage_xp_log'] },
-  { labelKey: 'adminQueuePools', icon: Swords, path: '/admin/queue', permissions: ['manage_queue_pools'] },
-  { labelKey: 'adminSeasons', icon: Medal, path: '/admin/seasons', permissions: ['manage_seasons'] },
-  { labelKey: 'adminMmrVerifications', icon: Shield, path: '/admin/mmr-verifications', permissions: ['manage_mmr_verifications'] },
-  { labelKey: 'adminJobs', icon: Activity, path: '/admin/jobs', permissions: ['manage_jobs'] },
-  { labelKey: 'adminRequestStats', icon: BarChart3, path: '/admin/request-stats', permissions: ['view_request_stats'] },
-  { labelKey: 'adminMenu', icon: MenuIcon, path: '/admin/menu', permissions: ['manage_menu'] },
+interface NavItem { labelKey: string; icon: any; path: string; permissions: string[] }
+interface NavGroup { key: string; labelKey: string; icon: any; children: NavItem[] }
+
+const navGroups: NavGroup[] = [
+  {
+    key: 'tournaments',
+    labelKey: 'navGroupTournaments',
+    icon: Trophy,
+    children: [
+      { labelKey: 'adminCompetitions', icon: Trophy, path: '/admin/competitions', permissions: ['manage_competitions', 'manage_own_competitions'] },
+      { labelKey: 'adminGames', icon: Gamepad2, path: '/admin/games', permissions: ['manage_games'] },
+      { labelKey: 'adminFantasy', icon: Star, path: '/admin/fantasy', permissions: ['manage_fantasy'] },
+      { labelKey: 'adminQueuePools', icon: Swords, path: '/admin/queue', permissions: ['manage_queue_pools', 'manage_own_queue_pools'] },
+      { labelKey: 'adminSeasons', icon: Medal, path: '/admin/seasons', permissions: ['manage_seasons'] },
+      { labelKey: 'adminLeagues', icon: Award, path: '/admin/leagues', permissions: ['manage_leagues', 'manage_own_leagues'] },
+    ],
+  },
+  {
+    key: 'users',
+    labelKey: 'navGroupUsers',
+    icon: Users,
+    children: [
+      { labelKey: 'users', icon: Users, path: '/admin/users', permissions: ['manage_users'] },
+      { labelKey: 'permissionGroups', icon: ShieldCheck, path: '/admin/permissions', permissions: ['manage_permissions'] },
+      { labelKey: 'adminMmrVerifications', icon: Shield, path: '/admin/mmr-verifications', permissions: ['manage_mmr_verifications'] },
+    ],
+  },
+  {
+    key: 'content',
+    labelKey: 'navGroupContent',
+    icon: Newspaper,
+    children: [
+      { labelKey: 'newsAnnouncements', icon: Newspaper, path: '/admin/news', permissions: ['manage_news'] },
+      { labelKey: 'adminMenu', icon: MenuIcon, path: '/admin/menu', permissions: ['manage_menu'] },
+      { labelKey: 'siteSettings', icon: Settings, path: '/admin/settings', permissions: ['manage_site_settings'] },
+    ],
+  },
+  {
+    key: 'operations',
+    labelKey: 'navGroupOperations',
+    icon: Wrench,
+    children: [
+      { labelKey: 'lobbyBots', icon: Bot, path: '/admin/bots', permissions: ['manage_bots'] },
+      { labelKey: 'adminJobs', icon: Activity, path: '/admin/jobs', permissions: ['manage_jobs'] },
+      { labelKey: 'adminXpLog', icon: Zap, path: '/admin/xp-log', permissions: ['manage_xp_log'] },
+      { labelKey: 'adminRequestStats', icon: BarChart3, path: '/admin/request-stats', permissions: ['view_request_stats'] },
+    ],
+  },
 ]
 
-const adminNav = computed(() =>
-  allNav.filter(item => item.permissions.some(p => store.hasPerm(p)))
+const visibleGroups = computed(() =>
+  navGroups
+    .map(g => ({ ...g, children: g.children.filter(item => item.permissions.some(p => store.hasPerm(p))) }))
+    .filter(g => g.children.length > 0)
 )
+
+// Flat list for mobile nav (preserves group order).
+const adminNav = computed(() => visibleGroups.value.flatMap(g => g.children))
+
+// Group expand/collapse state — persisted; defaults to "expand the group
+// containing the current route" on first visit per group.
+const GROUPS_STORAGE_KEY = 'admin_sidebar_groups'
+const expandedGroups = ref<Record<string, boolean>>(loadGroupState())
+
+function loadGroupState(): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem(GROUPS_STORAGE_KEY)
+    if (raw) return JSON.parse(raw) || {}
+  } catch {}
+  return {}
+}
+
+function isGroupExpanded(group: NavGroup): boolean {
+  if (group.key in expandedGroups.value) return expandedGroups.value[group.key]
+  return group.children.some(c => route.path.startsWith(c.path))
+}
+
+function toggleGroup(group: NavGroup) {
+  expandedGroups.value = { ...expandedGroups.value, [group.key]: !isGroupExpanded(group) }
+  try { localStorage.setItem(GROUPS_STORAGE_KEY, JSON.stringify(expandedGroups.value)) } catch {}
+}
 </script>
 
 <template>
@@ -152,19 +212,32 @@ const adminNav = computed(() =>
       <div class="px-4 py-4 border-b border-sidebar-border">
         <h2 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{{ t('adminPanel') }}</h2>
       </div>
-      <nav class="flex flex-col gap-0.5 p-2 overflow-y-auto">
-        <router-link
-          v-for="item in adminNav"
-          :key="item.path"
-          :to="item.path"
-          class="flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors"
-          :class="route.path.startsWith(item.path)
-            ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
-            : 'text-sidebar-foreground hover:bg-accent'"
-        >
-          <component :is="item.icon" class="w-4 h-4 shrink-0" />
-          <span class="truncate">{{ t(item.labelKey) }}</span>
-        </router-link>
+      <nav class="flex flex-col gap-1 p-2 overflow-y-auto">
+        <div v-for="group in visibleGroups" :key="group.key" class="flex flex-col">
+          <button
+            type="button"
+            class="flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-sidebar-foreground hover:bg-accent transition-colors"
+            @click="toggleGroup(group)"
+          >
+            <component :is="group.icon" class="w-4 h-4 shrink-0" />
+            <span class="truncate flex-1 text-left font-medium">{{ t(group.labelKey) }}</span>
+            <component :is="isGroupExpanded(group) ? ChevronDown : ChevronRight" class="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+          </button>
+          <div v-if="isGroupExpanded(group)" class="flex flex-col gap-0.5 mt-0.5">
+            <router-link
+              v-for="item in group.children"
+              :key="item.path"
+              :to="item.path"
+              class="flex items-center gap-2.5 pl-9 pr-3 py-1.5 rounded-md text-sm transition-colors"
+              :class="route.path.startsWith(item.path)
+                ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+                : 'text-sidebar-foreground hover:bg-accent'"
+            >
+              <component :is="item.icon" class="w-4 h-4 shrink-0" />
+              <span class="truncate">{{ t(item.labelKey) }}</span>
+            </router-link>
+          </div>
+        </div>
       </nav>
       <!-- Sidebar resize handle -->
       <div

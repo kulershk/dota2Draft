@@ -1354,6 +1354,92 @@
         }
       }
     },
+    "/api/leagues": {
+      "get": {
+        "tags": ["Leagues"],
+        "summary": "List leagues",
+        "description": "Requires authentication. Returns all leagues with public=true (visible to everyone who can create tournaments) plus the caller's own private leagues. manage_leagues / admins see every row.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "League list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": { "type": "integer" },
+                      "name": { "type": "string" },
+                      "dota_league_id": { "type": "integer" },
+                      "public": { "type": "boolean" },
+                      "created_by": { "type": "integer", "nullable": true },
+                      "created_by_name": { "type": "string", "nullable": true },
+                      "created_at": { "type": "string", "format": "date-time" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Leagues"],
+        "summary": "Create a league",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_leagues or manage_own_leagues permission. Set public=true to make the league usable by everyone in the lobby league dropdown; otherwise it is only visible to the creator and manage_leagues holders.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "dota_league_id": { "type": "integer" },
+                  "public": { "type": "boolean", "default": false }
+                },
+                "required": ["name", "dota_league_id"]
+              }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Created" } }
+      }
+    },
+    "/api/leagues/{id}": {
+      "put": {
+        "tags": ["Leagues"],
+        "summary": "Update a league",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_leagues, or manage_own_leagues if the caller created the league.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "dota_league_id": { "type": "integer" },
+                  "public": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Updated" } }
+      },
+      "delete": {
+        "tags": ["Leagues"],
+        "summary": "Delete a league",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_leagues, or manage_own_leagues if the caller created the league.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Deleted" } }
+      }
+    },
     "/api/users": {
       "get": {
         "tags": ["Users"],
@@ -1904,13 +1990,13 @@
       "get": {
         "tags": ["Queue"],
         "summary": "Admin: list all queue pools",
-        "description": "Returns all queue pools including disabled ones. Requires manage_queue_pools permission.",
+        "description": "Returns all queue pools including disabled ones. Requires manage_queue_pools (full) or manage_own_queue_pools (limited to your own pools).",
         "responses": { "200": { "description": "Array of all queue pools", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/QueuePool" } } } } } }
       },
       "post": {
         "tags": ["Queue"],
         "summary": "Admin: create queue pool",
-        "description": "Creates a new queue pool. Requires manage_queue_pools permission.",
+        "description": "Creates a new queue pool. Requires manage_queue_pools (full) or manage_own_queue_pools (limited to your own pools).",
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/QueuePoolInput" } } } },
         "responses": {
           "201": { "description": "Created pool", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/QueuePool" } } } },
@@ -1922,7 +2008,7 @@
       "put": {
         "tags": ["Queue"],
         "summary": "Admin: update queue pool",
-        "description": "Updates an existing queue pool. Requires manage_queue_pools permission. Only provided fields are updated.",
+        "description": "Updates an existing queue pool. Requires manage_queue_pools (full) or manage_own_queue_pools (limited to your own pools). Only provided fields are updated.",
         "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/QueuePoolInput" } } } },
         "responses": {
@@ -1933,7 +2019,7 @@
       "delete": {
         "tags": ["Queue"],
         "summary": "Admin: delete queue pool",
-        "description": "Deletes a queue pool and cascades to queue_matches. Requires manage_queue_pools permission.",
+        "description": "Deletes a queue pool and cascades to queue_matches. Requires manage_queue_pools (full) or manage_own_queue_pools (limited to your own pools).",
         "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
         "responses": { "200": { "description": "Deleted" } }
       }
@@ -1954,7 +2040,7 @@
       "get": {
         "tags": ["Queue"],
         "summary": "Admin: list active queue matches",
-        "description": "Returns all queue matches in picking, lobby_creating, or live status. Enriched with in-memory state and lobby info. Requires manage_queue_pools permission.",
+        "description": "Returns all queue matches in picking, lobby_creating, or live status. Enriched with in-memory state and lobby info. Requires manage_queue_pools (full) or manage_own_queue_pools (limited to your own pools).",
         "responses": { "200": { "description": "Array of active queue matches with team rosters and lobby info" } }
       }
     },
@@ -1962,7 +2048,7 @@
       "post": {
         "tags": ["Queue"],
         "summary": "Admin: cancel a queue match",
-        "description": "Cancels an active queue match. Notifies all players via socket, cleans up in-memory state, and sets DB status to cancelled. Refuses once the latest match_lobbies row is 'completed' (bot has left the lobby after game_started) — at that point the Dota match is running on its own. Requires manage_queue_pools permission.",
+        "description": "Cancels an active queue match. Notifies all players via socket, cleans up in-memory state, and sets DB status to cancelled. Refuses once the latest match_lobbies row is 'completed' (bot has left the lobby after game_started) — at that point the Dota match is running on its own. Requires manage_queue_pools (full) or manage_own_queue_pools (limited to your own pools).",
         "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
         "responses": {
           "200": { "description": "Match cancelled" },
@@ -1974,7 +2060,7 @@
       "get": {
         "tags": ["Queue"],
         "summary": "Admin: list currently queued players across all pools",
-        "description": "Returns the in-memory queue roster for every pool, each entry decorated with the poolId it's queued in. Requires manage_queue_pools.",
+        "description": "Returns the in-memory queue roster for every pool, each entry decorated with the poolId it's queued in. Requires manage_queue_pools (full) or manage_own_queue_pools (limited to your own pools).",
         "responses": { "200": { "description": "Array of queued players" } }
       }
     },
@@ -2000,11 +2086,16 @@
       "get": {
         "tags": ["Queue"],
         "summary": "Admin: list active queue bans",
+        "description": "Each row carries pool_id (null = ban applies to every pool) and pool_name. Optional ?pool_id=N to filter to one pool, or ?pool_id=global to filter to global bans. manage_own_queue_pools holders only see bans on pools they created (global bans are hidden).",
+        "parameters": [
+          { "name": "pool_id", "in": "query", "required": false, "schema": { "type": "string" }, "description": "Pool id, or 'global' for NULL pool_id" }
+        ],
         "responses": { "200": { "description": "Array of active ban rows" } }
       },
       "post": {
         "tags": ["Queue"],
         "summary": "Admin: create or update a queue ban",
+        "description": "If pool_id is null/omitted, the ban applies to every pool ('global'). Otherwise it only blocks the player from queuing into that specific pool. manage_own_queue_pools holders must specify a pool they created — global bans require full manage_queue_pools.",
         "requestBody": {
           "required": true,
           "content": {
@@ -2014,6 +2105,7 @@
                 "required": ["player_id"],
                 "properties": {
                   "player_id": { "type": "integer" },
+                  "pool_id": { "type": "integer", "nullable": true, "description": "null = ban applies to all pools" },
                   "duration_minutes": { "type": "integer", "description": "0 or null = permanent" },
                   "reason": { "type": "string" }
                 }
@@ -2024,11 +2116,12 @@
         "responses": { "200": { "description": "Ban saved" } }
       }
     },
-    "/api/admin/queue/bans/{playerId}": {
+    "/api/admin/queue/bans/{id}": {
       "delete": {
         "tags": ["Queue"],
-        "summary": "Admin: remove a queue ban",
-        "parameters": [{ "name": "playerId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "summary": "Admin: remove a queue ban (by ban id)",
+        "description": "Removes a queue ban. manage_own_queue_pools holders can only remove bans on pools they created — global bans require full manage_queue_pools.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" }, "description": "queue_bans.id" }],
         "responses": { "200": { "description": "Ban removed" } }
       }
     },
