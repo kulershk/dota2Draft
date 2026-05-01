@@ -1637,4 +1637,9 @@ export default {
   queueAdminBanScope: 'Bana apjoms',
   queueAdminBanScopeAll: 'Visi pūli',
   queueAdminBanScopeHint: 'Izvēlieties konkrētu pūlu, lai bloķētu spēlētāju tikai no tā, vai "Visi pūli" globālam banam.',
+  // Verified-MMR-only seasons
+  seasonVerifiedMmrOnly: 'Tikai apstiprināts MMR',
+  seasonVerifiedMmrOnlyHint: 'Šai sezonai piesaistītajos pūlos drīkst pievienoties tikai spēlētāji ar apstiprinātu MMR.',
+  queuePoolVerifiedOnly: 'Tikai apstiprināti',
+  queuePoolVerifiedOnlyHint: 'Šis pūls pieņem tikai spēlētājus ar apstiprinātu MMR.',
 }

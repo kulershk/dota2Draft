@@ -1115,6 +1115,14 @@ onUnmounted(() => {
                         <Medal class="w-3 h-3" />
                         {{ (selectedPool as any).season_name }}
                       </router-link>
+                      <span
+                        v-if="(selectedPool as any).verified_mmr_only"
+                        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[11px] font-bold shrink-0"
+                        :title="t('queuePoolVerifiedOnlyHint')"
+                      >
+                        <ShieldCheck class="w-3 h-3" />
+                        {{ t('queuePoolVerifiedOnly') }}
+                      </span>
                     </div>
                     <div class="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
                       <span>{{ teamSize }}v{{ teamSize }}</span>

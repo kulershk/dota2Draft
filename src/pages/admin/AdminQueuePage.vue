@@ -554,6 +554,9 @@ onUnmounted(() => {
             <span class="ml-2 text-xs px-1.5 py-0.5 rounded" :class="pool.enabled ? 'bg-green-500/10 text-green-500' : 'bg-accent text-muted-foreground'">
               {{ pool.enabled ? 'Enabled' : 'Disabled' }}
             </span>
+            <span v-if="pool.verified_mmr_only" class="ml-1.5 text-xs px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 font-semibold">
+              {{ t('queuePoolVerifiedOnly') }}
+            </span>
             <span class="text-xs text-muted-foreground ml-3">
               {{ pool.team_size || 5 }}v{{ pool.team_size || 5 }}
               | MMR: {{ pool.min_mmr || 0 }}{{ pool.max_mmr ? `-${pool.max_mmr}` : '+' }}

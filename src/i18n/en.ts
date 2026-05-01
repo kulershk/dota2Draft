@@ -1648,4 +1648,9 @@ export default {
   queueAdminBanScope: 'Ban scope',
   queueAdminBanScopeAll: 'All pools',
   queueAdminBanScopeHint: 'Pick a specific pool to only block the player from that pool, or "All pools" for a global ban.',
+  // Verified-MMR-only seasons
+  seasonVerifiedMmrOnly: 'Verified MMR only',
+  seasonVerifiedMmrOnlyHint: 'Only players whose MMR has been verified can queue into pools assigned to this season.',
+  queuePoolVerifiedOnly: 'Verified only',
+  queuePoolVerifiedOnlyHint: 'This pool only accepts players with a verified MMR.',
 }

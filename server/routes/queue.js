@@ -32,7 +32,8 @@ export default function createQueueRouter(io) {
   router.get('/api/queue/pools', async (req, res) => {
     try {
       const pools = await query(`
-        SELECT qp.*, s.name AS season_name, s.slug AS season_slug
+        SELECT qp.*, s.name AS season_name, s.slug AS season_slug,
+               COALESCE(s.verified_mmr_only, FALSE) AS verified_mmr_only
         FROM queue_pools qp
         LEFT JOIN seasons s ON s.id = qp.season_id
         WHERE qp.enabled = true
@@ -49,7 +50,8 @@ export default function createQueueRouter(io) {
   router.get('/api/queue/pools/:poolId', async (req, res) => {
     try {
       const pool = await queryOne(`
-        SELECT qp.*, s.name AS season_name, s.slug AS season_slug
+        SELECT qp.*, s.name AS season_name, s.slug AS season_slug,
+               COALESCE(s.verified_mmr_only, FALSE) AS verified_mmr_only
         FROM queue_pools qp
         LEFT JOIN seasons s ON s.id = qp.season_id
         WHERE qp.id = $1
@@ -322,9 +324,15 @@ export default function createQueueRouter(io) {
     const scope = await getQueueAdminScope(req, res)
     if (!scope) return
     try {
+      const baseSelect = `
+        SELECT qp.*, s.name AS season_name, s.slug AS season_slug,
+               COALESCE(s.verified_mmr_only, FALSE) AS verified_mmr_only
+        FROM queue_pools qp
+        LEFT JOIN seasons s ON s.id = qp.season_id
+      `
       const pools = scope.canManageAll
-        ? await query('SELECT * FROM queue_pools ORDER BY id')
-        : await query('SELECT * FROM queue_pools WHERE created_by = $1 ORDER BY id', [scope.player.id])
+        ? await query(`${baseSelect} ORDER BY qp.id`)
+        : await query(`${baseSelect} WHERE qp.created_by = $1 ORDER BY qp.id`, [scope.player.id])
       res.json(pools)
     } catch (e) {
       res.status(500).json({ error: e.message })

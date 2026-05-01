@@ -14,6 +14,7 @@ interface SeasonRow {
   starts_at: string | null
   ends_at: string | null
   is_active: boolean
+  verified_mmr_only: boolean
   settings: Record<string, any>
   pools?: Array<{ id: number; name: string; enabled: boolean }>
 }
@@ -82,6 +83,7 @@ const form = ref({
   starts_at: '',
   ends_at: '',
   is_active: true,
+  verified_mmr_only: false,
   settings: { ...SETTING_DEFAULTS },
 })
 const saving = ref(false)
@@ -115,6 +117,7 @@ async function load() {
     form.value.starts_at = s.starts_at ? toLocalDatetime(s.starts_at) : ''
     form.value.ends_at = s.ends_at ? toLocalDatetime(s.ends_at) : ''
     form.value.is_active = !!s.is_active
+    form.value.verified_mmr_only = !!s.verified_mmr_only
     form.value.settings = { ...SETTING_DEFAULTS, ...(s.settings || {}) }
     if (form.value.settings.max_points == null) form.value.settings.max_points = ''
   } catch (e: any) {
@@ -159,6 +162,7 @@ async function handleSave() {
       starts_at: form.value.starts_at ? localDatetimeToISO(form.value.starts_at) : null,
       ends_at: form.value.ends_at ? localDatetimeToISO(form.value.ends_at) : null,
       is_active: form.value.is_active,
+      verified_mmr_only: form.value.verified_mmr_only,
       settings: { ...form.value.settings },
     }
     if (payload.settings.max_points === '') payload.settings.max_points = null
@@ -292,6 +296,13 @@ onMounted(load)
         <label class="flex items-center gap-2 mt-2">
           <input v-model="form.is_active" type="checkbox" class="w-4 h-4" />
           <span class="text-sm">{{ t('seasonIsActive') }}</span>
+        </label>
+        <label class="flex items-start gap-2 mt-2">
+          <input v-model="form.verified_mmr_only" type="checkbox" class="w-4 h-4 mt-0.5" />
+          <span class="flex flex-col">
+            <span class="text-sm">{{ t('seasonVerifiedMmrOnly') }}</span>
+            <span class="text-xs text-muted-foreground">{{ t('seasonVerifiedMmrOnlyHint') }}</span>
+          </span>
         </label>
       </div>
 

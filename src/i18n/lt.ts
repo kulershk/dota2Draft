@@ -1637,4 +1637,9 @@ export default {
   queueAdminBanScope: 'Bano apimtis',
   queueAdminBanScopeAll: 'Visi pulai',
   queueAdminBanScopeHint: 'Pasirinkite konkretų pulą, kad žaidėjas būtų užblokuotas tik tame pule, arba "Visi pulai" — globaliam banui.',
+  // Verified-MMR-only seasons
+  seasonVerifiedMmrOnly: 'Tik patvirtintas MMR',
+  seasonVerifiedMmrOnlyHint: 'Šiam sezonui priskirtuose puluose gali žaisti tik žaidėjai su patvirtintu MMR.',
+  queuePoolVerifiedOnly: 'Tik patvirtinti',
+  queuePoolVerifiedOnlyHint: 'Šis pulas priima tik žaidėjus su patvirtintu MMR.',
 }

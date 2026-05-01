@@ -2307,6 +2307,7 @@
               "starts_at": { "type": "string", "format": "date-time", "nullable": true },
               "ends_at":   { "type": "string", "format": "date-time", "nullable": true },
               "is_active": { "type": "boolean", "default": true },
+              "verified_mmr_only": { "type": "boolean", "default": false, "description": "When true, only players with mmr_verified_at set can queue into pools assigned to this season." },
               "settings": {
                 "type": "object",
                 "properties": {

@@ -52,13 +52,21 @@ export function registerQueueHandlers(socket, io) {
       if (!pool) return socket.emit('queue:error', { message: 'Queue pool not found or disabled' })
 
       // Check player has steam_id and mmr set
-      const player = await queryOne('SELECT id, name, display_name, steam_id, avatar_url, mmr FROM players WHERE id = $1', [playerId])
+      const player = await queryOne('SELECT id, name, display_name, steam_id, avatar_url, mmr, mmr_verified_at FROM players WHERE id = $1', [playerId])
       if (!player?.steam_id) return socket.emit('queue:error', { message: 'Steam account required to queue' })
       if (!player.mmr || player.mmr <= 0) return socket.emit('queue:error', { message: 'You must set your MMR before queuing' })
 
       // Check MMR range
       if (pool.min_mmr > 0 && player.mmr < pool.min_mmr) return socket.emit('queue:error', { message: `Minimum MMR for this pool is ${pool.min_mmr}` })
       if (pool.max_mmr > 0 && player.mmr > pool.max_mmr) return socket.emit('queue:error', { message: `Maximum MMR for this pool is ${pool.max_mmr}` })
+
+      // Pool's season may require a verified MMR.
+      if (pool.season_id && !player.mmr_verified_at) {
+        const season = await queryOne('SELECT verified_mmr_only FROM seasons WHERE id = $1', [pool.season_id])
+        if (season?.verified_mmr_only) {
+          return socket.emit('queue:error', { message: 'This pool requires a verified MMR. Submit a verification request before queuing.' })
+        }
+      }
 
       // Check queue ban — global (pool_id IS NULL) or scoped to this pool.
       const ban = await queryOne(

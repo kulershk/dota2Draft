@@ -42,7 +42,7 @@ export default function createSeasonsRouter(io) {
   router.get('/api/seasons', async (req, res) => {
     try {
       const seasons = await query(`
-        SELECT s.id, s.name, s.slug, s.description, s.starts_at, s.ends_at, s.is_active, s.settings, s.created_at,
+        SELECT s.id, s.name, s.slug, s.description, s.starts_at, s.ends_at, s.is_active, s.verified_mmr_only, s.settings, s.created_at,
           (SELECT COUNT(*)::int FROM season_rankings WHERE season_id = s.id)            AS player_count,
           (SELECT COUNT(*)::int FROM season_match_log WHERE season_id = s.id AND queue_match_id IS NOT NULL) AS match_count
         FROM seasons s
@@ -182,15 +182,15 @@ export default function createSeasonsRouter(io) {
     const admin = await requirePermission(req, res, 'manage_seasons')
     if (!admin) return
     try {
-      const { name, slug, description, starts_at, ends_at, is_active, settings } = req.body
+      const { name, slug, description, starts_at, ends_at, is_active, verified_mmr_only, settings } = req.body
       if (!name) return res.status(400).json({ error: 'Name is required' })
       const finalSlug = (slug && slugify(slug)) || slugify(name)
       if (!finalSlug) return res.status(400).json({ error: 'Slug could not be generated from name' })
       const existing = await queryOne('SELECT 1 FROM seasons WHERE slug = $1', [finalSlug])
       if (existing) return res.status(409).json({ error: 'Slug already in use' })
       const created = await queryOne(`
-        INSERT INTO seasons (name, slug, description, starts_at, ends_at, is_active, settings, created_by)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        INSERT INTO seasons (name, slug, description, starts_at, ends_at, is_active, verified_mmr_only, settings, created_by)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING *
       `, [
         name,
@@ -199,6 +199,7 @@ export default function createSeasonsRouter(io) {
         starts_at || null,
         ends_at || null,
         is_active !== false,
+        !!verified_mmr_only,
         JSON.stringify(sanitizeSettings(settings)),
         admin.id,
       ])
@@ -235,6 +236,7 @@ export default function createSeasonsRouter(io) {
       if (req.body.starts_at !== undefined)   push('starts_at', req.body.starts_at || null)
       if (req.body.ends_at   !== undefined)   push('ends_at',   req.body.ends_at   || null)
       if (req.body.is_active !== undefined)   push('is_active', !!req.body.is_active)
+      if (req.body.verified_mmr_only !== undefined) push('verified_mmr_only', !!req.body.verified_mmr_only)
       if (req.body.settings  !== undefined)   push('settings',  JSON.stringify({ ...(existing.settings || {}), ...sanitizeSettings(req.body.settings) }))
 
       if (setClauses.length === 0) return res.json(existing)

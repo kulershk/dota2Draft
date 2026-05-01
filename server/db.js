@@ -812,18 +812,21 @@ export async function initDb() {
   // every participating player's points on the pool's season.
   await execute(`
     CREATE TABLE IF NOT EXISTS seasons (
-      id          SERIAL PRIMARY KEY,
-      name        TEXT NOT NULL,
-      slug        TEXT UNIQUE NOT NULL,
-      description TEXT DEFAULT '',
-      starts_at   TIMESTAMP NULL,
-      ends_at     TIMESTAMP NULL,
-      is_active   BOOLEAN DEFAULT TRUE,
-      settings    JSONB NOT NULL DEFAULT '{}'::jsonb,
-      created_by  INTEGER NULL REFERENCES players(id) ON DELETE SET NULL,
-      created_at  TIMESTAMP DEFAULT NOW()
+      id                 SERIAL PRIMARY KEY,
+      name               TEXT NOT NULL,
+      slug               TEXT UNIQUE NOT NULL,
+      description        TEXT DEFAULT '',
+      starts_at          TIMESTAMP NULL,
+      ends_at            TIMESTAMP NULL,
+      is_active          BOOLEAN DEFAULT TRUE,
+      verified_mmr_only  BOOLEAN NOT NULL DEFAULT FALSE,
+      settings           JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_by         INTEGER NULL REFERENCES players(id) ON DELETE SET NULL,
+      created_at         TIMESTAMP DEFAULT NOW()
     )
   `)
+  // Migration for existing DBs.
+  try { await execute('ALTER TABLE seasons ADD COLUMN verified_mmr_only BOOLEAN NOT NULL DEFAULT FALSE') } catch {}
 
   await execute(`
     CREATE TABLE IF NOT EXISTS season_rankings (
