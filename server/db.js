@@ -171,6 +171,7 @@ export async function initDb() {
     ['rules_content', 'TEXT DEFAULT \'\''],
     ['competition_type', 'TEXT DEFAULT \'\''],
     ['is_featured', 'BOOLEAN NOT NULL DEFAULT FALSE'],
+    ['deleted_at', 'TIMESTAMP NULL'],
   ]) {
     const has = await queryOne(
       `SELECT 1 FROM information_schema.columns WHERE table_name = 'competitions' AND column_name = $1`, [col]

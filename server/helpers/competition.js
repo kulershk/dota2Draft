@@ -66,7 +66,7 @@ export function parseAuctionState(comp) {
 }
 
 export async function getCompetition(compId) {
-  return await queryOne('SELECT * FROM competitions WHERE id = $1', [compId])
+  return await queryOne('SELECT * FROM competitions WHERE id = $1 AND deleted_at IS NULL', [compId])
 }
 
 export async function setAuctionState(compId, updates) {

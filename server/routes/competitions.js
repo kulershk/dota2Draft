@@ -18,7 +18,7 @@ router.get('/api/competitions', async (req, res) => {
   const search = (req.query.search || '').toString().trim()
 
   const params = []
-  let where = '1=1'
+  let where = 'c.deleted_at IS NULL'
   if (search) {
     params.push(`%${search.replace(/[%_]/g, '\\$&')}%`)
     where += ` AND c.name ILIKE $${params.length}`
@@ -70,7 +70,7 @@ router.get('/api/competitions/:id', async (req, res) => {
     SELECT c.*, COALESCE(p.display_name, p.name) AS created_by_name, p.avatar_url AS created_by_avatar
     FROM competitions c
     LEFT JOIN players p ON p.id = c.created_by
-    WHERE c.id = $1
+    WHERE c.id = $1 AND c.deleted_at IS NULL
   `, [req.params.id])
   if (!comp) return res.status(404).json({ error: 'Competition not found' })
   if (!comp.is_public) {
@@ -161,7 +161,12 @@ router.delete('/api/competitions/:id', async (req, res) => {
   const admin = await requireCompPermission(req, res, Number(req.params.id))
   if (!admin) return
 
-  await execute('DELETE FROM competitions WHERE id = $1', [req.params.id])
+  // Soft delete: keep the row + cascaded children intact, just hide it from
+  // every public read path. Clears is_featured so the home-page slot is freed.
+  await execute(
+    'UPDATE competitions SET deleted_at = NOW(), is_featured = FALSE WHERE id = $1 AND deleted_at IS NULL',
+    [req.params.id]
+  )
   res.json({ ok: true })
 })
 

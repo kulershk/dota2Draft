@@ -23,7 +23,7 @@ router.get('/api/home/stats', async (req, res) => {
       `),
       // "Active" = currently signing-up or currently running. Drafts, finished
       // and archived/cancelled don't count.
-      queryOne(`SELECT COUNT(*)::int AS n FROM competitions WHERE is_public = TRUE AND status IN ('registration', 'registration_closed', 'active')`),
+      queryOne(`SELECT COUNT(*)::int AS n FROM competitions WHERE is_public = TRUE AND deleted_at IS NULL AND status IN ('registration', 'registration_closed', 'active')`),
     ])
     res.json({
       active_players: activePlayers?.n || 0,
@@ -46,7 +46,7 @@ router.get('/api/home/featured-tournament', async (req, res) => {
         c.status, c.is_public, c.tournament_state, c.competition_type,
         (SELECT COUNT(*)::int FROM captains WHERE competition_id = c.id) AS captain_count
       FROM competitions c
-      WHERE c.is_featured = TRUE AND c.is_public = TRUE
+      WHERE c.is_featured = TRUE AND c.is_public = TRUE AND c.deleted_at IS NULL
       LIMIT 1
     `)
     if (!comp) return res.json(null)

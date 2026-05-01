@@ -152,6 +152,7 @@ router.get('/api/search', async (req, res) => {
     `SELECT id, name, status, starts_at, is_public, competition_type
        FROM competitions
        WHERE is_public = TRUE
+         AND deleted_at IS NULL
          AND name ILIKE $1
        ORDER BY
          CASE status

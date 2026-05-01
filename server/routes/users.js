@@ -113,7 +113,7 @@ router.get('/api/players/:id/profile', async (req, res) => {
       LEFT JOIN LATERAL (
         SELECT c2.tournament_state FROM competitions c2 WHERE c2.id = cap.competition_id
       ) ts ON true
-      WHERE cap.id = ANY($1::int[]) AND c.is_public = true
+      WHERE cap.id = ANY($1::int[]) AND c.is_public = true AND c.deleted_at IS NULL
     `, [captainIds])
   }
 

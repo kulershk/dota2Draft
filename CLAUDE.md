@@ -130,6 +130,18 @@ Stored as a raw `dota_league_id` integer (default `0` = no league). The UI is a 
 - The stored value is the raw `dota_league_id` — **not** an FK to `leagues.id` — so a league can be deleted from our table without breaking lobbies that reference its Valve-issued id. The dropdown preserves any unrecognised id with a `#NNNN` fallback option.
 - Dropdown call sites: `AdminCompetitionSetupPage.vue` (Lobby tab) and `AdminQueuePage.vue` (queue pool form). Both load `api.getLeagues()` on mount; the visibility filter above means non-admin comp owners only see public leagues plus their own.
 
+## Soft delete
+
+Competitions use soft delete: `competitions.deleted_at TIMESTAMP NULL`. `DELETE /api/competitions/:id` flips `deleted_at = NOW()` and `is_featured = FALSE` (so the home-page featured slot frees up); the row and all cascaded children (captains, competition_players, matches, etc.) stay intact. Every read path filters `deleted_at IS NULL`:
+
+- `getCompetition()` in `server/helpers/competition.js` (used by `requireCompPermission` and `botPool` lookups)
+- `GET /api/competitions` and `GET /api/competitions/:id`
+- `GET /api/home/stats` and `GET /api/home/featured-tournament`
+- `GET /api/search` competition section
+- `GET /api/players/:id` placements join
+
+There is no admin "show deleted" view; restoring requires `UPDATE competitions SET deleted_at = NULL WHERE id = N` against the DB. Treat soft delete as a tombstone — don't leak deleted comps via new joins.
+
 ## Stack
 
 - **Frontend**: Vue 3 + TypeScript + Tailwind CSS + Vue I18n
