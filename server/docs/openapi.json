@@ -1389,7 +1389,7 @@
         "tags": ["Leagues"],
         "summary": "Create a league",
         "security": [{ "bearerAuth": [] }],
-        "description": "Requires manage_leagues or manage_own_leagues permission. Set public=true to make the league usable by everyone in the lobby league dropdown; otherwise it is only visible to the creator and manage_leagues holders.",
+        "description": "Requires manage_leagues or manage_own_leagues permission. Set public=true to make the league usable by everyone in the lobby league dropdown; otherwise it is only visible to the creator and manage_leagues holders. dota_league_id is unique across the table — registering an id another row already holds returns 409.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1405,7 +1405,10 @@
             }
           }
         },
-        "responses": { "201": { "description": "Created" } }
+        "responses": {
+          "201": { "description": "Created" },
+          "409": { "description": "dota_league_id already registered by another row" }
+        }
       }
     },
     "/api/leagues/{id}": {
@@ -1413,7 +1416,7 @@
         "tags": ["Leagues"],
         "summary": "Update a league",
         "security": [{ "bearerAuth": [] }],
-        "description": "Requires manage_leagues, or manage_own_leagues if the caller created the league.",
+        "description": "Requires manage_leagues, or manage_own_leagues if the caller created the league. Changing dota_league_id to one another row already holds returns 409.",
         "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
         "requestBody": {
           "content": {
@@ -1429,7 +1432,10 @@
             }
           }
         },
-        "responses": { "200": { "description": "Updated" } }
+        "responses": {
+          "200": { "description": "Updated" },
+          "409": { "description": "dota_league_id already registered by another row" }
+        }
       },
       "delete": {
         "tags": ["Leagues"],

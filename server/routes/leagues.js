@@ -43,11 +43,17 @@ export default function createLeaguesRouter() {
     const dotaId = Number(dota_league_id)
     if (!Number.isFinite(dotaId) || dotaId <= 0) return res.status(400).json({ error: 'Valid dota_league_id is required' })
 
-    const league = await queryOne(
-      'INSERT INTO leagues (name, dota_league_id, public, created_by) VALUES ($1, $2, $3, $4) RETURNING *',
-      [String(name).trim(), dotaId, !!isPublic, admin.id]
-    )
-    res.status(201).json(league)
+    try {
+      const league = await queryOne(
+        'INSERT INTO leagues (name, dota_league_id, public, created_by) VALUES ($1, $2, $3, $4) RETURNING *',
+        [String(name).trim(), dotaId, !!isPublic, admin.id]
+      )
+      res.status(201).json(league)
+    } catch (e) {
+      // Postgres unique_violation
+      if (e.code === '23505') return res.status(409).json({ error: `Dota 2 league ID ${dotaId} is already registered` })
+      throw e
+    }
   })
 
   router.put('/api/leagues/:id', async (req, res) => {
@@ -69,7 +75,12 @@ export default function createLeaguesRouter() {
       newDotaId = n
     }
     const newPublic = isPublic !== undefined ? !!isPublic : existing.public
-    await execute('UPDATE leagues SET name = $1, dota_league_id = $2, public = $3 WHERE id = $4', [newName, newDotaId, newPublic, id])
+    try {
+      await execute('UPDATE leagues SET name = $1, dota_league_id = $2, public = $3 WHERE id = $4', [newName, newDotaId, newPublic, id])
+    } catch (e) {
+      if (e.code === '23505') return res.status(409).json({ error: `Dota 2 league ID ${newDotaId} is already registered` })
+      throw e
+    }
     const updated = await queryOne('SELECT * FROM leagues WHERE id = $1', [id])
     res.json(updated)
   })

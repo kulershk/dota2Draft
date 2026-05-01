@@ -52,7 +52,7 @@ export async function initDb() {
     CREATE TABLE IF NOT EXISTS leagues (
       id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
-      dota_league_id INTEGER NOT NULL,
+      dota_league_id INTEGER NOT NULL UNIQUE,
       public BOOLEAN NOT NULL DEFAULT FALSE,
       created_by INTEGER REFERENCES players(id) ON DELETE SET NULL,
       created_at TIMESTAMP DEFAULT NOW()
@@ -64,6 +64,15 @@ export async function initDb() {
       `SELECT 1 FROM information_schema.columns WHERE table_name = 'leagues' AND column_name = 'public'`
     )
     if (!has) await execute('ALTER TABLE leagues ADD COLUMN public BOOLEAN NOT NULL DEFAULT FALSE')
+  }
+  // Enforce one row per Valve dota_league_id so users can't impersonate
+  // someone else's league by registering the same id under a different name.
+  // Skip if existing data has duplicates — log a warning and let the operator
+  // dedupe manually rather than silently failing the boot.
+  try {
+    await execute('CREATE UNIQUE INDEX IF NOT EXISTS leagues_dota_league_id_unique ON leagues (dota_league_id)')
+  } catch (e) {
+    console.warn('[db] Could not add unique index on leagues.dota_league_id (likely duplicate rows). Resolve manually:', e.message)
   }
 
   // Ensure global settings

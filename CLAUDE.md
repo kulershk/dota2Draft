@@ -120,7 +120,7 @@ Per-competition lobby (Dota 2 in-game lobby) configuration. Stored as JSONB on `
 
 Stored as a raw `dota_league_id` integer (default `0` = no league). The UI is a dropdown — **never a free-form number input** — sourced from `GET /api/leagues`.
 
-- Backing table: `leagues` (`id`, `name`, `dota_league_id`, `public`, `created_by`, `created_at`).
+- Backing table: `leagues` (`id`, `name`, `dota_league_id` UNIQUE, `public`, `created_by`, `created_at`). The unique constraint on `dota_league_id` prevents one user impersonating another by claiming the same Valve-issued id under a different name; create/update returns 409 on conflict.
 - Visibility (`GET /api/leagues` — auth required):
   - Authenticated callers see all `public = TRUE` rows (the "anyone making a tournament can pick this" set) **plus** their own private rows.
   - `manage_leagues` (or `is_admin`) sees every row.
