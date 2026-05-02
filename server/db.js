@@ -4,6 +4,15 @@ const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://localhost:5432/draft'
 })
 
+// Without this listener, an error on an idle pooled client (e.g. the DB
+// container restarting and severing connections — Postgres 57P01) becomes
+// an unhandled 'error' event and Node terminates the whole Node process.
+// Log it instead; pg.Pool will discard the broken client and reconnect on
+// the next query.
+pool.on('error', (err, _client) => {
+  console.error('[pg.Pool] idle client error:', err.code || '', err.message)
+})
+
 // Helpers
 export async function query(sql, params = []) {
   const { rows } = await pool.query(sql, params)
