@@ -130,6 +130,11 @@ func main() {
 	}
 
 	wsClient = ws.NewClient(cfg.WSURL, cfg.Token, handler)
+	// On every (re)connect, push any lobby state Node may have lost across
+	// the disconnect — most importantly server_steam_id, which the live-stats
+	// poller needs and which otherwise required manual admin injection after
+	// every deploy.
+	wsClient.OnConnect = botMgr.ResendAllLobbyState
 
 	log.Printf("Connecting to Node.js at %s", cfg.WSURL)
 	go wsClient.Run() // runs reconnect loop in background

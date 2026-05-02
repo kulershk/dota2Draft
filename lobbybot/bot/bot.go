@@ -867,6 +867,26 @@ func (b *Bot) GetActiveLobbyID() string {
 	return b.activeLobbyID
 }
 
+// ResendLobbyState re-emits state Node may have missed if the WS was down
+// when the underlying GC event fired (most importantly server_steam_id).
+// Safe to call repeatedly; Node's handler de-dupes by current DB value.
+func (b *Bot) ResendLobbyState() {
+	b.mu.Lock()
+	lobbyID := b.activeLobbyID
+	lobby := b.lastLobby
+	b.mu.Unlock()
+	if lobbyID == "" || lobby == nil {
+		return
+	}
+	if serverID := lobby.GetServerId(); serverID != 0 {
+		b.log(fmt.Sprintf("Re-emitting lobby_server_id %d after WS reconnect", serverID))
+		b.send("lobby_server_id", protocol.LobbyServerIDEvent{
+			LobbyID:       lobbyID,
+			ServerSteamID: fmt.Sprintf("%d", serverID),
+		})
+	}
+}
+
 func (b *Bot) SetBusy(busy bool) {
 	b.mu.Lock()
 	if busy {

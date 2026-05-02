@@ -22,6 +22,10 @@ type Client struct {
 	connected   bool
 	connectedCh chan struct{} // closed on first successful connect
 	connOnce    sync.Once
+	// OnConnect, if set, is invoked after every successful (re)connect — not
+	// just the first. Used to push state back to Node that may have been lost
+	// when the WS dropped (e.g. server_steam_id re-emit after Node restart).
+	OnConnect func()
 }
 
 func NewClient(wsURL, token string, handler func(string, json.RawMessage)) *Client {
@@ -105,6 +109,11 @@ func (c *Client) connect() error {
 
 	// Send hello
 	c.Send("hello", map[string]string{"version": "1.0"})
+
+	// Fire reconnect hook in a goroutine so it can't block the read loop.
+	if c.OnConnect != nil {
+		go c.OnConnect()
+	}
 
 	// Read loop
 	for {
