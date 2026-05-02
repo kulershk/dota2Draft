@@ -7,6 +7,7 @@ import { BASE_URL, TWITCH_CLIENT_ID, TWITCH_CLIENT_SECRET, DISCORD_CLIENT_ID, DI
 import { getCompetition } from '../helpers/competition.js'
 import { fetchSteamProfile } from '../helpers/steam.js'
 import { awardXp } from '../helpers/xp.js'
+import { getActiveSubscription } from '../helpers/subscription.js'
 
 const router = Router()
 
@@ -82,6 +83,10 @@ router.get('/api/auth/me', async (req, res) => {
     bannedByName = banner ? (banner.display_name || banner.name) : null
   }
 
+  // Active subscription summary so the client can render the badge + know
+  // which perks unlock UI (e.g. auto-requeue checkbox visibility).
+  const sub = await getActiveSubscription(player.id)
+
   res.json({
     id: player.id,
     name: player.display_name || player.name,
@@ -102,6 +107,13 @@ router.get('/api/auth/me', async (req, res) => {
     banned_at: player.banned_at || null,
     banned_by_name: bannedByName,
     banned_reason: player.banned_reason || null,
+    subscription: sub ? {
+      plan_id: sub.plan_id,
+      plan_name: sub.plan_name,
+      plan_slug: sub.plan_slug,
+      badge_url: sub.plan_badge_url,
+      perks: sub.plan_perks || {},
+    } : null,
   })
 })
 

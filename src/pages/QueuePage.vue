@@ -53,6 +53,30 @@ const iAmParticipant = computed(() => {
   if (!uid || !queue.activeMatch.value) return false
   return queue.activeMatch.value.players.some(p => p.playerId === uid)
 })
+
+// Auto-requeue is a perk-gated convenience: when the current match ends,
+// the server puts the player straight back into the same pool. Visibility
+// is gated on the perk flag from /api/auth/me — non-subscribers never see
+// the checkbox at all (per UX request).
+const hasAutoRequeuePerk = computed(() =>
+  !!store.currentUser.value?.subscription?.perks?.auto_requeue
+)
+const autoRequeueEnabled = ref(false)
+function toggleAutoRequeue() {
+  const next = !autoRequeueEnabled.value
+  autoRequeueEnabled.value = next
+  // Optimistic — server will echo back queue:autoRequeueState; on disagree
+  // the listener below corrects us.
+  queue.setAutoRequeue(next)
+}
+queue.onAutoRequeueState((state: boolean) => {
+  autoRequeueEnabled.value = state
+})
+// Reset the toggle whenever the player exits the active match so the
+// checkbox returns to off for the next match.
+watch(() => queue.activeMatch.value, (m) => {
+  if (!m) autoRequeueEnabled.value = false
+})
 const myPrefs = computed<string[]>(() => {
   const uid = currentUserId.value
   if (!uid) return []
@@ -445,6 +469,26 @@ onUnmounted(() => {
 
         <!-- ═══════════════════ PICK PHASE ═══════════════════ -->
         <template v-if="queue.activeMatch.value">
+
+          <!-- Auto-requeue (subscriber perk) — hidden entirely for non-subscribers -->
+          <div
+            v-if="iAmParticipant && hasAutoRequeuePerk && !queue.cancelled.value"
+            class="card px-4 py-2.5 mb-3 flex items-center gap-3 border-amber-500/30"
+          >
+            <Crown class="w-4 h-4 text-amber-500 shrink-0" />
+            <label class="flex items-center gap-2 cursor-pointer flex-1 min-w-0">
+              <input
+                type="checkbox"
+                class="w-4 h-4 accent-amber-500"
+                :checked="autoRequeueEnabled"
+                @change="toggleAutoRequeue"
+              />
+              <span class="text-sm font-medium">{{ t('queueAutoRequeueLabel') }}</span>
+            </label>
+            <span v-if="autoRequeueEnabled" class="text-[10px] font-mono uppercase tracking-wider text-amber-500 shrink-0">
+              {{ t('queueAutoRequeueOn') }}
+            </span>
+          </div>
 
           <!-- Cancelled -->
           <div v-if="queue.cancelled.value" class="card px-8 py-12 text-center">
@@ -1266,6 +1310,7 @@ onUnmounted(() => {
                         <span class="text-sm truncate flex items-center gap-1"
                           :class="winnerSide(qm) === 1 ? 'font-semibold' : (winnerSide(qm) === 2 ? 'text-muted-foreground' : 'font-medium')">
                           {{ qm.captain1_display_name || qm.captain1_name }}
+                          <img v-if="qm.captain1_subscription_badge_url" :src="qm.captain1_subscription_badge_url" class="w-4 h-4 rounded shrink-0" :alt="t('subscriptionBadgeAlt')" :title="t('subscriptionBadgeTooltip')" />
                           <BadgeCheck v-if="qm.captain1_mmr_verified_at" class="w-3.5 h-3.5 text-cyan-400 shrink-0" :title="t('mmrVerifiedTooltip')" />
                         </span>
                         <span v-if="teamAvgMmr(qm.team1_players)" class="text-[10px] font-mono text-muted-foreground">
@@ -1334,6 +1379,7 @@ onUnmounted(() => {
                         <span class="text-sm truncate flex items-center gap-1"
                           :class="winnerSide(qm) === 2 ? 'font-semibold' : (winnerSide(qm) === 1 ? 'text-muted-foreground' : 'font-medium')">
                           {{ qm.captain2_display_name || qm.captain2_name }}
+                          <img v-if="qm.captain2_subscription_badge_url" :src="qm.captain2_subscription_badge_url" class="w-4 h-4 rounded shrink-0" :alt="t('subscriptionBadgeAlt')" :title="t('subscriptionBadgeTooltip')" />
                           <BadgeCheck v-if="qm.captain2_mmr_verified_at" class="w-3.5 h-3.5 text-cyan-400 shrink-0" :title="t('mmrVerifiedTooltip')" />
                         </span>
                         <span v-if="teamAvgMmr(qm.team2_players)" class="text-[10px] font-mono text-muted-foreground">

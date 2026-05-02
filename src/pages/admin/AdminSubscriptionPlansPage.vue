@@ -14,12 +14,20 @@ interface Plan {
   price_cents: number
   currency: string
   perks: Record<string, any>
+  badge_url: string | null
   is_active: boolean
   sort_order: number
   active_subscriber_count: number
   created_at: string
   updated_at: string
 }
+
+// Hardcoded perk catalogue. Adding a new perk = add a row here + a backend
+// consumer that calls hasPerk('the_key'). The plan's perks JSONB stores
+// boolean flags keyed by perk_key.
+const PERK_OPTIONS: { key: string; labelKey: string; descKey: string }[] = [
+  { key: 'auto_requeue', labelKey: 'perkAutoRequeue', descKey: 'perkAutoRequeueDesc' },
+]
 interface Subscriber {
   id: number
   player_id: number
@@ -66,7 +74,11 @@ const planForm = ref({
   currency: 'EUR',
   is_active: true,
   sort_order: 0,
+  perks: {} as Record<string, boolean>,
 })
+const badgeFile = ref<File | null>(null)
+const badgePreviewUrl = ref<string | null>(null)
+const badgeUploading = ref(false)
 
 // Subscriber assign modal
 const showAssignModal = ref(false)
@@ -106,7 +118,9 @@ async function load() {
 
 function openCreate() {
   editingPlan.value = null
-  planForm.value = { name: '', slug: '', description: '', price_cents: 0, currency: 'EUR', is_active: true, sort_order: nextSortOrder() }
+  planForm.value = { name: '', slug: '', description: '', price_cents: 0, currency: 'EUR', is_active: true, sort_order: nextSortOrder(), perks: {} }
+  badgeFile.value = null
+  badgePreviewUrl.value = null
   error.value = ''
   showPlanModal.value = true
 }
@@ -118,6 +132,10 @@ function nextSortOrder(): number {
 
 function openEdit(plan: Plan) {
   editingPlan.value = plan
+  // Coerce server perks JSONB into a flat boolean map for the checkboxes,
+  // ignoring any unknown keys (forward-compatible with future perks).
+  const perksMap: Record<string, boolean> = {}
+  for (const opt of PERK_OPTIONS) perksMap[opt.key] = !!(plan.perks && plan.perks[opt.key])
   planForm.value = {
     name: plan.name,
     slug: plan.slug,
@@ -126,14 +144,44 @@ function openEdit(plan: Plan) {
     currency: plan.currency,
     is_active: plan.is_active,
     sort_order: plan.sort_order,
+    perks: perksMap,
   }
+  badgeFile.value = null
+  badgePreviewUrl.value = plan.badge_url
   error.value = ''
   showPlanModal.value = true
+}
+
+function onPickBadge(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  badgeFile.value = file
+  badgePreviewUrl.value = URL.createObjectURL(file)
+}
+
+async function removeBadge() {
+  if (!editingPlan.value || !editingPlan.value.badge_url) {
+    badgeFile.value = null
+    badgePreviewUrl.value = null
+    return
+  }
+  if (!confirm(t('subscriptionPlanBadgeRemoveConfirm'))) return
+  await api.deleteSubscriptionPlanBadge(editingPlan.value.id)
+  badgePreviewUrl.value = null
+  badgeFile.value = null
+  await load()
+  // Refresh the editingPlan reference so badge_url state reflects the deletion.
+  const updated = plans.value.find(p => p.id === editingPlan.value!.id)
+  if (updated) editingPlan.value = updated
 }
 
 async function savePlan() {
   error.value = ''
   if (!planForm.value.name.trim()) { error.value = t('subscriptionPlanNameRequired'); return }
+  // Strip false keys so the perks JSONB doesn't accumulate dead flags over time.
+  const perks: Record<string, boolean> = {}
+  for (const [k, v] of Object.entries(planForm.value.perks)) if (v) perks[k] = true
+
   const payload = {
     name: planForm.value.name.trim(),
     slug: planForm.value.slug.trim() || undefined,
@@ -142,12 +190,24 @@ async function savePlan() {
     currency: planForm.value.currency.trim() || 'EUR',
     is_active: planForm.value.is_active,
     sort_order: Math.floor(Number(planForm.value.sort_order) || 0),
+    perks,
   }
   try {
+    let savedPlanId: number
     if (editingPlan.value) {
-      await api.updateSubscriptionPlan(editingPlan.value.id, payload)
+      const updated: any = await api.updateSubscriptionPlan(editingPlan.value.id, payload)
+      savedPlanId = updated.id
     } else {
-      await api.createSubscriptionPlan(payload)
+      const created: any = await api.createSubscriptionPlan(payload)
+      savedPlanId = created.id
+    }
+    if (badgeFile.value) {
+      badgeUploading.value = true
+      try {
+        await api.uploadSubscriptionPlanBadge(savedPlanId, badgeFile.value)
+      } finally {
+        badgeUploading.value = false
+      }
     }
     showPlanModal.value = false
     await load()
@@ -279,7 +339,13 @@ onUnmounted(() => {
       <div v-else class="divide-y divide-border">
         <div v-for="plan in sortedPlans" :key="plan.id" class="flex flex-col">
           <div class="px-4 py-3 md:px-6 flex items-center gap-3">
-            <Crown class="w-4 h-4 shrink-0" :class="plan.is_active ? 'text-amber-500' : 'text-muted-foreground'" />
+            <img
+              v-if="plan.badge_url"
+              :src="plan.badge_url"
+              class="w-8 h-8 rounded shrink-0 object-cover border border-border"
+              :alt="plan.name"
+            />
+            <Crown v-else class="w-4 h-4 shrink-0" :class="plan.is_active ? 'text-amber-500' : 'text-muted-foreground'" />
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-3 flex-wrap">
                 <span class="text-sm font-semibold text-foreground">{{ plan.name }}</span>
@@ -404,6 +470,39 @@ onUnmounted(() => {
           :hint="t('subscriptionPlanSortHint')"
           @update:model-value="planForm.sort_order = Number($event) || 0"
         />
+
+        <!-- Badge upload -->
+        <div class="flex flex-col gap-1.5">
+          <label class="label-text">{{ t('subscriptionPlanBadge') }}</label>
+          <div class="flex items-center gap-3">
+            <div class="w-16 h-16 rounded border border-border bg-accent/20 flex items-center justify-center overflow-hidden shrink-0">
+              <img v-if="badgePreviewUrl" :src="badgePreviewUrl" class="w-full h-full object-cover" />
+              <Crown v-else class="w-6 h-6 text-muted-foreground" />
+            </div>
+            <div class="flex flex-col gap-1.5 flex-1">
+              <input type="file" accept="image/*" class="text-xs file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-primary file:text-[#0A0F1C] file:font-semibold file:cursor-pointer hover:file:brightness-110" @change="onPickBadge" />
+              <button v-if="badgePreviewUrl" type="button" class="self-start text-xs text-destructive hover:underline" @click="removeBadge">
+                {{ t('subscriptionPlanBadgeRemove') }}
+              </button>
+            </div>
+          </div>
+          <p class="text-[11px] text-muted-foreground">{{ t('subscriptionPlanBadgeHint') }}</p>
+        </div>
+
+        <!-- Perks -->
+        <div class="flex flex-col gap-1.5">
+          <label class="label-text">{{ t('subscriptionPlanPerks') }}</label>
+          <div class="flex flex-col gap-2 rounded border border-border p-3 bg-accent/10">
+            <label v-for="opt in PERK_OPTIONS" :key="opt.key" class="flex items-start gap-2 cursor-pointer">
+              <input type="checkbox" class="mt-0.5 w-4 h-4 accent-primary" v-model="planForm.perks[opt.key]" />
+              <div class="flex flex-col">
+                <span class="text-sm text-foreground font-medium">{{ t(opt.labelKey) }}</span>
+                <span class="text-[11px] text-muted-foreground">{{ t(opt.descKey) }}</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
         <label class="flex items-center gap-2 cursor-pointer">
           <input type="checkbox" class="w-4 h-4 accent-primary" v-model="planForm.is_active" />
           <span class="text-sm text-foreground">{{ t('subscriptionPlanActive') }}</span>

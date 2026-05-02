@@ -500,6 +500,25 @@ export function useApi() {
       request(`/api/admin/subscription-plans/${id}/subscribers`, { method: 'POST', body: JSON.stringify(data) }),
     cancelSubscriptionPlanSubscriber: (planId: number, subscriptionId: number) =>
       request(`/api/admin/subscription-plans/${planId}/subscribers/${subscriptionId}`, { method: 'DELETE' }),
+    uploadSubscriptionPlanBadge: async (id: number, file: File): Promise<{ badge_url: string }> => {
+      const formData = new FormData()
+      formData.append('badge', file)
+      const headers: Record<string, string> = {}
+      const tok = (typeof localStorage !== 'undefined') ? localStorage.getItem('draft_auth_token') : null
+      if (tok) headers['Authorization'] = `Bearer ${tok}`
+      const res = await fetch('/api/admin/subscription-plans/' + id + '/badge', {
+        method: 'POST',
+        body: formData,
+        headers,
+      })
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}))
+        throw new Error(e.error || 'Upload failed')
+      }
+      return res.json()
+    },
+    deleteSubscriptionPlanBadge: (id: number) =>
+      request(`/api/admin/subscription-plans/${id}/badge`, { method: 'DELETE' }),
 
     // News Comments
     getComments: (newsId: number) => request(`/api/news/${newsId}/comments`),

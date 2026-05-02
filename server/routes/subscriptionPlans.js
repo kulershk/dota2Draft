@@ -1,7 +1,11 @@
 import { Router } from 'express'
+import fs from 'fs'
+import { join } from 'path'
+import sharp from 'sharp'
 import { query, queryOne, execute } from '../db.js'
 import { getAuthPlayer } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/permissions.js'
+import { upload, uploadsDir } from '../middleware/upload.js'
 
 function slugify(s) {
   return String(s)
@@ -19,7 +23,7 @@ export default function createSubscriptionPlansRouter() {
   // only included for admin views below — public list omits it.
   router.get('/api/subscription-plans', async (_req, res) => {
     const rows = await query(`
-      SELECT id, name, slug, description, price_cents, currency, perks, sort_order
+      SELECT id, name, slug, description, price_cents, currency, perks, badge_url, sort_order
         FROM subscription_plans
        WHERE is_active = TRUE
        ORDER BY sort_order ASC, id ASC
@@ -33,7 +37,7 @@ export default function createSubscriptionPlansRouter() {
     if (!admin) return
     const rows = await query(`
       SELECT sp.id, sp.name, sp.slug, sp.description, sp.price_cents, sp.currency,
-             sp.perks, sp.is_active, sp.sort_order, sp.created_at, sp.updated_at,
+             sp.perks, sp.badge_url, sp.is_active, sp.sort_order, sp.created_at, sp.updated_at,
              COALESCE(c.active_count, 0) AS active_subscriber_count
         FROM subscription_plans sp
         LEFT JOIN (
@@ -128,6 +132,56 @@ export default function createSubscriptionPlansRouter() {
       if (e.code === '23503') return res.status(409).json({ error: 'plan has subscriber history; mark inactive instead of deleting' })
       throw e
     }
+  })
+
+  // ── Badge upload ────────────────────────────────────────
+  // Resize to 64x64 PNG so layout next to avatars stays consistent regardless
+  // of what the admin uploads. Old badge file is unlinked when replaced.
+  router.post('/api/admin/subscription-plans/:id/badge', upload.single('badge'), async (req, res) => {
+    const id = Number(req.params.id)
+    if (!id) return res.status(400).json({ error: 'invalid id' })
+    const admin = await requirePermission(req, res, 'manage_subscription_plans')
+    if (!admin) return
+    const plan = await queryOne('SELECT id, badge_url FROM subscription_plans WHERE id = $1', [id])
+    if (!plan) return res.status(404).json({ error: 'plan not found' })
+    if (!req.file) return res.status(400).json({ error: 'no file uploaded' })
+
+    const resizedFilename = `plan_badge_${id}_${Date.now()}.png`
+    const resizedPath = join(uploadsDir, resizedFilename)
+    await sharp(req.file.path)
+      .resize(64, 64, { fit: 'cover', position: 'center' })
+      .png()
+      .toFile(resizedPath)
+    if (req.file.path !== resizedPath) {
+      try { fs.unlinkSync(req.file.path) } catch {}
+    }
+
+    if (plan.badge_url) {
+      const oldPath = join(uploadsDir, plan.badge_url.replace('/uploads/', ''))
+      try { if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath) } catch {}
+    }
+
+    const badgeUrl = `/uploads/${resizedFilename}`
+    await execute(
+      'UPDATE subscription_plans SET badge_url = $1, updated_at = NOW() WHERE id = $2',
+      [badgeUrl, id]
+    )
+    res.json({ badge_url: badgeUrl })
+  })
+
+  router.delete('/api/admin/subscription-plans/:id/badge', async (req, res) => {
+    const id = Number(req.params.id)
+    if (!id) return res.status(400).json({ error: 'invalid id' })
+    const admin = await requirePermission(req, res, 'manage_subscription_plans')
+    if (!admin) return
+    const plan = await queryOne('SELECT id, badge_url FROM subscription_plans WHERE id = $1', [id])
+    if (!plan) return res.status(404).json({ error: 'plan not found' })
+    if (plan.badge_url) {
+      const oldPath = join(uploadsDir, plan.badge_url.replace('/uploads/', ''))
+      try { if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath) } catch {}
+    }
+    await execute('UPDATE subscription_plans SET badge_url = NULL, updated_at = NOW() WHERE id = $1', [id])
+    res.json({ ok: true })
   })
 
   // ── Subscribers ──────────────────────────────────────────

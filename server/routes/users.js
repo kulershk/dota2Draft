@@ -3,6 +3,7 @@ import { query, queryOne, execute } from '../db.js'
 import { createSession, getAuthPlayer } from '../middleware/auth.js'
 import { requirePermission, getPlayerPermissions } from '../middleware/permissions.js'
 import { fetchSteamProfile, fetchSteamProfiles, parseSteamIds } from '../helpers/steam.js'
+import { getActiveSubscription } from '../helpers/subscription.js'
 import { socketPlayers, getOnlinePlayerIds, getPlayerActivities } from '../socket/state.js'
 
 const router = Router()
@@ -319,6 +320,8 @@ router.get('/api/players/:id/profile', async (req, res) => {
     }
   }
 
+  const sub = await getActiveSubscription(player.id)
+
   res.json({
     id: player.id,
     name: player.display_name || player.name,
@@ -332,6 +335,12 @@ router.get('/api/players/:id/profile', async (req, res) => {
     info: player.info || '',
     total_xp: player.total_xp || 0,
     level: Math.floor((player.total_xp || 0) / 1000) + 1,
+    subscription: sub ? {
+      plan_id: sub.plan_id,
+      plan_name: sub.plan_name,
+      plan_slug: sub.plan_slug,
+      badge_url: sub.plan_badge_url,
+    } : null,
     level_progress: (player.total_xp || 0) % 1000,
     twitch_username: player.twitch_username || null,
     is_admin: !!player.is_admin,

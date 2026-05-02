@@ -217,6 +217,7 @@ const streakBadge = computed(() => {
               <div class="min-w-0 flex-1">
                 <div class="flex flex-wrap items-center gap-2">
                   <h1 class="text-2xl md:text-3xl font-extrabold text-foreground tracking-tight truncate">{{ profile.name }}</h1>
+                  <img v-if="profile.subscription?.badge_url" :src="profile.subscription.badge_url" class="w-7 h-7 rounded shrink-0" :alt="profile.subscription.plan_name" :title="t('subscriptionBadgeOf', { plan: profile.subscription.plan_name })" />
                   <BadgeCheck v-if="profile.mmr_verified_at" class="w-6 h-6 text-cyan-400 shrink-0" :title="t('mmrVerifiedTooltip')" />
                   <span v-if="profile.is_banned"
                         class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-500/15 border border-red-500/40 text-red-500 dark:text-red-400 text-[11px] font-bold uppercase tracking-wider">

@@ -1094,6 +1094,32 @@
         }
       }
     },
+    "queue:setAutoRequeue": {
+      "publish": {
+        "summary": "Subscriber-only opt-in to be re-queued automatically into the same pool the moment the current match ends. Stored in-memory keyed by playerId+queueMatchId; server enforces the auto_requeue perk and silently ignores attempts from players without it. Server echoes queue:autoRequeueState with the authoritative value.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "enabled": { "type": "boolean" }
+            },
+            "required": ["enabled"]
+          }
+        }
+      }
+    },
+    "queue:autoRequeueState": {
+      "subscribe": {
+        "summary": "Echo of the server's authoritative auto-requeue state for the requesting socket. Sent in response to queue:setAutoRequeue and used by the client to keep the checkbox in sync (e.g. when a perk-less player toggles, server replies with enabled: false).",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": { "enabled": { "type": "boolean" } },
+            "required": ["enabled"]
+          }
+        }
+      }
+    },
     "queue:setRolePreferences": {
       "publish": {
         "summary": "Participant in a queue match sets (or updates) their ordered role preferences. Server validates roles against ['carry','mid','offlane','support','hard_support'], dedupes, persists on queue_matches.role_preferences, and broadcasts queue:rolePreferencesUpdate to the queue-match room.",

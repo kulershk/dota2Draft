@@ -474,6 +474,23 @@ export function useQueueStore() {
     getSocket().emit('queue:decline', { readyCheckId: rc.readyCheckId })
   }
 
+  // Auto-requeue (perk-gated). Server validates the perk; client UI hides
+  // the toggle for non-subscribers but the gate is enforced server-side.
+  function setAutoRequeue(enabled: boolean) {
+    getSocket().emit('queue:setAutoRequeue', { enabled })
+  }
+  // Caller-provided callback for the server's authoritative state echo.
+  // Stored in a single slot so re-registering on hot-reload doesn't stack
+  // listeners; pages subscribe in setup, useQueueStore re-binds on its own
+  // io connect.
+  let autoRequeueStateCb: ((enabled: boolean) => void) | null = null
+  function onAutoRequeueState(cb: (enabled: boolean) => void) {
+    autoRequeueStateCb = cb
+  }
+  getSocket().on('queue:autoRequeueState', (data: { enabled: boolean }) => {
+    if (autoRequeueStateCb) autoRequeueStateCb(!!data?.enabled)
+  })
+
   return {
     pools,
     inQueue,
@@ -512,5 +529,7 @@ export function useQueueStore() {
     declineReadyCheck,
     setRolePreferences,
     toggleRolePreference,
+    setAutoRequeue,
+    onAutoRequeueState,
   }
 }

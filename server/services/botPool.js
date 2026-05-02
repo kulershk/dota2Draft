@@ -1,5 +1,5 @@
 import { query, queryOne, execute } from '../db.js'
-import { playerInMatch, activeQueueMatches } from '../socket/queueState.js'
+import { playerInMatch, activeQueueMatches, playerWantsRequeue } from '../socket/queueState.js'
 import { socketPlayers } from '../socket/state.js'
 import { fetchAndSaveGameStats, fetchOpenDotaMatch, saveMatchGameStats, requestOpenDotaParse } from '../helpers/opendota.js'
 import { fetchSteamMatchDetails } from '../helpers/steam.js'
@@ -1093,6 +1093,28 @@ class BotPool {
           if (playerInMatch.get(pid) === queueMatchXp.id) playerInMatch.delete(pid)
         }
         activeQueueMatches.delete(queueMatchXp.id)
+
+        // Auto-requeue: any player who toggled the perk-gated checkbox
+        // during THIS match (queueMatchId match-checked) goes straight
+        // back into the same pool. Lazy import avoids a circular dependency
+        // at module load (queue.js already imports botPool). Failures
+        // (ban, closed pool, etc.) log and move on.
+        const requeueIds = allIds.filter(pid => {
+          const entry = playerWantsRequeue.get(pid)
+          return entry && entry.queueMatchId === queueMatchXp.id
+        })
+        if (requeueIds.length) {
+          import('../socket/queue.js').then(({ enqueuePlayerForRequeue }) => {
+            for (const pid of requeueIds) {
+              const entry = playerWantsRequeue.get(pid)
+              playerWantsRequeue.delete(pid)
+              if (!entry?.poolId) continue
+              enqueuePlayerForRequeue(this.io, pid, entry.poolId).catch(e => {
+                console.error('[auto-requeue] failed for player', pid, ':', e?.message)
+              })
+            }
+          })
+        }
       } else if (match.competition_id) {
         // Competition match XP
         const comp = await getCompetition(match.competition_id)

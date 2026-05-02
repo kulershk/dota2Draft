@@ -70,15 +70,33 @@ export default function createQueueRouter(io) {
     const offset = Number(req.query.offset) || 0
     const poolId = req.query.poolId ? Number(req.query.poolId) : null
 
+    // sub_*.badge_url joined via the active subscription row per captain so the
+    // badge can render alongside MMR-verified BadgeCheck without an extra fetch.
     let sql = `
       SELECT qm.*,
         p1.name AS captain1_name, COALESCE(p1.display_name, p1.name) AS captain1_display_name, p1.avatar_url AS captain1_avatar, p1.mmr_verified_at AS captain1_mmr_verified_at,
         p2.name AS captain2_name, COALESCE(p2.display_name, p2.name) AS captain2_display_name, p2.avatar_url AS captain2_avatar, p2.mmr_verified_at AS captain2_mmr_verified_at,
+        sp1.badge_url AS captain1_subscription_badge_url,
+        sp2.badge_url AS captain2_subscription_badge_url,
         qp.name AS pool_name,
         m.score1, m.score2, m.winner_captain_id, m.best_of
       FROM queue_matches qm
       LEFT JOIN players p1 ON p1.id = qm.captain1_player_id
       LEFT JOIN players p2 ON p2.id = qm.captain2_player_id
+      LEFT JOIN LATERAL (
+        SELECT sp.badge_url FROM user_subscriptions us
+        JOIN subscription_plans sp ON sp.id = us.plan_id
+        WHERE us.player_id = qm.captain1_player_id AND us.status = 'active'
+          AND (us.expires_at IS NULL OR us.expires_at > NOW())
+        LIMIT 1
+      ) sp1 ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT sp.badge_url FROM user_subscriptions us
+        JOIN subscription_plans sp ON sp.id = us.plan_id
+        WHERE us.player_id = qm.captain2_player_id AND us.status = 'active'
+          AND (us.expires_at IS NULL OR us.expires_at > NOW())
+        LIMIT 1
+      ) sp2 ON TRUE
       LEFT JOIN queue_pools qp ON qp.id = qm.pool_id
       LEFT JOIN matches m ON m.id = qm.match_id
       WHERE qm.status IN ('live', 'completed')

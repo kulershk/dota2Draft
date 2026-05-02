@@ -1562,6 +1562,44 @@
         }
       }
     },
+    "/api/admin/subscription-plans/{id}/badge": {
+      "post": {
+        "tags": ["Subscription Plans"],
+        "summary": "Upload a plan badge image",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_subscription_plans. Multipart/form-data with field `badge`. PNG / JPG / WebP up to 5 MB. Server resizes to 64×64 PNG (cover/center) and replaces any existing badge file.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["badge"],
+                "properties": {
+                  "badge": { "type": "string", "format": "binary" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Uploaded",
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "badge_url": { "type": "string" } } } } }
+          },
+          "400": { "description": "No file uploaded" },
+          "404": { "description": "Plan not found" }
+        }
+      },
+      "delete": {
+        "tags": ["Subscription Plans"],
+        "summary": "Remove the plan badge",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_subscription_plans. Unlinks the file and clears badge_url.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Removed" } }
+      }
+    },
     "/api/admin/subscription-plans/{id}/subscribers": {
       "get": {
         "tags": ["Subscription Plans"],

@@ -144,6 +144,13 @@ export interface CurrentUser {
   banned_at: string | null
   banned_by_name: string | null
   banned_reason: string | null
+  subscription: {
+    plan_id: number
+    plan_name: string
+    plan_slug: string
+    badge_url: string | null
+    perks: Record<string, boolean>
+  } | null
 }
 
 export interface CompetitionUser {

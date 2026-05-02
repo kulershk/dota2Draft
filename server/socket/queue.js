@@ -5,8 +5,10 @@ import {
   playerInQueue, playerInMatch,
   pendingReadyChecks, playerInReadyCheck, nextReadyCheckId,
   getPoolQueue, getPoolQueueCount, getPoolQueuePlayers, clearPickTimer,
+  playerWantsRequeue,
 } from './queueState.js'
 import { botPool } from '../services/botPool.js'
+import { hasPerk, PERK } from '../helpers/subscription.js'
 
 // Generate pick order for a given team size (snake draft).
 // For 5v5: [1,2,2,1,1,2,2,1] — captain 1 picks first, then captain 2 picks
@@ -39,6 +41,104 @@ const CHAT_RATE_LIMIT_MS = 1000
 const CHAT_HISTORY_MAX = 50
 const CHAT_TEXT_MAX = 300
 
+// Internal join — no socket required. Used both by the queue:join socket
+// handler (with one specific socket to room-join) and by the auto-requeue
+// path that runs at match completion (walks all of the player's connected
+// sockets). Returns { ok: true, banner? } on success or { ok: false, error,
+// banner? } on failure. `banner` carries ban info for the socket emitter to
+// show the banner on the requesting socket only.
+async function _doEnqueue(io, playerId, poolId) {
+  const pool = await queryOne('SELECT * FROM queue_pools WHERE id = $1 AND enabled = true', [poolId])
+  if (!pool) return { ok: false, error: 'Queue pool not found or disabled' }
+
+  const player = await queryOne('SELECT id, name, display_name, steam_id, avatar_url, mmr, mmr_verified_at FROM players WHERE id = $1', [playerId])
+  if (!player?.steam_id) return { ok: false, error: 'Steam account required to queue' }
+  if (!player.mmr || player.mmr <= 0) return { ok: false, error: 'You must set your MMR before queuing' }
+  if (pool.min_mmr > 0 && player.mmr < pool.min_mmr) return { ok: false, error: `Minimum MMR for this pool is ${pool.min_mmr}` }
+  if (pool.max_mmr > 0 && player.mmr > pool.max_mmr) return { ok: false, error: `Maximum MMR for this pool is ${pool.max_mmr}` }
+
+  if (pool.season_id && !player.mmr_verified_at) {
+    const season = await queryOne('SELECT verified_mmr_only FROM seasons WHERE id = $1', [pool.season_id])
+    if (season?.verified_mmr_only) {
+      return { ok: false, error: 'This pool requires a verified MMR. Submit a verification request before queuing.' }
+    }
+  }
+
+  const ban = await queryOne(
+    `SELECT qb.banned_until, qb.reason, ab.name AS banned_by_name
+       FROM queue_bans qb
+       LEFT JOIN players ab ON ab.id = qb.banned_by
+      WHERE qb.player_id = $1
+        AND (qb.pool_id IS NULL OR qb.pool_id = $2)
+        AND (qb.banned_until IS NULL OR qb.banned_until > NOW())
+      ORDER BY qb.banned_until DESC NULLS FIRST
+      LIMIT 1`,
+    [playerId, poolId]
+  )
+  if (ban) return {
+    ok: false,
+    error: 'You are banned from queue',
+    banner: {
+      bannedUntil: ban.banned_until ? new Date(ban.banned_until).toISOString() : null,
+      reason: ban.reason || null,
+      bannedBy: ban.banned_by_name || null,
+    },
+  }
+
+  if (playerInQueue.has(playerId)) return { ok: false, error: 'Already in a queue' }
+  if (playerInMatch.has(playerId)) return { ok: false, error: 'Already in an active match' }
+  if (playerInReadyCheck.has(playerId)) return { ok: false, error: 'Ready check in progress — accept or decline first' }
+
+  const dbActive = await queryOne(`
+    SELECT id FROM queue_matches
+    WHERE status IN ('picking', 'lobby_creating', 'live')
+      AND all_player_ids @> $1::jsonb
+    LIMIT 1
+  `, [JSON.stringify([playerId])])
+  if (dbActive) {
+    playerInMatch.set(playerId, dbActive.id)
+    return { ok: false, error: 'Already in an active match' }
+  }
+
+  const q = getPoolQueue(poolId)
+  q.set(playerId, {
+    playerId,
+    name: player.display_name || player.name,
+    steamId: player.steam_id,
+    avatarUrl: player.avatar_url,
+    mmr: player.mmr,
+  })
+  playerInQueue.set(playerId, poolId)
+
+  const teamSize = pool.team_size || 5
+  const totalPlayers = teamSize * 2
+  poolSizeCache.set(poolId, { teamSize, totalPlayers })
+
+  broadcastQueueUpdate(io, poolId)
+
+  if (q.size >= totalPlayers) await startReadyCheck(poolId, io)
+
+  return { ok: true, queueSize: q.size, totalPlayers }
+}
+
+// Auto-requeue entry point used by botPool when a queue match ends. Walks
+// the player's currently-connected sockets so future queue events reach
+// them in real time; if nothing is connected they'll see the queued state
+// on next reload via getState.
+export async function enqueuePlayerForRequeue(io, playerId, poolId) {
+  const result = await _doEnqueue(io, playerId, poolId)
+  if (!result.ok) {
+    console.log(`[auto-requeue] skipped player=${playerId} pool=${poolId}: ${result.error}`)
+    return result
+  }
+  for (const [socketId, pid] of socketPlayers) {
+    if (pid !== playerId) continue
+    const s = io.sockets.sockets.get(socketId)
+    if (s) s.join(`queue:${poolId}`)
+  }
+  return result
+}
+
 export function registerQueueHandlers(socket, io) {
 
   // ── Join queue ──
@@ -47,104 +147,54 @@ export function registerQueueHandlers(socket, io) {
     if (!playerId) return socket.emit('queue:error', { message: 'Not authenticated' })
 
     try {
-      // Validate pool exists and is enabled
-      const pool = await queryOne('SELECT * FROM queue_pools WHERE id = $1 AND enabled = true', [poolId])
-      if (!pool) return socket.emit('queue:error', { message: 'Queue pool not found or disabled' })
-
-      // Check player has steam_id and mmr set
-      const player = await queryOne('SELECT id, name, display_name, steam_id, avatar_url, mmr, mmr_verified_at FROM players WHERE id = $1', [playerId])
-      if (!player?.steam_id) return socket.emit('queue:error', { message: 'Steam account required to queue' })
-      if (!player.mmr || player.mmr <= 0) return socket.emit('queue:error', { message: 'You must set your MMR before queuing' })
-
-      // Check MMR range
-      if (pool.min_mmr > 0 && player.mmr < pool.min_mmr) return socket.emit('queue:error', { message: `Minimum MMR for this pool is ${pool.min_mmr}` })
-      if (pool.max_mmr > 0 && player.mmr > pool.max_mmr) return socket.emit('queue:error', { message: `Maximum MMR for this pool is ${pool.max_mmr}` })
-
-      // Pool's season may require a verified MMR.
-      if (pool.season_id && !player.mmr_verified_at) {
-        const season = await queryOne('SELECT verified_mmr_only FROM seasons WHERE id = $1', [pool.season_id])
-        if (season?.verified_mmr_only) {
-          return socket.emit('queue:error', { message: 'This pool requires a verified MMR. Submit a verification request before queuing.' })
+      const result = await _doEnqueue(io, playerId, poolId)
+      if (!result.ok) {
+        if (result.banner) {
+          // Re-emit myState so the client's banner shows up even if it hadn't
+          // received it yet (e.g. ban applied during this session).
+          socket.emit('queue:myState', {
+            inQueue: false, poolId: null, poolName: null,
+            inMatch: !!playerInMatch.get(playerId), queueMatchId: playerInMatch.get(playerId) || null,
+            count: 0, players: [],
+            ban: result.banner,
+          })
         }
+        return socket.emit('queue:error', { message: result.error })
       }
-
-      // Check queue ban — global (pool_id IS NULL) or scoped to this pool.
-      const ban = await queryOne(
-        `SELECT qb.banned_until, qb.reason, ab.name AS banned_by_name
-           FROM queue_bans qb
-           LEFT JOIN players ab ON ab.id = qb.banned_by
-          WHERE qb.player_id = $1
-            AND (qb.pool_id IS NULL OR qb.pool_id = $2)
-            AND (qb.banned_until IS NULL OR qb.banned_until > NOW())
-          ORDER BY qb.banned_until DESC NULLS FIRST
-          LIMIT 1`,
-        [playerId, poolId]
-      )
-      if (ban) {
-        // Also re-broadcast myState so the client's banner shows up even if
-        // it hadn't received it yet (e.g. ban applied during this session).
-        socket.emit('queue:myState', {
-          inQueue: false, poolId: null, poolName: null,
-          inMatch: !!playerInMatch.get(playerId), queueMatchId: playerInMatch.get(playerId) || null,
-          count: 0, players: [],
-          ban: {
-            bannedUntil: ban.banned_until ? new Date(ban.banned_until).toISOString() : null,
-            reason: ban.reason || null,
-            bannedBy: ban.banned_by_name || null,
-          },
-        })
-        return socket.emit('queue:error', { message: 'You are banned from queue' })
-      }
-
-      // Check not already in queue or active match
-      if (playerInQueue.has(playerId)) return socket.emit('queue:error', { message: 'Already in a queue' })
-      if (playerInMatch.has(playerId)) return socket.emit('queue:error', { message: 'Already in an active match' })
-      if (playerInReadyCheck.has(playerId)) return socket.emit('queue:error', { message: 'Ready check in progress — accept or decline first' })
-
-      // Also check the DB — in-memory state is wiped on server restart, so a
-      // player whose queue match is still picking/lobby/live in the DB must
-      // remain blocked from re-queuing until that match is completed/cancelled.
-      const dbActive = await queryOne(`
-        SELECT id FROM queue_matches
-        WHERE status IN ('picking', 'lobby_creating', 'live')
-          AND all_player_ids @> $1::jsonb
-        LIMIT 1
-      `, [JSON.stringify([playerId])])
-      if (dbActive) {
-        // Re-hydrate the in-memory flag so subsequent checks short-circuit
-        playerInMatch.set(playerId, dbActive.id)
-        return socket.emit('queue:error', { message: 'Already in an active match' })
-      }
-
-      // Add to queue
-      const q = getPoolQueue(poolId)
-      q.set(playerId, {
-        playerId,
-        name: player.display_name || player.name,
-        steamId: player.steam_id,
-        avatarUrl: player.avatar_url,
-        mmr: player.mmr,
-      })
-      playerInQueue.set(playerId, poolId)
       socket.join(`queue:${poolId}`)
-
-      // Cache pool size
-      const teamSize = pool.team_size || 5
-      const totalPlayers = teamSize * 2
-      poolSizeCache.set(poolId, { teamSize, totalPlayers })
-
-      // Broadcast updated queue
-      broadcastQueueUpdate(io, poolId)
-
-      // Check if enough players — start ready check instead of going straight
-      // into picking. Players must Accept within pool.accept_timer seconds.
-      if (q.size >= totalPlayers) {
-        await startReadyCheck(poolId, io)
-      }
     } catch (e) {
       console.error('[Queue] Join error:', e.message)
       socket.emit('queue:error', { message: 'Failed to join queue' })
     }
+  })
+
+  // ── Auto-requeue toggle (perk-gated) ──
+  // Stored in memory only, scoped to the player's currently-active match.
+  // Cleared automatically when the match ends and the player is re-queued
+  // (or skipped), or when they leave/cancel their current match.
+  socket.on('queue:setAutoRequeue', async ({ enabled }) => {
+    const playerId = socketPlayers.get(socket.id)
+    if (!playerId) return socket.emit('queue:error', { message: 'Not authenticated' })
+    const queueMatchId = playerInMatch.get(playerId)
+    if (!queueMatchId) {
+      playerWantsRequeue.delete(playerId)
+      return socket.emit('queue:autoRequeueState', { enabled: false })
+    }
+    if (!enabled) {
+      playerWantsRequeue.delete(playerId)
+      return socket.emit('queue:autoRequeueState', { enabled: false })
+    }
+    if (!(await hasPerk(playerId, PERK.AUTO_REQUEUE))) {
+      // Silently ignore perk-less attempts so a stale UI doesn't get stuck —
+      // client should hide the checkbox anyway.
+      return socket.emit('queue:autoRequeueState', { enabled: false })
+    }
+    // Resolve pool from the active queue match in DB so the requeue lands
+    // in the same pool the player just played in.
+    const qm = await queryOne('SELECT pool_id FROM queue_matches WHERE id = $1', [queueMatchId])
+    if (!qm?.pool_id) return socket.emit('queue:autoRequeueState', { enabled: false })
+    playerWantsRequeue.set(playerId, { poolId: qm.pool_id, queueMatchId })
+    socket.emit('queue:autoRequeueState', { enabled: true })
   })
 
   // ── Leave queue ──
