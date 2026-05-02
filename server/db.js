@@ -1036,6 +1036,12 @@ export async function initDb() {
   // Migration for DBs that already have the table without badge_url.
   try { await execute(`ALTER TABLE subscription_plans ADD COLUMN badge_url TEXT NULL`) } catch {}
 
+  // Persistent per-player flag for the auto_requeue perk. The match-end hook
+  // reads this together with hasPerk('auto_requeue') and re-queues the player
+  // into the same pool when both are true. Stored on players (not on a queue
+  // match) so the preference survives across matches and server restarts.
+  try { await execute(`ALTER TABLE players ADD COLUMN auto_requeue_enabled BOOLEAN NOT NULL DEFAULT false`) } catch {}
+
   await execute(`
     CREATE TABLE IF NOT EXISTS user_subscriptions (
       id            SERIAL PRIMARY KEY,

@@ -151,6 +151,7 @@ export interface CurrentUser {
     badge_url: string | null
     perks: Record<string, boolean>
   } | null
+  auto_requeue_enabled: boolean
 }
 
 export interface CompetitionUser {

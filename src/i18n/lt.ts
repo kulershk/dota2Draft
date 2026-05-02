@@ -1668,7 +1668,8 @@ export default {
   subscriptionBadgeAlt: 'Prenumeratos ženkliukas',
   subscriptionBadgeTooltip: 'Prenumeratorius',
   subscriptionBadgeOf: '{plan} prenumeratorius',
-  queueAutoRequeueLabel: 'Automatiškai į eilę, kai šis žaidimas baigsis',
+  queueAutoRequeueLabel: 'Automatiškai į eilę po kiekvienų rungtynių',
+  queueAutoRequeueHint: 'Kai įjungta, esi automatiškai grąžinamas į tą patį pulą iškart po rungtynių pabaigos. Prenumeratoriaus privilegija.',
   queueAutoRequeueOn: 'Įj.',
   // Admin sidebar groups
   navGroupTournaments: 'Turnyrai',

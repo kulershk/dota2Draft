@@ -54,28 +54,31 @@ const iAmParticipant = computed(() => {
   return queue.activeMatch.value.players.some(p => p.playerId === uid)
 })
 
-// Auto-requeue is a perk-gated convenience: when the current match ends,
-// the server puts the player straight back into the same pool. Visibility
-// is gated on the perk flag from /api/auth/me — non-subscribers never see
-// the checkbox at all (per UX request).
+// Auto-requeue is a perk-gated convenience: when ANY queue match ends, the
+// server puts the player straight back into the same pool. The checkbox
+// is hidden entirely for non-subscribers (per UX request); the underlying
+// preference is persisted on players.auto_requeue_enabled, so the toggle
+// shown next to "Join Queue" and the one in the in-match view share state.
 const hasAutoRequeuePerk = computed(() =>
   !!store.currentUser.value?.subscription?.perks?.auto_requeue
 )
-const autoRequeueEnabled = ref(false)
+const autoRequeueEnabled = ref(!!store.currentUser.value?.auto_requeue_enabled)
+watch(() => store.currentUser.value?.auto_requeue_enabled, (v) => {
+  autoRequeueEnabled.value = !!v
+})
 function toggleAutoRequeue() {
   const next = !autoRequeueEnabled.value
   autoRequeueEnabled.value = next
-  // Optimistic — server will echo back queue:autoRequeueState; on disagree
-  // the listener below corrects us.
+  // Optimistic — server echoes queue:autoRequeueState which corrects us if
+  // the perk check fails server-side.
   queue.setAutoRequeue(next)
+  // Mirror onto the cached currentUser so other components reading the flag
+  // see the change without waiting for a /api/auth/me re-fetch.
+  if (store.currentUser.value) store.currentUser.value.auto_requeue_enabled = next
 }
 queue.onAutoRequeueState((state: boolean) => {
   autoRequeueEnabled.value = state
-})
-// Reset the toggle whenever the player exits the active match so the
-// checkbox returns to off for the next match.
-watch(() => queue.activeMatch.value, (m) => {
-  if (!m) autoRequeueEnabled.value = false
+  if (store.currentUser.value) store.currentUser.value.auto_requeue_enabled = state
 })
 const myPrefs = computed<string[]>(() => {
   const uid = currentUserId.value
@@ -1209,7 +1212,7 @@ onUnmounted(() => {
                   </div>
                 </div>
 
-                <div class="px-6 py-4 border-t border-border/30 bg-accent/20 flex items-center justify-between gap-4">
+                <div class="px-6 py-4 border-t border-border/30 bg-accent/20 flex items-center justify-between gap-4 flex-wrap">
                   <div class="flex items-center gap-2 min-w-0">
                     <Check class="w-4 h-4 text-green-500 shrink-0" />
                     <span class="text-sm font-medium">{{ t('queueYouAreReady') }}</span>
@@ -1217,7 +1220,22 @@ onUnmounted(() => {
                       · {{ store.currentUser.value.mmr }} MMR
                     </span>
                   </div>
-                  <div class="shrink-0">
+                  <div class="flex items-center gap-3 shrink-0">
+                    <!-- Auto-requeue (subscriber perk) — hidden entirely for non-subscribers -->
+                    <label
+                      v-if="hasAutoRequeuePerk"
+                      class="flex items-center gap-1.5 cursor-pointer text-xs text-amber-500 hover:text-amber-400 transition-colors"
+                      :title="t('queueAutoRequeueHint')"
+                    >
+                      <input
+                        type="checkbox"
+                        class="w-3.5 h-3.5 accent-amber-500"
+                        :checked="autoRequeueEnabled"
+                        @change="toggleAutoRequeue"
+                      />
+                      <Crown class="w-3.5 h-3.5" />
+                      <span class="font-medium">{{ t('queueAutoRequeueLabel') }}</span>
+                    </label>
                     <button v-if="!queue.inQueue.value"
                       class="btn-primary px-8 py-2.5 text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
                       :disabled="isBanned"

@@ -114,6 +114,9 @@ router.get('/api/auth/me', async (req, res) => {
       badge_url: sub.plan_badge_url,
       perks: sub.plan_perks || {},
     } : null,
+    // Player-level perk preferences. Persisted across sessions; perk gating
+    // is checked separately on every server-side use site.
+    auto_requeue_enabled: !!player.auto_requeue_enabled,
   })
 })
 

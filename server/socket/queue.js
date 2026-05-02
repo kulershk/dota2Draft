@@ -5,7 +5,6 @@ import {
   playerInQueue, playerInMatch,
   pendingReadyChecks, playerInReadyCheck, nextReadyCheckId,
   getPoolQueue, getPoolQueueCount, getPoolQueuePlayers, clearPickTimer,
-  playerWantsRequeue,
 } from './queueState.js'
 import { botPool } from '../services/botPool.js'
 import { hasPerk, PERK } from '../helpers/subscription.js'
@@ -168,33 +167,22 @@ export function registerQueueHandlers(socket, io) {
     }
   })
 
-  // ── Auto-requeue toggle (perk-gated) ──
-  // Stored in memory only, scoped to the player's currently-active match.
-  // Cleared automatically when the match ends and the player is re-queued
-  // (or skipped), or when they leave/cancel their current match.
+  // ── Auto-requeue toggle (perk-gated, persistent) ──
+  // Stored on players.auto_requeue_enabled so the preference survives
+  // sessions and is honored regardless of whether the toggle was set from
+  // the queue lobby or the in-match view. Server enforces the perk; clients
+  // hide the checkbox for non-subscribers but the gate is here too.
   socket.on('queue:setAutoRequeue', async ({ enabled }) => {
     const playerId = socketPlayers.get(socket.id)
     if (!playerId) return socket.emit('queue:error', { message: 'Not authenticated' })
-    const queueMatchId = playerInMatch.get(playerId)
-    if (!queueMatchId) {
-      playerWantsRequeue.delete(playerId)
+    if (enabled && !(await hasPerk(playerId, PERK.AUTO_REQUEUE))) {
+      // Silently disable so a stale or tampered UI doesn't get stuck on.
+      await execute('UPDATE players SET auto_requeue_enabled = false WHERE id = $1', [playerId])
       return socket.emit('queue:autoRequeueState', { enabled: false })
     }
-    if (!enabled) {
-      playerWantsRequeue.delete(playerId)
-      return socket.emit('queue:autoRequeueState', { enabled: false })
-    }
-    if (!(await hasPerk(playerId, PERK.AUTO_REQUEUE))) {
-      // Silently ignore perk-less attempts so a stale UI doesn't get stuck —
-      // client should hide the checkbox anyway.
-      return socket.emit('queue:autoRequeueState', { enabled: false })
-    }
-    // Resolve pool from the active queue match in DB so the requeue lands
-    // in the same pool the player just played in.
-    const qm = await queryOne('SELECT pool_id FROM queue_matches WHERE id = $1', [queueMatchId])
-    if (!qm?.pool_id) return socket.emit('queue:autoRequeueState', { enabled: false })
-    playerWantsRequeue.set(playerId, { poolId: qm.pool_id, queueMatchId })
-    socket.emit('queue:autoRequeueState', { enabled: true })
+    const next = !!enabled
+    await execute('UPDATE players SET auto_requeue_enabled = $1 WHERE id = $2', [next, playerId])
+    socket.emit('queue:autoRequeueState', { enabled: next })
   })
 
   // ── Leave queue ──

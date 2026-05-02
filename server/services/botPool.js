@@ -1,5 +1,6 @@
 import { query, queryOne, execute } from '../db.js'
-import { playerInMatch, activeQueueMatches, playerWantsRequeue } from '../socket/queueState.js'
+import { playerInMatch, activeQueueMatches } from '../socket/queueState.js'
+import { hasPerk, PERK } from '../helpers/subscription.js'
 import { socketPlayers } from '../socket/state.js'
 import { fetchAndSaveGameStats, fetchOpenDotaMatch, saveMatchGameStats, requestOpenDotaParse } from '../helpers/opendota.js'
 import { fetchSteamMatchDetails } from '../helpers/steam.js'
@@ -1094,26 +1095,32 @@ class BotPool {
         }
         activeQueueMatches.delete(queueMatchXp.id)
 
-        // Auto-requeue: any player who toggled the perk-gated checkbox
-        // during THIS match (queueMatchId match-checked) goes straight
-        // back into the same pool. Lazy import avoids a circular dependency
-        // at module load (queue.js already imports botPool). Failures
-        // (ban, closed pool, etc.) log and move on.
-        const requeueIds = allIds.filter(pid => {
-          const entry = playerWantsRequeue.get(pid)
-          return entry && entry.queueMatchId === queueMatchXp.id
-        })
-        if (requeueIds.length) {
-          import('../socket/queue.js').then(({ enqueuePlayerForRequeue }) => {
-            for (const pid of requeueIds) {
-              const entry = playerWantsRequeue.get(pid)
-              playerWantsRequeue.delete(pid)
-              if (!entry?.poolId) continue
-              enqueuePlayerForRequeue(this.io, pid, entry.poolId).catch(e => {
+        // Auto-requeue: pull the persistent flag for every just-released
+        // player and check the perk. Both true → re-enqueue into the same
+        // pool. Lazy import avoids a circular dependency at module load
+        // (queue.js already imports botPool). Failures (ban, closed pool,
+        // etc.) log and move on.
+        try {
+          const flagRows = allIds.length
+            ? await query('SELECT id, auto_requeue_enabled FROM players WHERE id = ANY($1::int[])', [allIds])
+            : []
+          const wantsByPid = new Map(flagRows.map(r => [r.id, !!r.auto_requeue_enabled]))
+          const eligibleIds = []
+          for (const pid of allIds) {
+            if (!wantsByPid.get(pid)) continue
+            if (await hasPerk(pid, PERK.AUTO_REQUEUE)) eligibleIds.push(pid)
+          }
+          if (eligibleIds.length) {
+            const targetPoolId = queueMatchXp.pool_id
+            const { enqueuePlayerForRequeue } = await import('../socket/queue.js')
+            for (const pid of eligibleIds) {
+              enqueuePlayerForRequeue(this.io, pid, targetPoolId).catch(e => {
                 console.error('[auto-requeue] failed for player', pid, ':', e?.message)
               })
             }
-          })
+          }
+        } catch (e) {
+          console.error('[auto-requeue] match-end hook failed:', e?.message)
         }
       } else if (match.competition_id) {
         // Competition match XP

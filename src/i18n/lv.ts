@@ -1668,7 +1668,8 @@ export default {
   subscriptionBadgeAlt: 'Abonementa nozīmīte',
   subscriptionBadgeTooltip: 'Abonents',
   subscriptionBadgeOf: '{plan} abonents',
-  queueAutoRequeueLabel: 'Automātiski rindā, kad spēle beidzas',
+  queueAutoRequeueLabel: 'Automātiski rindā pēc katras spēles',
+  queueAutoRequeueHint: 'Kad ieslēgts, tu tiec pievienots atpakaļ tam pašam pūlim, tiklīdz spēle beidzas. Abonentu privilēģija.',
   queueAutoRequeueOn: 'Iesl.',
   // Admin sidebar groups
   navGroupTournaments: 'Turnīri',

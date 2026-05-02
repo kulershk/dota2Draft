@@ -24,14 +24,6 @@ export const pendingReadyChecks = new Map()
 // playerId -> readyCheckId (third gate alongside playerInQueue / playerInMatch)
 export const playerInReadyCheck = new Map()
 
-// playerId -> { poolId, queueMatchId } — set while the player is in the
-// referenced queue match and has opted into auto-requeueing for poolId.
-// Read by the queue match-end hook in botPool, which only honors the entry
-// if queueMatchId matches the just-completed match (so a cancelled match
-// followed by a manual queue into a different pool can't trigger a stale
-// auto-requeue into the original pool). Perk gating is enforced at the
-// socket event boundary, not here. In-memory only.
-export const playerWantsRequeue = new Map()
 
 let readyCheckSeq = 0
 export function nextReadyCheckId() { return ++readyCheckSeq }

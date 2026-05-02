@@ -1679,7 +1679,8 @@ export default {
   subscriptionBadgeAlt: 'Subscription badge',
   subscriptionBadgeTooltip: 'Subscriber',
   subscriptionBadgeOf: '{plan} subscriber',
-  queueAutoRequeueLabel: 'Auto-queue when this game ends',
+  queueAutoRequeueLabel: 'Auto-queue after each match',
+  queueAutoRequeueHint: 'When enabled, you are added back to the same pool as soon as your match ends. Subscriber perk.',
   queueAutoRequeueOn: 'On',
   // Admin sidebar groups
   navGroupTournaments: 'Tournaments',
