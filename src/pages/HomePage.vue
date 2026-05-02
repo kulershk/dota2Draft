@@ -219,10 +219,17 @@ function fmtMatchTime(iso: string | null): string {
   return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-// Realtime score updates pushed by the server while a queue match is live
+// Realtime score updates pushed by the server while a match is live. The
+// poller sends payload.matchId for both queue and tournament matches; queue
+// cards historically matched by queueMatchId, but matching by the canonical
+// matchId means tournament cards get live updates too.
 function onLiveStats(payload: any) {
-  if (!payload || payload.queueMatchId == null) return
-  const card = liveMatches.value.find(m => m.kind === 'queue' && m.id === payload.queueMatchId)
+  if (!payload) return
+  const card = liveMatches.value.find(m =>
+    m.kind === 'queue'
+      ? (payload.queueMatchId != null && m.id === Number(payload.queueMatchId))
+      : (payload.matchId != null && m.id === Number(payload.matchId))
+  )
   if (!card) return
   // Steam returns radiant/dire — team1 is treated as radiant by convention
   if (Number.isFinite(Number(payload.radiant_score))) card.team1_score = Number(payload.radiant_score)

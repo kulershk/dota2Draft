@@ -5,7 +5,7 @@ import { useRouter } from 'vue-router'
 import { Clock, Users, Swords, X, Check, Loader2, Shield, ShieldCheck, ChevronRight, Timer, Send, MessageCircle, Ban, Target, Copy, Eye, EyeOff, Hourglass, ListOrdered, UserPlus, Plus, Info, Crown, Medal, BadgeCheck } from 'lucide-vue-next'
 import { useQueueStore, type QueuePlayer, QUEUE_ROLES } from '@/composables/useQueueStore'
 import { useDraftStore } from '@/composables/useDraftStore'
-import { getServerNow } from '@/composables/useSocket'
+import { getServerNow, getSocket } from '@/composables/useSocket'
 import { formatRelativeTime } from '@/utils/format'
 
 function teamAvgMmr(players: any[] | undefined | null): number {
@@ -304,6 +304,18 @@ watch(
   { immediate: true }
 )
 
+// Live kill totals for in-progress queue matches in the recent-matches list.
+// The poller broadcasts radiant/dire scores via `home:liveStats` keyed by
+// queueMatchId; we mutate the row in place so the existing kills branch in
+// the template renders instead of falling through to "VS".
+function onLiveStats(payload: any) {
+  if (!payload?.queueMatchId) return
+  const qm = queue.queueHistory.value.find((m: any) => m.id === payload.queueMatchId)
+  if (!qm) return
+  if (Number.isFinite(Number(payload.radiant_score))) qm.team1_kills = Number(payload.radiant_score)
+  if (Number.isFinite(Number(payload.dire_score)))    qm.team2_kills = Number(payload.dire_score)
+}
+
 onMounted(async () => {
   await queue.fetchPools()
   if (queue.pools.value.length > 0) {
@@ -322,10 +334,12 @@ onMounted(async () => {
     now.value = getServerNow()
     chatCooldownLeft.value = Math.max(0, queue.chatRateLimitedUntil.value - Date.now())
   }, 200)
+  getSocket()?.on('home:liveStats', onLiveStats)
 })
 
 onUnmounted(() => {
   if (tickInterval) clearInterval(tickInterval)
+  getSocket()?.off('home:liveStats', onLiveStats)
 })
 </script>
 
