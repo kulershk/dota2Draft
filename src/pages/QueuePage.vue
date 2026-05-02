@@ -75,6 +75,13 @@ function toggleAutoRequeue() {
   // Mirror onto the cached currentUser so other components reading the flag
   // see the change without waiting for a /api/auth/me re-fetch.
   if (store.currentUser.value) store.currentUser.value.auto_requeue_enabled = next
+
+  // Convenience: ticking on while sitting on the queue page (not yet in a
+  // queue or active match) also joins the queue for the selected pool. The
+  // server still validates ban / MMR / etc. and emits queue:error if so.
+  if (next && !queue.inQueue.value && !queue.activeMatch.value && selectedPoolId.value) {
+    queue.joinQueue(selectedPoolId.value)
+  }
 }
 queue.onAutoRequeueState((state: boolean) => {
   autoRequeueEnabled.value = state
