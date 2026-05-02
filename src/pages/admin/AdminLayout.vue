@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Newspaper, Users, Trophy, ChevronRight, ChevronDown, Settings, ShieldCheck, Bot, Gamepad2, Star, Zap, Swords, Activity, Medal, Shield, BarChart3, Menu as MenuIcon, Award, Wrench } from 'lucide-vue-next'
+import { Newspaper, Users, Trophy, ChevronRight, ChevronDown, Settings, ShieldCheck, Bot, Gamepad2, Star, Zap, Swords, Activity, Medal, Shield, BarChart3, Menu as MenuIcon, Award, Wrench, Crown } from 'lucide-vue-next'
 import { computed, ref, onBeforeUnmount, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -144,6 +144,7 @@ const navGroups: NavGroup[] = [
       { labelKey: 'users', icon: Users, path: '/admin/users', permissions: ['manage_users'] },
       { labelKey: 'permissionGroups', icon: ShieldCheck, path: '/admin/permissions', permissions: ['manage_permissions'] },
       { labelKey: 'adminMmrVerifications', icon: Shield, path: '/admin/mmr-verifications', permissions: ['manage_mmr_verifications'] },
+      { labelKey: 'adminSubscriptionPlans', icon: Crown, path: '/admin/subscription-plans', permissions: ['manage_subscription_plans'] },
     ],
   },
   {

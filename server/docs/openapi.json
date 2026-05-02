@@ -29,7 +29,8 @@
     { "name": "Jobs", "description": "Background job admin (list/retry/cancel)" },
     { "name": "Admin Stats", "description": "Request and socket-event observability for admins" },
     { "name": "Search", "description": "Global search across players and matches" },
-    { "name": "Nav Items", "description": "Customizable site navigation menu" }
+    { "name": "Nav Items", "description": "Customizable site navigation menu" },
+    { "name": "Subscription Plans", "description": "Tiered membership plans + manual user assignments. Pricing/perks placeholders today; future payment-provider webhooks will populate user_subscriptions with source != 'manual'." }
   ],
   "components": {
     "securitySchemes": {
@@ -1444,6 +1445,173 @@
         "description": "Requires manage_leagues, or manage_own_leagues if the caller created the league.",
         "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
         "responses": { "200": { "description": "Deleted" } }
+      }
+    },
+    "/api/subscription-plans": {
+      "get": {
+        "tags": ["Subscription Plans"],
+        "summary": "List active subscription plans (public)",
+        "description": "Returns only is_active=true plans, no subscriber counts. Intended for the future public pricing page.",
+        "responses": {
+          "200": {
+            "description": "Active plan list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": { "type": "integer" },
+                      "name": { "type": "string" },
+                      "slug": { "type": "string" },
+                      "description": { "type": "string", "nullable": true },
+                      "price_cents": { "type": "integer" },
+                      "currency": { "type": "string" },
+                      "perks": { "type": "object" },
+                      "sort_order": { "type": "integer" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/subscription-plans": {
+      "get": {
+        "tags": ["Subscription Plans"],
+        "summary": "List all plans (admin)",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_subscription_plans. Includes inactive plans and active_subscriber_count for each.",
+        "responses": { "200": { "description": "Plan list with subscriber counts" } }
+      },
+      "post": {
+        "tags": ["Subscription Plans"],
+        "summary": "Create a plan",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_subscription_plans. Slug is auto-derived from name if omitted; collisions return 409.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "name": { "type": "string" },
+                  "slug": { "type": "string", "description": "Auto-derived from name if omitted" },
+                  "description": { "type": "string", "nullable": true },
+                  "price_cents": { "type": "integer", "default": 0 },
+                  "currency": { "type": "string", "default": "EUR" },
+                  "perks": { "type": "object", "default": {} },
+                  "is_active": { "type": "boolean", "default": true },
+                  "sort_order": { "type": "integer", "default": 0 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Created" },
+          "409": { "description": "slug already in use" }
+        }
+      }
+    },
+    "/api/admin/subscription-plans/{id}": {
+      "put": {
+        "tags": ["Subscription Plans"],
+        "summary": "Update a plan",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_subscription_plans. All fields are optional — only the provided fields are updated.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "slug": { "type": "string" },
+                  "description": { "type": "string", "nullable": true },
+                  "price_cents": { "type": "integer" },
+                  "currency": { "type": "string" },
+                  "perks": { "type": "object" },
+                  "is_active": { "type": "boolean" },
+                  "sort_order": { "type": "integer" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Updated" },
+          "404": { "description": "Plan not found" },
+          "409": { "description": "slug already in use" }
+        }
+      },
+      "delete": {
+        "tags": ["Subscription Plans"],
+        "summary": "Hard-delete a plan",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_subscription_plans. Returns 409 if any user_subscriptions row references the plan — the FK is ON DELETE RESTRICT to keep payment history intact. Mark inactive instead.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": { "description": "Deleted" },
+          "409": { "description": "Plan has subscriber history; mark inactive instead" }
+        }
+      }
+    },
+    "/api/admin/subscription-plans/{id}/subscribers": {
+      "get": {
+        "tags": ["Subscription Plans"],
+        "summary": "List subscribers (active + cancelled history) for a plan",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_subscription_plans. Active rows first, then cancelled history newest-first.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Subscriber list" } }
+      },
+      "post": {
+        "tags": ["Subscription Plans"],
+        "summary": "Manually assign a player to a plan",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_subscription_plans. Cancels any existing active subscription on a different plan first (one active row per player). source = 'manual'.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["player_id"],
+                "properties": {
+                  "player_id": { "type": "integer" },
+                  "expires_at": { "type": "string", "format": "date-time", "nullable": true, "description": "Omit for lifetime / open-ended." }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Subscription created" },
+          "404": { "description": "Plan or player not found" }
+        }
+      }
+    },
+    "/api/admin/subscription-plans/{planId}/subscribers/{subscriptionId}": {
+      "delete": {
+        "tags": ["Subscription Plans"],
+        "summary": "Cancel a subscription (keep history)",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_subscription_plans. Sets status='cancelled' and cancelled_at=NOW() — does not delete the row.",
+        "parameters": [
+          { "name": "planId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "subscriptionId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Cancelled" },
+          "400": { "description": "Subscription does not belong to this plan" },
+          "404": { "description": "Subscription not found" }
+        }
       }
     },
     "/api/users": {

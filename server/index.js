@@ -27,6 +27,7 @@ import settingRoutes from './routes/settings.js'
 import userRoutes from './routes/users.js'
 import createNewsRouter from './routes/news.js'
 import createLeaguesRouter from './routes/leagues.js'
+import createSubscriptionPlansRouter from './routes/subscriptionPlans.js'
 import templateRoutes from './routes/templates.js'
 import createQueueRouter from './routes/queue.js'
 import createSeasonsRouter from './routes/seasons.js'
@@ -141,6 +142,7 @@ app.use(settingRoutes)
 app.use(userRoutes)
 app.use(createNewsRouter(io))
 app.use(createLeaguesRouter())
+app.use(createSubscriptionPlansRouter())
 app.use(templateRoutes)
 app.use(createQueueRouter(io))
 app.use(createSeasonsRouter(io))

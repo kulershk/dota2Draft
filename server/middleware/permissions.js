@@ -27,6 +27,7 @@ export const ALL_PERMISSIONS = [
   'manage_xp_log',
   'manage_leagues',
   'manage_own_leagues',
+  'manage_subscription_plans',
 ]
 
 export async function getPlayerPermissions(playerId) {

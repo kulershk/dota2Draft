@@ -1008,6 +1008,56 @@ export async function initDb() {
       )
     }
   }
+
+  // ─── Subscription plans ──────────────────────────────────
+  // Tiered membership plans (e.g. Bronze / Silver / Gold). For now plans are
+  // assigned manually in admin; later, payment provider webhooks (Lemon
+  // Squeezy / Stripe / Patreon) will INSERT into user_subscriptions with
+  // source != 'manual' and external_id set to the provider's subscription id.
+  // perks JSONB is reserved for future per-perk config (e.g. badge color,
+  // discord role id, custom emojis) — kept open so adding perks later is a
+  // pure code change, no migration.
+  await execute(`
+    CREATE TABLE IF NOT EXISTS subscription_plans (
+      id           SERIAL PRIMARY KEY,
+      name         TEXT NOT NULL,
+      slug         TEXT NOT NULL UNIQUE,
+      description  TEXT NULL,
+      price_cents  INTEGER NOT NULL DEFAULT 0,
+      currency     TEXT NOT NULL DEFAULT 'EUR',
+      perks        JSONB NOT NULL DEFAULT '{}'::jsonb,
+      is_active    BOOLEAN NOT NULL DEFAULT TRUE,
+      sort_order   INTEGER NOT NULL DEFAULT 0,
+      created_at   TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at   TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+  `)
+
+  await execute(`
+    CREATE TABLE IF NOT EXISTS user_subscriptions (
+      id            SERIAL PRIMARY KEY,
+      player_id     INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      plan_id       INTEGER NOT NULL REFERENCES subscription_plans(id) ON DELETE RESTRICT,
+      status        TEXT NOT NULL DEFAULT 'active',
+      source        TEXT NOT NULL DEFAULT 'manual',
+      external_id   TEXT NULL,
+      started_at    TIMESTAMP NOT NULL DEFAULT NOW(),
+      expires_at    TIMESTAMP NULL,
+      cancelled_at  TIMESTAMP NULL,
+      created_at    TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at    TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+  `)
+  // One active row per player (enforced by partial unique index, so cancelled
+  // history rows can stack up freely).
+  try {
+    await execute(`CREATE UNIQUE INDEX IF NOT EXISTS user_subscriptions_one_active_per_player
+                     ON user_subscriptions (player_id) WHERE status = 'active'`)
+  } catch (e) {
+    console.warn('[db] Could not add unique index on active user_subscriptions:', e.message)
+  }
+  try { await execute(`CREATE INDEX IF NOT EXISTS user_subscriptions_plan_idx ON user_subscriptions (plan_id)`) } catch {}
+  try { await execute(`CREATE INDEX IF NOT EXISTS user_subscriptions_player_idx ON user_subscriptions (player_id)`) } catch {}
 }
 
 async function createFreshCompetitionTables() {

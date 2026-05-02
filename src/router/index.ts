@@ -70,6 +70,7 @@ const router = createRouter({
         { path: 'request-stats', name: 'admin-request-stats', meta: { permissions: ['view_request_stats'] }, component: () => import('@/pages/admin/AdminRequestStatsPage.vue') },
         { path: 'menu', name: 'admin-menu', meta: { permissions: ['manage_menu'] }, component: () => import('@/pages/admin/AdminMenuPage.vue') },
         { path: 'leagues', name: 'admin-leagues', meta: { permissions: ['manage_leagues', 'manage_own_leagues'] }, component: () => import('@/pages/admin/AdminLeaguesPage.vue') },
+        { path: 'subscription-plans', name: 'admin-subscription-plans', meta: { permissions: ['manage_subscription_plans'] }, component: () => import('@/pages/admin/AdminSubscriptionPlansPage.vue') },
         { path: 'users/:id/multi-account', name: 'admin-multi-account', meta: { permissions: ['view_request_stats'] }, component: () => import('@/pages/admin/AdminMultiAccountPage.vue') },
       ],
     },

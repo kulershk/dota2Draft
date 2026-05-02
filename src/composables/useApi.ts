@@ -479,6 +479,28 @@ export function useApi() {
     deleteLeague: (id: number) =>
       request(`/api/leagues/${id}`, { method: 'DELETE' }),
 
+    // Subscription plans
+    getActiveSubscriptionPlans: () => request('/api/subscription-plans'),
+    getAdminSubscriptionPlans: () => request('/api/admin/subscription-plans'),
+    createSubscriptionPlan: (data: {
+      name: string; slug?: string; description?: string | null;
+      price_cents?: number; currency?: string; perks?: any;
+      is_active?: boolean; sort_order?: number;
+    }) => request('/api/admin/subscription-plans', { method: 'POST', body: JSON.stringify(data) }),
+    updateSubscriptionPlan: (id: number, data: {
+      name?: string; slug?: string; description?: string | null;
+      price_cents?: number; currency?: string; perks?: any;
+      is_active?: boolean; sort_order?: number;
+    }) => request(`/api/admin/subscription-plans/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteSubscriptionPlan: (id: number) =>
+      request(`/api/admin/subscription-plans/${id}`, { method: 'DELETE' }),
+    getSubscriptionPlanSubscribers: (id: number) =>
+      request(`/api/admin/subscription-plans/${id}/subscribers`),
+    addSubscriptionPlanSubscriber: (id: number, data: { player_id: number; expires_at?: string | null }) =>
+      request(`/api/admin/subscription-plans/${id}/subscribers`, { method: 'POST', body: JSON.stringify(data) }),
+    cancelSubscriptionPlanSubscriber: (planId: number, subscriptionId: number) =>
+      request(`/api/admin/subscription-plans/${planId}/subscribers/${subscriptionId}`, { method: 'DELETE' }),
+
     // News Comments
     getComments: (newsId: number) => request(`/api/news/${newsId}/comments`),
     addComment: (newsId: number, content: string) =>
