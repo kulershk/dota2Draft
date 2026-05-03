@@ -2326,6 +2326,21 @@
         }
       }
     },
+    "/api/admin/queue/matches/{id}/force-complete": {
+      "post": {
+        "tags": ["Queue"],
+        "summary": "Admin: force-complete a stuck queue match",
+        "description": "For matches whose Dota game ended but never got cleaned up by _autoFillGameWinner (e.g. server restart mid-game, bot lost connection, OpenDota never returned a winner). Marks queue_matches.status = 'completed', frees every roster player from the in-memory playerInMatch lock so they can re-queue, broadcasts queue:cancelled to the queue-match room. Skips bot lobby cancel since this is meant for matches the bot has already left. Requires manage_queue_pools or manage_own_queue_pools (scoped to owned pools).",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": {
+            "description": "Match force-completed",
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "ok": { "type": "boolean" }, "freedPlayers": { "type": "integer" } } } } }
+          },
+          "404": { "description": "Queue match not found" }
+        }
+      }
+    },
     "/api/admin/queue/players": {
       "get": {
         "tags": ["Queue"],

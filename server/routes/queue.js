@@ -632,6 +632,50 @@ export default function createQueueRouter(io) {
     }
   })
 
+  // ── Admin: force-complete a stuck queue match ──
+  // For matches whose Dota game ended but didn't get cleaned up by
+  // _autoFillGameWinner (e.g. server restart mid-game, bot lost connection,
+  // OpenDota never returned a winner). Marks the row completed, frees all
+  // players from playerInMatch so they can re-queue, and skips the bot
+  // lobby cancel since the lobby is already gone. Distinct from /cancel
+  // which refuses once the match is marked started by the bot.
+  router.post('/api/admin/queue/matches/:id/force-complete', async (req, res) => {
+    const scope = await getQueueAdminScope(req, res)
+    if (!scope) return
+
+    const qmId = Number(req.params.id)
+    if (!qmId) return res.status(400).json({ error: 'invalid id' })
+    try {
+      const qmRow = await queryOne('SELECT pool_id, team1_players, team2_players FROM queue_matches WHERE id = $1', [qmId])
+      if (!qmRow) return res.status(404).json({ error: 'queue match not found' })
+      if (!scope.canManageAll && !scope.ownedPoolIds.has(qmRow.pool_id)) {
+        return res.status(403).json({ error: 'Permission denied — match is not in a pool you own' })
+      }
+
+      await execute(
+        `UPDATE queue_matches SET status = 'completed', completed_at = COALESCE(completed_at, NOW()) WHERE id = $1`,
+        [qmId]
+      )
+
+      // Free playerInMatch for everyone on the persisted roster — this is
+      // the actual unblocker since the join check reads both DB and the map.
+      const allIds = [
+        ...((qmRow.team1_players || []).map(p => p.playerId)),
+        ...((qmRow.team2_players || []).map(p => p.playerId)),
+      ]
+      for (const pid of allIds) {
+        if (playerInMatch.get(pid) === qmId) playerInMatch.delete(pid)
+      }
+      activeQueueMatches.delete(qmId)
+      // Notify any clients still pinned to the room so their UI clears.
+      io.to(`queue-match:${qmId}`).emit('queue:cancelled', { queueMatchId: qmId, reason: 'Force-completed by admin' })
+
+      res.json({ ok: true, freedPlayers: allIds.length })
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
   // ── Admin: manually retry lobby creation for a queue match ──
   router.post('/api/admin/queue/matches/:id/retry-lobby', async (req, res) => {
     const scope = await getQueueAdminScope(req, res)

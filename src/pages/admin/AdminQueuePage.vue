@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Plus, Trash2, Pencil, X, Check, Ban, RefreshCw, Swords, Loader2, UserX, Clock, Search } from 'lucide-vue-next'
+import { Plus, Trash2, Pencil, X, Check, Ban, RefreshCw, Swords, Loader2, UserX, Clock, Search, CheckSquare } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
@@ -243,6 +243,16 @@ async function cancelMatch(id: number) {
   }
 }
 
+async function forceComplete(id: number) {
+  if (!confirm(t('queueAdminForceCompleteConfirm'))) return
+  try {
+    await api.forceCompleteQueueMatch(id)
+    await fetchActiveMatches()
+  } catch (e: any) {
+    alert(e.message)
+  }
+}
+
 const retryingLobby = ref<number | null>(null)
 async function retryLobby(id: number) {
   if (retryingLobby.value) return
@@ -406,6 +416,17 @@ onUnmounted(() => {
                 @click="cancelMatch(qm.id)"
               >
                 <Ban class="w-3.5 h-3.5" /> {{ t('cancel') }}
+              </button>
+              <!-- Force-complete: only useful for stuck matches the bot has already left
+                   (lobby_status === 'completed') — that's exactly the case Cancel can't
+                   handle, so this button only appears then. -->
+              <button
+                v-if="qm.lobby_status === 'completed'"
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-amber-500 hover:bg-amber-500/10 transition-colors"
+                :title="t('queueAdminForceCompleteHint')"
+                @click="forceComplete(qm.id)"
+              >
+                <CheckSquare class="w-3.5 h-3.5" /> {{ t('queueAdminForceComplete') }}
               </button>
             </div>
           </div>

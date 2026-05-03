@@ -1096,18 +1096,25 @@ class BotPool {
         activeQueueMatches.delete(queueMatchXp.id)
 
         // Auto-requeue: pull the persistent flag for every just-released
-        // player and check the perk. Both true → re-enqueue into the same
-        // pool. Lazy import avoids a circular dependency at module load
-        // (queue.js already imports botPool). Failures (ban, closed pool,
-        // etc.) log and move on.
+        // player and check the perk + an open socket. All three required —
+        // skipping the offline case avoids putting an absent player into a
+        // queue where they'd just rack up ready-check timeout bans. Lazy
+        // import avoids a circular dependency at module load (queue.js
+        // already imports botPool).
         try {
           const flagRows = allIds.length
             ? await query('SELECT id, auto_requeue_enabled FROM players WHERE id = ANY($1::int[])', [allIds])
             : []
           const wantsByPid = new Map(flagRows.map(r => [r.id, !!r.auto_requeue_enabled]))
+          const onlinePids = new Set()
+          for (const pid of socketPlayers.values()) onlinePids.add(pid)
           const eligibleIds = []
           for (const pid of allIds) {
             if (!wantsByPid.get(pid)) continue
+            if (!onlinePids.has(pid)) {
+              console.log('[auto-requeue] skipped player', pid, '— no open socket')
+              continue
+            }
             if (await hasPerk(pid, PERK.AUTO_REQUEUE)) eligibleIds.push(pid)
           }
           if (eligibleIds.length) {

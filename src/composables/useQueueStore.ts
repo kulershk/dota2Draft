@@ -296,12 +296,11 @@ function initSocket() {
   socket.on('queue:error', (data: { message: string }) => {
     queueError.value = data.message
     setTimeout(() => { queueError.value = null }, 5000)
-    // Roll back optimistic join state — if the server rejected the join,
-    // we're not actually in queue.
-    inQueue.value = false
-    currentPoolName.value = null
-    queueCount.value = 0
-    queuePlayers.value = []
+    // Don't clobber local queue state — errors like "Already in a queue" /
+    // "Already in an active match" mean nothing changed server-side, and
+    // wiping queueCount made the UI flash 0 even when the pool was still
+    // populated. Re-sync from server truth instead.
+    requestMyState()
   })
 
   socket.on('queue:myState', (data: {
