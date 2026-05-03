@@ -709,7 +709,7 @@ class BotPool {
     console.log(`[Queue] Lobby ${lobby.id} timed out — banned ${bannedCount} no-show player(s) for 10 min`)
 
     // Cancel the queue match (if any) so surviving players can re-queue.
-    const qm = await queryOne('SELECT id, all_player_ids FROM queue_matches WHERE match_id = $1', [lobby.match_id])
+    const qm = await queryOne('SELECT id, pool_id, all_player_ids FROM queue_matches WHERE match_id = $1', [lobby.match_id])
     if (qm) {
       try {
         await execute("UPDATE queue_matches SET status = 'cancelled' WHERE id = $1", [qm.id])
@@ -726,6 +726,49 @@ class BotPool {
           queueMatchId: qm.id,
           reason: 'Lobby timed out — no-shows banned 10 minutes',
         })
+      }
+
+      // Surgical auto-requeue for SHOWED-UP players only — the no-shows
+      // already got the 10-min ban applied above, and _doEnqueue's ban
+      // check would reject them anyway. Same gates as the post-game
+      // requeue: perk + persistent flag + open socket. Players who showed
+      // up but closed the tab during the wait are silently skipped.
+      try {
+        const showedUpSteamIds = expected
+          .map(e => String(e?.steam_id || ''))
+          .filter(sid => sid && slottedSteamIds.has(sid))
+        if (showedUpSteamIds.length > 0) {
+          const showedUpRows = await query(
+            'SELECT id FROM players WHERE steam_id = ANY($1::text[])',
+            [showedUpSteamIds]
+          )
+          const showedUpIds = showedUpRows.map(r => r.id)
+          const flagRows = showedUpIds.length
+            ? await query('SELECT id, auto_requeue_enabled FROM players WHERE id = ANY($1::int[])', [showedUpIds])
+            : []
+          const wantsByPid = new Map(flagRows.map(r => [r.id, !!r.auto_requeue_enabled]))
+          const onlinePids = new Set()
+          for (const pid of socketPlayers.values()) onlinePids.add(pid)
+          const eligibleIds = []
+          for (const pid of showedUpIds) {
+            if (!wantsByPid.get(pid)) continue
+            if (!onlinePids.has(pid)) {
+              console.log('[auto-requeue] (lobby-timeout) skipped player', pid, '— no open socket')
+              continue
+            }
+            if (await hasPerk(pid, PERK.AUTO_REQUEUE)) eligibleIds.push(pid)
+          }
+          if (eligibleIds.length && qm.pool_id) {
+            const { enqueuePlayerForRequeue } = await import('../socket/queue.js')
+            for (const pid of eligibleIds) {
+              enqueuePlayerForRequeue(this.io, pid, qm.pool_id).catch(e => {
+                console.error('[auto-requeue] (lobby-timeout) failed for player', pid, ':', e?.message)
+              })
+            }
+          }
+        }
+      } catch (e) {
+        console.error('[auto-requeue] lobby-timeout hook failed:', e?.message)
       }
     }
   }
