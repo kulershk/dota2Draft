@@ -320,13 +320,12 @@ function initSocket() {
       currentPoolName.value = data.poolName
       queueCount.value = data.count
       queuePlayers.value = data.players
-    } else if (!data.inMatch) {
-      // Truly idle — clear any stale state
-      if (!data.poolId) {
-        queueCount.value = 0
-        queuePlayers.value = []
-      }
     }
+    // Don't clear queueCount/queuePlayers when idle: those reflect the
+    // currently-viewed pool (owned by the queue:updated path triggered by
+    // selectPool → requestState), not the player's own queue membership.
+    // Clearing them here raced with QueuePage's requestState on reload,
+    // wiping the just-arrived player list.
   })
 
   socket.on('queue:gameStarted', (_data: { queueMatchId: number; dotaMatchId: string }) => {
