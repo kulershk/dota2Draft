@@ -1524,6 +1524,8 @@ export default {
   statsEvent: 'Event',
   statsEmpty: 'No data for this period yet.',
   statsClickToFilter: 'click row to filter',
+  statsShowAll: 'Show all',
+  statsShowLess: 'Show less',
   statsFilteringUser: 'Filtering by user',
   statsFilteringIp: 'Filtering by IP',
   statsClearFilter: 'Clear filter',

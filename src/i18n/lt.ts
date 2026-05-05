@@ -1513,6 +1513,8 @@ export default {
   statsEvent: 'Įvykis',
   statsEmpty: 'Šiam periodui dar nėra duomenų.',
   statsClickToFilter: 'spustelėk eilutę, kad filtruotum',
+  statsShowAll: 'Rodyti visus',
+  statsShowLess: 'Rodyti mažiau',
   statsFilteringUser: 'Filtruojama pagal naudotoją',
   statsFilteringIp: 'Filtruojama pagal IP',
   statsClearFilter: 'Išvalyti filtrą',

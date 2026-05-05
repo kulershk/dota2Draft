@@ -33,6 +33,13 @@ const loading = ref(false)
 type Filter = { kind: 'user'; userId: number; label: string } | { kind: 'ip'; ip: string; label: string }
 const filter = ref<Filter | null>(null)
 
+const TOP_LIMIT_DEFAULT = 20
+const TOP_LIMIT_EXPANDED = 5000
+const usersExpanded = ref(false)
+const ipsExpanded = ref(false)
+const usersLimit = computed(() => usersExpanded.value ? TOP_LIMIT_EXPANDED : TOP_LIMIT_DEFAULT)
+const ipsLimit = computed(() => ipsExpanded.value ? TOP_LIMIT_EXPANDED : TOP_LIMIT_DEFAULT)
+
 type Summary = {
   period: string
   requests: { total: number; unique_users: number; unique_ips: number; avg_ms: number; p95_ms: number }
@@ -105,7 +112,7 @@ async function loadAll() {
     // Top users only when not already filtered to one user
     if (filter.value?.kind !== 'user') {
       calls.push(api.getRequestStatsTopUsers(period.value, {
-        limit: 20,
+        limit: usersLimit.value,
         ...range,
         ...(filter.value?.kind === 'ip' ? { ip: filter.value.ip } : {}),
       }))
@@ -115,7 +122,7 @@ async function loadAll() {
     // Top IPs only when not already filtered to one IP
     if (filter.value?.kind !== 'ip') {
       calls.push(api.getRequestStatsTopIps(period.value, {
-        limit: 20,
+        limit: ipsLimit.value,
         ...range,
         ...(filter.value?.kind === 'user' ? { userId: filter.value.userId } : {}),
       }))
@@ -171,7 +178,7 @@ function clearFilter() {
   filter.value = null
 }
 
-watch([period, filter], () => loadAll(), { deep: true })
+watch([period, filter, usersExpanded, ipsExpanded], () => loadAll(), { deep: true })
 
 onMounted(() => {
   loadAll()
@@ -191,7 +198,9 @@ const errorRatePct = computed(() => {
 function fmtBucketLabel(iso: string, bucket: string): string {
   const d = new Date(iso)
   if (bucket === 'minute') return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  if (bucket === 'hour') return d.toLocaleString([], { month: 'short', day: '2-digit', hour: '2-digit' })
+  if (bucket === 'hour' || bucket === '6h' || bucket === '12h') {
+    return d.toLocaleString([], { month: 'short', day: '2-digit', hour: '2-digit' })
+  }
   return d.toLocaleDateString([], { month: 'short', day: '2-digit' })
 }
 
@@ -401,19 +410,19 @@ function statusBadge(s: number): string {
       </div>
     </div>
 
-    <!-- Charts row -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
-      <div class="card p-4 lg:col-span-2">
-        <h3 class="text-sm font-semibold text-foreground mb-3">{{ t('statsRequestsOverTime') }}</h3>
-        <div class="h-64">
-          <Line :data="lineChartData" :options="lineChartOptions" />
-        </div>
+    <!-- Requests-over-time chart (full-width) -->
+    <div class="card p-4">
+      <h3 class="text-sm font-semibold text-foreground mb-3">{{ t('statsRequestsOverTime') }}</h3>
+      <div class="h-64">
+        <Line :data="lineChartData" :options="lineChartOptions" />
       </div>
-      <div class="card p-4">
-        <h3 class="text-sm font-semibold text-foreground mb-3">{{ t('statsStatusBreakdown') }}</h3>
-        <div class="h-64">
-          <Bar :data="statusChartData" :options="barChartOptions" />
-        </div>
+    </div>
+
+    <!-- Status breakdown -->
+    <div class="card p-4">
+      <h3 class="text-sm font-semibold text-foreground mb-3">{{ t('statsStatusBreakdown') }}</h3>
+      <div class="h-64">
+        <Bar :data="statusChartData" :options="barChartOptions" />
       </div>
     </div>
 
@@ -456,6 +465,11 @@ function statusBadge(s: number): string {
             </tr>
           </tbody>
         </table>
+        <div v-if="topUsers.length >= TOP_LIMIT_DEFAULT || usersExpanded" class="px-4 py-2 border-t border-border flex justify-center">
+          <button class="text-xs text-primary hover:underline" @click="usersExpanded = !usersExpanded">
+            {{ usersExpanded ? t('statsShowLess') : t('statsShowAll') }}
+          </button>
+        </div>
       </div>
 
       <div v-if="filter?.kind !== 'ip'" class="card p-0 overflow-hidden">
@@ -490,6 +504,11 @@ function statusBadge(s: number): string {
             </tr>
           </tbody>
         </table>
+        <div v-if="topIps.length >= TOP_LIMIT_DEFAULT || ipsExpanded" class="px-4 py-2 border-t border-border flex justify-center">
+          <button class="text-xs text-primary hover:underline" @click="ipsExpanded = !ipsExpanded">
+            {{ ipsExpanded ? t('statsShowLess') : t('statsShowAll') }}
+          </button>
+        </div>
       </div>
     </div>
 

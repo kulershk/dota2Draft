@@ -5,12 +5,23 @@ import { requirePermission } from '../middleware/permissions.js'
 const router = Router()
 
 const PERIOD_HOURS = { '1h': 1, '24h': 24, '7d': 7 * 24, '14d': 14 * 24, '30d': 30 * 24, '90d': 90 * 24 }
-const BUCKETS = new Set(['minute', 'hour', 'day'])
+const BUCKET_SECONDS = {
+  minute: 60,
+  hour: 3600,
+  '6h': 6 * 3600,
+  '12h': 12 * 3600,
+  day: 86400,
+}
 
 function defaultBucketFor(period, hours) {
   if (period === '1h') return 'minute'
   if (period === '24h') return 'hour'
+  if (period === '7d') return '6h'
+  if (period === '14d') return '12h'
+  if (hours && hours <= 1) return 'minute'
   if (hours && hours <= 24) return 'hour'
+  if (hours && hours <= 7 * 24) return '6h'
+  if (hours && hours <= 14 * 24) return '12h'
   return 'day'
 }
 
@@ -150,7 +161,8 @@ router.get('/api/admin/stats/timeseries', async (req, res) => {
   if (!await requirePermission(req, res, 'view_request_stats')) return
   const f = buildRequestFilter(req)
   const period = req.query.period || '24h'
-  const bucket = BUCKETS.has(req.query.bucket) ? req.query.bucket : defaultBucketFor(period, f.hours)
+  const bucket = BUCKET_SECONDS[req.query.bucket] ? req.query.bucket : defaultBucketFor(period, f.hours)
+  const bucketSec = BUCKET_SECONDS[bucket]
   const path = req.query.path || null
   const method = req.query.method || null
 
@@ -163,11 +175,11 @@ router.get('/api/admin/stats/timeseries', async (req, res) => {
     f.params.push(method)
     where += ` AND method = $${f.params.length}`
   }
-  f.params.push(bucket)
+  f.params.push(bucketSec)
   const bucketIdx = f.params.length
 
   const rows = await query(
-    `SELECT date_trunc($${bucketIdx}, ts) AS bucket,
+    `SELECT to_timestamp(floor(extract(epoch from ts) / $${bucketIdx})::bigint * $${bucketIdx}) AS bucket,
             COUNT(*)::int AS count,
             (COUNT(*) FILTER (WHERE status >= 400))::int AS errors,
             COALESCE(AVG(duration_ms), 0)::int AS avg_ms
@@ -181,7 +193,7 @@ router.get('/api/admin/stats/timeseries', async (req, res) => {
 router.get('/api/admin/stats/top-users', async (req, res) => {
   if (!await requirePermission(req, res, 'view_request_stats')) return
   const f = buildRequestFilter(req, 'rl')
-  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100)
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 5000)
   f.params.push(limit)
 
   const rows = await query(
@@ -224,7 +236,7 @@ router.get('/api/admin/stats/socket-events', async (req, res) => {
 router.get('/api/admin/stats/top-ips', async (req, res) => {
   if (!await requirePermission(req, res, 'view_request_stats')) return
   const f = buildRequestFilter(req)
-  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100)
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 5000)
   f.params.push(limit)
 
   const rows = await query(

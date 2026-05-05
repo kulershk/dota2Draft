@@ -3001,11 +3001,11 @@
         "get": {
           "tags": ["Admin Stats"],
           "summary": "Bucketed request counts over time",
-          "description": "Default bucket auto-selected from period (1h→minute, 24h→hour, longer→day). Optional path/method/userId/ip filters narrow the data.",
+          "description": "Default bucket auto-selected from period (1h→minute, 24h→hour, 7d→6h, 14d→12h, longer→day). Optional path/method/userId/ip filters narrow the data.",
           "security": [{ "bearerAuth": [] }],
           "parameters": [
             { "name": "period", "in": "query", "schema": { "type": "string", "enum": ["1h", "24h", "7d", "14d", "30d", "90d", "all", "custom"], "default": "24h" } },
-            { "name": "bucket", "in": "query", "schema": { "type": "string", "enum": ["minute", "hour", "day"] } },
+            { "name": "bucket", "in": "query", "schema": { "type": "string", "enum": ["minute", "hour", "6h", "12h", "day"] } },
             { "name": "path", "in": "query", "schema": { "type": "string" } },
             { "name": "method", "in": "query", "schema": { "type": "string" } },
             { "name": "userId", "in": "query", "schema": { "type": "integer" } },
@@ -3021,7 +3021,7 @@
           "security": [{ "bearerAuth": [] }],
           "parameters": [
             { "name": "period", "in": "query", "schema": { "type": "string", "enum": ["1h", "24h", "7d", "14d", "30d", "90d", "all", "custom"], "default": "24h" } },
-            { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } },
+            { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 5000, "default": 20 } },
             { "name": "ip", "in": "query", "schema": { "type": "string" }, "description": "When provided, only counts requests from this IP." }
           ],
           "responses": { "200": { "description": "Array of { user_id, name, avatar_url, count, errors, last_seen }" } }
@@ -3034,7 +3034,7 @@
           "security": [{ "bearerAuth": [] }],
           "parameters": [
             { "name": "period", "in": "query", "schema": { "type": "string", "enum": ["1h", "24h", "7d", "14d", "30d", "90d", "all", "custom"], "default": "24h" } },
-            { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } },
+            { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 5000, "default": 20 } },
             { "name": "userId", "in": "query", "schema": { "type": "integer" }, "description": "When provided, only counts requests by this user." }
           ],
           "responses": { "200": { "description": "Array of { ip, count, unique_users, errors, last_seen }" } }

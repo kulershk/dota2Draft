@@ -1513,6 +1513,8 @@ export default {
   statsEvent: 'Notikums',
   statsEmpty: 'Šim periodam vēl nav datu.',
   statsClickToFilter: 'klikšķini, lai filtrētu',
+  statsShowAll: 'Rādīt visus',
+  statsShowLess: 'Rādīt mazāk',
   statsFilteringUser: 'Filtrē pēc lietotāja',
   statsFilteringIp: 'Filtrē pēc IP',
   statsClearFilter: 'Notīrīt filtru',
