@@ -197,9 +197,9 @@ const errorRatePct = computed(() => {
 
 function fmtBucketLabel(iso: string, bucket: string): string {
   const d = new Date(iso)
-  if (bucket === 'minute') return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  if (bucket === 'minute') return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
   if (bucket === 'hour' || bucket === '6h' || bucket === '12h') {
-    return d.toLocaleString([], { month: 'short', day: '2-digit', hour: '2-digit' })
+    return d.toLocaleString([], { month: 'short', day: '2-digit', hour: '2-digit', hour12: false })
   }
   return d.toLocaleDateString([], { month: 'short', day: '2-digit' })
 }
