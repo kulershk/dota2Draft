@@ -46,6 +46,10 @@ export function parseCompSettings(comp) {
     lobbyPenaltyDire: Number(s.lobbyPenaltyDire) || 0,
     lobbySeriesType: Number(s.lobbySeriesType) || 0,
     lobbyTimeoutMinutes: Number(s.lobbyTimeoutMinutes) || 10,
+    // Team registration mode (captain registers a fixed roster, no auction)
+    teamRegistrationMode: !!s.teamRegistrationMode,
+    teamRegistrationSize: Number(s.teamRegistrationSize) || 5,
+    teamRegistrationOpen: s.teamRegistrationOpen !== false,
     // XP / Leveling
     xpGameWin: Number(s.xpGameWin ?? 10),
     xpGameLoss: Number(s.xpGameLoss ?? 5),

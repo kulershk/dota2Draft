@@ -193,6 +193,30 @@ export default {
     pos5: 'Hard Support (Pos 5)',
   },
 
+  // Team registration mode
+  teamRegistrationTitle: 'Komandu reģistrācija',
+  teamRegistrationMode: 'Iespējot komandu reģistrācijas režīmu',
+  teamRegistrationModeHint: 'Kapteiņi reģistrē iepriekš izveidotas komandas; izsole tiek izlaista.',
+  teamRegistrationSize: 'Komandas izmērs (ar kapteini)',
+  teamRegistrationSizeHint: 'Katrā komandā ir {n} spēlētāji (kapteinis + {m} biedri).',
+  teamRegistrationOpen: 'Reģistrācija atvērta',
+  teamRegistrationClosed: 'Komandu reģistrācija ir slēgta',
+  registerTeam: 'Reģistrēt komandu',
+  registerTeamTitle: 'Reģistrē savu komandu',
+  registerTeamSubtitle: 'Tu kļūsti par kapteini. Sameklē un pievieno {m} komandas biedrus (kopā {n} spēlētāji).',
+  youAreCaptain: 'Tu būsi komandas kapteinis',
+  registerTeamNameLabel: 'Komandas nosaukums',
+  registerTeamNamePlaceholder: 'piem. Team Liquid',
+  registerTeamMembersLabel: 'Komandas biedri',
+  searchByNameOrSteamId: 'Meklē pēc vārda vai Steam ID...',
+  searchingPlayers: 'Meklē...',
+  slotRolePlaceholder: 'Loma',
+  teamMemberDuplicateRole: 'Diviem biedriem nedrīkst būt viena un tā pati loma.',
+  teamRegistration: {
+    submitting: 'Reģistrē...',
+    failed: 'Reģistrācija neizdevās',
+  },
+
   // Auction page
   liveAuction: 'Izsole',
   roundOf: '{current}. raunds no {total}',

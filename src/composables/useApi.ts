@@ -112,6 +112,14 @@ export function useApi() {
     deleteCaptainBanner: (compId: number, captainId: number) =>
       request(`/api/competitions/${compId}/captains/${captainId}/banner`, { method: 'DELETE' }),
 
+    // Team registration (captain self-registers a pre-formed team)
+    registerTeam: (compId: number, data: {
+      team: string
+      captainRole?: number | null
+      members: { playerId: number; playingRole?: number | null }[]
+    }) =>
+      request(`/api/competitions/${compId}/team-registration`, { method: 'POST', body: JSON.stringify(data) }),
+
     // Competition Pool (admin)
     addUserToCompPool: (compId: number, userId: number) =>
       request(`/api/competitions/${compId}/users/${userId}/add-to-pool`, { method: 'POST', body: '{}' }),

@@ -193,6 +193,30 @@ export default {
     pos5: 'Hard Support (Pos 5)',
   },
 
+  // Team registration mode
+  teamRegistrationTitle: 'Komandų registracija',
+  teamRegistrationMode: 'Įjungti komandų registracijos režimą',
+  teamRegistrationModeHint: 'Kapitonai registruoja iš anksto suformuotas komandas; aukcionas praleidžiamas.',
+  teamRegistrationSize: 'Komandos dydis (su kapitonu)',
+  teamRegistrationSizeHint: 'Kiekvienoje komandoje yra {n} žaidėjai (kapitonas + {m} nariai).',
+  teamRegistrationOpen: 'Registracija atvira',
+  teamRegistrationClosed: 'Komandų registracija uždaryta',
+  registerTeam: 'Registruoti komandą',
+  registerTeamTitle: 'Registruok savo komandą',
+  registerTeamSubtitle: 'Tu tampi kapitonu. Suraskite ir pridėkite {m} komandos narius (komanda iš {n}).',
+  youAreCaptain: 'Tu būsi komandos kapitonas',
+  registerTeamNameLabel: 'Komandos pavadinimas',
+  registerTeamNamePlaceholder: 'pvz. Team Liquid',
+  registerTeamMembersLabel: 'Komandos nariai',
+  searchByNameOrSteamId: 'Ieškoti pagal vardą arba Steam ID...',
+  searchingPlayers: 'Ieškoma...',
+  slotRolePlaceholder: 'Rolė',
+  teamMemberDuplicateRole: 'Du nariai negali turėti tos pačios rolės.',
+  teamRegistration: {
+    submitting: 'Registruojama...',
+    failed: 'Registracija nepavyko',
+  },
+
   // Auction page
   liveAuction: 'Aukcionas',
   roundOf: '{current} raundas iš {total}',

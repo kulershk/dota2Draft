@@ -99,6 +99,9 @@ export interface Settings {
   lobbyAutoAssignTeams: boolean
   lobbyLeagueId: number
   lobbyDotaTvDelay: number
+  teamRegistrationMode: boolean
+  teamRegistrationSize: number
+  teamRegistrationOpen: boolean
 }
 
 export interface RevealedBid {
@@ -188,6 +191,9 @@ const settings = reactive<Settings>({
   lobbyAutoAssignTeams: true,
   lobbyLeagueId: 0,
   lobbyDotaTvDelay: 1,
+  teamRegistrationMode: false,
+  teamRegistrationSize: 5,
+  teamRegistrationOpen: true,
 })
 
 const captains = ref<Captain[]>([])
@@ -527,6 +533,16 @@ export function useDraftStore() {
     }
   }
 
+  async function registerTeam(data: {
+    team: string
+    captainRole?: number | null
+    members: { playerId: number; playingRole?: number | null }[]
+  }) {
+    const compId = currentCompetitionId.value
+    if (!compId) return
+    await api.registerTeam(compId, data)
+  }
+
   async function updatePlayer(id: number, data: Record<string, any>) {
     const compId = currentCompetitionId.value
     if (!compId) return
@@ -644,6 +660,7 @@ export function useDraftStore() {
     updateCaptain,
     demoteCaptain,
     registerForPool,
+    registerTeam,
     updatePlayer,
     deletePlayer,
     fetchTournament,

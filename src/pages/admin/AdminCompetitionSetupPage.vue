@@ -80,6 +80,10 @@ const localSettings = reactive({
   lobbyPenaltyDire: 0,
   lobbySeriesType: 0,
   lobbyTimeoutMinutes: 10,
+  // Team registration mode
+  teamRegistrationMode: false,
+  teamRegistrationSize: 5,
+  teamRegistrationOpen: true,
   // XP settings
   xpGameWin: 30,
   xpGameLoss: 10,
@@ -602,6 +606,34 @@ watch(activeTab, (tab) => {
           <InputGroup :label="t('bidIncrementLabel')" :model-value="String(localSettings.bidIncrement)" placeholder="5" @update:model-value="localSettings.bidIncrement = Number($event)" />
           <InputGroup :label="t('maxBidNoLimit')" :model-value="String(localSettings.maxBid)" placeholder="0" @update:model-value="localSettings.maxBid = Number($event)" />
         </div>
+      </div>
+    </div>
+
+    <!-- Team Registration -->
+    <div class="card">
+      <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
+        <UserPlus class="w-5 h-5 text-foreground" />
+        <span class="text-sm font-semibold text-foreground">{{ t('teamRegistrationTitle') }}</span>
+      </div>
+      <div class="p-4 flex flex-col gap-4">
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" class="w-4 h-4 accent-primary" v-model="localSettings.teamRegistrationMode" />
+          <span class="text-sm text-foreground">{{ t('teamRegistrationMode') }}</span>
+        </label>
+        <p class="text-xs text-muted-foreground -mt-2">{{ t('teamRegistrationModeHint') }}</p>
+        <template v-if="localSettings.teamRegistrationMode">
+          <InputGroup
+            :label="t('teamRegistrationSize')"
+            :model-value="String(localSettings.teamRegistrationSize)"
+            placeholder="5"
+            :hint="t('teamRegistrationSizeHint', { n: localSettings.teamRegistrationSize, m: Math.max(0, localSettings.teamRegistrationSize - 1) })"
+            @update:model-value="localSettings.teamRegistrationSize = Math.min(10, Math.max(2, Number($event) || 5))"
+          />
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" class="w-4 h-4 accent-primary" v-model="localSettings.teamRegistrationOpen" />
+            <span class="text-sm text-foreground">{{ t('teamRegistrationOpen') }}</span>
+          </label>
+        </template>
       </div>
     </div>
 
@@ -1276,7 +1308,7 @@ watch(activeTab, (tab) => {
         <RotateCcw class="w-4 h-4" />
         {{ t('reset') }}
       </button>
-      <button v-if="store.auction.status === 'idle'" class="btn-primary" :disabled="!allCaptainsReady" @click="startDraft">
+      <button v-if="store.auction.status === 'idle' && !localSettings.teamRegistrationMode" class="btn-primary" :disabled="!allCaptainsReady" @click="startDraft">
         <Play class="w-4 h-4" />
         {{ t('startDraft') }}
       </button>

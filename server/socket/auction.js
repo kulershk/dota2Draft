@@ -222,6 +222,10 @@ export function registerAuctionHandlers(socket, io) {
     const comp = await getCompetition(compId)
     const settings = parseCompSettings(comp)
 
+    if (settings.teamRegistrationMode) {
+      return socket.emit('auction:error', { message: 'Auction is disabled in team-registration mode' })
+    }
+
     if (settings.requireAllOnline) {
       const readySet = compReadyCaptains.get(compId) || new Set()
       const allReady = captains.every(c => readySet.has(c.id))

@@ -2,6 +2,7 @@
 import { Gavel, Pause, Play, XCircle, Zap, History, Wallet, Users as UsersIcon, AlertCircle, CheckCircle, Circle, Undo2, Search, EyeOff, Eye, RefreshCw } from 'lucide-vue-next'
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute, useRouter } from 'vue-router'
 import { useDraftStore } from '@/composables/useDraftStore'
 import RoleBadge from '@/components/common/RoleBadge.vue'
 import MmrDisplay from '@/components/common/MmrDisplay.vue'
@@ -14,6 +15,19 @@ import { getServerNow } from '@/composables/useSocket'
 
 const store = useDraftStore()
 const { t } = useI18n()
+const route = useRoute()
+const router = useRouter()
+
+watch(
+  () => store.settings.teamRegistrationMode,
+  (mode) => {
+    if (mode) {
+      const compId = Number(route.params.compId)
+      if (compId) router.replace({ name: 'comp-players', params: { compId } })
+    }
+  },
+  { immediate: true }
+)
 
 // Live countdown timer
 const timeLeft = ref(0)

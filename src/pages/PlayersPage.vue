@@ -9,6 +9,7 @@ import ModalOverlay from '@/components/common/ModalOverlay.vue'
 import InputGroup from '@/components/common/InputGroup.vue'
 import RoleBadge from '@/components/common/RoleBadge.vue'
 import MmrDisplay from '@/components/common/MmrDisplay.vue'
+import RegisterTeamModal from '@/components/competition/RegisterTeamModal.vue'
 import { sortedRoles } from '@/utils/roles'
 import { fmtDateTime } from '@/utils/format'
 import UserName from '@/components/common/UserName.vue'
@@ -32,8 +33,13 @@ async function syncRoles() {
   }
 }
 const showRegister = ref(false)
+const showRegisterTeam = ref(false)
 const searchQuery = ref('')
 const activeRoleFilter = ref<string | null>(null)
+
+const teamRegistrationMode = computed(() => !!store.settings.teamRegistrationMode)
+const teamRegistrationOpen = computed(() => store.settings.teamRegistrationOpen !== false)
+const teamRegistrationSize = computed(() => Number(store.settings.teamRegistrationSize) || 5)
 
 function toggleRoleFilter(role: string) {
   activeRoleFilter.value = activeRoleFilter.value === role ? null : role
@@ -226,7 +232,24 @@ watch(searchQuery, () => { playersPage.value = 1 })
             <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input v-model="searchQuery" type="text" :placeholder="t('search')" class="input-field pl-9 w-full sm:w-56" />
           </div>
-          <template v-if="store.currentUser.value && !store.compUser.value?.in_pool && !store.compUser.value?.captain && (store.settings.allowSteamRegistration || store.isAdmin.value)">
+          <template v-if="teamRegistrationMode">
+            <template v-if="store.currentUser.value && !store.compUser.value?.captain">
+              <button v-if="(registrationOpen && teamRegistrationOpen) || store.isAdmin.value" class="btn-primary text-sm flex-shrink-0" @click="showRegisterTeam = true">
+                <UserPlus class="w-4 h-4" />
+                <span class="hidden sm:inline">{{ t('registerTeam') }}</span>
+              </button>
+              <span v-else-if="!teamRegistrationOpen" class="text-xs text-muted-foreground italic flex-shrink-0">{{ t('teamRegistrationClosed') }}</span>
+              <span v-else-if="registrationStatus" class="text-xs text-muted-foreground italic flex-shrink-0">{{ registrationStatus }}</span>
+            </template>
+            <template v-else-if="!store.currentUser.value">
+              <button v-if="registrationOpen && teamRegistrationOpen" class="btn-primary text-sm flex-shrink-0" @click="loginWithSteam">
+                <LogIn class="w-4 h-4" />
+                <span class="hidden sm:inline">{{ t('loginToJoin') }}</span>
+              </button>
+              <span v-else-if="registrationStatus" class="text-xs text-muted-foreground italic flex-shrink-0">{{ registrationStatus }}</span>
+            </template>
+          </template>
+          <template v-else-if="store.currentUser.value && !store.compUser.value?.in_pool && !store.compUser.value?.captain && (store.settings.allowSteamRegistration || store.isAdmin.value)">
             <button v-if="registrationOpen || store.isAdmin.value" class="btn-primary text-sm flex-shrink-0" @click="openRegister">
               <UserPlus class="w-4 h-4" />
               <span class="hidden sm:inline">{{ t('joinAsParticipant') }}</span>
@@ -377,6 +400,13 @@ watch(searchQuery, () => { playersPage.value = 1 })
         </button>
       </div>
     </ModalOverlay>
+
+    <!-- Register Team Modal -->
+    <RegisterTeamModal
+      :show="showRegisterTeam"
+      :team-size="teamRegistrationSize"
+      @close="showRegisterTeam = false"
+    />
 
     <!-- Edit Player Modal -->
     <ModalOverlay :show="showEditPlayer" @close="showEditPlayer = false">

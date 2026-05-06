@@ -618,6 +618,50 @@
         "responses": { "200": { "description": "Deleted" } }
       }
     },
+    "/api/competitions/{compId}/team-registration": {
+      "post": {
+        "tags": ["Captains"],
+        "summary": "Register a pre-formed team (captain self-registration)",
+        "description": "Available only when settings.teamRegistrationMode is true and settings.teamRegistrationOpen is true. The authenticated user becomes a captain of a new team and registers (settings.teamRegistrationSize - 1) team members searched by name or Steam ID. Auction phase is suppressed in this mode.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["team", "members"],
+                "properties": {
+                  "team": { "type": "string", "description": "Team name (unique within competition)" },
+                  "captainRole": { "type": "integer", "minimum": 1, "maximum": 5, "nullable": true, "description": "Optional playing role for the captain (1-5)" },
+                  "members": {
+                    "type": "array",
+                    "description": "Team members (length must equal teamRegistrationSize - 1)",
+                    "items": {
+                      "type": "object",
+                      "required": ["playerId"],
+                      "properties": {
+                        "playerId": { "type": "integer" },
+                        "playingRole": { "type": "integer", "minimum": 1, "maximum": 5, "nullable": true }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Team registered", "content": { "application/json": { "schema": { "type": "object", "properties": { "ok": { "type": "boolean" }, "captainId": { "type": "integer" } } } } } },
+          "400": { "description": "Mode disabled, validation failed, or invalid body" },
+          "401": { "description": "Not authenticated" },
+          "403": { "description": "Banned, registration closed, or outside registration window" },
+          "404": { "description": "Competition or member not found" },
+          "409": { "description": "Conflict: already a captain, team name taken, member already on a team, or member already a captain" }
+        }
+      }
+    },
     "/api/competitions/{compId}/players": {
       "get": {
         "tags": ["Players"],

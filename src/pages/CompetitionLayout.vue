@@ -16,7 +16,7 @@ const compId = computed(() => Number(route.params.compId))
 const navItems = computed(() => [
   { label: t('navInfo'), icon: Info, name: 'comp-info' },
   { label: t('navParticipants'), icon: Users, name: 'comp-players' },
-  ...(store.auction.status !== AUCTION_STATUS.FINISHED ? [{ label: t('navLiveAuction'), icon: Gavel, name: 'comp-auction' }] : []),
+  ...(!store.settings.teamRegistrationMode && store.auction.status !== AUCTION_STATUS.FINISHED ? [{ label: t('navLiveAuction'), icon: Gavel, name: 'comp-auction' }] : []),
   { label: t('navTeams'), icon: Trophy, name: 'comp-results' },
   { label: t('navTournament'), icon: Swords, name: 'comp-tournament' },
   { label: t('navMatches'), icon: ListChecks, name: 'comp-matches' },

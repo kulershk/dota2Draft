@@ -193,6 +193,30 @@ export default {
     pos5: 'Hard Support (Pos 5)',
   },
 
+  // Team registration mode
+  teamRegistrationTitle: 'Team Registration',
+  teamRegistrationMode: 'Enable team registration mode',
+  teamRegistrationModeHint: 'Captains register pre-formed teams; the auction is skipped.',
+  teamRegistrationSize: 'Team size (incl. captain)',
+  teamRegistrationSizeHint: 'Each team has {n} players (captain + {m} members).',
+  teamRegistrationOpen: 'Registrations open',
+  teamRegistrationClosed: 'Team registration closed',
+  registerTeam: 'Register Team',
+  registerTeamTitle: 'Register your team',
+  registerTeamSubtitle: 'You become the captain. Search and pick {m} team members (team of {n}).',
+  youAreCaptain: "You'll be the team captain",
+  registerTeamNameLabel: 'Team name',
+  registerTeamNamePlaceholder: 'e.g. Team Liquid',
+  registerTeamMembersLabel: 'Team members',
+  searchByNameOrSteamId: 'Search by name or Steam ID...',
+  searchingPlayers: 'Searching...',
+  slotRolePlaceholder: 'Role',
+  teamMemberDuplicateRole: 'Two members cannot share the same role.',
+  teamRegistration: {
+    submitting: 'Registering...',
+    failed: 'Registration failed',
+  },
+
   // Auction page
   liveAuction: 'Live Auction',
   roundOf: 'Round {current} of {total}',
