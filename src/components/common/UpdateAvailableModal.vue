@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useAppVersion } from '@/composables/useAppVersion'
 
 const { t } = useI18n()
-const { updateAvailable } = useAppVersion()
+const { updateAvailable, initialVersion, currentVersion } = useAppVersion()
 
 function refresh() {
   window.location.reload()
@@ -26,6 +26,11 @@ function refresh() {
           </div>
           <h2 class="text-lg font-bold text-foreground">{{ t('versionUpdateTitle') }}</h2>
           <p class="text-sm text-muted-foreground">{{ t('versionUpdateDesc') }}</p>
+          <div class="text-[11px] font-mono text-muted-foreground/80 break-all">
+            <span class="line-through">{{ initialVersion ?? '—' }}</span>
+            <span class="mx-1">→</span>
+            <span class="text-foreground">{{ currentVersion ?? '—' }}</span>
+          </div>
           <button
             class="mt-2 inline-flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-colors"
             @click="refresh"
