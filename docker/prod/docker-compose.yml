@@ -3,16 +3,30 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=frontend"
-      # HTTP router
-      - "traefik.http.routers.draft-http.rule=Host(`dota2.lv`)"
+      # HTTP router (dota.lv)
+      - "traefik.http.routers.draft-http.rule=Host(`dota.lv`)"
       - "traefik.http.routers.draft-http.entrypoints=http"
       - "traefik.http.routers.draft-http.service=draft"
-      # HTTPS router
-      - "traefik.http.routers.draft.rule=Host(`dota2.lv`)"
+      # HTTPS router (dota.lv)
+      - "traefik.http.routers.draft.rule=Host(`dota.lv`)"
       - "traefik.http.routers.draft.entrypoints=https"
       - "traefik.http.routers.draft.tls=true"
       - "traefik.http.routers.draft.tls.certresolver=letsencrypt"
       - "traefik.http.routers.draft.service=draft"
+      # Redirect dota2.lv -> dota.lv (preserves path + scheme upgrade to https)
+      - "traefik.http.middlewares.draft-redirect-old.redirectregex.regex=^https?://dota2\\.lv(.*)"
+      - "traefik.http.middlewares.draft-redirect-old.redirectregex.replacement=https://dota.lv$${1}"
+      - "traefik.http.middlewares.draft-redirect-old.redirectregex.permanent=true"
+      - "traefik.http.routers.draft-old-http.rule=Host(`dota2.lv`)"
+      - "traefik.http.routers.draft-old-http.entrypoints=http"
+      - "traefik.http.routers.draft-old-http.middlewares=draft-redirect-old"
+      - "traefik.http.routers.draft-old-http.service=draft"
+      - "traefik.http.routers.draft-old.rule=Host(`dota2.lv`)"
+      - "traefik.http.routers.draft-old.entrypoints=https"
+      - "traefik.http.routers.draft-old.tls=true"
+      - "traefik.http.routers.draft-old.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.draft-old.middlewares=draft-redirect-old"
+      - "traefik.http.routers.draft-old.service=draft"
       # Service
       - "traefik.http.services.draft.loadbalancer.server.port=3001"
     container_name: draft
