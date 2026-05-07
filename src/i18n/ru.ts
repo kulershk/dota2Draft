@@ -24,7 +24,7 @@ export default {
   created: 'Создано',
 
   // Nav / App
-  appTitle: 'DOTA2.LV',
+  appTitle: 'DOTA.LV',
   home: 'Главная',
   admin: 'Админ',
   adminPanel: 'Панель администратора',

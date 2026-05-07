@@ -24,7 +24,7 @@ export default {
   created: 'Izveidots',
 
   // Nav / App
-  appTitle: 'DOTA2.LV',
+  appTitle: 'DOTA.LV',
   home: 'Sākums',
   admin: 'Administrēšana',
   adminPanel: 'Administrēšanas panelis',
