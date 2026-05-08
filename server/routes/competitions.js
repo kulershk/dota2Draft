@@ -3,6 +3,9 @@ import { query, queryOne, execute } from '../db.js'
 import { getAuthPlayer } from '../middleware/auth.js'
 import { hasPermission, requireCompPermission } from '../middleware/permissions.js'
 import { getCompetition, parseCompSettings, parseAuctionState, computeAndSyncCompStatus } from '../helpers/competition.js'
+import { discordBot } from '../services/discordBotClient.js'
+
+const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || ''
 
 const router = Router()
 
@@ -110,6 +113,25 @@ router.post('/api/competitions', async (req, res) => {
     SELECT c.*, COALESCE(p.display_name, p.name) AS created_by_name, p.avatar_url AS created_by_avatar
     FROM competitions c LEFT JOIN players p ON p.id = c.created_by WHERE c.id = $1
   `, [comp.id])
+
+  // Fire-and-forget Discord announcement. Bot ignores it if the
+  // tournamentAnnounce plugin is disabled or no channel is configured.
+  // PUBLIC_BASE_URL is optional — if unset the bot's embed will omit the link.
+  const publicUrl = PUBLIC_BASE_URL ? `${PUBLIC_BASE_URL.replace(/\/$/, '')}/c/${full.id}/info` : null
+  discordBot
+    .tournamentAnnounce({
+      id: full.id,
+      name: full.name,
+      description: full.description,
+      startsAt: full.starts_at,
+      registrationStart: full.registration_start,
+      registrationEnd: full.registration_end,
+      competitionType: full.competition_type,
+      bannerUrl: null,
+      publicUrl,
+    })
+    .catch((err) => console.warn('[competitions] discord announce failed:', err.message))
+
   res.status(201).json({ ...full, settings: parseCompSettings(full) })
 })
 

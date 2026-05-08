@@ -536,6 +536,8 @@ export default {
   discordChannelsSection: 'Channels',
   discordWelcomeChannel: 'Welcome channel',
   discordWelcomeChannelHint: 'Optional — channel the bot will post to when it auto-verifies a new member.',
+  discordTournamentChannel: 'Tournament announcements channel',
+  discordTournamentChannelHint: 'When a competition is created on the site, the bot posts an embed here with name, dates, format, and a sign-up link. Disable the tournamentAnnounce plugin above to silence without losing the channel choice.',
   discordChannelNone: '— none —',
   discordPluginsSection: 'Plugins',
   discordPluginsHint: 'Each plugin handles a specific bot behavior. Toggle off to silence its event handlers without removing the code or restarting the bot. Changes take effect within ~1 second.',

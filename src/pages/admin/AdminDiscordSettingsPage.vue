@@ -15,6 +15,7 @@ const guildId = ref('')
 const roleVerifiedId = ref('')
 const roleCasterId = ref('')
 const welcomeChannelId = ref('')
+const tournamentChannelId = ref('')
 const inhouseVoiceId = ref('')
 const matchCategoryId = ref('')
 const matchVoiceEnabled = ref(false)
@@ -78,6 +79,7 @@ onMounted(async () => {
     roleVerifiedId.value = settings.discord_role_id_verified || ''
     roleCasterId.value = settings.discord_role_id_caster || ''
     welcomeChannelId.value = settings.discord_welcome_channel_id || ''
+    tournamentChannelId.value = settings.discord_tournament_channel_id || ''
     inhouseVoiceId.value = settings.discord_inhouse_voice_id || ''
     matchCategoryId.value = settings.discord_match_category_id || ''
     matchVoiceEnabled.value = settings.discord_match_voice_enabled === 'true'
@@ -105,6 +107,7 @@ async function save() {
       discord_role_id_verified: roleVerifiedId.value,
       discord_role_id_caster: roleCasterId.value,
       discord_welcome_channel_id: welcomeChannelId.value,
+      discord_tournament_channel_id: tournamentChannelId.value,
       discord_inhouse_voice_id: inhouseVoiceId.value,
       discord_match_category_id: matchCategoryId.value,
       discord_match_voice_enabled: matchVoiceEnabled.value ? 'true' : 'false',
@@ -225,6 +228,15 @@ async function save() {
             <option v-for="c in textChannels" :key="c.id" :value="c.id">#{{ c.name }}</option>
           </select>
           <p class="text-[11px] text-muted-foreground mt-1">{{ t('discordWelcomeChannelHint') }}</p>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('discordTournamentChannel') }}</label>
+          <select v-model="tournamentChannelId" class="input-field w-full">
+            <option value="">{{ t('discordChannelNone') }}</option>
+            <option v-for="c in textChannels" :key="c.id" :value="c.id">#{{ c.name }}</option>
+          </select>
+          <p class="text-[11px] text-muted-foreground mt-1">{{ t('discordTournamentChannelHint') }}</p>
         </div>
       </div>
     </div>

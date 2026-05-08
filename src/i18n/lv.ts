@@ -535,6 +535,8 @@ export default {
   discordChannelsSection: 'Kanāli',
   discordWelcomeChannel: 'Sveiciena kanāls',
   discordWelcomeChannelHint: 'Neobligāti — kanāls, kurā bots paziņos par jaunu verificētu dalībnieku.',
+  discordTournamentChannel: 'Turnīru paziņojumu kanāls',
+  discordTournamentChannelHint: 'Kad vietnē tiek izveidots jauns turnīrs, bots šeit publicē embed ar nosaukumu, datumiem, formātu un saiti uz pieteikšanos. Lai apturētu, izslēdz tournamentAnnounce spraudni augšā.',
   discordChannelNone: '— nav —',
   discordPluginsSection: 'Spraudņi',
   discordPluginsHint: 'Katrs spraudnis veic konkrētu bota uzvedību. Izslēdz, lai apturētu tā notikumu apstrādi bez koda dzēšanas vai bota restarta. Izmaiņas stājas spēkā ~1 sekundē.',

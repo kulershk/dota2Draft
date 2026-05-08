@@ -16,6 +16,7 @@ const KEYS = [
   'discord_role_id_verified',
   'discord_role_id_caster',
   'discord_welcome_channel_id',
+  'discord_tournament_channel_id',
   'discord_inhouse_voice_id',
   'discord_match_category_id',
   'discord_match_voice_enabled',

@@ -169,6 +169,18 @@ export function startInternalServer(client: Client): void {
     res.json({ plugins: PluginManager.listPluginsMeta() })
   })
 
+  app.post('/internal/tournament/announce', (req, res) => {
+    const payload = req.body
+    if (!payload || typeof payload.id !== 'number' || typeof payload.name !== 'string') {
+      res.status(400).json({ error: 'id (number) and name (string) required' })
+      return
+    }
+    // Custom event, picked up by plugins via @EventHook on onTournamentAnnounce.
+    // Goes through the same enable-gate as Discord-native events.
+    client.emit('tournamentAnnounce' as any, payload)
+    res.json({ ok: true })
+  })
+
   app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
     Logger.error('internal server error', err)
     res.status(500).json({ error: err.message })

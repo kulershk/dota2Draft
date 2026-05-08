@@ -535,6 +535,8 @@ export default {
   discordChannelsSection: 'Kanalai',
   discordWelcomeChannel: 'Pasveikinimo kanalas',
   discordWelcomeChannelHint: 'Neprivaloma — kanalas, į kurį botas paskelbs apie naują patvirtintą narį.',
+  discordTournamentChannel: 'Turnyrų skelbimų kanalas',
+  discordTournamentChannelHint: 'Kai svetainėje sukuriamas turnyras, botas čia paskelbs embed su pavadinimu, datomis, formatu ir nuoroda registracijai. Norint nutildyti — išjunk tournamentAnnounce įskiepį viršuje.',
   discordChannelNone: '— nėra —',
   discordPluginsSection: 'Įskiepiai',
   discordPluginsHint: 'Kiekvienas įskiepis atlieka tam tikrą boto elgseną. Išjunk, kad nutiltų jo įvykių apdorojimas, neištrinant kodo ir neperjungiant boto. Pakeitimai įsigalioja per ~1 sek.',

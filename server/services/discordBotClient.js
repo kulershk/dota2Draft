@@ -35,4 +35,7 @@ export const discordBot = {
   matchEnd(matchId, immediate = false) {
     return post('/internal/match/end', { matchId, immediate })
   },
+  tournamentAnnounce(payload) {
+    return post('/internal/tournament/announce', payload)
+  },
 }
