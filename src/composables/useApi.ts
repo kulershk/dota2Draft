@@ -164,6 +164,12 @@ export function useApi() {
       return request(url)
     },
     getMyUpcomingMatchCount: () => request('/api/matches/my-upcoming-count'),
+    announceCompetitionOnDiscord: (compId: number) =>
+      request(`/api/competitions/${compId}/discord-announce`, { method: 'POST' }) as Promise<{
+        ok: boolean
+        discord_announced_at: string | null
+        botResult?: { ok?: boolean; reason?: string }
+      }>,
     addTournamentStage: (compId: number, data: { name: string; format: string; groups?: any[]; bestOf?: number; seeds?: number[] }) =>
       request(`/api/competitions/${compId}/tournament/stages`, { method: 'POST', body: JSON.stringify(data) }),
     updateTournamentStage: (compId: number, stageId: number, data: { name?: string; status?: string }) =>

@@ -113,26 +113,45 @@ router.post('/api/competitions', async (req, res) => {
     SELECT c.*, COALESCE(p.display_name, p.name) AS created_by_name, p.avatar_url AS created_by_avatar
     FROM competitions c LEFT JOIN players p ON p.id = c.created_by WHERE c.id = $1
   `, [comp.id])
-
-  // Fire-and-forget Discord announcement. Bot ignores it if the
-  // tournamentAnnounce plugin is disabled or no channel is configured.
-  // PUBLIC_BASE_URL is optional — if unset the bot's embed will omit the link.
-  const publicUrl = PUBLIC_BASE_URL ? `${PUBLIC_BASE_URL.replace(/\/$/, '')}/c/${full.id}/info` : null
-  discordBot
-    .tournamentAnnounce({
-      id: full.id,
-      name: full.name,
-      description: full.description,
-      startsAt: full.starts_at,
-      registrationStart: full.registration_start,
-      registrationEnd: full.registration_end,
-      competitionType: full.competition_type,
-      bannerUrl: null,
-      publicUrl,
-    })
-    .catch((err) => console.warn('[competitions] discord announce failed:', err.message))
-
   res.status(201).json({ ...full, settings: parseCompSettings(full) })
+})
+
+// Manually trigger the Discord embed for this competition. Idempotent: stamps
+// `discord_announced_at` on success but allows re-announce (admin can correct
+// a typo and post again — they just see the prior timestamp in the UI).
+router.post('/api/competitions/:id/discord-announce', async (req, res) => {
+  const id = Number(req.params.id)
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' })
+  const admin = await requireCompPermission(req, res, id)
+  if (!admin) return
+
+  const full = await queryOne(`
+    SELECT c.*, COALESCE(p.display_name, p.name) AS created_by_name, p.avatar_url AS created_by_avatar
+    FROM competitions c LEFT JOIN players p ON p.id = c.created_by
+    WHERE c.id = $1 AND c.deleted_at IS NULL
+  `, [id])
+  if (!full) return res.status(404).json({ error: 'Competition not found' })
+
+  const publicUrl = PUBLIC_BASE_URL ? `${PUBLIC_BASE_URL.replace(/\/$/, '')}/c/${full.id}/info` : null
+  const result = await discordBot.tournamentAnnounce({
+    id: full.id,
+    name: full.name,
+    description: full.description,
+    startsAt: full.starts_at,
+    registrationStart: full.registration_start,
+    registrationEnd: full.registration_end,
+    competitionType: full.competition_type,
+    bannerUrl: null,
+    publicUrl,
+  })
+
+  if (result?.ok === false) {
+    return res.status(502).json({ error: result.reason || 'Bot rejected announcement', botResult: result })
+  }
+
+  await execute(`UPDATE competitions SET discord_announced_at = NOW() WHERE id = $1`, [id])
+  const updated = await queryOne(`SELECT discord_announced_at FROM competitions WHERE id = $1`, [id])
+  res.json({ ok: true, discord_announced_at: updated?.discord_announced_at, botResult: result })
 })
 
 router.put('/api/competitions/:id', async (req, res) => {

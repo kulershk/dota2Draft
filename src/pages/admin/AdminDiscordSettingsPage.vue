@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { MessageSquare, Save, RefreshCw, ShieldCheck, Hash, Volume2, AlertTriangle, CheckCircle2, Swords, Puzzle } from 'lucide-vue-next'
+import { MessageSquare, Save, RefreshCw, ShieldCheck, Hash, Volume2, AlertTriangle, CheckCircle2, Swords, Puzzle, Settings as SettingsIcon, Trophy, UserPlus, Hand } from 'lucide-vue-next'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
@@ -34,6 +34,32 @@ const saving = ref(false)
 const saved = ref(false)
 const errorMsg = ref('')
 const health = ref<{ reachable: boolean; ready?: boolean; bot?: string | null; settingsLoaded?: boolean; error?: string } | null>(null)
+
+// Tab nav state. 'general' is server-wide config (guild + roles + bot status).
+// Each plugin gets its own tab keyed by its @Plugin({ name }). 'matchVoice' is
+// here as a section even though it's not a true plugin yet.
+type TabKey = 'general' | 'matchVoice' | string
+const activeTab = ref<TabKey>('general')
+
+// Static metadata for tabs that aren't dynamic plugins.
+const FIXED_TABS = [
+  { key: 'general', icon: SettingsIcon },
+  { key: 'matchVoice', icon: Swords },
+] as const
+
+// Hook icon for known plugin names. Unknown plugins fall back to Puzzle.
+const PLUGIN_ICONS: Record<string, any> = {
+  autoVerify: ShieldCheck,
+  welcome: Hand,
+  tournamentAnnounce: Trophy,
+}
+function pluginIcon(name: string) { return PLUGIN_ICONS[name] ?? Puzzle }
+function pluginLabel(name: string) {
+  // i18n key per plugin: discordPluginLabel_<name>. Fall back to the raw name.
+  const key = `discordPluginLabel_${name}`
+  const v = t(key)
+  return v === key ? name : v
+}
 
 const textChannels = computed(() => channels.value.filter((c) => c.type === 'text' || c.type === 'announcement'))
 const voiceChannels = computed(() => channels.value.filter((c) => c.type === 'voice' || c.type === 'stage'))
@@ -151,175 +177,217 @@ async function save() {
       <span>{{ errorMsg }}</span>
     </div>
 
-    <!-- Bot status -->
-    <div class="card">
-      <div class="flex items-center gap-2 px-5 py-3 border-b border-border">
-        <MessageSquare class="w-4 h-4 text-foreground" />
-        <span class="text-sm font-semibold text-foreground">{{ t('discordBotStatus') }}</span>
-      </div>
-      <div class="px-5 py-4 grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
-        <div>
-          <div class="text-[11px] uppercase tracking-wide text-muted-foreground">{{ t('discordBotReachable') }}</div>
-          <div class="mt-1 flex items-center gap-1.5">
-            <CheckCircle2 v-if="health?.reachable" class="w-4 h-4 text-green-500" />
-            <AlertTriangle v-else class="w-4 h-4 text-destructive" />
-            <span>{{ health?.reachable ? t('yes') : t('no') }}</span>
-          </div>
-        </div>
-        <div>
-          <div class="text-[11px] uppercase tracking-wide text-muted-foreground">{{ t('discordBotAccount') }}</div>
-          <div class="mt-1">{{ health?.bot ?? '—' }}</div>
-        </div>
-        <div>
-          <div class="text-[11px] uppercase tracking-wide text-muted-foreground">{{ t('discordSettingsLoaded') }}</div>
-          <div class="mt-1">{{ health?.settingsLoaded ? t('yes') : t('no') }}</div>
-        </div>
-      </div>
-    </div>
+    <!-- Layout: tab nav + active panel -->
+    <div class="flex flex-col md:flex-row gap-4 md:gap-6">
+      <!-- Tab nav -->
+      <nav class="flex md:flex-col md:w-56 gap-1 overflow-x-auto md:overflow-visible flex-shrink-0">
+        <button
+          class="flex items-center gap-2 px-3 py-2 text-sm rounded-md whitespace-nowrap transition-colors text-left"
+          :class="activeTab === 'general' ? 'bg-primary/10 text-primary font-medium' : 'text-muted-foreground hover:bg-accent/30 hover:text-foreground'"
+          @click="activeTab = 'general'"
+        >
+          <SettingsIcon class="w-4 h-4" />
+          <span>{{ t('discordTabGeneral') }}</span>
+        </button>
 
-    <!-- Guild + roles -->
-    <div class="card">
-      <div class="flex items-center gap-2 px-5 py-3 border-b border-border">
-        <ShieldCheck class="w-4 h-4 text-foreground" />
-        <span class="text-sm font-semibold text-foreground">{{ t('discordRolesSection') }}</span>
-      </div>
-      <div class="px-5 py-4 flex flex-col gap-4">
-        <div>
-          <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('discordGuildId') }}</label>
-          <input type="text" v-model="guildId" class="input-field w-full font-mono" placeholder="123456789012345678" />
-          <p class="text-[11px] text-muted-foreground mt-1">{{ t('discordGuildIdHint') }}</p>
-        </div>
-
-        <div>
-          <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('discordRoleVerified') }}</label>
-          <select v-model="roleVerifiedId" class="input-field w-full">
-            <option value="">{{ t('discordRoleNone') }}</option>
-            <option v-for="r in roles" :key="r.id" :value="r.id" :disabled="r.managed">
-              {{ r.name }} {{ r.managed ? '(managed)' : '' }}
-            </option>
-          </select>
-          <p class="text-[11px] text-muted-foreground mt-1">{{ t('discordRoleVerifiedHint') }}</p>
-        </div>
-
-        <div>
-          <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('discordRoleCaster') }}</label>
-          <select v-model="roleCasterId" class="input-field w-full">
-            <option value="">{{ t('discordRoleNone') }}</option>
-            <option v-for="r in roles" :key="r.id" :value="r.id" :disabled="r.managed">
-              {{ r.name }} {{ r.managed ? '(managed)' : '' }}
-            </option>
-          </select>
-          <p class="text-[11px] text-muted-foreground mt-1">{{ t('discordRoleCasterHint') }}</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Channels -->
-    <div class="card">
-      <div class="flex items-center gap-2 px-5 py-3 border-b border-border">
-        <Hash class="w-4 h-4 text-foreground" />
-        <span class="text-sm font-semibold text-foreground">{{ t('discordChannelsSection') }}</span>
-      </div>
-      <div class="px-5 py-4 flex flex-col gap-4">
-        <div>
-          <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('discordWelcomeChannel') }}</label>
-          <select v-model="welcomeChannelId" class="input-field w-full">
-            <option value="">{{ t('discordChannelNone') }}</option>
-            <option v-for="c in textChannels" :key="c.id" :value="c.id">#{{ c.name }}</option>
-          </select>
-          <p class="text-[11px] text-muted-foreground mt-1">{{ t('discordWelcomeChannelHint') }}</p>
-        </div>
-
-        <div>
-          <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('discordTournamentChannel') }}</label>
-          <select v-model="tournamentChannelId" class="input-field w-full">
-            <option value="">{{ t('discordChannelNone') }}</option>
-            <option v-for="c in textChannels" :key="c.id" :value="c.id">#{{ c.name }}</option>
-          </select>
-          <p class="text-[11px] text-muted-foreground mt-1">{{ t('discordTournamentChannelHint') }}</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Plugins -->
-    <div class="card">
-      <div class="flex items-center gap-2 px-5 py-3 border-b border-border">
-        <Puzzle class="w-4 h-4 text-foreground" />
-        <span class="text-sm font-semibold text-foreground">{{ t('discordPluginsSection') }}</span>
-      </div>
-      <div class="px-5 py-4 flex flex-col gap-3">
-        <p class="text-[11px] text-muted-foreground">{{ t('discordPluginsHint') }}</p>
-        <div v-if="!plugins.length" class="text-sm text-muted-foreground italic">
-          {{ t('discordPluginsEmpty') }}
-        </div>
-        <label
+        <button
           v-for="p in plugins"
           :key="p.name"
-          class="flex items-start gap-3 cursor-pointer rounded-md border border-border px-3 py-2 hover:bg-accent/30"
+          class="flex items-center gap-2 px-3 py-2 text-sm rounded-md whitespace-nowrap transition-colors text-left"
+          :class="activeTab === p.name ? 'bg-primary/10 text-primary font-medium' : 'text-muted-foreground hover:bg-accent/30 hover:text-foreground'"
+          @click="activeTab = p.name"
         >
-          <input
-            type="checkbox"
-            class="mt-1"
-            :checked="pluginToggles[p.name] !== false"
-            @change="pluginToggles[p.name] = ($event.target as HTMLInputElement).checked"
-          />
-          <span class="flex-1">
-            <span class="block text-sm font-medium text-foreground">{{ p.name }}</span>
-            <span class="block text-[11px] text-muted-foreground mt-0.5">{{ p.description }}</span>
-          </span>
-        </label>
+          <component :is="pluginIcon(p.name)" class="w-4 h-4" />
+          <span class="flex-1">{{ pluginLabel(p.name) }}</span>
+          <span v-if="pluginToggles[p.name] === false" class="text-[10px] uppercase text-muted-foreground">{{ t('discordTabOff') }}</span>
+        </button>
+
+        <button
+          class="flex items-center gap-2 px-3 py-2 text-sm rounded-md whitespace-nowrap transition-colors text-left"
+          :class="activeTab === 'matchVoice' ? 'bg-primary/10 text-primary font-medium' : 'text-muted-foreground hover:bg-accent/30 hover:text-foreground'"
+          @click="activeTab = 'matchVoice'"
+        >
+          <Swords class="w-4 h-4" />
+          <span>{{ t('discordMatchVoiceSection') }}</span>
+        </button>
+      </nav>
+
+      <!-- Active panel -->
+      <div class="flex-1 flex flex-col gap-4 md:gap-6 min-w-0">
+        <!-- ========== GENERAL ========== -->
+        <template v-if="activeTab === 'general'">
+          <!-- Bot status -->
+          <div class="card">
+            <div class="flex items-center gap-2 px-5 py-3 border-b border-border">
+              <MessageSquare class="w-4 h-4 text-foreground" />
+              <span class="text-sm font-semibold text-foreground">{{ t('discordBotStatus') }}</span>
+            </div>
+            <div class="px-5 py-4 grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+              <div>
+                <div class="text-[11px] uppercase tracking-wide text-muted-foreground">{{ t('discordBotReachable') }}</div>
+                <div class="mt-1 flex items-center gap-1.5">
+                  <CheckCircle2 v-if="health?.reachable" class="w-4 h-4 text-green-500" />
+                  <AlertTriangle v-else class="w-4 h-4 text-destructive" />
+                  <span>{{ health?.reachable ? t('yes') : t('no') }}</span>
+                </div>
+              </div>
+              <div>
+                <div class="text-[11px] uppercase tracking-wide text-muted-foreground">{{ t('discordBotAccount') }}</div>
+                <div class="mt-1">{{ health?.bot ?? '—' }}</div>
+              </div>
+              <div>
+                <div class="text-[11px] uppercase tracking-wide text-muted-foreground">{{ t('discordSettingsLoaded') }}</div>
+                <div class="mt-1">{{ health?.settingsLoaded ? t('yes') : t('no') }}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Guild + roles -->
+          <div class="card">
+            <div class="flex items-center gap-2 px-5 py-3 border-b border-border">
+              <ShieldCheck class="w-4 h-4 text-foreground" />
+              <span class="text-sm font-semibold text-foreground">{{ t('discordRolesSection') }}</span>
+            </div>
+            <div class="px-5 py-4 flex flex-col gap-4">
+              <div>
+                <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('discordGuildId') }}</label>
+                <input type="text" v-model="guildId" class="input-field w-full font-mono" placeholder="123456789012345678" />
+                <p class="text-[11px] text-muted-foreground mt-1">{{ t('discordGuildIdHint') }}</p>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('discordRoleVerified') }}</label>
+                <select v-model="roleVerifiedId" class="input-field w-full">
+                  <option value="">{{ t('discordRoleNone') }}</option>
+                  <option v-for="r in roles" :key="r.id" :value="r.id" :disabled="r.managed">
+                    {{ r.name }} {{ r.managed ? '(managed)' : '' }}
+                  </option>
+                </select>
+                <p class="text-[11px] text-muted-foreground mt-1">{{ t('discordRoleVerifiedHint') }}</p>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('discordRoleCaster') }}</label>
+                <select v-model="roleCasterId" class="input-field w-full">
+                  <option value="">{{ t('discordRoleNone') }}</option>
+                  <option v-for="r in roles" :key="r.id" :value="r.id" :disabled="r.managed">
+                    {{ r.name }} {{ r.managed ? '(managed)' : '' }}
+                  </option>
+                </select>
+                <p class="text-[11px] text-muted-foreground mt-1">{{ t('discordRoleCasterHint') }}</p>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- ========== PLUGIN PANELS ========== -->
+        <template v-for="p in plugins" :key="p.name">
+          <template v-if="activeTab === p.name">
+            <!-- Generic enable + description card for every plugin -->
+            <div class="card">
+              <div class="flex items-center gap-2 px-5 py-3 border-b border-border">
+                <component :is="pluginIcon(p.name)" class="w-4 h-4 text-foreground" />
+                <span class="text-sm font-semibold text-foreground">{{ pluginLabel(p.name) }}</span>
+              </div>
+              <div class="px-5 py-4 flex flex-col gap-3">
+                <p class="text-sm text-muted-foreground">{{ p.description }}</p>
+                <label class="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    class="mt-1"
+                    :checked="pluginToggles[p.name] !== false"
+                    @change="pluginToggles[p.name] = ($event.target as HTMLInputElement).checked"
+                  />
+                  <span class="flex-1">
+                    <span class="block text-sm font-medium text-foreground">{{ t('discordPluginEnableLabel') }}</span>
+                    <span class="block text-[11px] text-muted-foreground mt-0.5">{{ t('discordPluginEnableHint') }}</span>
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Per-plugin extra settings -->
+            <div v-if="p.name === 'welcome'" class="card">
+              <div class="flex items-center gap-2 px-5 py-3 border-b border-border">
+                <Hash class="w-4 h-4 text-foreground" />
+                <span class="text-sm font-semibold text-foreground">{{ t('discordWelcomeChannel') }}</span>
+              </div>
+              <div class="px-5 py-4">
+                <select v-model="welcomeChannelId" class="input-field w-full">
+                  <option value="">{{ t('discordChannelNone') }}</option>
+                  <option v-for="c in textChannels" :key="c.id" :value="c.id">#{{ c.name }}</option>
+                </select>
+                <p class="text-[11px] text-muted-foreground mt-1">{{ t('discordWelcomeChannelHint') }}</p>
+              </div>
+            </div>
+
+            <div v-if="p.name === 'tournamentAnnounce'" class="card">
+              <div class="flex items-center gap-2 px-5 py-3 border-b border-border">
+                <Hash class="w-4 h-4 text-foreground" />
+                <span class="text-sm font-semibold text-foreground">{{ t('discordTournamentChannel') }}</span>
+              </div>
+              <div class="px-5 py-4">
+                <select v-model="tournamentChannelId" class="input-field w-full">
+                  <option value="">{{ t('discordChannelNone') }}</option>
+                  <option v-for="c in textChannels" :key="c.id" :value="c.id">#{{ c.name }}</option>
+                </select>
+                <p class="text-[11px] text-muted-foreground mt-1">{{ t('discordTournamentChannelHint') }}</p>
+              </div>
+            </div>
+          </template>
+        </template>
+
+        <!-- ========== MATCH VOICE ========== -->
+        <template v-if="activeTab === 'matchVoice'">
+          <div class="card">
+            <div class="flex items-center gap-2 px-5 py-3 border-b border-border">
+              <Swords class="w-4 h-4 text-foreground" />
+              <span class="text-sm font-semibold text-foreground">{{ t('discordMatchVoiceSection') }}</span>
+            </div>
+            <div class="px-5 py-4 flex flex-col gap-4">
+              <label class="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  class="mt-1"
+                  :checked="matchVoiceEnabled"
+                  @change="matchVoiceEnabled = ($event.target as HTMLInputElement).checked"
+                />
+                <span class="flex-1">
+                  <span class="block text-sm font-medium text-foreground">{{ t('discordMatchVoiceEnabled') }}</span>
+                  <span class="block text-[11px] text-muted-foreground mt-0.5">{{ t('discordMatchVoiceEnabledHint') }}</span>
+                </span>
+              </label>
+
+              <div>
+                <label class="block text-xs font-medium text-muted-foreground mb-1">
+                  <Volume2 class="w-3 h-3 inline-block mr-1" />
+                  {{ t('discordInhouseVoice') }}
+                </label>
+                <select v-model="inhouseVoiceId" class="input-field w-full">
+                  <option value="">{{ t('discordChannelNone') }}</option>
+                  <option v-for="c in voiceChannels" :key="c.id" :value="c.id">🔊 {{ c.name }}</option>
+                </select>
+                <p class="text-[11px] text-muted-foreground mt-1">{{ t('discordInhouseVoiceHint') }}</p>
+              </div>
+
+              <div>
+                <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('discordMatchCategory') }}</label>
+                <select v-model="matchCategoryId" class="input-field w-full">
+                  <option value="">{{ t('discordCategoryNone') }}</option>
+                  <option v-for="c in categoryChannels" :key="c.id" :value="c.id">{{ c.name }}</option>
+                </select>
+                <p class="text-[11px] text-muted-foreground mt-1">{{ t('discordMatchCategoryHint') }}</p>
+              </div>
+
+              <div>
+                <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('discordMatchCleanupDelay') }}</label>
+                <input type="number" v-model.number="matchCleanupDelay" min="0" max="120" class="input-field w-full max-w-[120px]" />
+                <p class="text-[11px] text-muted-foreground mt-1">{{ t('discordMatchCleanupDelayHint') }}</p>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <div v-if="loading" class="text-center text-sm text-muted-foreground py-4">{{ t('loading') }}</div>
       </div>
     </div>
-
-    <!-- Match voice channels -->
-    <div class="card">
-      <div class="flex items-center gap-2 px-5 py-3 border-b border-border">
-        <Swords class="w-4 h-4 text-foreground" />
-        <span class="text-sm font-semibold text-foreground">{{ t('discordMatchVoiceSection') }}</span>
-      </div>
-      <div class="px-5 py-4 flex flex-col gap-4">
-        <label class="flex items-start gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            class="mt-1"
-            :checked="matchVoiceEnabled"
-            @change="matchVoiceEnabled = ($event.target as HTMLInputElement).checked"
-          />
-          <span class="flex-1">
-            <span class="block text-sm font-medium text-foreground">{{ t('discordMatchVoiceEnabled') }}</span>
-            <span class="block text-[11px] text-muted-foreground mt-0.5">{{ t('discordMatchVoiceEnabledHint') }}</span>
-          </span>
-        </label>
-
-        <div>
-          <label class="block text-xs font-medium text-muted-foreground mb-1">
-            <Volume2 class="w-3 h-3 inline-block mr-1" />
-            {{ t('discordInhouseVoice') }}
-          </label>
-          <select v-model="inhouseVoiceId" class="input-field w-full">
-            <option value="">{{ t('discordChannelNone') }}</option>
-            <option v-for="c in voiceChannels" :key="c.id" :value="c.id">🔊 {{ c.name }}</option>
-          </select>
-          <p class="text-[11px] text-muted-foreground mt-1">{{ t('discordInhouseVoiceHint') }}</p>
-        </div>
-
-        <div>
-          <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('discordMatchCategory') }}</label>
-          <select v-model="matchCategoryId" class="input-field w-full">
-            <option value="">{{ t('discordCategoryNone') }}</option>
-            <option v-for="c in categoryChannels" :key="c.id" :value="c.id">{{ c.name }}</option>
-          </select>
-          <p class="text-[11px] text-muted-foreground mt-1">{{ t('discordMatchCategoryHint') }}</p>
-        </div>
-
-        <div>
-          <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('discordMatchCleanupDelay') }}</label>
-          <input type="number" v-model.number="matchCleanupDelay" min="0" max="120" class="input-field w-full max-w-[120px]" />
-          <p class="text-[11px] text-muted-foreground mt-1">{{ t('discordMatchCleanupDelayHint') }}</p>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="loading" class="text-center text-sm text-muted-foreground py-4">{{ t('loading') }}</div>
   </div>
 </template>

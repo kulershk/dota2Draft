@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Settings, DollarSign, Users, UserPlus, RotateCcw, Play, Pencil, ArrowDown, Wifi, ArrowLeft, Plus, Trash2, Search, Tv, Upload, Swords, ChevronDown, ChevronRight, X, Trophy, Medal, Check } from 'lucide-vue-next'
+import { Settings, DollarSign, Users, UserPlus, RotateCcw, Play, Pencil, ArrowDown, Wifi, ArrowLeft, Plus, Trash2, Search, Tv, Upload, Swords, ChevronDown, ChevronRight, X, Trophy, Medal, Check, MessageSquare, AlertCircle } from 'lucide-vue-next'
 import { ref, computed, onMounted, reactive, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
@@ -37,6 +37,9 @@ const PAGE_SIZE = 20
 
 
 const compName = ref('')
+const discordAnnouncedAt = ref<string | null>(null)
+const discordAnnouncing = ref(false)
+const discordAnnounceMsg = ref<{ kind: 'ok' | 'error'; text: string } | null>(null)
 const compDescription = ref('')
 const compRulesTitle = ref('')
 const compRulesContent = ref('')
@@ -183,6 +186,7 @@ onMounted(async () => {
   compStatus.value = comp.status || 'draft'
   compIsPublic.value = !!comp.is_public
   compIsFeatured.value = !!comp.is_featured
+  discordAnnouncedAt.value = comp.discord_announced_at || null
   compStartsAt.value = comp.starts_at ? toLocalDatetime(comp.starts_at) : ''
   compRegStart.value = comp.registration_start ? toLocalDatetime(comp.registration_start) : ''
   compRegEnd.value = comp.registration_end ? toLocalDatetime(comp.registration_end) : ''
@@ -376,6 +380,22 @@ async function fetchStreams() {
   streams.value = await api.getCompStreams(compId.value)
 }
 
+async function announceOnDiscord() {
+  if (discordAnnouncing.value) return
+  discordAnnouncing.value = true
+  discordAnnounceMsg.value = null
+  try {
+    const r = await api.announceCompetitionOnDiscord(compId.value)
+    discordAnnouncedAt.value = r.discord_announced_at
+    discordAnnounceMsg.value = { kind: 'ok', text: t('discordAnnounceSuccess') }
+  } catch (err) {
+    discordAnnounceMsg.value = { kind: 'error', text: (err as Error).message }
+  } finally {
+    discordAnnouncing.value = false
+    setTimeout(() => { discordAnnounceMsg.value = null }, 5000)
+  }
+}
+
 async function addStream() {
   if (!newStreamUsername.value.trim()) return
   await api.addCompStream(compId.value, { twitch_username: newStreamUsername.value.trim(), title: newStreamTitle.value.trim() })
@@ -457,13 +477,30 @@ watch(activeTab, (tab) => {
 
 <template>
   <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[var(--admin-content-max,1200px)] w-full">
-    <div class="flex items-center gap-3">
-      <button class="btn-ghost p-2" @click="router.push('/admin/competitions')">
-        <ArrowLeft class="w-4 h-4" />
-      </button>
-      <div>
-        <h1 class="text-2xl font-semibold text-foreground">{{ t('competitionSetup') }}</h1>
-        <p class="text-sm text-muted-foreground mt-1">{{ compName || t('loading') }}</p>
+    <div class="flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <button class="btn-ghost p-2" @click="router.push('/admin/competitions')">
+          <ArrowLeft class="w-4 h-4" />
+        </button>
+        <div>
+          <h1 class="text-2xl font-semibold text-foreground">{{ t('competitionSetup') }}</h1>
+          <p class="text-sm text-muted-foreground mt-1">{{ compName || t('loading') }}</p>
+        </div>
+      </div>
+      <div v-if="loaded" class="flex flex-col items-end gap-1">
+        <button class="btn-secondary text-sm" :disabled="discordAnnouncing" @click="announceOnDiscord">
+          <MessageSquare class="w-4 h-4" />
+          {{ discordAnnouncing ? t('loading') : (discordAnnouncedAt ? t('discordReannounce') : t('discordAnnounce')) }}
+        </button>
+        <span v-if="discordAnnouncedAt && !discordAnnounceMsg" class="text-[11px] text-muted-foreground">
+          {{ t('discordAnnouncedAt', { when: new Date(discordAnnouncedAt).toLocaleString() }) }}
+        </span>
+        <span v-if="discordAnnounceMsg" class="text-[11px] flex items-center gap-1"
+          :class="discordAnnounceMsg.kind === 'ok' ? 'text-green-500' : 'text-destructive'">
+          <AlertCircle v-if="discordAnnounceMsg.kind === 'error'" class="w-3 h-3" />
+          <Check v-else class="w-3 h-3" />
+          {{ discordAnnounceMsg.text }}
+        </span>
       </div>
     </div>
 

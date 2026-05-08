@@ -552,6 +552,20 @@
         "responses": { "200": { "description": "Deleted" } }
       }
     },
+    "/api/competitions/{id}/discord-announce": {
+      "post": {
+        "tags": ["Discord"],
+        "summary": "Manually trigger the Discord embed for this competition",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_competitions on this comp (or full manage_competitions perm). Calls the bot's POST /internal/tournament/announce. Stamps competitions.discord_announced_at on success — re-announces are allowed (admin can correct typos and post again, the previous timestamp is shown in the UI).",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": { "description": "{ ok: true, discord_announced_at, botResult }" },
+          "404": { "description": "Competition not found" },
+          "502": { "description": "Bot rejected announcement (plugin disabled, channel not configured, etc.)" }
+        }
+      }
+    },
     "/api/competitions/{compId}/captains": {
       "get": {
         "tags": ["Captains"],
