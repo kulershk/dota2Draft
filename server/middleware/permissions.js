@@ -60,6 +60,15 @@ export async function requirePermission(req, res, permission) {
   return player
 }
 
+export async function isCompetitionHelper(playerId, compId) {
+  if (!playerId || !compId) return false
+  const row = await query(
+    'SELECT 1 FROM competition_helpers WHERE competition_id = $1 AND player_id = $2 LIMIT 1',
+    [compId, playerId],
+  )
+  return row.length > 0
+}
+
 export async function requireCompPermission(req, res, compId, subPermission) {
   const player = await getAuthPlayer(req)
   if (!player) { res.status(401).json({ error: 'Not authenticated' }); return null }
@@ -69,6 +78,8 @@ export async function requireCompPermission(req, res, compId, subPermission) {
     if (!compId) return player
     const comp = await getCompetition(compId)
     if (comp && comp.created_by === player.id) return player
+    // Helper grant — same scope as creator on this comp.
+    if (await isCompetitionHelper(player.id, compId)) return player
   }
   res.status(403).json({ error: 'Permission denied' })
   return null

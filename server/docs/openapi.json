@@ -566,6 +566,42 @@
         }
       }
     },
+    "/api/competitions/{id}/helpers": {
+      "get": {
+        "tags": ["Competitions"],
+        "summary": "List competition helpers",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Anyone with manage rights on this comp (creator, helper, or global manage_competitions) can read the list.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "{ helpers: [{ player_id, name, avatar_url, steam_id, added_at, added_by }] }" } }
+      },
+      "post": {
+        "tags": ["Competitions"],
+        "summary": "Add a competition helper",
+        "security": [{ "bearerAuth": [] }],
+        "description": "OWNER or global manage_competitions only. Helpers themselves cannot add other helpers (prevents a helper from removing the owner). The added player gains the same scoped management rights as the owner on this comp (treated as `created_by` by requireCompPermission), but no global perms.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "required": ["player_id"], "properties": { "player_id": { "type": "integer" } } } } } },
+        "responses": {
+          "201": { "description": "Added (or already a helper — idempotent)" },
+          "400": { "description": "Invalid player_id, or target is already the owner" },
+          "403": { "description": "Caller is not the owner / global admin" }
+        }
+      }
+    },
+    "/api/competitions/{id}/helpers/{playerId}": {
+      "delete": {
+        "tags": ["Competitions"],
+        "summary": "Remove a competition helper",
+        "security": [{ "bearerAuth": [] }],
+        "description": "OWNER or global manage_competitions only.",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "playerId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "{ ok, removed }" } }
+      }
+    },
     "/api/competitions/{compId}/captains": {
       "get": {
         "tags": ["Captains"],

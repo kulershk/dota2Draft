@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { query, queryOne, execute } from '../db.js'
 import { getAuthPlayer } from '../middleware/auth.js'
-import { hasPermission, requireCompPermission } from '../middleware/permissions.js'
+import { hasPermission, requireCompPermission, isCompetitionHelper } from '../middleware/permissions.js'
 import { getCompetition, parseCompSettings, parseAuctionState, computeAndSyncCompStatus } from '../helpers/competition.js'
 import { discordBot } from '../services/discordBotClient.js'
 
@@ -43,11 +43,22 @@ router.get('/api/competitions', async (req, res) => {
   `, params)
 
   const canManageAll = player && await hasPermission(player, 'manage_competitions')
+  // Pre-fetch which non-public comp ids the current player helps on, so the
+  // filter loop stays sync. Empty set when not authed.
+  const helperCompIds = new Set()
+  if (player) {
+    const rows = await query(
+      'SELECT competition_id FROM competition_helpers WHERE player_id = $1',
+      [player.id],
+    )
+    for (const r of rows) helperCompIds.add(r.competition_id)
+  }
   const visible = allRows.filter(c => {
     if (c.is_public) return true
     if (!player) return false
     if (player.is_admin || canManageAll) return true
     if (c.created_by === player.id) return true
+    if (helperCompIds.has(c.id)) return true
     return false
   })
 
@@ -79,7 +90,11 @@ router.get('/api/competitions/:id', async (req, res) => {
   if (!comp.is_public) {
     const player = await getAuthPlayer(req)
     const canManageAll = player && await hasPermission(player, 'manage_competitions')
-    if (!player || (!player.is_admin && !canManageAll && comp.created_by !== player.id)) {
+    let isHelper = false
+    if (player && !player.is_admin && !canManageAll && comp.created_by !== player.id) {
+      isHelper = await isCompetitionHelper(player.id, comp.id)
+    }
+    if (!player || (!player.is_admin && !canManageAll && comp.created_by !== player.id && !isHelper)) {
       return res.status(404).json({ error: 'Competition not found' })
     }
   }
@@ -152,6 +167,90 @@ router.post('/api/competitions/:id/discord-announce', async (req, res) => {
   await execute(`UPDATE competitions SET discord_announced_at = NOW() WHERE id = $1`, [id])
   const updated = await queryOne(`SELECT discord_announced_at FROM competitions WHERE id = $1`, [id])
   res.json({ ok: true, discord_announced_at: updated?.discord_announced_at, botResult: result })
+})
+
+// ──────────────────────────────────────────────────────────────────────────
+// Competition helpers
+// ──────────────────────────────────────────────────────────────────────────
+// Helpers gain the same scoped management rights on this comp as the owner
+// (see requireCompPermission). Only the owner or a global manage_competitions
+// admin can add/remove helpers — helpers themselves see the list but can't
+// modify it (prevents a helper from removing the owner).
+
+async function isOwnerOrGlobalAdmin(req, res, compId) {
+  const player = await getAuthPlayer(req)
+  if (!player) { res.status(401).json({ error: 'Not authenticated' }); return null }
+  if (await hasPermission(player, 'manage_competitions')) return player
+  const comp = await getCompetition(compId)
+  if (!comp) { res.status(404).json({ error: 'Competition not found' }); return null }
+  if (comp.created_by !== player.id) {
+    res.status(403).json({ error: 'Only the competition owner can manage helpers' })
+    return null
+  }
+  return player
+}
+
+router.get('/api/competitions/:id/helpers', async (req, res) => {
+  const id = Number(req.params.id)
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' })
+  // Anyone who can see/manage this comp can see who the helpers are.
+  const player = await requireCompPermission(req, res, id)
+  if (!player) return
+  const rows = await query(
+    `SELECT ch.player_id, ch.added_at, ch.added_by,
+            COALESCE(p.display_name, p.name) AS name,
+            p.avatar_url, p.steam_id
+     FROM competition_helpers ch
+     JOIN players p ON p.id = ch.player_id
+     WHERE ch.competition_id = $1
+     ORDER BY ch.added_at ASC`,
+    [id],
+  )
+  res.json({ helpers: rows })
+})
+
+router.post('/api/competitions/:id/helpers', async (req, res) => {
+  const id = Number(req.params.id)
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' })
+  const owner = await isOwnerOrGlobalAdmin(req, res, id)
+  if (!owner) return
+
+  const playerId = Number(req.body?.player_id)
+  if (!Number.isFinite(playerId)) return res.status(400).json({ error: 'player_id required' })
+  if (playerId === owner.id) return res.status(400).json({ error: 'You are already the owner' })
+
+  const target = await queryOne('SELECT id FROM players WHERE id = $1', [playerId])
+  if (!target) return res.status(404).json({ error: 'Player not found' })
+
+  // Don't add helper if they're already the comp's creator.
+  const comp = await getCompetition(id)
+  if (comp?.created_by === playerId) {
+    return res.status(400).json({ error: 'That player is the competition owner' })
+  }
+
+  await execute(
+    `INSERT INTO competition_helpers (competition_id, player_id, added_by)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (competition_id, player_id) DO NOTHING`,
+    [id, playerId, owner.id],
+  )
+  res.status(201).json({ ok: true })
+})
+
+router.delete('/api/competitions/:id/helpers/:playerId', async (req, res) => {
+  const id = Number(req.params.id)
+  const playerId = Number(req.params.playerId)
+  if (!Number.isFinite(id) || !Number.isFinite(playerId)) {
+    return res.status(400).json({ error: 'Invalid id' })
+  }
+  const owner = await isOwnerOrGlobalAdmin(req, res, id)
+  if (!owner) return
+
+  const r = await execute(
+    'DELETE FROM competition_helpers WHERE competition_id = $1 AND player_id = $2',
+    [id, playerId],
+  )
+  res.json({ ok: true, removed: r.rowCount ?? 0 })
 })
 
 router.put('/api/competitions/:id', async (req, res) => {

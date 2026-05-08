@@ -170,6 +170,14 @@ export function useApi() {
         discord_announced_at: string | null
         botResult?: { ok?: boolean; reason?: string }
       }>,
+    getCompetitionHelpers: (compId: number) =>
+      request(`/api/competitions/${compId}/helpers`) as Promise<{
+        helpers: Array<{ player_id: number; name: string; avatar_url: string | null; steam_id: string | null; added_at: string; added_by: number | null }>
+      }>,
+    addCompetitionHelper: (compId: number, playerId: number) =>
+      request(`/api/competitions/${compId}/helpers`, { method: 'POST', body: JSON.stringify({ player_id: playerId }) }),
+    removeCompetitionHelper: (compId: number, playerId: number) =>
+      request(`/api/competitions/${compId}/helpers/${playerId}`, { method: 'DELETE' }),
     addTournamentStage: (compId: number, data: { name: string; format: string; groups?: any[]; bestOf?: number; seeds?: number[] }) =>
       request(`/api/competitions/${compId}/tournament/stages`, { method: 'POST', body: JSON.stringify(data) }),
     updateTournamentStage: (compId: number, stageId: number, data: { name?: string; status?: string }) =>

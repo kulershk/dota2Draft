@@ -198,7 +198,66 @@ onMounted(async () => {
   allUsers.value = await api.getUsers()
   // Load streams
   await fetchStreams()
+  // Load helpers (best-effort — page works without them)
+  await fetchHelpers().catch(() => {})
 })
+
+interface HelperRow {
+  player_id: number
+  name: string
+  avatar_url: string | null
+  steam_id: string | null
+  added_at: string
+  added_by: number | null
+}
+const helpers = ref<HelperRow[]>([])
+const helperSearch = ref('')
+const helperAdding = ref(false)
+const helperRemovingId = ref<number | null>(null)
+const helperError = ref('')
+
+async function fetchHelpers() {
+  if (!compId.value) return
+  const r = await api.getCompetitionHelpers(compId.value)
+  helpers.value = r.helpers
+}
+
+const eligibleHelpers = computed(() => {
+  const helperIds = new Set(helpers.value.map(h => h.player_id))
+  const q = helperSearch.value.trim().toLowerCase()
+  let list = allUsers.value.filter(u => !helperIds.has(u.id) && !u.is_banned)
+  if (q) list = list.filter(u => (u.name || '').toLowerCase().includes(q) || (u.steam_id || '').includes(q))
+  return list.slice(0, 20)
+})
+
+async function addHelper(playerId: number) {
+  if (helperAdding.value) return
+  helperAdding.value = true
+  helperError.value = ''
+  try {
+    await api.addCompetitionHelper(compId.value, playerId)
+    helperSearch.value = ''
+    await fetchHelpers()
+  } catch (err) {
+    helperError.value = (err as Error).message
+  } finally {
+    helperAdding.value = false
+  }
+}
+
+async function removeHelper(playerId: number) {
+  if (helperRemovingId.value !== null) return
+  helperRemovingId.value = playerId
+  helperError.value = ''
+  try {
+    await api.removeCompetitionHelper(compId.value, playerId)
+    await fetchHelpers()
+  } catch (err) {
+    helperError.value = (err as Error).message
+  } finally {
+    helperRemovingId.value = null
+  }
+}
 
 // Players eligible for promotion (Steam-registered, not already captains in this competition)
 const promotablePlayers = computed(() => {
@@ -510,7 +569,7 @@ watch(activeTab, (tab) => {
     <template v-else>
     <!-- Tabs -->
     <div class="flex gap-1 border-b border-border overflow-x-auto">
-      <button v-for="tab in ['settings', 'rules', 'lobby', 'fantasy', 'captains', 'placements', 'other']" :key="tab"
+      <button v-for="tab in ['settings', 'rules', 'lobby', 'fantasy', 'captains', 'helpers', 'placements', 'other']" :key="tab"
         class="px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px"
         :class="activeTab === tab ? 'text-primary border-primary' : 'text-muted-foreground border-transparent hover:text-foreground hover:border-border'"
         @click="activeTab = tab"
@@ -995,6 +1054,75 @@ watch(activeTab, (tab) => {
       </button>
     </div>
 
+    </template>
+
+    <!-- Tab: Helpers -->
+    <template v-if="activeTab === 'helpers'">
+      <div class="card">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-border">
+          <div>
+            <span class="text-sm font-semibold text-foreground">{{ t('helpersTitle') }}</span>
+            <p class="text-[11px] text-muted-foreground mt-0.5">{{ t('helpersHint') }}</p>
+          </div>
+        </div>
+        <div class="px-4 py-4 flex flex-col gap-4">
+          <div v-if="helperError" class="text-xs text-destructive">{{ helperError }}</div>
+
+          <div>
+            <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('helperAdd') }}</label>
+            <input
+              v-model="helperSearch"
+              type="text"
+              class="input-field w-full"
+              :placeholder="t('helperSearchPlaceholder')"
+            />
+            <div v-if="helperSearch" class="mt-2 border border-border rounded-md max-h-64 overflow-y-auto">
+              <div v-if="!eligibleHelpers.length" class="px-3 py-2 text-xs text-muted-foreground italic">
+                {{ t('helperNoMatches') }}
+              </div>
+              <button
+                v-for="u in eligibleHelpers"
+                :key="u.id"
+                class="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-accent/30 text-sm"
+                :disabled="helperAdding"
+                @click="addHelper(u.id)"
+              >
+                <img v-if="u.avatar_url" :src="u.avatar_url" class="w-6 h-6 rounded-full" />
+                <span class="flex-1">{{ u.name }}</span>
+                <span v-if="u.steam_id" class="text-[10px] text-muted-foreground font-mono">{{ u.steam_id }}</span>
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-muted-foreground mb-2">{{ t('helpersList') }}</label>
+            <div v-if="!helpers.length" class="text-sm text-muted-foreground italic">{{ t('helpersEmpty') }}</div>
+            <div v-else class="flex flex-col gap-1.5">
+              <div
+                v-for="h in helpers"
+                :key="h.player_id"
+                class="flex items-center gap-2 px-3 py-2 border border-border rounded-md"
+              >
+                <img v-if="h.avatar_url" :src="h.avatar_url" class="w-7 h-7 rounded-full" />
+                <div class="flex-1">
+                  <div class="text-sm">{{ h.name }}</div>
+                  <div class="text-[10px] text-muted-foreground">
+                    {{ t('helperAddedAt', { when: new Date(h.added_at).toLocaleDateString() }) }}
+                  </div>
+                </div>
+                <button
+                  class="btn-ghost text-xs text-destructive"
+                  :disabled="helperRemovingId === h.player_id"
+                  @click="removeHelper(h.player_id)"
+                >
+                  <X class="w-3.5 h-3.5" />
+                  {{ t('remove') }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </template>
 
     <!-- Tab: Placements -->

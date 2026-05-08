@@ -653,6 +653,20 @@ export async function initDb() {
     }
   }
 
+  // ─── Competition helpers ──────────────────────────────────────────────
+  // Per-competition collaborators. A user listed here is treated by
+  // requireCompPermission as if they were the competition's creator —
+  // grants the same scoped management rights without a global perm.
+  await execute(`
+    CREATE TABLE IF NOT EXISTS competition_helpers (
+      competition_id INTEGER NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
+      player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      added_by INTEGER REFERENCES players(id) ON DELETE SET NULL,
+      added_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (competition_id, player_id)
+    )
+  `)
+
   // Ensure competition_players exists (might already from migration)
   await execute(`
     CREATE TABLE IF NOT EXISTS competition_players (
