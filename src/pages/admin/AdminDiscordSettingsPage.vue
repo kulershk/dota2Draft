@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { MessageSquare, Save, RefreshCw, ShieldCheck, Hash, Volume2, AlertTriangle, CheckCircle2 } from 'lucide-vue-next'
+import { MessageSquare, Save, RefreshCw, ShieldCheck, Hash, Volume2, AlertTriangle, CheckCircle2, Swords } from 'lucide-vue-next'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
@@ -15,6 +15,10 @@ const roleVerifiedId = ref('')
 const roleCasterId = ref('')
 const welcomeChannelId = ref('')
 const autoVerifyEnabled = ref(true)
+const inhouseVoiceId = ref('')
+const matchCategoryId = ref('')
+const matchVoiceEnabled = ref(false)
+const matchCleanupDelay = ref(10)
 
 const roles = ref<RoleDto[]>([])
 const channels = ref<ChannelDto[]>([])
@@ -27,6 +31,8 @@ const errorMsg = ref('')
 const health = ref<{ reachable: boolean; ready?: boolean; bot?: string | null; settingsLoaded?: boolean; error?: string } | null>(null)
 
 const textChannels = computed(() => channels.value.filter((c) => c.type === 'text' || c.type === 'announcement'))
+const voiceChannels = computed(() => channels.value.filter((c) => c.type === 'voice' || c.type === 'stage'))
+const categoryChannels = computed(() => channels.value.filter((c) => c.type === 'category'))
 
 function colorHex(color: number): string {
   if (!color) return '#99a'
@@ -62,6 +68,10 @@ onMounted(async () => {
     roleCasterId.value = settings.discord_role_id_caster || ''
     welcomeChannelId.value = settings.discord_welcome_channel_id || ''
     autoVerifyEnabled.value = settings.discord_auto_verify_enabled !== 'false'
+    inhouseVoiceId.value = settings.discord_inhouse_voice_id || ''
+    matchCategoryId.value = settings.discord_match_category_id || ''
+    matchVoiceEnabled.value = settings.discord_match_voice_enabled === 'true'
+    matchCleanupDelay.value = Number(settings.discord_match_cleanup_delay_minutes || '10')
     await refreshFromBot()
   } finally {
     loading.value = false
@@ -79,6 +89,10 @@ async function save() {
       discord_role_id_caster: roleCasterId.value,
       discord_welcome_channel_id: welcomeChannelId.value,
       discord_auto_verify_enabled: autoVerifyEnabled.value ? 'true' : 'false',
+      discord_inhouse_voice_id: inhouseVoiceId.value,
+      discord_match_category_id: matchCategoryId.value,
+      discord_match_voice_enabled: matchVoiceEnabled.value ? 'true' : 'false',
+      discord_match_cleanup_delay_minutes: String(matchCleanupDelay.value),
     })
     saved.value = true
     setTimeout(() => { saved.value = false }, 3000)
@@ -214,6 +228,55 @@ async function save() {
             <span class="block text-[11px] text-muted-foreground mt-0.5">{{ t('discordAutoVerifyEnabledHint') }}</span>
           </span>
         </label>
+      </div>
+    </div>
+
+    <!-- Match voice channels -->
+    <div class="card">
+      <div class="flex items-center gap-2 px-5 py-3 border-b border-border">
+        <Swords class="w-4 h-4 text-foreground" />
+        <span class="text-sm font-semibold text-foreground">{{ t('discordMatchVoiceSection') }}</span>
+      </div>
+      <div class="px-5 py-4 flex flex-col gap-4">
+        <label class="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            class="mt-1"
+            :checked="matchVoiceEnabled"
+            @change="matchVoiceEnabled = ($event.target as HTMLInputElement).checked"
+          />
+          <span class="flex-1">
+            <span class="block text-sm font-medium text-foreground">{{ t('discordMatchVoiceEnabled') }}</span>
+            <span class="block text-[11px] text-muted-foreground mt-0.5">{{ t('discordMatchVoiceEnabledHint') }}</span>
+          </span>
+        </label>
+
+        <div>
+          <label class="block text-xs font-medium text-muted-foreground mb-1">
+            <Volume2 class="w-3 h-3 inline-block mr-1" />
+            {{ t('discordInhouseVoice') }}
+          </label>
+          <select v-model="inhouseVoiceId" class="input-field w-full">
+            <option value="">{{ t('discordChannelNone') }}</option>
+            <option v-for="c in voiceChannels" :key="c.id" :value="c.id">🔊 {{ c.name }}</option>
+          </select>
+          <p class="text-[11px] text-muted-foreground mt-1">{{ t('discordInhouseVoiceHint') }}</p>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('discordMatchCategory') }}</label>
+          <select v-model="matchCategoryId" class="input-field w-full">
+            <option value="">{{ t('discordCategoryNone') }}</option>
+            <option v-for="c in categoryChannels" :key="c.id" :value="c.id">{{ c.name }}</option>
+          </select>
+          <p class="text-[11px] text-muted-foreground mt-1">{{ t('discordMatchCategoryHint') }}</p>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('discordMatchCleanupDelay') }}</label>
+          <input type="number" v-model.number="matchCleanupDelay" min="0" max="120" class="input-field w-full max-w-[120px]" />
+          <p class="text-[11px] text-muted-foreground mt-1">{{ t('discordMatchCleanupDelayHint') }}</p>
+        </div>
       </div>
     </div>
 

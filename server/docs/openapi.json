@@ -2175,6 +2175,32 @@
         }
       }
     },
+    "/internal/match/start": {
+      "post": {
+        "tags": ["Discord"],
+        "summary": "Bot-internal: create per-team voice channels and pull players from In-House",
+        "description": "Bot-only endpoint (bearer auth on the bot's :3030 internal HTTP server) called by the draft server when a queue match's lobby is created. Creates two voice channels (Radiant + Dire), restricts them to the team's discord-linked players + the Caster role, and moves any of those players currently sitting in the configured In-House voice channel into their team channel. Players not in In-House are skipped. Idempotent per matchId — returns reason on duplicate.",
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "required": ["matchId", "team1", "team2"], "properties": {
+          "matchId": { "type": "integer" },
+          "queueMatchId": { "type": "integer", "nullable": true },
+          "team1": { "type": "object", "properties": { "side": { "type": "string", "enum": ["radiant", "dire"] }, "playerIds": { "type": "array", "items": { "type": "integer" } } } },
+          "team2": { "type": "object", "properties": { "side": { "type": "string", "enum": ["radiant", "dire"] }, "playerIds": { "type": "array", "items": { "type": "integer" } } } }
+        } } } } },
+        "responses": { "200": { "description": "{ ok, radiantChannelId, direChannelId, movedCount } or { ok: false, reason }" } }
+      }
+    },
+    "/internal/match/end": {
+      "post": {
+        "tags": ["Discord"],
+        "summary": "Bot-internal: schedule cleanup of per-team voice channels",
+        "description": "Bot-only endpoint. Called by the draft server when a queue match completes (via OpenDota auto-fill) or is cancelled. After the configured delay (default 10 min, or immediate=true on cancel), the bot moves any stragglers back to In-House and deletes the team channels.",
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "required": ["matchId"], "properties": {
+          "matchId": { "type": "integer" },
+          "immediate": { "type": "boolean", "description": "Skip the cleanup delay (used for cancellations)." }
+        } } } } },
+        "responses": { "200": { "description": "{ ok } or { ok: false, reason }" } }
+      }
+    },
     "/api/admin/discord/health": {
       "get": {
         "tags": ["Discord"],

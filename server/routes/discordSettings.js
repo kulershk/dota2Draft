@@ -13,6 +13,10 @@ const KEYS = [
   'discord_role_id_caster',
   'discord_welcome_channel_id',
   'discord_auto_verify_enabled',
+  'discord_inhouse_voice_id',
+  'discord_match_category_id',
+  'discord_match_voice_enabled',
+  'discord_match_cleanup_delay_minutes',
 ]
 
 async function botGet(path) {

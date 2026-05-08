@@ -539,6 +539,16 @@ export default {
   discordAutoVerifySection: 'Auto-patvirtinimas',
   discordAutoVerifyEnabled: 'Auto-patvirtinimas prisijungus',
   discordAutoVerifyEnabledHint: 'Jei įjungta, botas suteikia Patvirtinto vaidmenį naujiems nariams, kurių Discord paskyra svetainėje jau susieta su Steam.',
+  discordMatchVoiceSection: 'Mačų balso kanalai',
+  discordMatchVoiceEnabled: 'Sukurti komandų balso kanalus prasidėjus /queue mačui',
+  discordMatchVoiceEnabledHint: 'Kai /queue lobby sukurtas, botas pridės du balso kanalus (Radiant + Dire), apribos juos komandos nariams + Caster vaidmeniui ir perkels tuos žaidėjus iš In-House kanalo į komandos kanalą.',
+  discordInhouseVoice: 'In-House balso kanalas',
+  discordInhouseVoiceHint: 'Žaidėjai, esantys čia lobby kūrimo metu, automatiškai perkeliami į komandos kanalą. Kiti praleidžiami (be klaidos).',
+  discordMatchCategory: 'Mačų kanalų kategorija',
+  discordMatchCategoryHint: 'Neprivaloma — kategorija, kurioje atsiras komandų kanalai. Palik tuščią, kad būtų viršuje.',
+  discordCategoryNone: '— viršuje —',
+  discordMatchCleanupDelay: 'Valymo delsa (minutės)',
+  discordMatchCleanupDelayHint: 'Po mačo pabaigos kiek palaukti prieš grąžinant likusiuosius ir ištrinant komandų kanalus. Atšaukimo atveju valymas vyksta iškart.',
 
   // Admin: Site Settings
   siteSettings: 'Svetainės nustatymai',

@@ -540,6 +540,16 @@ export default {
   discordAutoVerifySection: 'Auto-verify',
   discordAutoVerifyEnabled: 'Auto-verify on join',
   discordAutoVerifyEnabledHint: 'When enabled, the bot grants the Verified role to new members whose Discord is already linked to a Steam account on the site.',
+  discordMatchVoiceSection: 'Match voice channels',
+  discordMatchVoiceEnabled: 'Spin up team voice channels when a queue match starts',
+  discordMatchVoiceEnabledHint: 'When a /queue lobby is created, the bot adds two voice channels (Radiant + Dire), restricts them to the team\'s linked Discord users + Caster role, and pulls those players from the In-House channel into their team.',
+  discordInhouseVoice: 'In-House voice channel',
+  discordInhouseVoiceHint: 'Players sitting here when the lobby is created get auto-moved to their team channel. Players elsewhere are skipped (no error).',
+  discordMatchCategory: 'Match channels category',
+  discordMatchCategoryHint: 'Optional — the category the team channels appear in. Leave blank to put them at the top level.',
+  discordCategoryNone: '— top level —',
+  discordMatchCleanupDelay: 'Cleanup delay (minutes)',
+  discordMatchCleanupDelayHint: 'After the match ends, wait this long before moving stragglers back and deleting the team channels. Cancellations always clean up immediately.',
 
   // Admin: Site Settings
   siteSettings: 'Site Settings',

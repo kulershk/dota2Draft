@@ -4,6 +4,7 @@ import { ChannelType } from 'discord.js'
 import { env } from '../env.js'
 import { Logger } from './logger.js'
 import { Settings, loadSettings } from './settings.js'
+import { startMatch, endMatch, listLiveMatches } from './match-voice.js'
 
 interface RoleDto {
   id: string
@@ -122,6 +123,40 @@ export function startInternalServer(client: Client): void {
   app.post('/internal/reload-settings', async (_req, res) => {
     await loadSettings()
     res.json({ ok: true })
+  })
+
+  app.post('/internal/match/start', async (req, res) => {
+    try {
+      const { matchId, queueMatchId, team1, team2 } = req.body ?? {}
+      if (!matchId || !team1?.playerIds || !team2?.playerIds) {
+        res.status(400).json({ error: 'matchId, team1.playerIds, team2.playerIds required' })
+        return
+      }
+      const result = await startMatch(client, {
+        matchId,
+        queueMatchId,
+        team1: { side: team1.side ?? 'radiant', playerIds: team1.playerIds },
+        team2: { side: team2.side ?? 'dire', playerIds: team2.playerIds },
+      })
+      res.json(result)
+    } catch (err) {
+      Logger.error('POST /internal/match/start failed', err)
+      res.status(500).json({ error: (err as Error).message })
+    }
+  })
+
+  app.post('/internal/match/end', (req, res) => {
+    const { matchId, immediate } = req.body ?? {}
+    if (!matchId) {
+      res.status(400).json({ error: 'matchId required' })
+      return
+    }
+    const result = endMatch(client, Number(matchId), Boolean(immediate))
+    res.json(result)
+  })
+
+  app.get('/internal/match/live', (_req, res) => {
+    res.json({ matches: listLiveMatches() })
   })
 
   app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {

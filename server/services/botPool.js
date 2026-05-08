@@ -8,6 +8,7 @@ import { awardXp, getTeamPlayerIds, awardStagePlacements } from '../helpers/xp.j
 import { getCompetition, parseCompSettings } from '../helpers/competition.js'
 import { applyMatchToSeason } from './seasonRankingApply.js'
 import { startPolling as startLivePolling, stopPolling as stopLivePolling, updateServerSteamId as updateLivePollerServerSteamId } from './liveMatchPoller.js'
+import { discordBot } from './discordBotClient.js'
 import SteamCommunity from 'steamcommunity'
 import { LoginSession, EAuthTokenPlatformType } from 'steam-session'
 
@@ -1107,6 +1108,12 @@ class BotPool {
         // Update queue match status
         await execute("UPDATE queue_matches SET status = 'completed', completed_at = NOW() WHERE id = $1", [queueMatchXp.id])
         // (live poller already stopped at the top of _autoFillGameWinner)
+
+        // Tell the discord bot to schedule cleanup of per-team voice channels.
+        // Fire-and-forget — failures here MUST NOT block the season/XP path.
+        discordBot
+          .matchEnd(matchId, false)
+          .catch((err) => console.warn('[botPool] discord matchEnd failed:', err.message))
 
         // Apply season rating change (only if this match's pool was assigned to a season).
         // applyMatchToSeason is idempotent against queue_match_id, so a retry can't double-apply.

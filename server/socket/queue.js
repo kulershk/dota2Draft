@@ -7,6 +7,7 @@ import {
   getPoolQueue, getPoolQueueCount, getPoolQueuePlayers, clearPickTimer,
 } from './queueState.js'
 import { botPool } from '../services/botPool.js'
+import { discordBot } from '../services/discordBotClient.js'
 import { hasPerk, PERK } from '../helpers/subscription.js'
 
 // Generate pick order for a given team size (snake draft).
@@ -1078,6 +1079,18 @@ async function finalizeQueueMatch(queueMatchId, io) {
       },
       lobbyExpiresAt: match.lobbyExpiresAt,
     })
+
+    // Fire-and-forget: ask the discord bot to spin up per-team voice channels
+    // and pull players from the In-House voice channel into them. Failures
+    // here MUST NOT break the match flow.
+    discordBot
+      .matchStart({
+        matchId: matchRow.id,
+        queueMatchId,
+        team1: { side: 'radiant', playerIds: team1.map((p) => p.playerId) },
+        team2: { side: 'dire', playerIds: team2.map((p) => p.playerId) },
+      })
+      .catch((err) => console.warn('[Queue] discord matchStart failed:', err.message))
   } catch (e) {
     console.error('[Queue] Failed to create lobby:', e.message)
     io.to(`queue-match:${queueMatchId}`).emit('queue:error', { message: `Lobby creation failed: ${e.message}` })
@@ -1092,6 +1105,16 @@ async function cancelQueueMatch(queueMatchId, reason, io) {
 
   // Update DB regardless of in-memory state
   execute(`UPDATE queue_matches SET status = 'cancelled' WHERE id = $1`, [queueMatchId]).catch(() => {})
+
+  // If a matches row already got created for this queue match, tear down its
+  // discord voice channels immediately (no cleanup delay on cancel).
+  queryOne('SELECT match_id FROM queue_matches WHERE id = $1', [queueMatchId])
+    .then((row) => {
+      if (row?.match_id) {
+        return discordBot.matchEnd(row.match_id, true)
+      }
+    })
+    .catch((err) => console.warn('[Queue] discord matchEnd (cancel) failed:', err.message))
 
   // Notify players in the room (broadcast even if memory is empty — anyone
   // still subscribed should know it died)

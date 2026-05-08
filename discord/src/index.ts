@@ -19,10 +19,12 @@ async function main(): Promise<void> {
     Logger.error('Database ping failed (continuing anyway)', err)
   }
 
+  // Guilds + GuildVoiceStates are non-privileged (needed for /queue match
+  // voice channels — listing/moving members in voice).
   // GuildMembers is privileged — opt in via ENABLE_GUILD_MEMBERS_INTENT=true
   // AFTER toggling SERVER MEMBERS INTENT at https://discord.com/developers.
   // Without it, the auto-verify plugin's onGuildMemberAdd hook never fires.
-  const intents = [GatewayIntentBits.Guilds]
+  const intents = [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates]
   if (env.ENABLE_GUILD_MEMBERS_INTENT) intents.push(GatewayIntentBits.GuildMembers)
   const client = new Client({ intents })
   client.on('error', (e) => Logger.error('client error', e))

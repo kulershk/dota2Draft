@@ -539,6 +539,16 @@ export default {
   discordAutoVerifySection: 'Automātiskā verifikācija',
   discordAutoVerifyEnabled: 'Automātiska verifikācija pievienojoties',
   discordAutoVerifyEnabledHint: 'Ja ieslēgts, bots piešķir Verificēta lomu jauniem dalībniekiem, kuru Discord konts vietnē jau ir saistīts ar Steam.',
+  discordMatchVoiceSection: 'Spēļu balss kanāli',
+  discordMatchVoiceEnabled: 'Veidot komandu balss kanālus, kad sākas /queue spēle',
+  discordMatchVoiceEnabledHint: 'Kad /queue lobijs ir izveidots, bots izveido divus balss kanālus (Radiant + Dire), piešķir tos tikai komandai un Caster lomai, un pārvieto šos spēlētājus no In-House kanāla uz savas komandas kanālu.',
+  discordInhouseVoice: 'In-House balss kanāls',
+  discordInhouseVoiceHint: 'Spēlētāji, kuri šeit atrodas lobija izveides brīdī, tiek automātiski pārvietoti uz komandas kanālu. Pārējie tiek izlaisti (bez kļūdas).',
+  discordMatchCategory: 'Spēļu kanālu kategorija',
+  discordMatchCategoryHint: 'Neobligāti — kategorija, kurā parādīsies komandu kanāli. Atstāj tukšu, lai novietotu virspusē.',
+  discordCategoryNone: '— virspusē —',
+  discordMatchCleanupDelay: 'Tīrīšanas aizture (minūtes)',
+  discordMatchCleanupDelayHint: 'Pēc spēles beigām cik ilgi nogaidīt pirms atlikušos pārvietot atpakaļ un dzēst komandu kanālus. Atcelšanas gadījumā tīrīšana notiek uzreiz.',
 
   // Admin: Site Settings
   siteSettings: 'Vietnes iestatījumi',
