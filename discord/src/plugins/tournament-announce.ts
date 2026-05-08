@@ -8,6 +8,7 @@ import { Plugin } from '../core/decorators/plugin.js'
 import { EventHook } from '../core/decorators/event-hook.js'
 import { Logger } from '../services/logger.js'
 import { Settings } from '../services/settings.js'
+import { htmlToDiscordMarkdown } from '../services/html-to-md.js'
 import { env } from '../env.js'
 import type { PluginInterface } from '../core/types.js'
 
@@ -87,7 +88,12 @@ export class TournamentAnnounce implements PluginInterface {
       .setColor(0xe67e22)
       .setTitle(`🏆 ${payload.name}`)
       .setURL(payload.publicUrl ?? null)
-    if (payload.description) embed.setDescription(payload.description.slice(0, 2000))
+    if (payload.description) {
+      const md = htmlToDiscordMarkdown(payload.description)
+      // Discord embed description hard-caps at 4096 chars; use 2000 as a comfy
+      // limit to leave room for fields + footer.
+      if (md) embed.setDescription(md.slice(0, 2000))
+    }
     if (payload.bannerUrl) embed.setImage(payload.bannerUrl)
     if (fields.length) embed.addFields(...fields)
     if (payload.publicUrl) embed.addFields({ name: 'Pieteikšanās', value: payload.publicUrl })
