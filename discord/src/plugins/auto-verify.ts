@@ -12,19 +12,33 @@ export class AutoVerify implements PluginInterface {
 
   @EventHook()
   async onGuildMemberAdd(member: GuildMember): Promise<void> {
-    if (member.user.bot) return
+    Logger.info(`[autoVerify] guildMemberAdd fired: ${member.user.tag} (id=${member.id}, bot=${member.user.bot})`)
+    if (member.user.bot) {
+      Logger.info(`[autoVerify] skipping bot user`)
+      return
+    }
     try {
       const user = await UserRepository.byDiscordId(member.id)
-      if (!user || !user.steamId) {
-        Logger.info(`Member ${member.user.tag} joined — no linked Steam, skipping auto-verify`)
+      if (!user) {
+        Logger.info(`[autoVerify] no draft account linked to Discord id ${member.id}`)
+        return
+      }
+      if (!user.steamId) {
+        Logger.info(`[autoVerify] draft account ${user.id} (${user.displayName}) found but Steam not linked — skipping`)
         return
       }
       const { added, role } = await ensureRole(member, ROLE_KEYS.Verified)
-      if (added && role) {
-        Logger.info(`Auto-verified ${member.user.tag} → ${role.name} (steam ${user.steamId})`)
+      if (!role) {
+        Logger.warn(`[autoVerify] Verified role not found in guild — set discord_role_id_verified in /admin/discord, or ensure a role named "Verified" exists. Skipped ${member.user.tag}.`)
+        return
+      }
+      if (added) {
+        Logger.info(`[autoVerify] granted ${role.name} to ${member.user.tag} (steam ${user.steamId})`)
+      } else {
+        Logger.info(`[autoVerify] ${member.user.tag} already had ${role.name} — no change`)
       }
     } catch (err) {
-      Logger.error(`Auto-verify failed for ${member.user.tag}`, err)
+      Logger.error(`[autoVerify] failed for ${member.user.tag}`, err)
     }
   }
 }

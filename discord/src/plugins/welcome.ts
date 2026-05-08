@@ -18,13 +18,17 @@ export class Welcome implements PluginInterface {
 
   @EventHook()
   async onGuildMemberAdd(member: GuildMember): Promise<void> {
+    Logger.info(`[welcome] guildMemberAdd fired: ${member.user.tag}`)
     if (member.user.bot) return
     const channelId = Settings.get('welcome_channel_id')
-    if (!channelId) return
+    if (!channelId) {
+      Logger.info(`[welcome] discord_welcome_channel_id not set — skipping`)
+      return
+    }
 
     const channel = member.guild.channels.cache.get(channelId)
     if (!channel || channel.type !== ChannelType.GuildText) {
-      Logger.warn(`welcome: channel ${channelId} not found or not text`)
+      Logger.warn(`[welcome] channel ${channelId} not found in guild ${member.guild.id} or not a text channel`)
       return
     }
 

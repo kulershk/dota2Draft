@@ -27,6 +27,7 @@ async function main(): Promise<void> {
   // Without it, the auto-verify plugin's onGuildMemberAdd hook never fires.
   const intents = [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates]
   if (env.ENABLE_GUILD_MEMBERS_INTENT) intents.push(GatewayIntentBits.GuildMembers)
+  Logger.info(`Intents: ${intents.map((i) => GatewayIntentBits[i]).join(', ')} (ENABLE_GUILD_MEMBERS_INTENT=${env.ENABLE_GUILD_MEMBERS_INTENT})`)
   const client = new Client({ intents })
   client.on('error', (e) => Logger.error('client error', e))
 
