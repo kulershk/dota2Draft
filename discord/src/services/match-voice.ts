@@ -1,5 +1,6 @@
 import {
   ChannelType,
+  OverwriteType,
   type CategoryChannel,
   type Client,
   type Guild,
@@ -75,17 +76,23 @@ async function createTeamVoiceChannel(
   const casterRole = findRole(guild, ROLE_KEYS.Caster)
   const everyoneId = guild.roles.everyone.id
 
+  // Setting `type` explicitly tells discord.js whether the id is a Role or
+  // a Member without doing a cache lookup — required for player ids the bot
+  // has never seen on the gateway (cold cache → InvalidType throw at create).
   const overwrites: Array<{
     id: string
+    type: OverwriteType
     allow?: bigint[]
     deny?: bigint[]
   }> = [
     {
       id: everyoneId,
+      type: OverwriteType.Role,
       deny: [PermissionFlagsBits.Connect, PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Speak],
     },
     ...discordIds.map((id) => ({
       id,
+      type: OverwriteType.Member,
       allow: [
         PermissionFlagsBits.Connect,
         PermissionFlagsBits.ViewChannel,
@@ -97,6 +104,7 @@ async function createTeamVoiceChannel(
   if (casterRole) {
     overwrites.push({
       id: casterRole.id,
+      type: OverwriteType.Role,
       allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Speak],
     })
   }
