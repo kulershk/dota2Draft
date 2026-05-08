@@ -54,6 +54,28 @@ export class UserRepository {
     return row ? new User(row) : null
   }
 
+  /**
+   * Bulk lookup of every player whose discord_id is in the given set AND who
+   * also has steam_id set (the prerequisite for auto-verify). Returned as a
+   * Map keyed by discord_id for cheap O(1) per-member lookups in /verify
+   * checkall and similar bulk flows.
+   */
+  static async verifiableByDiscordIds(discordIds: string[]): Promise<Map<string, User>> {
+    if (!discordIds.length) return new Map()
+    const rows = await query<PlayerRow>(
+      `SELECT ${SELECT_COLUMNS} FROM players
+       WHERE discord_id = ANY($1::text[])
+         AND steam_id IS NOT NULL
+         AND is_banned = FALSE`,
+      [discordIds],
+    )
+    const map = new Map<string, User>()
+    for (const r of rows) {
+      if (r.discord_id) map.set(r.discord_id, new User(r))
+    }
+    return map
+  }
+
   static async bySteamId(steamId: string): Promise<User | null> {
     const row = await queryOne<PlayerRow>(
       `SELECT ${SELECT_COLUMNS} FROM players WHERE steam_id = $1 LIMIT 1`,
