@@ -5,6 +5,7 @@ import { env } from '../env.js'
 import { Logger } from './logger.js'
 import { Settings, loadSettings } from './settings.js'
 import { startMatch, endMatch, listLiveMatches } from './match-voice.js'
+import { PluginManager } from '../core/plugin-manager.js'
 
 interface RoleDto {
   id: string
@@ -162,6 +163,10 @@ export function startInternalServer(client: Client): void {
 
   app.get('/internal/match/live', (_req, res) => {
     res.json({ matches: listLiveMatches() })
+  })
+
+  app.get('/internal/plugins', (_req, res) => {
+    res.json({ plugins: PluginManager.listPluginsMeta() })
   })
 
   app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {

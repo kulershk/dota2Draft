@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { MessageSquare, Save, RefreshCw, ShieldCheck, Hash, Volume2, AlertTriangle, CheckCircle2, Swords } from 'lucide-vue-next'
+import { MessageSquare, Save, RefreshCw, ShieldCheck, Hash, Volume2, AlertTriangle, CheckCircle2, Swords, Puzzle } from 'lucide-vue-next'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
@@ -9,19 +9,23 @@ const api = useApi()
 
 interface RoleDto { id: string; name: string; color: number; managed: boolean }
 interface ChannelDto { id: string; name: string; type: string; parentId: string | null }
+interface PluginDto { name: string; description: string; class: string; enabled: boolean }
 
 const guildId = ref('')
 const roleVerifiedId = ref('')
 const roleCasterId = ref('')
 const welcomeChannelId = ref('')
-const autoVerifyEnabled = ref(true)
 const inhouseVoiceId = ref('')
 const matchCategoryId = ref('')
 const matchVoiceEnabled = ref(false)
 const matchCleanupDelay = ref(10)
+// Map<plugin.name, enabled>. Edited in-place by the toggle UI; saved with the
+// rest of the settings on Save.
+const pluginToggles = ref<Record<string, boolean>>({})
 
 const roles = ref<RoleDto[]>([])
 const channels = ref<ChannelDto[]>([])
+const plugins = ref<PluginDto[]>([])
 
 const loading = ref(true)
 const refreshing = ref(false)
@@ -43,14 +47,21 @@ async function refreshFromBot() {
   refreshing.value = true
   errorMsg.value = ''
   try {
-    const [r, c, h] = await Promise.all([
+    const [r, c, h, p] = await Promise.all([
       api.getDiscordRoles().catch((e) => { throw new Error(`roles: ${e.message}`) }),
       api.getDiscordChannels().catch((e) => { throw new Error(`channels: ${e.message}`) }),
       api.getDiscordHealth(),
+      api.getDiscordPlugins().catch((e) => { throw new Error(`plugins: ${e.message}`) }),
     ])
     roles.value = r.roles
     channels.value = c.channels
     health.value = h
+    plugins.value = p.plugins
+    // Seed the local toggle map from the bot's view (which already merges DB
+    // override with the @Plugin info default).
+    for (const pl of p.plugins) {
+      if (pluginToggles.value[pl.name] === undefined) pluginToggles.value[pl.name] = pl.enabled
+    }
     if (!guildId.value) guildId.value = r.guildId
   } catch (err) {
     errorMsg.value = (err as Error).message
@@ -67,11 +78,17 @@ onMounted(async () => {
     roleVerifiedId.value = settings.discord_role_id_verified || ''
     roleCasterId.value = settings.discord_role_id_caster || ''
     welcomeChannelId.value = settings.discord_welcome_channel_id || ''
-    autoVerifyEnabled.value = settings.discord_auto_verify_enabled !== 'false'
     inhouseVoiceId.value = settings.discord_inhouse_voice_id || ''
     matchCategoryId.value = settings.discord_match_category_id || ''
     matchVoiceEnabled.value = settings.discord_match_voice_enabled === 'true'
     matchCleanupDelay.value = Number(settings.discord_match_cleanup_delay_minutes || '0')
+    // Seed plugin toggles from any persisted discord_plugin_*_enabled keys
+    // BEFORE we hit the bot. refreshFromBot() will then overlay the bot's
+    // canonical list (so unknown stale settings get dropped from the UI).
+    for (const [k, v] of Object.entries(settings)) {
+      const m = k.match(/^discord_plugin_(.+)_enabled$/)
+      if (m) pluginToggles.value[m[1]] = v !== 'false'
+    }
     await refreshFromBot()
   } finally {
     loading.value = false
@@ -83,17 +100,20 @@ async function save() {
   saved.value = false
   errorMsg.value = ''
   try {
-    await api.updateDiscordSettings({
+    const payload: Record<string, string> = {
       discord_guild_id: guildId.value,
       discord_role_id_verified: roleVerifiedId.value,
       discord_role_id_caster: roleCasterId.value,
       discord_welcome_channel_id: welcomeChannelId.value,
-      discord_auto_verify_enabled: autoVerifyEnabled.value ? 'true' : 'false',
       discord_inhouse_voice_id: inhouseVoiceId.value,
       discord_match_category_id: matchCategoryId.value,
       discord_match_voice_enabled: matchVoiceEnabled.value ? 'true' : 'false',
       discord_match_cleanup_delay_minutes: String(matchCleanupDelay.value),
-    })
+    }
+    for (const [name, on] of Object.entries(pluginToggles.value)) {
+      payload[`discord_plugin_${name}_enabled`] = on ? 'true' : 'false'
+    }
+    await api.updateDiscordSettings(payload)
     saved.value = true
     setTimeout(() => { saved.value = false }, 3000)
   } catch (err) {
@@ -209,23 +229,31 @@ async function save() {
       </div>
     </div>
 
-    <!-- Auto-verify -->
+    <!-- Plugins -->
     <div class="card">
       <div class="flex items-center gap-2 px-5 py-3 border-b border-border">
-        <ShieldCheck class="w-4 h-4 text-foreground" />
-        <span class="text-sm font-semibold text-foreground">{{ t('discordAutoVerifySection') }}</span>
+        <Puzzle class="w-4 h-4 text-foreground" />
+        <span class="text-sm font-semibold text-foreground">{{ t('discordPluginsSection') }}</span>
       </div>
-      <div class="px-5 py-4">
-        <label class="flex items-start gap-3 cursor-pointer">
+      <div class="px-5 py-4 flex flex-col gap-3">
+        <p class="text-[11px] text-muted-foreground">{{ t('discordPluginsHint') }}</p>
+        <div v-if="!plugins.length" class="text-sm text-muted-foreground italic">
+          {{ t('discordPluginsEmpty') }}
+        </div>
+        <label
+          v-for="p in plugins"
+          :key="p.name"
+          class="flex items-start gap-3 cursor-pointer rounded-md border border-border px-3 py-2 hover:bg-accent/30"
+        >
           <input
             type="checkbox"
             class="mt-1"
-            :checked="autoVerifyEnabled"
-            @change="autoVerifyEnabled = ($event.target as HTMLInputElement).checked"
+            :checked="pluginToggles[p.name] !== false"
+            @change="pluginToggles[p.name] = ($event.target as HTMLInputElement).checked"
           />
           <span class="flex-1">
-            <span class="block text-sm font-medium text-foreground">{{ t('discordAutoVerifyEnabled') }}</span>
-            <span class="block text-[11px] text-muted-foreground mt-0.5">{{ t('discordAutoVerifyEnabledHint') }}</span>
+            <span class="block text-sm font-medium text-foreground">{{ p.name }}</span>
+            <span class="block text-[11px] text-muted-foreground mt-0.5">{{ p.description }}</span>
           </span>
         </label>
       </div>

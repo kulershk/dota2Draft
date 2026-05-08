@@ -7,17 +7,22 @@ const router = Router()
 const BOT_BASE = process.env.DISCORD_BOT_INTERNAL_URL || 'http://draft-discordbot:3030'
 const BOT_TOKEN = process.env.INTERNAL_TOKEN || ''
 
+// Static settings keys returned by GET and accepted by PUT. Plugin toggles
+// (`discord_plugin_<name>_enabled`) are also accepted by PUT but are NOT
+// listed here — they are dynamic, driven by what the bot reports at
+// /internal/plugins.
 const KEYS = [
   'discord_guild_id',
   'discord_role_id_verified',
   'discord_role_id_caster',
   'discord_welcome_channel_id',
-  'discord_auto_verify_enabled',
   'discord_inhouse_voice_id',
   'discord_match_category_id',
   'discord_match_voice_enabled',
   'discord_match_cleanup_delay_minutes',
 ]
+
+const PLUGIN_KEY_RE = /^discord_plugin_[a-zA-Z0-9_]+_enabled$/
 
 async function botGet(path) {
   const res = await fetch(`${BOT_BASE}${path}`, {
@@ -42,8 +47,10 @@ async function botPost(path) {
 router.get('/api/admin/discord/settings', async (req, res) => {
   const admin = await requirePermission(req, res, 'manage_discord_settings')
   if (!admin) return
+  // Return both the static KEYS and any persisted plugin toggle keys so the
+  // admin UI can render their current state without a separate fetch.
   const rows = await query(
-    `SELECT key, value FROM settings WHERE key = ANY($1::text[])`,
+    `SELECT key, value FROM settings WHERE key = ANY($1::text[]) OR key LIKE 'discord_plugin_%'`,
     [KEYS],
   )
   const out = {}
@@ -56,9 +63,9 @@ router.put('/api/admin/discord/settings', async (req, res) => {
   const admin = await requirePermission(req, res, 'manage_discord_settings')
   if (!admin) return
   const body = req.body || {}
-  for (const key of KEYS) {
-    if (body[key] === undefined) continue
-    const value = String(body[key] ?? '')
+  for (const [key, raw] of Object.entries(body)) {
+    if (!KEYS.includes(key) && !PLUGIN_KEY_RE.test(key)) continue
+    const value = String(raw ?? '')
     await execute(
       `INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2`,
       [key, value],
@@ -72,6 +79,17 @@ router.put('/api/admin/discord/settings', async (req, res) => {
     console.warn('[discord-settings] bot reload failed:', err.message)
   }
   res.json({ ok: true })
+})
+
+router.get('/api/admin/discord/plugins', async (req, res) => {
+  const admin = await requirePermission(req, res, 'manage_discord_settings')
+  if (!admin) return
+  try {
+    const data = await botGet('/internal/plugins')
+    res.json(data)
+  } catch (err) {
+    res.status(502).json({ error: err.message })
+  }
 })
 
 router.get('/api/admin/discord/roles', async (req, res) => {

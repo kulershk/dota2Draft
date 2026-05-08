@@ -1,5 +1,6 @@
 import type { Client, ClientEvents } from 'discord.js'
 import { Logger } from '../services/logger.js'
+import { Settings } from '../services/settings.js'
 import type {
   EventHookInfo,
   LoadedPlugin,
@@ -44,6 +45,25 @@ export class PluginManager {
     this.hookStore.get(hook.event)!.push(hook)
   }
 
+  // True if the plugin is enabled for runtime hook firing. Default = the
+  // @Plugin({ enabled }) info value (defaults to true). Admins override per
+  // plugin via the `discord_plugin_<pluginName>_enabled` setting key.
+  static isPluginEnabled(pluginClassName: string): boolean {
+    const managed = this.pluginStore.get(pluginClassName)
+    if (!managed) return false
+    const defaultEnabled = managed.info.enabled !== false
+    return Settings.getBool(`plugin_${managed.info.name}_enabled`, defaultEnabled)
+  }
+
+  static listPluginsMeta(): Array<{ name: string; description: string; class: string; enabled: boolean }> {
+    return [...this.pluginStore.entries()].map(([cls, m]) => ({
+      class: cls,
+      name: m.info.name,
+      description: m.info.description,
+      enabled: this.isPluginEnabled(cls),
+    }))
+  }
+
   static bindHooks(): void {
     const client = this.getClient()
     for (const [event, hooks] of this.hookStore) {
@@ -51,6 +71,10 @@ export class PluginManager {
         for (const hook of hooks) {
           const managed = this.pluginStore.get(hook.target)
           if (!managed) continue
+          // Central enable-gate. Plugins themselves no longer need to read
+          // settings — toggling here turns every @EventHook on the plugin
+          // off in one place.
+          if (!this.isPluginEnabled(hook.target)) continue
           try {
             const fn = (managed.instance as any)[hook.method]
             if (typeof fn === 'function') fn.call(managed.instance, ...args)

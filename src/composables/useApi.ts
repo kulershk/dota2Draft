@@ -316,6 +316,10 @@ export function useApi() {
       }>,
     getDiscordHealth: () =>
       request('/api/admin/discord/health') as Promise<{ reachable: boolean; ready?: boolean; bot?: string | null; settingsLoaded?: boolean; error?: string }>,
+    getDiscordPlugins: () =>
+      request('/api/admin/discord/plugins') as Promise<{
+        plugins: Array<{ name: string; description: string; class: string; enabled: boolean }>
+      }>,
 
     // Site Settings
     getSiteSettings: () => request('/api/site-settings'),

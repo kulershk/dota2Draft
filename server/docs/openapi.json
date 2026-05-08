@@ -2201,6 +2201,18 @@
         "responses": { "200": { "description": "{ ok } or { ok: false, reason }" } }
       }
     },
+    "/api/admin/discord/plugins": {
+      "get": {
+        "tags": ["Discord"],
+        "summary": "List bot plugins (autoVerify, welcome, …) with current enabled state",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_discord_settings. Proxies the bot's GET /internal/plugins. Each plugin's enabled state reflects the persisted `discord_plugin_<name>_enabled` setting (default = the plugin's @Plugin({enabled}) info value, true if absent).\n\nTo toggle: PUT /api/admin/discord/settings with `{ discord_plugin_<name>_enabled: 'true' | 'false' }`. The bot is reloaded immediately; gating is enforced centrally in PluginManager.bindHooks so no plugin code change is required.",
+        "responses": {
+          "200": { "description": "{ plugins: [{ name, description, class, enabled }] }" },
+          "502": { "description": "Bot unreachable" }
+        }
+      }
+    },
     "/api/admin/discord/health": {
       "get": {
         "tags": ["Discord"],
