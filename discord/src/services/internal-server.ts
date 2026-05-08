@@ -145,14 +145,19 @@ export function startInternalServer(client: Client): void {
     }
   })
 
-  app.post('/internal/match/end', (req, res) => {
+  app.post('/internal/match/end', async (req, res) => {
     const { matchId, immediate } = req.body ?? {}
     if (!matchId) {
       res.status(400).json({ error: 'matchId required' })
       return
     }
-    const result = endMatch(client, Number(matchId), Boolean(immediate))
-    res.json(result)
+    try {
+      const result = await endMatch(client, Number(matchId), Boolean(immediate))
+      res.json(result)
+    } catch (err) {
+      Logger.error('POST /internal/match/end failed', err)
+      res.status(500).json({ error: (err as Error).message })
+    }
   })
 
   app.get('/internal/match/live', (_req, res) => {

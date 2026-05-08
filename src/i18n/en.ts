@@ -542,14 +542,14 @@ export default {
   discordAutoVerifyEnabledHint: 'When enabled, the bot grants the Verified role to new members whose Discord is already linked to a Steam account on the site.',
   discordMatchVoiceSection: 'Match voice channels',
   discordMatchVoiceEnabled: 'Spin up team voice channels when a queue match starts',
-  discordMatchVoiceEnabledHint: 'When a /queue lobby is created, the bot adds two voice channels (Radiant + Dire), restricts them to the team\'s linked Discord users + Caster role, and pulls those players from the In-House channel into their team.',
+  discordMatchVoiceEnabledHint: 'When a /queue lobby is created, the bot adds two voice channels named after each captain (5-slot limit, restricted to the team\'s linked Discord users + Caster role) and pulls those players from the In-House channel into their team. When the match ends everyone is moved back to In-House.',
   discordInhouseVoice: 'In-House voice channel',
   discordInhouseVoiceHint: 'Players sitting here when the lobby is created get auto-moved to their team channel. Players elsewhere are skipped (no error).',
   discordMatchCategory: 'Match channels category',
   discordMatchCategoryHint: 'Optional — the category the team channels appear in. Leave blank to put them at the top level.',
   discordCategoryNone: '— top level —',
   discordMatchCleanupDelay: 'Cleanup delay (minutes)',
-  discordMatchCleanupDelayHint: 'After the match ends, wait this long before moving stragglers back and deleting the team channels. Cancellations always clean up immediately.',
+  discordMatchCleanupDelayHint: 'Players are moved back to In-House the moment the match ends. This delay only controls when the empty team channels get deleted. Default 0 = delete immediately. Set higher (e.g. 5) only if you want the empty rooms to linger.',
 
   // Admin: Site Settings
   siteSettings: 'Site Settings',

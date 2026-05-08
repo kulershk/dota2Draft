@@ -541,14 +541,14 @@ export default {
   discordAutoVerifyEnabledHint: 'Ja ieslēgts, bots piešķir Verificēta lomu jauniem dalībniekiem, kuru Discord konts vietnē jau ir saistīts ar Steam.',
   discordMatchVoiceSection: 'Spēļu balss kanāli',
   discordMatchVoiceEnabled: 'Veidot komandu balss kanālus, kad sākas /queue spēle',
-  discordMatchVoiceEnabledHint: 'Kad /queue lobijs ir izveidots, bots izveido divus balss kanālus (Radiant + Dire), piešķir tos tikai komandai un Caster lomai, un pārvieto šos spēlētājus no In-House kanāla uz savas komandas kanālu.',
+  discordMatchVoiceEnabledHint: 'Kad /queue lobijs ir izveidots, bots izveido divus balss kanālus, kas nosaukti pēc kapteiņiem (5 vietas, redzami tikai komandas dalībniekiem un Caster lomai), un pārvieto šos spēlētājus no In-House kanāla uz savas komandas kanālu. Kad spēle beidzas, visi tiek pārvietoti atpakaļ uz In-House.',
   discordInhouseVoice: 'In-House balss kanāls',
   discordInhouseVoiceHint: 'Spēlētāji, kuri šeit atrodas lobija izveides brīdī, tiek automātiski pārvietoti uz komandas kanālu. Pārējie tiek izlaisti (bez kļūdas).',
   discordMatchCategory: 'Spēļu kanālu kategorija',
   discordMatchCategoryHint: 'Neobligāti — kategorija, kurā parādīsies komandu kanāli. Atstāj tukšu, lai novietotu virspusē.',
   discordCategoryNone: '— virspusē —',
   discordMatchCleanupDelay: 'Tīrīšanas aizture (minūtes)',
-  discordMatchCleanupDelayHint: 'Pēc spēles beigām cik ilgi nogaidīt pirms atlikušos pārvietot atpakaļ un dzēst komandu kanālus. Atcelšanas gadījumā tīrīšana notiek uzreiz.',
+  discordMatchCleanupDelayHint: 'Spēlētāji tiek pārvietoti atpakaļ uz In-House uzreiz, tiklīdz spēle beidzas. Šī aizture nosaka tikai to, kad tiek dzēsti tukšie komandu kanāli. Standarta 0 = dzēst uzreiz. Palielini (piem. 5) tikai tad, ja vēlies, lai tukšie kanāli vēl mirkli paliek.',
 
   // Admin: Site Settings
   siteSettings: 'Vietnes iestatījumi',

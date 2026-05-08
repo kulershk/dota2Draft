@@ -71,7 +71,7 @@ onMounted(async () => {
     inhouseVoiceId.value = settings.discord_inhouse_voice_id || ''
     matchCategoryId.value = settings.discord_match_category_id || ''
     matchVoiceEnabled.value = settings.discord_match_voice_enabled === 'true'
-    matchCleanupDelay.value = Number(settings.discord_match_cleanup_delay_minutes || '10')
+    matchCleanupDelay.value = Number(settings.discord_match_cleanup_delay_minutes || '0')
     await refreshFromBot()
   } finally {
     loading.value = false

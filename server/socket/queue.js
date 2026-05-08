@@ -1087,8 +1087,16 @@ async function finalizeQueueMatch(queueMatchId, io) {
       .matchStart({
         matchId: matchRow.id,
         queueMatchId,
-        team1: { side: 'radiant', playerIds: team1.map((p) => p.playerId) },
-        team2: { side: 'dire', playerIds: team2.map((p) => p.playerId) },
+        team1: {
+          side: 'radiant',
+          captainName: match.captain1?.name,
+          playerIds: team1.map((p) => p.playerId),
+        },
+        team2: {
+          side: 'dire',
+          captainName: match.captain2?.name,
+          playerIds: team2.map((p) => p.playerId),
+        },
       })
       .catch((err) => console.warn('[Queue] discord matchStart failed:', err.message))
   } catch (e) {

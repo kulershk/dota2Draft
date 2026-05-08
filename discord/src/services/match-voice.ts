@@ -15,6 +15,7 @@ import { query } from './db.js'
 
 interface TeamSpec {
   side: 'radiant' | 'dire'
+  captainName?: string
   playerIds: number[]
 }
 
@@ -25,9 +26,13 @@ interface StartMatchPayload {
   team2: TeamSpec
 }
 
-const TEAM_NAMES: Record<TeamSpec['side'], string> = {
-  radiant: '🟢 Radiant',
-  dire: '🔴 Dire',
+const TEAM_USER_LIMIT = 5
+
+function teamChannelName(team: TeamSpec, matchId: number): string {
+  const base = team.captainName?.trim() || (team.side === 'radiant' ? 'Radiant' : 'Dire')
+  // Discord caps channel names at 100 chars.
+  const name = base.slice(0, 80)
+  return team.side === 'radiant' ? `🟢 ${name}` : `🔴 ${name}`
 }
 
 // matchId -> { radiantChannelId, direChannelId, cleanupTimer }
@@ -97,9 +102,10 @@ async function createTeamVoiceChannel(
   }
 
   return guild.channels.create({
-    name: `${TEAM_NAMES[team.side]} — Match #${matchId}`,
+    name: teamChannelName(team, matchId),
     type: ChannelType.GuildVoice,
     parent: category?.id ?? undefined,
+    userLimit: TEAM_USER_LIMIT,
     permissionOverwrites: overwrites,
     reason: `Queue match #${matchId} ${team.side}`,
   })
@@ -139,7 +145,29 @@ async function moveFromInHouseToTeams(
   return { moved, absent }
 }
 
-async function cleanupMatch(client: Client, matchId: number): Promise<void> {
+async function moveTeamMembersToInHouse(
+  guild: Guild,
+  channelIds: string[],
+  inhouseId: string,
+): Promise<number> {
+  let moved = 0
+  for (const channelId of channelIds) {
+    const ch = guild.channels.cache.get(channelId) as VoiceChannel | undefined
+    if (!ch) continue
+    const members = [...ch.members.values()]
+    for (const m of members) {
+      try {
+        await m.voice.setChannel(inhouseId, 'Match ended — return to In-House')
+        moved++
+      } catch (err) {
+        Logger.warn(`match-voice: failed to return ${m.user.tag} to in-house: ${(err as Error).message}`)
+      }
+    }
+  }
+  return moved
+}
+
+async function deleteMatchChannels(client: Client, matchId: number): Promise<void> {
   const state = liveMatches.get(matchId)
   if (!state) return
   liveMatches.delete(matchId)
@@ -147,22 +175,9 @@ async function cleanupMatch(client: Client, matchId: number): Promise<void> {
   const guild = await fetchGuild(client)
   if (!guild) return
 
-  const inhouseId = Settings.get('inhouse_voice_id')
   for (const channelId of [state.radiantChannelId, state.direChannelId]) {
     const ch = guild.channels.cache.get(channelId) as VoiceChannel | undefined
     if (!ch) continue
-
-    if (inhouseId) {
-      // Move any stragglers back to in-house before deleting.
-      const members = [...ch.members.values()]
-      for (const m of members) {
-        try {
-          await m.voice.setChannel(inhouseId, 'Match ended — return to In-House')
-        } catch (err) {
-          Logger.warn(`match-voice: failed to return ${m.user.tag} to in-house: ${(err as Error).message}`)
-        }
-      }
-    }
     try {
       await ch.delete(`Match #${matchId} ended`)
       Logger.info(`match-voice: deleted ${ch.name}`)
@@ -229,21 +244,46 @@ export async function startMatch(client: Client, payload: StartMatchPayload): Pr
   }
 }
 
-export function endMatch(client: Client, matchId: number, immediate = false): { ok: boolean; reason?: string } {
+export async function endMatch(
+  client: Client,
+  matchId: number,
+  immediate = false,
+): Promise<{ ok: boolean; reason?: string; movedBack?: number }> {
   const state = liveMatches.get(matchId)
   if (!state) return { ok: false, reason: 'no live voice channels for this match' }
 
   if (state.cleanupTimer) clearTimeout(state.cleanupTimer)
 
-  const delayMin = Number(Settings.get('match_cleanup_delay_minutes', '10'))
+  // Step 1 (always immediate): pull every member from the team channels back
+  // to In-House, so nobody is stuck in a half-empty room.
+  let movedBack = 0
+  const guild = await fetchGuild(client)
+  const inhouseId = Settings.get('inhouse_voice_id')
+  if (guild && inhouseId) {
+    movedBack = await moveTeamMembersToInHouse(
+      guild,
+      [state.radiantChannelId, state.direChannelId],
+      inhouseId,
+    )
+  }
+
+  // Step 2 (delayed): delete the empty channels. Default is 0 → also instant;
+  // bump match_cleanup_delay_minutes if you want to keep the rooms around for
+  // post-game discussion (which won't have anyone in them anyway, so usually
+  // skip this).
+  const delayMin = Number(Settings.get('match_cleanup_delay_minutes', '0'))
   const delayMs = immediate ? 0 : Math.max(0, delayMin) * 60_000
 
   state.cleanupTimer = setTimeout(() => {
-    cleanupMatch(client, matchId).catch((err) => Logger.error(`cleanupMatch ${matchId} failed`, err))
+    deleteMatchChannels(client, matchId).catch((err) =>
+      Logger.error(`deleteMatchChannels ${matchId} failed`, err),
+    )
   }, delayMs)
 
-  Logger.info(`match-voice: scheduled cleanup for match #${matchId} in ${delayMs}ms`)
-  return { ok: true }
+  Logger.info(
+    `match-voice: ended match #${matchId} — moved ${movedBack} back, channels delete in ${delayMs}ms`,
+  )
+  return { ok: true, movedBack }
 }
 
 export function listLiveMatches(): Array<{ matchId: number; radiantChannelId: string; direChannelId: string }> {
