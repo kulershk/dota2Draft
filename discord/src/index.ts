@@ -1,5 +1,6 @@
 import 'reflect-metadata'
 import { Client, Events, GatewayIntentBits } from 'discord.js'
+import { MSG_FLAG_EPHEMERAL } from './core/flags.js'
 import { env } from './env.js'
 import { Logger } from './services/logger.js'
 import { ping as dbPing } from './services/db.js'
@@ -54,7 +55,7 @@ async function main(): Promise<void> {
         await cmd.instance.execute(interaction, client)
       } catch (err) {
         Logger.error(`Command ${interaction.commandName} failed`, err)
-        const reply = { content: 'Command failed.', ephemeral: true }
+        const reply = { content: 'Command failed.', flags: MSG_FLAG_EPHEMERAL }
         if (interaction.deferred || interaction.replied) {
           await interaction.followUp(reply).catch(() => {})
         } else {

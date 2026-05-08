@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, type ChatInputCommandInteraction, type GuildMember } from 'discord.js'
 import { Command } from '../core/decorators/command.js'
 import { BaseCommand } from '../core/types.js'
+import { MSG_FLAG_EPHEMERAL } from '../core/flags.js'
 import { UserRepository } from '../services/user-repository.js'
 import { ensureRole, ROLE_KEYS } from '../services/roles.js'
 
@@ -11,7 +12,7 @@ import { ensureRole, ROLE_KEYS } from '../services/roles.js'
 )
 export class Verify extends BaseCommand {
   override async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    await interaction.deferReply({ ephemeral: true })
+    await interaction.deferReply({ flags: MSG_FLAG_EPHEMERAL })
 
     if (!interaction.inCachedGuild() || !interaction.member) {
       await interaction.editReply('This command can only be used inside the server.')

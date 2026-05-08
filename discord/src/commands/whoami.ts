@@ -1,12 +1,13 @@
 import { SlashCommandBuilder, type ChatInputCommandInteraction } from 'discord.js'
 import { Command } from '../core/decorators/command.js'
 import { BaseCommand } from '../core/types.js'
+import { MSG_FLAG_EPHEMERAL } from '../core/flags.js'
 import { UserRepository } from '../services/user-repository.js'
 
 @Command(new SlashCommandBuilder().setName('whoami').setDescription('Show your linked draft account'))
 export class WhoAmI extends BaseCommand {
   override async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    await interaction.deferReply({ ephemeral: true })
+    await interaction.deferReply({ flags: MSG_FLAG_EPHEMERAL })
     const user = await UserRepository.byDiscordId(interaction.user.id)
     if (!user) {
       await interaction.editReply('No linked draft account. Sign in with Discord on the site to link.')
