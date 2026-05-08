@@ -96,7 +96,9 @@ export class TournamentAnnounce implements PluginInterface {
     }
     if (payload.bannerUrl) embed.setImage(payload.bannerUrl)
     if (fields.length) embed.addFields(...fields)
-    if (payload.publicUrl) embed.addFields({ name: 'Pieteikšanās', value: payload.publicUrl })
+    if (payload.publicUrl) {
+      embed.addFields({ name: 'Pieteikšanās', value: `[${payload.publicUrl}](${payload.publicUrl})` })
+    }
 
     try {
       await (channel as TextChannel).send({ embeds: [embed] })

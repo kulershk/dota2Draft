@@ -46,6 +46,7 @@ services:
       - DISCORD_CLIENT_SECRET=${DISCORD_CLIENT_SECRET}
       - DISCORD_BOT_INTERNAL_URL=http://draft-discordbot:3030
       - INTERNAL_TOKEN=${INTERNAL_TOKEN}
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-https://dota.lv}
       - REQUEST_LOG_DISABLED=${REQUEST_LOG_DISABLED:-false}
     volumes:
       - draft_uploads:/app/uploads
