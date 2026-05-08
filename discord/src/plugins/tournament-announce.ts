@@ -97,7 +97,9 @@ export class TournamentAnnounce implements PluginInterface {
     if (payload.bannerUrl) embed.setImage(payload.bannerUrl)
     if (fields.length) embed.addFields(...fields)
     if (payload.publicUrl) {
-      embed.addFields({ name: 'Pieteikšanās', value: `[${payload.publicUrl}](${payload.publicUrl})` })
+      // Use a friendly label — Discord's auto-linker corrupts the field if
+      // we put a URL as the markdown text (renders as nested brackets).
+      embed.addFields({ name: 'Pieteikšanās', value: `🔗 [Atvērt turnīra lapu](${payload.publicUrl})` })
     }
 
     try {
