@@ -128,7 +128,7 @@ const navGroups: NavGroup[] = [
     labelKey: 'navGroupTournaments',
     icon: Trophy,
     children: [
-      { labelKey: 'adminCompetitions', icon: Trophy, path: '/admin/competitions', permissions: ['manage_competitions', 'manage_own_competitions'] },
+      { labelKey: 'adminCompetitions', icon: Trophy, path: '/admin/competitions', permissions: ['manage_competitions', 'manage_own_competitions', '_helps_competition'] },
       { labelKey: 'adminGames', icon: Gamepad2, path: '/admin/games', permissions: ['manage_games'] },
       { labelKey: 'adminFantasy', icon: Star, path: '/admin/fantasy', permissions: ['manage_fantasy'] },
       { labelKey: 'adminQueuePools', icon: Swords, path: '/admin/queue', permissions: ['manage_queue_pools', 'manage_own_queue_pools'] },

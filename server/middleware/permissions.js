@@ -74,12 +74,13 @@ export async function requireCompPermission(req, res, compId, subPermission) {
   if (!player) { res.status(401).json({ error: 'Not authenticated' }); return null }
   if (await hasPermission(player, 'manage_competitions')) return player
   if (subPermission && await hasPermission(player, subPermission)) return player
+  // Helper grant: anyone explicitly added to competition_helpers passes,
+  // even without the global manage_own_competitions perm.
+  if (compId && await isCompetitionHelper(player.id, compId)) return player
   if (await hasPermission(player, 'manage_own_competitions')) {
     if (!compId) return player
     const comp = await getCompetition(compId)
     if (comp && comp.created_by === player.id) return player
-    // Helper grant — same scope as creator on this comp.
-    if (await isCompetitionHelper(player.id, compId)) return player
   }
   res.status(403).json({ error: 'Permission denied' })
   return null

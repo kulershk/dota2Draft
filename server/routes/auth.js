@@ -74,6 +74,17 @@ router.get('/api/auth/me', async (req, res) => {
   execute('UPDATE players SET last_online = NOW() WHERE id = $1', [player.id]).catch(() => {})
   const perms = await getPlayerPermissions(player.id)
 
+  // Virtual perm: lights up if the player is a helper on any competition.
+  // Lets the frontend route guard and sidebar surface /admin/competitions
+  // for helpers without granting them the global manage_own_competitions
+  // perm. Server-side enforcement lives in requireCompPermission +
+  // isCompetitionHelper — this flag is purely UI gating.
+  const helperRow = await queryOne(
+    'SELECT 1 FROM competition_helpers WHERE player_id = $1 LIMIT 1',
+    [player.id],
+  )
+  if (helperRow) perms.add('_helps_competition')
+
   let bannedByName = null
   if (player.is_banned && player.banned_by) {
     const banner = await queryOne(
@@ -141,6 +152,12 @@ router.put('/api/auth/me', async (req, res) => {
 
   const updated = await queryOne('SELECT * FROM players WHERE id = $1', [player.id])
   const updatedPerms = await getPlayerPermissions(updated.id)
+  // See GET /api/auth/me — virtual perm for "helps on at least one comp".
+  const updatedHelperRow = await queryOne(
+    'SELECT 1 FROM competition_helpers WHERE player_id = $1 LIMIT 1',
+    [updated.id],
+  )
+  if (updatedHelperRow) updatedPerms.add('_helps_competition')
   res.json({
     id: updated.id,
     name: updated.display_name || updated.name,
