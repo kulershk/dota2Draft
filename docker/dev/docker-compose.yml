@@ -44,6 +44,24 @@ services:
       - draft-app
     restart: unless-stopped
 
+  draft-discordbot:
+    container_name: draft-dev-discordbot
+    build:
+      context: ../../discord
+      dockerfile: Dockerfile
+    environment:
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+      - DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
+      - DISCORD_GUILD_ID=${DISCORD_GUILD_ID:-}
+      - API_BASE_URL=http://draft-dev-app:3001
+      - DATABASE_URL=postgresql://draft:draft@draft-dev-db:5432/draft
+    depends_on:
+      draft-dev-db:
+        condition: service_healthy
+      draft-app:
+        condition: service_started
+    restart: unless-stopped
+
   draft-dev-db:
     image: postgres:16-alpine
     container_name: draft-dev-db
