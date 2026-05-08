@@ -1,4 +1,7 @@
 import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   ChannelType,
   EmbedBuilder,
   type Client,
@@ -96,14 +99,23 @@ export class TournamentAnnounce implements PluginInterface {
     }
     if (payload.bannerUrl) embed.setImage(payload.bannerUrl)
     if (fields.length) embed.addFields(...fields)
-    if (payload.publicUrl) {
-      // Use a friendly label — Discord's auto-linker corrupts the field if
-      // we put a URL as the markdown text (renders as nested brackets).
-      embed.addFields({ name: 'Pieteikšanās', value: `🔗 [Atvērt turnīra lapu](${payload.publicUrl})` })
-    }
+    // A real Link button instead of a markdown link — embed-field markdown
+    // links are inconsistently rendered across Discord clients (mobile vs
+    // desktop, and the auto-linker mangles [url](url) shapes). The button
+    // appears under the embed as a proper clickable.
+    const components = payload.publicUrl
+      ? [
+          new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder()
+              .setLabel('🔗 Atvērt turnīra lapu')
+              .setStyle(ButtonStyle.Link)
+              .setURL(payload.publicUrl),
+          ),
+        ]
+      : []
 
     try {
-      await (channel as TextChannel).send({ embeds: [embed] })
+      await (channel as TextChannel).send({ embeds: [embed], components })
       Logger.info(`tournamentAnnounce: posted comp #${payload.id} (${payload.name})`)
     } catch (err) {
       Logger.error(`tournamentAnnounce: failed to send for comp #${payload.id}`, err)
