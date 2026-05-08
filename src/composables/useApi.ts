@@ -300,6 +300,23 @@ export function useApi() {
     setPlayerGroups: (playerId: number, groupIds: number[]) =>
       request(`/api/players/${playerId}/groups`, { method: 'PUT', body: JSON.stringify({ groupIds }) }),
 
+    // Discord Settings (admin)
+    getDiscordSettings: () => request('/api/admin/discord/settings') as Promise<Record<string, string>>,
+    updateDiscordSettings: (data: Record<string, string | boolean>) =>
+      request('/api/admin/discord/settings', { method: 'PUT', body: JSON.stringify(data) }),
+    getDiscordRoles: () =>
+      request('/api/admin/discord/roles') as Promise<{
+        guildId: string
+        roles: Array<{ id: string; name: string; color: number; position: number; managed: boolean; hoist: boolean; mentionable: boolean }>
+      }>,
+    getDiscordChannels: () =>
+      request('/api/admin/discord/channels') as Promise<{
+        guildId: string
+        channels: Array<{ id: string; name: string; type: 'text' | 'voice' | 'category' | 'announcement' | 'forum' | 'stage' | 'other'; parentId: string | null; position: number }>
+      }>,
+    getDiscordHealth: () =>
+      request('/api/admin/discord/health') as Promise<{ reachable: boolean; ready?: boolean; bot?: string | null; settingsLoaded?: boolean; error?: string }>,
+
     // Site Settings
     getSiteSettings: () => request('/api/site-settings'),
     // Stale-while-revalidate variant: returns cached payload from localStorage

@@ -16,6 +16,8 @@ services:
       - TWITCH_CLIENT_SECRET=${TWITCH_CLIENT_SECRET}
       - DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
       - DISCORD_CLIENT_SECRET=${DISCORD_CLIENT_SECRET}
+      - DISCORD_BOT_INTERNAL_URL=http://draft-dev-discordbot:3030
+      - INTERNAL_TOKEN=${INTERNAL_TOKEN}
     volumes:
       - ../../src:/app/src
       - ../../server:/app/server
@@ -55,6 +57,9 @@ services:
       - DISCORD_GUILD_ID=${DISCORD_GUILD_ID:-}
       - API_BASE_URL=http://draft-dev-app:3001
       - DATABASE_URL=postgresql://draft:draft@draft-dev-db:5432/draft
+      - INTERNAL_TOKEN=${INTERNAL_TOKEN}
+      - INTERNAL_PORT=3030
+      - ENABLE_GUILD_MEMBERS_INTENT=${ENABLE_GUILD_MEMBERS_INTENT:-false}
     depends_on:
       draft-dev-db:
         condition: service_healthy

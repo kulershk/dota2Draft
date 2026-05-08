@@ -20,6 +20,7 @@
     { "name": "Users", "description": "Global user management (admin)" },
     { "name": "Permissions", "description": "Permission groups" },
     { "name": "Settings", "description": "Site settings" },
+    { "name": "Discord", "description": "Discord bot settings — admin panel for the discord/ service" },
     { "name": "Streams", "description": "Twitch streams" },
     { "name": "Queue", "description": "Queue matchmaking pools & matches" },
     { "name": "Seasons", "description": "Ranked seasons — ELO ladders attached to queue pools" },
@@ -2120,6 +2121,67 @@
         "description": "Requires manage_site_settings permission. Setting `sockets_enabled: false` immediately disconnects all currently-connected Socket.io clients and refuses new handshakes until re-enabled. The flag is persisted, so it survives server restarts.",
         "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "site_title": { "type": "string" }, "site_subtitle": { "type": "string" }, "site_hero_paragraph": { "type": "string" }, "site_discord_url": { "type": "string" }, "site_name": { "type": "string" }, "sockets_enabled": { "type": "boolean" } } } } } },
         "responses": { "200": { "description": "Updated" } }
+      }
+    },
+    "/api/admin/discord/settings": {
+      "get": {
+        "tags": ["Discord"],
+        "summary": "Get Discord bot settings",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_discord_settings. Returns persisted discord_* keys (guild ID, role IDs, welcome channel, auto-verify toggle). Empty string for unset keys.",
+        "responses": {
+          "200": {
+            "description": "Settings object",
+            "content": { "application/json": { "schema": { "type": "object", "properties": {
+              "discord_guild_id": { "type": "string" },
+              "discord_role_id_verified": { "type": "string" },
+              "discord_role_id_caster": { "type": "string" },
+              "discord_welcome_channel_id": { "type": "string" },
+              "discord_auto_verify_enabled": { "type": "string", "description": "'true' or 'false' (stored as string)" }
+            } } } }
+          }
+        }
+      },
+      "put": {
+        "tags": ["Discord"],
+        "summary": "Update Discord bot settings",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_discord_settings. Triggers an async POST /internal/reload-settings on the bot so changes apply within ~1s instead of waiting for the 60s poll.",
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "additionalProperties": { "type": "string" } } } } },
+        "responses": { "200": { "description": "Updated" } }
+      }
+    },
+    "/api/admin/discord/roles": {
+      "get": {
+        "tags": ["Discord"],
+        "summary": "List Discord roles via the bot",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_discord_settings. Proxies the bot's GET /internal/roles. Returns roles for the configured guild.",
+        "responses": {
+          "200": { "description": "{ guildId, roles: [{ id, name, color, position, managed, hoist, mentionable }] }" },
+          "502": { "description": "Bot unreachable" }
+        }
+      }
+    },
+    "/api/admin/discord/channels": {
+      "get": {
+        "tags": ["Discord"],
+        "summary": "List Discord channels via the bot",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_discord_settings. Proxies the bot's GET /internal/channels.",
+        "responses": {
+          "200": { "description": "{ guildId, channels: [{ id, name, type, parentId, position }] }" },
+          "502": { "description": "Bot unreachable" }
+        }
+      }
+    },
+    "/api/admin/discord/health": {
+      "get": {
+        "tags": ["Discord"],
+        "summary": "Bot reachability check",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_discord_settings. Hits the bot's /internal/health (no auth) and reports reachable/ready/settingsLoaded.",
+        "responses": { "200": { "description": "{ reachable, ready, bot, settingsLoaded } or { reachable: false, error }" } }
       }
     },
     "/api/site-settings/logo": {

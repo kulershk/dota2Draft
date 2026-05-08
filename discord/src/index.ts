@@ -6,19 +6,25 @@ import { ping as dbPing } from './services/db.js'
 import { CommandManager } from './core/command-manager.js'
 import { PluginManager } from './core/plugin-manager.js'
 import { CronManager } from './core/cron-manager.js'
+import { loadSettings, startSettingsRefresh } from './services/settings.js'
+import { startInternalServer } from './services/internal-server.js'
 
 async function main(): Promise<void> {
   try {
     await dbPing()
     Logger.info('Connected to database')
+    await loadSettings()
+    startSettingsRefresh()
   } catch (err) {
     Logger.error('Database ping failed (continuing anyway)', err)
   }
 
-  // Only non-privileged intents by default. Add GuildMembers / GuildMessages /
-  // MessageContent here AND flip them on at https://discord.com/developers
-  // once a plugin actually needs them.
-  const client = new Client({ intents: [GatewayIntentBits.Guilds] })
+  // GuildMembers is privileged — opt in via ENABLE_GUILD_MEMBERS_INTENT=true
+  // AFTER toggling SERVER MEMBERS INTENT at https://discord.com/developers.
+  // Without it, the auto-verify plugin's onGuildMemberAdd hook never fires.
+  const intents = [GatewayIntentBits.Guilds]
+  if (env.ENABLE_GUILD_MEMBERS_INTENT) intents.push(GatewayIntentBits.GuildMembers)
+  const client = new Client({ intents })
   client.on('error', (e) => Logger.error('client error', e))
 
   await client.login(env.DISCORD_BOT_TOKEN)
@@ -35,6 +41,8 @@ async function main(): Promise<void> {
   CronManager.setClient(client)
   await CronManager.load()
   CronManager.start(client)
+
+  startInternalServer(client)
 
   client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.isChatInputCommand()) {

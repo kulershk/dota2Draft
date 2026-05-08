@@ -57,6 +57,7 @@ const router = createRouter({
         { path: 'users', name: 'admin-users', meta: { permissions: ['manage_users'] }, component: () => import('@/pages/admin/AdminUsersPage.vue') },
         { path: 'news', name: 'admin-news', meta: { permissions: ['manage_news'] }, component: () => import('@/pages/admin/AdminNewsPage.vue') },
         { path: 'settings', name: 'admin-settings', meta: { permissions: ['manage_site_settings'] }, component: () => import('@/pages/admin/AdminSiteSettingsPage.vue') },
+        { path: 'discord', name: 'admin-discord', meta: { permissions: ['manage_discord_settings'] }, component: () => import('@/pages/admin/AdminDiscordSettingsPage.vue') },
         { path: 'permissions', name: 'admin-permissions', meta: { permissions: ['manage_permissions'] }, component: () => import('@/pages/admin/AdminPermissionsPage.vue') },
         { path: 'bots', name: 'admin-bots', meta: { permissions: ['manage_bots'] }, component: () => import('@/pages/admin/AdminBotsPage.vue') },
         { path: 'games', name: 'admin-games', meta: { permissions: ['manage_games'] }, component: () => import('@/pages/admin/AdminGamesPage.vue') },

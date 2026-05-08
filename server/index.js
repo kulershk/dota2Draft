@@ -25,6 +25,7 @@ import dotaRoutes from './routes/dota.js'
 import streamRoutes from './routes/streams.js'
 import permissionRoutes from './routes/permissions.js'
 import settingRoutes from './routes/settings.js'
+import discordSettingsRoutes from './routes/discordSettings.js'
 import userRoutes from './routes/users.js'
 import createNewsRouter from './routes/news.js'
 import createLeaguesRouter from './routes/leagues.js'
@@ -141,6 +142,7 @@ app.use(dotaRoutes)
 app.use(streamRoutes)
 app.use(permissionRoutes)
 app.use(settingRoutes)
+app.use(discordSettingsRoutes)
 app.use(userRoutes)
 app.use(createNewsRouter(io))
 app.use(createLeaguesRouter())

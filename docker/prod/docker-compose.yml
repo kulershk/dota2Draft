@@ -44,6 +44,8 @@ services:
       - TWITCH_CLIENT_SECRET=${TWITCH_CLIENT_SECRET}
       - DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
       - DISCORD_CLIENT_SECRET=${DISCORD_CLIENT_SECRET}
+      - DISCORD_BOT_INTERNAL_URL=http://draft-discordbot:3030
+      - INTERNAL_TOKEN=${INTERNAL_TOKEN}
       - REQUEST_LOG_DISABLED=${REQUEST_LOG_DISABLED:-false}
     volumes:
       - draft_uploads:/app/uploads
@@ -84,6 +86,9 @@ services:
       - DISCORD_GUILD_ID=${DISCORD_GUILD_ID:-}
       - API_BASE_URL=http://draft:3001
       - DATABASE_URL=postgresql://draft:draft@draft-db:5432/draft
+      - INTERNAL_TOKEN=${INTERNAL_TOKEN}
+      - INTERNAL_PORT=3030
+      - ENABLE_GUILD_MEMBERS_INTENT=${ENABLE_GUILD_MEMBERS_INTENT:-false}
     depends_on:
       draft-db:
         condition: service_healthy
