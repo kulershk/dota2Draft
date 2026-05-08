@@ -1,16 +1,12 @@
 import {
   ChannelType,
-  OverwriteType,
   type CategoryChannel,
   type Client,
   type Guild,
-  type GuildMember,
   type VoiceChannel,
 } from 'discord.js'
-import { PermissionFlagsBits } from 'discord.js'
 import { Logger } from './logger.js'
 import { Settings } from './settings.js'
-import { findRole, ROLE_KEYS } from './roles.js'
 import { env } from '../env.js'
 import { query } from './db.js'
 
@@ -26,8 +22,6 @@ interface StartMatchPayload {
   team1: TeamSpec
   team2: TeamSpec
 }
-
-const TEAM_USER_LIMIT = 5
 
 function teamChannelName(team: TeamSpec, matchId: number): string {
   const base = team.captainName?.trim() || (team.side === 'radiant' ? 'Radiant' : 'Dire')
@@ -70,51 +64,15 @@ async function createTeamVoiceChannel(
   guild: Guild,
   matchId: number,
   team: TeamSpec,
-  discordIds: string[],
+  _discordIds: string[],
   category: CategoryChannel | null,
 ): Promise<VoiceChannel> {
-  const casterRole = findRole(guild, ROLE_KEYS.Caster)
-  const everyoneId = guild.roles.everyone.id
-
-  // Setting `type` explicitly tells discord.js whether the id is a Role or
-  // a Member without doing a cache lookup — required for player ids the bot
-  // has never seen on the gateway (cold cache → InvalidType throw at create).
-  const overwrites: Array<{
-    id: string
-    type: OverwriteType
-    allow?: bigint[]
-    deny?: bigint[]
-  }> = [
-    {
-      id: everyoneId,
-      type: OverwriteType.Role,
-      deny: [PermissionFlagsBits.Connect, PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Speak],
-    },
-    ...discordIds.map((id) => ({
-      id,
-      type: OverwriteType.Member,
-      allow: [
-        PermissionFlagsBits.Connect,
-        PermissionFlagsBits.ViewChannel,
-        PermissionFlagsBits.Speak,
-        PermissionFlagsBits.UseVAD,
-      ],
-    })),
-  ]
-  if (casterRole) {
-    overwrites.push({
-      id: casterRole.id,
-      type: OverwriteType.Role,
-      allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Speak],
-    })
-  }
-
+  // Public, no slot cap, no permission overrides — channel inherits the
+  // category / @everyone defaults so anyone in the server can join.
   return guild.channels.create({
     name: teamChannelName(team, matchId),
     type: ChannelType.GuildVoice,
     parent: category?.id ?? undefined,
-    userLimit: TEAM_USER_LIMIT,
-    permissionOverwrites: overwrites,
     reason: `Queue match #${matchId} ${team.side}`,
   })
 }
