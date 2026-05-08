@@ -6,6 +6,7 @@ import { Logger } from './logger.js'
 import { Settings, loadSettings } from './settings.js'
 import { startMatch, endMatch, listLiveMatches } from './match-voice.js'
 import { PluginManager } from '../core/plugin-manager.js'
+import { DRAFT_EVENTS } from '../core/draft-events.js'
 
 interface RoleDto {
   id: string
@@ -133,12 +134,19 @@ export function startInternalServer(client: Client): void {
         res.status(400).json({ error: 'matchId, team1.playerIds, team2.playerIds required' })
         return
       }
-      const result = await startMatch(client, {
+      const normalizedPayload = {
         matchId,
         queueMatchId,
-        team1: { side: team1.side ?? 'radiant', playerIds: team1.playerIds },
-        team2: { side: team2.side ?? 'dire', playerIds: team2.playerIds },
-      })
+        team1: { side: team1.side ?? 'radiant', captainName: team1.captainName, playerIds: team1.playerIds },
+        team2: { side: team2.side ?? 'dire', captainName: team2.captainName, playerIds: team2.playerIds },
+      }
+      const result = await startMatch(client, normalizedPayload)
+      // Fan out to plugins after the inline match-voice work succeeds. A
+      // failed startMatch should NOT fire matchStarted (otherwise plugins
+      // see ghost matches with no voice channels).
+      if (result?.ok !== false) {
+        client.emit(DRAFT_EVENTS.MATCH_STARTED as any, normalizedPayload)
+      }
       res.json(result)
     } catch (err) {
       Logger.error('POST /internal/match/start failed', err)
@@ -154,6 +162,9 @@ export function startInternalServer(client: Client): void {
     }
     try {
       const result = await endMatch(client, Number(matchId), Boolean(immediate))
+      // Always emit matchEnded — plugins might want to react to a queue cancel
+      // even if the bot had no voice channels for that match (result.ok=false).
+      client.emit(DRAFT_EVENTS.MATCH_ENDED as any, { matchId: Number(matchId), immediate: Boolean(immediate) })
       res.json(result)
     } catch (err) {
       Logger.error('POST /internal/match/end failed', err)
@@ -167,6 +178,20 @@ export function startInternalServer(client: Client): void {
 
   app.get('/internal/plugins', (_req, res) => {
     res.json({ plugins: PluginManager.listPluginsMeta() })
+  })
+
+  // Generic event bus: any caller can fire an arbitrary draft event via
+  // `discordBot.emit('myEvent', payload)` server-side and have it land on
+  // every plugin with a matching `@EventHook on<MyEvent>` handler. No
+  // dedicated bot endpoint needed for new event types.
+  app.post('/internal/event', (req, res) => {
+    const { type, payload } = req.body ?? {}
+    if (typeof type !== 'string' || !type.length) {
+      res.status(400).json({ error: 'type (string) required' })
+      return
+    }
+    client.emit(type as any, payload)
+    res.json({ ok: true })
   })
 
   app.post('/internal/tournament/announce', (req, res) => {

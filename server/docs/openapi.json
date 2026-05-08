@@ -2225,6 +2225,18 @@
         }
       }
     },
+    "/internal/event": {
+      "post": {
+        "tags": ["Discord"],
+        "summary": "Bot-internal: generic draft event bus",
+        "description": "Bot-only endpoint (bearer auth). Re-emits the payload as `client.emit(type, payload)` so any plugin with `@EventHook async on<Type>(payload)` receives it. Plugin gating (discord_plugin_<name>_enabled) applies automatically. Use this for new server-side events that don't need bot-internal side effects — for events that also create voice channels / etc, add a dedicated endpoint that does the inline work AND emits.\n\nKnown event types are catalogued in discord/src/core/draft-events.ts.",
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "required": ["type"], "properties": {
+          "type": { "type": "string", "description": "camelCase event name, e.g. `matchStarted`, `tournamentAnnounce`" },
+          "payload": { "description": "Event-specific shape; see DRAFT_EVENTS interfaces in the bot." }
+        } } } } },
+        "responses": { "200": { "description": "{ ok: true }" }, "400": { "description": "type missing" } }
+      }
+    },
     "/internal/match/start": {
       "post": {
         "tags": ["Discord"],
