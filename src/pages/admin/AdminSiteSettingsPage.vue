@@ -4,7 +4,6 @@ import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
 import RichTextEditor from '@/components/common/RichTextEditor.vue'
-import { vSafeHtml } from '@/directives/safeHtml'
 
 const { t } = useI18n()
 const api = useApi()
