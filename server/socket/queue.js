@@ -880,18 +880,45 @@ async function startQueueMatch(poolId, io, preselectedPlayers = null, preselecte
   // Captain 1 picks first; assign captain 1 = LOWER MMR of the two so the
   // weaker captain gets first pick. If MMRs are equal, pick randomly.
   players.sort((a, b) => b.mmr - a.mmr)
-  const top1 = players[0]
-  const top2 = players[1]
-  let captain1, captain2
-  if (top1.mmr === top2.mmr) {
-    if (Math.random() < 0.5) { captain1 = top1; captain2 = top2 }
-    else { captain1 = top2; captain2 = top1 }
+  // Captain selection: an eligibility window. Anyone within `threshold` MMR
+  // of the lobby's top MMR is a captain candidate; two are drawn at random.
+  // Lower-MMR captain still picks first as a balance handicap. Threshold is
+  // configurable per pool (queue_pools.captain_eligibility_threshold,
+  // default 1500). When fewer than 2 players sit inside the window (extreme
+  // outlier) we fall back to top-2-by-MMR — preserves the prior behavior.
+  // Setting the threshold to 0 always falls into the fallback branch and
+  // restores the legacy "top 2 always captain" behavior.
+  const threshold = pool?.captain_eligibility_threshold ?? 1500
+  const topMmr = players[0].mmr
+  const eligible = players.filter(p => p.mmr >= topMmr - threshold)
+  let pickA, pickB
+  if (eligible.length < 2) {
+    pickA = players[0]
+    pickB = players[1]
   } else {
-    // top1 has higher mmr → captain2; top2 has lower mmr → captain1 (picks first)
-    captain1 = top2
-    captain2 = top1
+    // Fisher-Yates partial shuffle — only need the first two slots.
+    const pool2 = [...eligible]
+    const i0 = Math.floor(Math.random() * pool2.length)
+    ;[pool2[0], pool2[i0]] = [pool2[i0], pool2[0]]
+    const i1 = 1 + Math.floor(Math.random() * (pool2.length - 1))
+    ;[pool2[1], pool2[i1]] = [pool2[i1], pool2[1]]
+    pickA = pool2[0]
+    pickB = pool2[1]
   }
-  const available = players.slice(2)
+  let captain1, captain2
+  if (pickA.mmr === pickB.mmr) {
+    if (Math.random() < 0.5) { captain1 = pickA; captain2 = pickB }
+    else { captain1 = pickB; captain2 = pickA }
+  } else if (pickA.mmr < pickB.mmr) {
+    // Lower MMR picks first (handicap)
+    captain1 = pickA
+    captain2 = pickB
+  } else {
+    captain1 = pickB
+    captain2 = pickA
+  }
+  const captainIds = new Set([captain1.playerId, captain2.playerId])
+  const available = players.filter(p => !captainIds.has(p.playerId))
 
   const pickOrder = generatePickOrder(teamSize)
   const pickTimer = pool?.pick_timer || 30

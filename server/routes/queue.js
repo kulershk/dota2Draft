@@ -387,6 +387,7 @@ export default function createQueueRouter(io) {
       lobby_series_type, lobby_timeout_minutes,
       xp_win, xp_participate,
       accept_timer, decline_ban_minutes,
+      captain_eligibility_threshold,
       season_id,
     } = req.body
 
@@ -403,8 +404,9 @@ export default function createQueueRouter(io) {
           lobby_series_type, lobby_timeout_minutes,
           xp_win, xp_participate,
           accept_timer, decline_ban_minutes,
+          captain_eligibility_threshold,
           season_id, created_by
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
         RETURNING *
       `, [
         name, enabled !== false, min_mmr || 0, max_mmr || 0,
@@ -416,6 +418,7 @@ export default function createQueueRouter(io) {
         lobby_series_type || 0, lobby_timeout_minutes || 10,
         xp_win ?? 15, xp_participate ?? 5,
         accept_timer ?? 20, decline_ban_minutes ?? 5,
+        captain_eligibility_threshold ?? 1500,
         season_id || null, admin.id,
       ])
       res.status(201).json(pool)
@@ -446,6 +449,7 @@ export default function createQueueRouter(io) {
         'lobby_series_type', 'lobby_timeout_minutes',
         'xp_win', 'xp_participate',
         'accept_timer', 'decline_ban_minutes',
+        'captain_eligibility_threshold',
         'season_id',
       ]
       const setClauses = []

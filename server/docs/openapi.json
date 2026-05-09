@@ -255,6 +255,7 @@
           "lobby_penalty_dire": { "type": "integer", "default": 0 },
           "lobby_series_type": { "type": "integer", "default": 0 },
           "lobby_timeout_minutes": { "type": "integer", "default": 10 },
+          "captain_eligibility_threshold": { "type": "integer", "default": 1500, "description": "MMR window for random captain selection. Players within this many MMR of the lobby's top get a random chance to be captain. Set to 0 to always pick the top 2 by MMR (legacy behavior)." },
           "xp_win": { "type": "integer", "default": 15 },
           "xp_participate": { "type": "integer", "default": 5 }
         }

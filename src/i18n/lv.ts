@@ -1278,6 +1278,8 @@ export default {
   queueMaxMmr: 'Max MMR',
   queueNoLimit: 'bez limita',
   queuePickTimer: 'Izvēles taimeris',
+  queueCaptainThreshold: 'Kapteiņu atlases logs (MMR)',
+  queueCaptainThresholdHint: 'Spēlētāji, kuru MMR ir šajā robežā no lobija augstākā, kļūst par kapteiņu kandidātiem; 2 tiek izvēlēti nejauši. 0 = vienmēr augstākie 2 pēc MMR.',
   queueBestOf: 'Best Of',
   queueTeamSize: 'Komandas lielums',
   queueXpWin: 'XP uzvarētāju komandai',

@@ -75,6 +75,7 @@ const form = ref<Record<string, any>>({
   xp_participate: 5,
   accept_timer: 20,
   decline_ban_minutes: 5,
+  captain_eligibility_threshold: 1500,
   season_id: null,
 })
 
@@ -88,6 +89,7 @@ function resetForm() {
     lobby_series_type: 0, lobby_timeout_minutes: 10,
     xp_win: 15, xp_participate: 5,
     accept_timer: 20, decline_ban_minutes: 5,
+    captain_eligibility_threshold: 1500,
     season_id: null,
   }
 }
@@ -627,6 +629,11 @@ onUnmounted(() => {
         <div class="flex flex-col gap-1">
           <label class="text-xs text-muted-foreground">{{ t('queuePickTimer') }} (s)</label>
           <input class="input-field" type="number" v-model.number="form.pick_timer" />
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-muted-foreground">{{ t('queueCaptainThreshold') }}</label>
+          <input class="input-field" type="number" min="0" v-model.number="form.captain_eligibility_threshold" />
+          <span class="text-[10px] text-muted-foreground leading-tight">{{ t('queueCaptainThresholdHint') }}</span>
         </div>
         <div class="flex flex-col gap-1">
           <label class="text-xs text-muted-foreground">{{ t('queueAcceptTimer') }} (s)</label>

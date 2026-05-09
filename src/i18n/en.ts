@@ -1291,6 +1291,8 @@ export default {
   queueMaxMmr: 'Max MMR',
   queueNoLimit: 'no limit',
   queuePickTimer: 'Pick Timer',
+  queueCaptainThreshold: 'Captain eligibility window (MMR)',
+  queueCaptainThresholdHint: 'Players within this MMR of the lobby\'s top become captain candidates; 2 are picked at random. 0 = always top 2 by MMR.',
   queueBestOf: 'Best Of',
   queueTeamSize: 'Team Size',
   queueXpWin: 'XP for winning team',

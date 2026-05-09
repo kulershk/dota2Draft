@@ -1278,6 +1278,8 @@ export default {
   queueMaxMmr: 'Max MMR',
   queueNoLimit: 'be limito',
   queuePickTimer: 'Pasirinkimo laikmatis',
+  queueCaptainThreshold: 'Kapitonų atrankos langas (MMR)',
+  queueCaptainThresholdHint: 'Žaidėjai, kurių MMR yra šiame intervale nuo aukščiausio lobby, tampa kapitonų kandidatais; 2 pasirenkami atsitiktinai. 0 = visada aukščiausi 2 pagal MMR.',
   queueBestOf: 'Best Of',
   queueTeamSize: 'Komandos dydis',
   queueXpWin: 'XP laimėjusiai komandai',

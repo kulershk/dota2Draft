@@ -745,6 +745,7 @@ export async function initDb() {
   try { await execute('ALTER TABLE queue_pools ADD COLUMN accept_timer INTEGER DEFAULT 20') } catch {}
   try { await execute('ALTER TABLE queue_pools ADD COLUMN decline_ban_minutes INTEGER DEFAULT 5') } catch {}
   try { await execute('ALTER TABLE queue_pools ADD COLUMN created_by INTEGER NULL REFERENCES players(id) ON DELETE SET NULL') } catch {}
+  try { await execute('ALTER TABLE queue_pools ADD COLUMN captain_eligibility_threshold INTEGER NOT NULL DEFAULT 1500') } catch {}
 
   // Drop FK constraints on winner_captain_id so queue matches can store player IDs
   try { await execute('ALTER TABLE match_games DROP CONSTRAINT IF EXISTS match_games_winner_captain_id_fkey') } catch {}
