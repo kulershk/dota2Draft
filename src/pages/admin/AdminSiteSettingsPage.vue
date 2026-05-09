@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { Settings, Save, Upload, Trash2, Plus, Image } from 'lucide-vue-next'
-import { ref, onMounted } from 'vue'
+import { Settings, Save, Upload, Trash2, Plus, Image, Megaphone } from 'lucide-vue-next'
+import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
+import RichTextEditor from '@/components/common/RichTextEditor.vue'
+import { vSafeHtml } from '@/directives/safeHtml'
 
 const { t } = useI18n()
 const api = useApi()
@@ -15,8 +17,19 @@ const discordUrl = ref('')
 const logoUrl = ref('')
 const heroBannerUrl = ref('')
 const socketsEnabled = ref(true)
+const topbarEnabled = ref(false)
+const topbarHtml = ref('')
+const topbarColor = ref<'info' | 'success' | 'warning' | 'danger'>('info')
 const saving = ref(false)
 const saved = ref(false)
+
+const TOPBAR_COLOR_PREVIEW: Record<string, string> = {
+  info: 'bg-blue-500/10 border-blue-500/40 text-blue-200',
+  success: 'bg-green-500/10 border-green-500/40 text-green-200',
+  warning: 'bg-amber-500/10 border-amber-500/40 text-amber-200',
+  danger: 'bg-red-500/10 border-red-500/40 text-red-200',
+}
+const previewClass = computed(() => TOPBAR_COLOR_PREVIEW[topbarColor.value] ?? TOPBAR_COLOR_PREVIEW.info)
 const uploadingLogo = ref(false)
 const uploadingBanner = ref(false)
 
@@ -41,6 +54,9 @@ onMounted(async () => {
   heroBannerUrl.value = data.site_hero_banner_url || ''
   sponsors.value = data.site_sponsors || []
   socketsEnabled.value = data.sockets_enabled !== false
+  topbarEnabled.value = data.site_topbar_enabled === true
+  topbarHtml.value = data.site_topbar_html || ''
+  topbarColor.value = (data.site_topbar_color as any) || 'info'
 })
 
 function pickSponsorFile(e: Event) {
@@ -89,6 +105,9 @@ async function saveSettings() {
       site_hero_paragraph: siteHeroParagraph.value,
       site_discord_url: discordUrl.value,
       sockets_enabled: socketsEnabled.value,
+      site_topbar_enabled: topbarEnabled.value,
+      site_topbar_html: topbarHtml.value,
+      site_topbar_color: topbarColor.value,
     })
     saved.value = true
     setTimeout(() => { saved.value = false }, 3000)
@@ -190,6 +209,52 @@ async function removeBanner() {
             <span class="block text-[11px] text-muted-foreground mt-0.5">{{ t('siteSocketsEnabledHint') }}</span>
           </span>
         </label>
+      </div>
+    </div>
+
+    <!-- Top-bar notification -->
+    <div class="card">
+      <div class="flex items-center gap-2 px-5 py-3 border-b border-border">
+        <Megaphone class="w-4 h-4 text-foreground" />
+        <span class="text-sm font-semibold text-foreground">{{ t('siteTopbarSection') }}</span>
+      </div>
+      <div class="px-5 py-4 flex flex-col gap-4">
+        <label class="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            class="mt-1"
+            :checked="topbarEnabled"
+            @change="topbarEnabled = ($event.target as HTMLInputElement).checked"
+          />
+          <span class="flex-1">
+            <span class="block text-sm font-medium text-foreground">{{ t('siteTopbarEnabled') }}</span>
+            <span class="block text-[11px] text-muted-foreground mt-0.5">{{ t('siteTopbarEnabledHint') }}</span>
+          </span>
+        </label>
+
+        <div>
+          <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('siteTopbarColor') }}</label>
+          <select v-model="topbarColor" class="input-field w-full max-w-[240px]">
+            <option value="info">{{ t('siteTopbarColorInfo') }}</option>
+            <option value="success">{{ t('siteTopbarColorSuccess') }}</option>
+            <option value="warning">{{ t('siteTopbarColorWarning') }}</option>
+            <option value="danger">{{ t('siteTopbarColorDanger') }}</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('siteTopbarHtml') }}</label>
+          <RichTextEditor v-model="topbarHtml" />
+          <p class="text-[11px] text-muted-foreground mt-1">{{ t('siteTopbarHtmlHint') }}</p>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('siteTopbarPreview') }}</label>
+          <div :class="['border rounded-md px-4 py-3 text-sm', previewClass]">
+            <div v-if="topbarHtml" v-safe-html="topbarHtml" class="prose prose-sm prose-invert max-w-none"></div>
+            <div v-else class="text-muted-foreground italic">{{ t('siteTopbarPreviewEmpty') }}</div>
+          </div>
+        </div>
       </div>
     </div>
 

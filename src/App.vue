@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Gamepad2, Shield, ShieldAlert, LogOut, Sun, Moon, Menu, X, Home, LogIn, Lock, Globe, Settings, Swords, Info, Radio, ChevronDown, Check, LayoutDashboard, Bell, User, Newspaper, Calendar, Trophy, Medal, Ban } from 'lucide-vue-next'
+import { Gamepad2, Shield, ShieldAlert, LogOut, Sun, Moon, Menu, X, Home, LogIn, Lock, Globe, Settings, Swords, Info, Radio, ChevronDown, Check, LayoutDashboard, Bell, User, Newspaper, Calendar, Trophy, Medal, Ban, Megaphone } from 'lucide-vue-next'
+import { vSafeHtml } from '@/directives/safeHtml'
 import { useRoute, useRouter } from 'vue-router'
 import { onMounted, ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -130,6 +131,9 @@ const customSiteName = ref(_cachedSiteSettings.site_name || '')
 const customLogoUrl = ref(_cachedSiteSettings.site_logo_url || '')
 const discordUrl = ref(_cachedSiteSettings.site_discord_url || '')
 const heroBannerUrl = ref(_cachedSiteSettings.site_hero_banner_url || '')
+const topbarEnabled = ref<boolean>(_cachedSiteSettings.site_topbar_enabled === true)
+const topbarHtml = ref<string>(_cachedSiteSettings.site_topbar_html || '')
+const topbarColor = ref<string>(_cachedSiteSettings.site_topbar_color || 'info')
 
 const languages = [
   { code: 'en', label: 'English' },
@@ -157,6 +161,9 @@ onMounted(async () => {
     customLogoUrl.value = data.site_logo_url || ''
     discordUrl.value = data.site_discord_url || ''
     heroBannerUrl.value = data.site_hero_banner_url || ''
+    topbarEnabled.value = data.site_topbar_enabled === true
+    topbarHtml.value = data.site_topbar_html || ''
+    topbarColor.value = data.site_topbar_color || 'info'
     if (data.site_name) document.title = data.site_name
     if (data.site_logo_url) {
       const favicon = document.getElementById('favicon') as HTMLLinkElement
@@ -255,6 +262,40 @@ function dismissMmrBanner() {
   sessionStorage.setItem(MMR_BANNER_KEY, '1')
 }
 
+// Admin-controlled top-bar notification. Dismiss key includes a short hash of
+// the current HTML so editing the message re-shows the banner for everyone
+// who already dismissed the previous version.
+const TOPBAR_DISMISS_PREFIX = 'site_topbar_dismissed_v1:'
+function topbarHash(s: string): string {
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0
+  return Math.abs(h).toString(36)
+}
+const topbarDismissed = ref(false)
+function checkTopbarDismissed() {
+  const key = TOPBAR_DISMISS_PREFIX + topbarHash(topbarHtml.value)
+  topbarDismissed.value = sessionStorage.getItem(key) === '1'
+}
+checkTopbarDismissed()
+watch(topbarHtml, checkTopbarDismissed)
+const showTopbar = computed(() =>
+  topbarEnabled.value && !!topbarHtml.value.trim() && !topbarDismissed.value,
+)
+function dismissTopbar() {
+  topbarDismissed.value = true
+  const key = TOPBAR_DISMISS_PREFIX + topbarHash(topbarHtml.value)
+  sessionStorage.setItem(key, '1')
+}
+const topbarBgClass = computed(() => {
+  switch (topbarColor.value) {
+    case 'success': return 'bg-green-500/15 border-b border-green-500/40 text-green-100'
+    case 'warning': return 'bg-amber-500/15 border-b border-amber-500/40 text-amber-100'
+    case 'danger':  return 'bg-red-500/15 border-b border-red-500/40 text-red-100'
+    case 'info':
+    default:        return 'bg-blue-500/15 border-b border-blue-500/40 text-blue-100'
+  }
+})
+
 const myMatchCount = ref(0)
 
 async function fetchMyMatchCount() {
@@ -339,6 +380,26 @@ onMounted(() => {
             </template>
           </p>
         </div>
+      </div>
+    </div>
+
+    <!-- Admin top-bar notification — site-wide, dismissible per session.
+         Editing the message in /admin/settings re-shows it (key includes
+         a hash of the html). -->
+    <div v-if="showTopbar" :class="topbarBgClass">
+      <div class="max-w-[1400px] mx-auto w-full flex items-start gap-3 px-4 md:px-8 py-2.5">
+        <Megaphone class="w-4 h-4 mt-0.5 shrink-0 opacity-80" />
+        <div
+          v-safe-html="topbarHtml"
+          class="topbar-content flex-1 text-sm leading-snug min-w-0 prose prose-sm prose-invert max-w-none"
+        />
+        <button
+          class="shrink-0 opacity-70 hover:opacity-100 -mt-0.5"
+          :title="t('dismiss')"
+          @click="dismissTopbar"
+        >
+          <X class="w-4 h-4" />
+        </button>
       </div>
     </div>
 

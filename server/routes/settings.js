@@ -44,6 +44,12 @@ router.get('/api/site-settings', async (req, res) => {
     // Boolean view of the persisted 'site_sockets_enabled' string. Default
     // is true if the row has never been written.
     sockets_enabled: obj.site_sockets_enabled !== 'false',
+    // Top-bar notification (admin-controlled). HTML is sanitized client-side
+    // via v-safe-html before render. `enabled` defaults to false so the bar
+    // stays hidden until an admin explicitly turns it on.
+    site_topbar_enabled: obj.site_topbar_enabled === 'true',
+    site_topbar_html: obj.site_topbar_html || '',
+    site_topbar_color: obj.site_topbar_color || 'info', // info | success | warning | danger
   }
   siteSettingsCache = payload
   siteSettingsCacheExpiry = now + SITE_SETTINGS_TTL_MS
@@ -53,13 +59,18 @@ router.get('/api/site-settings', async (req, res) => {
 router.put('/api/site-settings', async (req, res) => {
   const admin = await requirePermission(req, res, 'manage_site_settings')
   if (!admin) return
-  const { site_title, site_subtitle, site_hero_paragraph, site_discord_url, site_name, sockets_enabled } = req.body
+  const {
+    site_title, site_subtitle, site_hero_paragraph, site_discord_url, site_name, sockets_enabled,
+    site_topbar_enabled, site_topbar_html, site_topbar_color,
+  } = req.body
   for (const [key, value] of [
     ['site_title', site_title],
     ['site_subtitle', site_subtitle],
     ['site_hero_paragraph', site_hero_paragraph],
     ['site_discord_url', site_discord_url],
     ['site_name', site_name],
+    ['site_topbar_html', site_topbar_html],
+    ['site_topbar_color', site_topbar_color],
   ]) {
     if (value !== undefined) {
       await execute(
@@ -67,6 +78,12 @@ router.put('/api/site-settings', async (req, res) => {
         [key, value || '']
       )
     }
+  }
+  if (site_topbar_enabled !== undefined) {
+    await execute(
+      "INSERT INTO settings (key, value) VALUES ('site_topbar_enabled', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
+      [site_topbar_enabled ? 'true' : 'false']
+    )
   }
   // Real-time kill switch. Persist as a string ('true'/'false'), update the
   // in-memory flag the connection-gate middleware reads, and on toggle to
