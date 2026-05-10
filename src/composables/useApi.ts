@@ -629,6 +629,8 @@ export function useApi() {
     getAdminQueuePlayers: () => request('/api/admin/queue/players'),
     adminKickFromQueue: (playerId: number, reason?: string) =>
       request(`/api/admin/queue/kick/${playerId}`, { method: 'POST', body: JSON.stringify({ reason }) }),
+    adminSetQueuePlayerShadow: (playerId: number, shadowPool: 0 | 1 | 2) =>
+      request(`/api/admin/queue/players/${playerId}/shadow`, { method: 'POST', body: JSON.stringify({ shadow_pool: shadowPool }) }),
     getAdminQueueBans: (poolId?: number | 'global') => {
       const qs = poolId == null ? '' : `?pool_id=${poolId}`
       return request(`/api/admin/queue/bans${qs}`)

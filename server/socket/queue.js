@@ -51,7 +51,7 @@ async function _doEnqueue(io, playerId, poolId) {
   const pool = await queryOne('SELECT * FROM queue_pools WHERE id = $1 AND enabled = true', [poolId])
   if (!pool) return { ok: false, error: 'Queue pool not found or disabled' }
 
-  const player = await queryOne('SELECT id, name, display_name, steam_id, avatar_url, mmr, mmr_verified_at FROM players WHERE id = $1', [playerId])
+  const player = await queryOne('SELECT id, name, display_name, steam_id, avatar_url, mmr, mmr_verified_at, shadow_pool FROM players WHERE id = $1', [playerId])
   if (!player?.steam_id) return { ok: false, error: 'Steam account required to queue' }
   if (!player.mmr || player.mmr <= 0) return { ok: false, error: 'You must set your MMR before queuing' }
   if (pool.min_mmr > 0 && player.mmr < pool.min_mmr) return { ok: false, error: `Minimum MMR for this pool is ${pool.min_mmr}` }
@@ -107,6 +107,7 @@ async function _doEnqueue(io, playerId, poolId) {
     steamId: player.steam_id,
     avatarUrl: player.avatar_url,
     mmr: player.mmr,
+    shadowPool: player.shadow_pool || 0,
   })
   playerInQueue.set(playerId, poolId)
 
@@ -600,7 +601,7 @@ function removeFromQueue(playerId, poolId, socket) {
   if (socket) socket.leave(`queue:${poolId}`)
 }
 
-function broadcastQueueUpdate(io, poolId) {
+export function broadcastQueueUpdate(io, poolId) {
   io.to(`queue:${poolId}`).emit('queue:updated', {
     poolId,
     count: getPoolQueueCount(poolId),
@@ -658,6 +659,28 @@ async function startReadyCheck(poolId, io) {
   for (const [, info] of q) {
     players.push(info)
     if (players.length >= totalPlayers) break
+  }
+
+  // Shadow-pool rule: a hard shadow (shadowPool === 2) can only be matched
+  // when at least one OTHER shadow-flagged player (soft or hard) is in the
+  // same group of 10. If the picked 10 contain exactly one shadow player and
+  // it's a hard shadow, swap them out for the next queued player — non-shadow
+  // takes the count to 0 (fine), shadow takes it to 2 (fine). If no swap
+  // candidate exists, abort: the hard shadow waits in queue for company.
+  const shadowCount = players.filter(p => (p.shadowPool | 0) > 0).length
+  if (shadowCount === 1) {
+    const loneHardIdx = players.findIndex(p => p.shadowPool === 2)
+    if (loneHardIdx !== -1) {
+      let swapIn = null
+      let seen = 0
+      for (const [, info] of q) {
+        if (seen++ < totalPlayers) continue
+        swapIn = info
+        break
+      }
+      if (!swapIn) return
+      players[loneHardIdx] = swapIn
+    }
   }
 
   // Move from in-queue → in-ready-check

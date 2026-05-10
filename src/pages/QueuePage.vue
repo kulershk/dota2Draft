@@ -627,6 +627,9 @@ onUnmounted(() => {
                         <span v-if="topRoleOf(p.playerId)" class="text-[9px] font-bold text-purple-300 bg-purple-500/15 border border-purple-500/30 px-1.5 py-0.5 rounded">
                           {{ t('queueRoleShort_' + topRoleOf(p.playerId)) }}
                         </span>
+                        <span v-if="(p.shadowPool || 0) > 0" class="text-[9px] font-bold uppercase tracking-wider text-violet-300 bg-violet-500/15 border border-violet-500/30 px-1.5 py-0.5 rounded">
+                          {{ t('queueShadowBadge') }}
+                        </span>
                       </div>
                       <div class="text-[10px] text-muted-foreground">{{ p.mmr }} MMR</div>
                     </div>
@@ -668,6 +671,9 @@ onUnmounted(() => {
                         <span v-if="idx === 0" class="text-[9px] font-bold text-red-400 bg-red-500/15 px-1.5 py-0.5 rounded">CPT</span>
                         <span v-if="topRoleOf(p.playerId)" class="text-[9px] font-bold text-purple-300 bg-purple-500/15 border border-purple-500/30 px-1.5 py-0.5 rounded">
                           {{ t('queueRoleShort_' + topRoleOf(p.playerId)) }}
+                        </span>
+                        <span v-if="(p.shadowPool || 0) > 0" class="text-[9px] font-bold uppercase tracking-wider text-violet-300 bg-violet-500/15 border border-violet-500/30 px-1.5 py-0.5 rounded">
+                          {{ t('queueShadowBadge') }}
                         </span>
                       </div>
                       <div class="text-[10px] text-muted-foreground">{{ p.mmr }} MMR</div>
@@ -1004,7 +1010,13 @@ onUnmounted(() => {
 
                     <!-- Info: name + meta row -->
                     <div class="flex flex-col gap-0.5 flex-1 min-w-0">
-                      <span class="text-[13px] font-bold truncate">{{ p.name }}</span>
+                      <div class="flex items-center gap-1.5 min-w-0">
+                        <span class="text-[13px] font-bold truncate">{{ p.name }}</span>
+                        <span v-if="(p.shadowPool || 0) > 0"
+                          class="text-[8px] font-bold uppercase tracking-wider text-violet-300 bg-violet-500/15 border border-violet-500/30 px-1 py-0.5 rounded shrink-0">
+                          {{ t('queueShadowBadge') }}
+                        </span>
+                      </div>
                       <div class="flex items-center gap-1.5 flex-wrap">
                         <span class="text-[10px] font-mono font-bold text-slate-300 tabular-nums">{{ p.mmr }}</span>
                         <span class="text-[9px] font-mono font-semibold text-muted-foreground/60">MMR</span>
@@ -1302,6 +1314,10 @@ onUnmounted(() => {
                       <span class="text-primary text-lg font-bold">{{ (p.name || '?').charAt(0).toUpperCase() }}</span>
                     </div>
                     <span class="text-[13px] font-semibold truncate max-w-full">{{ p.name }}</span>
+                    <span v-if="(p.shadowPool || 0) > 0"
+                      class="text-[9px] font-bold uppercase tracking-wider text-violet-300 bg-violet-500/15 border border-violet-500/30 px-1.5 py-0.5 rounded">
+                      {{ t('queueShadowBadge') }}
+                    </span>
                     <span class="text-[11px] text-muted-foreground font-mono font-medium tabular-nums">{{ p.mmr }} MMR</span>
                     <span class="flex items-center gap-1 font-mono tabular-nums"
                       :title="t('queuePlayerStatsTooltip')">

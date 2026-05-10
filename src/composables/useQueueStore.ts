@@ -12,6 +12,8 @@ export interface QueuePlayer {
   seasonPoints?: number | null
   /** Saved role preferences carried from previous matches */
   preferredRoles?: string[]
+  /** 0 = none, 1 = soft shadow, 2 = hard shadow */
+  shadowPool?: number
 }
 
 export interface QueuePool {

@@ -2614,6 +2614,27 @@
         "responses": { "200": { "description": "Kick result" } }
       }
     },
+    "/api/admin/queue/players/{id}/shadow": {
+      "post": {
+        "tags": ["Queue"],
+        "summary": "Admin: set a player's shadow-pool flag",
+        "description": "Updates players.shadow_pool. 0 = none (matches normally), 1 = soft shadow (marked but matches normally), 2 = hard shadow (only included in a match-of-10 when at least one other shadow-flagged player is in the same group). The flag is a global player attribute; requires manage_queue_pools (manage_own_queue_pools is rejected). If the player is currently queued, the in-memory entry is updated and a queue:updated broadcast pushes the badge change to all clients in that pool.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["shadow_pool"],
+                "properties": { "shadow_pool": { "type": "integer", "enum": [0, 1, 2] } }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Flag updated" }, "400": { "description": "shadow_pool must be 0, 1, or 2" }, "403": { "description": "Requires full manage_queue_pools" }, "404": { "description": "Player not found" } }
+      }
+    },
     "/api/admin/queue/bans": {
       "get": {
         "tags": ["Queue"],

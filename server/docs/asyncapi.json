@@ -866,6 +866,34 @@
         }
       }
     },
+    "queue:updated": {
+      "subscribe": {
+        "summary": "Broadcast to queue:${poolId}: the pool's current count and roster. Fired on every join/leave AND when an admin changes a queued player's shadow flag via POST /api/admin/queue/players/{id}/shadow.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "poolId": { "type": "integer" },
+              "count": { "type": "integer" },
+              "players": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "playerId": { "type": "integer" },
+                    "name": { "type": "string" },
+                    "steamId": { "type": "string" },
+                    "avatarUrl": { "type": "string", "nullable": true },
+                    "mmr": { "type": "integer" },
+                    "shadowPool": { "type": "integer", "enum": [0, 1, 2], "description": "0 = none, 1 = soft shadow (label only), 2 = hard shadow (only selected into a match-of-10 when at least one other shadow-flagged player is in the same group)" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "queue:getMyState": {
       "publish": {
         "summary": "Ask the server for this socket's current queue/match state. Used on app boot and page reload to restore the overlay and rejoin rooms.",

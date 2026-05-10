@@ -110,6 +110,7 @@ export async function initDb() {
     ['banned_at', 'TIMESTAMP DEFAULT NULL'],
     ['banned_by', 'INTEGER DEFAULT NULL REFERENCES players(id) ON DELETE SET NULL'],
     ['banned_reason', 'TEXT DEFAULT NULL'],
+    ['shadow_pool', 'SMALLINT NOT NULL DEFAULT 0 CHECK (shadow_pool IN (0, 1, 2))'],
   ]) {
     const has = await queryOne(
       `SELECT 1 FROM information_schema.columns WHERE table_name = 'players' AND column_name = $1`, [col]

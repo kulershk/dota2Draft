@@ -24,7 +24,7 @@ async function getQueueAdminScope(req, res) {
 import { activeQueueMatches, playerInMatch, playerInQueue, poolQueues, getPoolQueuePlayers, clearPickTimer } from '../socket/queueState.js'
 import { socketPlayers } from '../socket/state.js'
 import { botPool } from '../services/botPool.js'
-import { kickPlayerFromQueue } from '../socket/queue.js'
+import { kickPlayerFromQueue, broadcastQueueUpdate } from '../socket/queue.js'
 import { discordBot } from '../services/discordBotClient.js'
 
 export default function createQueueRouter(io) {
@@ -754,6 +754,35 @@ export default function createQueueRouter(io) {
       if (onlyInPool === -1) return res.status(403).json({ error: 'Player is not in a pool you own' })
       const kicked = kickPlayerFromQueue(io, playerId, reason, onlyInPool)
       res.json({ ok: true, kicked })
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  // ── Admin: set a player's shadow-pool flag (0=none, 1=soft, 2=hard) ──
+  // Global player flag, so gated on canManageAll only — mirrors how global bans
+  // are restricted. If the player is currently queued, the in-memory entry is
+  // mutated so the next startReadyCheck sees the new value without re-queueing,
+  // and a queue:updated broadcast pushes the badge change to all clients
+  // subscribed to that pool.
+  router.post('/api/admin/queue/players/:id/shadow', async (req, res) => {
+    const scope = await getQueueAdminScope(req, res)
+    if (!scope) return
+    if (!scope.canManageAll) return res.status(403).json({ error: 'Global player flag requires manage_queue_pools' })
+    const playerId = Number(req.params.id)
+    if (!playerId) return res.status(400).json({ error: 'Invalid player id' })
+    const next = Number(req.body?.shadow_pool)
+    if (![0, 1, 2].includes(next)) return res.status(400).json({ error: 'shadow_pool must be 0, 1, or 2' })
+    try {
+      const result = await execute('UPDATE players SET shadow_pool = $1 WHERE id = $2', [next, playerId])
+      if (result.rowCount === 0) return res.status(404).json({ error: 'Player not found' })
+      for (const q of poolQueues.values()) {
+        const e = q.get(playerId)
+        if (e) e.shadowPool = next
+      }
+      const poolId = playerInQueue.get(playerId)
+      if (poolId) broadcastQueueUpdate(io, poolId)
+      res.json({ ok: true, shadow_pool: next })
     } catch (e) {
       res.status(500).json({ error: e.message })
     }
