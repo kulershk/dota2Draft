@@ -176,6 +176,33 @@ export function startInternalServer(client: Client): void {
     res.json({ matches: listLiveMatches() })
   })
 
+  app.get('/internal/members', async (_req, res) => {
+    const guildId = resolveGuildId()
+    if (!guildId) {
+      res.status(400).json({ error: 'guild_id not configured' })
+      return
+    }
+    try {
+      const guild = await client.guilds.fetch(guildId)
+      // Forces a full member fetch — requires GuildMembers privileged intent.
+      // Without it the cache only contains members the bot has seen interact.
+      await guild.members.fetch().catch(() => {})
+      const members = [...guild.members.cache.values()]
+        .filter((m) => !m.user.bot)
+        .map((m) => ({
+          id: m.id,
+          username: m.user.username,
+          displayName: m.displayName ?? m.user.username,
+          avatarUrl: m.user.displayAvatarURL({ size: 64 }),
+        }))
+        .sort((a, b) => a.displayName.localeCompare(b.displayName))
+      res.json({ guildId, members })
+    } catch (err) {
+      Logger.error('GET /internal/members failed', err)
+      res.status(500).json({ error: (err as Error).message })
+    }
+  })
+
   app.get('/internal/plugins', (_req, res) => {
     res.json({ plugins: PluginManager.listPluginsMeta() })
   })

@@ -2229,6 +2229,43 @@
         }
       }
     },
+    "/api/admin/discord/members": {
+      "get": {
+        "tags": ["Discord"],
+        "summary": "List Discord guild members for the AdminUsersPage link picker",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_users. Proxies the bot's GET /internal/members. Bots are filtered out, list is sorted by displayName.",
+        "responses": {
+          "200": { "description": "{ guildId, members: [{ id, username, displayName, avatarUrl }] }" },
+          "502": { "description": "Bot unreachable" }
+        }
+      }
+    },
+    "/api/admin/users/{id}/discord": {
+      "put": {
+        "tags": ["Users"],
+        "summary": "Manually link a Discord account to a player",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_users. Sets players.discord_id + discord_username. Refuses with 409 if another player already holds that discord_id (admin must unlink the conflicting side first).",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "required": ["discord_id"], "properties": {
+          "discord_id": { "type": "string", "description": "Discord user snowflake (15-25 digits)" },
+          "discord_username": { "type": "string" }
+        } } } } },
+        "responses": {
+          "200": { "description": "{ ok, player: { id, discord_id, discord_username } }" },
+          "409": { "description": "Discord account is already linked to a different player" }
+        }
+      },
+      "delete": {
+        "tags": ["Users"],
+        "summary": "Unlink the Discord account from a player",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_users. Clears players.discord_id and discord_username.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "{ ok: true }" } }
+      }
+    },
     "/internal/event": {
       "post": {
         "tags": ["Discord"],

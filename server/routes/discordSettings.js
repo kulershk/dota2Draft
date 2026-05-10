@@ -115,6 +115,20 @@ router.get('/api/admin/discord/channels', async (req, res) => {
   }
 })
 
+// Lists guild members for the AdminUsersPage Discord-link picker. Gated on
+// manage_users (not manage_discord_settings) since linking accounts is a
+// user-management action.
+router.get('/api/admin/discord/members', async (req, res) => {
+  const admin = await requirePermission(req, res, 'manage_users')
+  if (!admin) return
+  try {
+    const data = await botGet('/internal/members')
+    res.json(data)
+  } catch (err) {
+    res.status(502).json({ error: err.message })
+  }
+})
+
 router.get('/api/admin/discord/health', async (req, res) => {
   const admin = await requirePermission(req, res, 'manage_discord_settings')
   if (!admin) return

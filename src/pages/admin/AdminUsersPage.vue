@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Users, Search, ExternalLink, Ban, CheckCircle, LogIn, UserPlus, Pencil, ArrowUp, ArrowDown, Upload, RefreshCw, Network } from 'lucide-vue-next'
+import { Users, Search, ExternalLink, Ban, CheckCircle, LogIn, UserPlus, Pencil, ArrowUp, ArrowDown, Upload, RefreshCw, Network, Link as LinkIcon, Unlink } from 'lucide-vue-next'
 import RoleBadge from '@/components/common/RoleBadge.vue'
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -45,6 +45,8 @@ interface User {
   permission_groups: PermGroupRef[]
   online: boolean
   activity: { page: string; path: string; timestamp: number } | null
+  discord_id: string | null
+  discord_username: string | null
 }
 
 const pageLabels: Record<string, string> = {
@@ -89,6 +91,70 @@ const editUserRoles = ref<string[]>([])
 const savingUser = ref(false)
 const ALL_ROLES = ['Carry', 'Mid', 'Offlane', 'Pos4', 'Pos5']
 const onlinePlayerIds = ref<number[]>([])
+
+// Discord link modal state
+interface DiscordMemberRow { id: string; username: string; displayName: string; avatarUrl: string }
+const linkUser = ref<User | null>(null)
+const linkMembers = ref<DiscordMemberRow[]>([])
+const linkSearch = ref('')
+const linkLoading = ref(false)
+const linkSaving = ref(false)
+const linkError = ref('')
+
+const filteredLinkMembers = computed(() => {
+  const q = linkSearch.value.trim().toLowerCase()
+  let list = linkMembers.value
+  if (q) list = list.filter((m) => m.displayName.toLowerCase().includes(q) || m.username.toLowerCase().includes(q) || m.id.includes(q))
+  return list.slice(0, 50)
+})
+
+async function openLinkDiscord(user: User) {
+  linkUser.value = user
+  linkSearch.value = ''
+  linkError.value = ''
+  linkMembers.value = []
+  linkLoading.value = true
+  try {
+    const data = await api.getDiscordMembers()
+    linkMembers.value = data.members
+  } catch (err) {
+    linkError.value = (err as Error).message
+  } finally {
+    linkLoading.value = false
+  }
+}
+
+function closeLinkDiscord() {
+  linkUser.value = null
+  linkMembers.value = []
+  linkSearch.value = ''
+  linkError.value = ''
+}
+
+async function pickLinkMember(m: DiscordMemberRow) {
+  if (!linkUser.value || linkSaving.value) return
+  linkSaving.value = true
+  linkError.value = ''
+  try {
+    await api.linkPlayerDiscord(linkUser.value.id, m.id, m.displayName)
+    await fetchUsers()
+    closeLinkDiscord()
+  } catch (err) {
+    linkError.value = (err as Error).message
+  } finally {
+    linkSaving.value = false
+  }
+}
+
+async function unlinkDiscord(user: User) {
+  if (!confirm(t('confirmUnlinkDiscord', { name: user.discord_username || user.name }))) return
+  try {
+    await api.unlinkPlayerDiscord(user.id)
+    await fetchUsers()
+  } catch (err) {
+    alert((err as Error).message)
+  }
+}
 
 async function fetchUsers() {
   loading.value = true
@@ -551,6 +617,22 @@ function formatRelativeTime(dateStr: string | null) {
                   <button v-if="user.steam_id" class="btn-ghost p-2" :title="t('syncProfile')" @click="syncSingleUser(user.id)">
                     <RefreshCw class="w-4 h-4" />
                   </button>
+                  <button
+                    v-if="!user.discord_id"
+                    class="btn-ghost p-2"
+                    :title="t('linkDiscord')"
+                    @click="openLinkDiscord(user)"
+                  >
+                    <LinkIcon class="w-4 h-4" />
+                  </button>
+                  <button
+                    v-else
+                    class="btn-ghost p-2 text-purple-500"
+                    :title="t('unlinkDiscordTitle', { name: user.discord_username || user.discord_id })"
+                    @click="unlinkDiscord(user)"
+                  >
+                    <Unlink class="w-4 h-4" />
+                  </button>
                   <button v-if="!user.is_banned && store.hasPerm('ban_users')" class="btn-ghost p-2" :title="t('banUser')" @click="promptToggleBan(user)">
                     <Ban class="w-4 h-4" />
                   </button>
@@ -789,6 +871,48 @@ function formatRelativeTime(dateStr: string | null) {
           {{ savingUser ? t('saving') : t('saveChanges') }}
         </button>
         <button class="btn-secondary w-full justify-center" @click="editUser = null">{{ t('cancel') }}</button>
+      </div>
+    </ModalOverlay>
+
+    <!-- Link Discord modal -->
+    <ModalOverlay :show="!!linkUser" @close="closeLinkDiscord">
+      <div class="card max-w-lg w-full overflow-hidden">
+        <div class="px-5 py-3 border-b border-border">
+          <h3 class="text-sm font-semibold text-foreground">{{ t('linkDiscordModalTitle', { name: linkUser?.name }) }}</h3>
+          <p class="text-[11px] text-muted-foreground mt-1">{{ t('linkDiscordModalHint') }}</p>
+        </div>
+        <div class="px-5 py-4 flex flex-col gap-3">
+          <input
+            v-model="linkSearch"
+            class="input-field w-full"
+            type="text"
+            :placeholder="t('linkDiscordSearchPlaceholder')"
+            :disabled="linkLoading"
+          />
+          <div v-if="linkError" class="text-xs text-destructive">{{ linkError }}</div>
+          <div class="border border-border rounded-md max-h-[400px] overflow-y-auto">
+            <div v-if="linkLoading" class="px-3 py-4 text-sm text-muted-foreground italic text-center">{{ t('loading') }}</div>
+            <div v-else-if="!filteredLinkMembers.length" class="px-3 py-4 text-sm text-muted-foreground italic text-center">
+              {{ linkSearch ? t('linkDiscordNoMatches') : t('linkDiscordNoMembers') }}
+            </div>
+            <button
+              v-for="m in filteredLinkMembers"
+              :key="m.id"
+              class="flex items-center gap-3 w-full px-3 py-2 text-left hover:bg-accent/30 disabled:opacity-50 disabled:cursor-wait"
+              :disabled="linkSaving"
+              @click="pickLinkMember(m)"
+            >
+              <img v-if="m.avatarUrl" :src="m.avatarUrl" class="w-7 h-7 rounded-full" />
+              <div class="flex-1 min-w-0">
+                <div class="text-sm truncate">{{ m.displayName }}</div>
+                <div class="text-[10px] text-muted-foreground truncate">{{ m.username }} · {{ m.id }}</div>
+              </div>
+            </button>
+          </div>
+        </div>
+        <div class="px-5 py-3 border-t border-border flex justify-end">
+          <button class="btn-secondary text-sm" @click="closeLinkDiscord">{{ t('cancel') }}</button>
+        </div>
       </div>
     </ModalOverlay>
   </div>

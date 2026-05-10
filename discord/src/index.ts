@@ -9,6 +9,7 @@ import { PluginManager } from './core/plugin-manager.js'
 import { CronManager } from './core/cron-manager.js'
 import { loadSettings, startSettingsRefresh } from './services/settings.js'
 import { startInternalServer } from './services/internal-server.js'
+import { restoreLiveMatches } from './services/match-voice.js'
 
 async function main(): Promise<void> {
   try {
@@ -45,6 +46,11 @@ async function main(): Promise<void> {
   CronManager.setClient(client)
   await CronManager.load()
   CronManager.start(client)
+
+  // Re-hydrate match-voice state from DB BEFORE the internal HTTP server
+  // starts accepting traffic, so an inbound /internal/match/end for a
+  // crash-resumed match finds its entry in liveMatches.
+  await restoreLiveMatches(client)
 
   startInternalServer(client)
 

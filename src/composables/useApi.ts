@@ -328,6 +328,18 @@ export function useApi() {
         guildId: string
         channels: Array<{ id: string; name: string; type: 'text' | 'voice' | 'category' | 'announcement' | 'forum' | 'stage' | 'other'; parentId: string | null; position: number }>
       }>,
+    getDiscordMembers: () =>
+      request('/api/admin/discord/members') as Promise<{
+        guildId: string
+        members: Array<{ id: string; username: string; displayName: string; avatarUrl: string }>
+      }>,
+    linkPlayerDiscord: (playerId: number, discord_id: string, discord_username: string) =>
+      request(`/api/admin/users/${playerId}/discord`, {
+        method: 'PUT',
+        body: JSON.stringify({ discord_id, discord_username }),
+      }),
+    unlinkPlayerDiscord: (playerId: number) =>
+      request(`/api/admin/users/${playerId}/discord`, { method: 'DELETE' }),
     getDiscordHealth: () =>
       request('/api/admin/discord/health') as Promise<{ reachable: boolean; ready?: boolean; bot?: string | null; settingsLoaded?: boolean; error?: string }>,
     getDiscordPlugins: () =>

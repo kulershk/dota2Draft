@@ -747,6 +747,22 @@ export async function initDb() {
   try { await execute('ALTER TABLE queue_pools ADD COLUMN created_by INTEGER NULL REFERENCES players(id) ON DELETE SET NULL') } catch {}
   try { await execute('ALTER TABLE queue_pools ADD COLUMN captain_eligibility_threshold INTEGER NOT NULL DEFAULT 1500') } catch {}
 
+  // ─── Discord match-voice state ────────────────────────────────────────
+  // The discord bot mirrors its in-memory liveMatches Map here so a bot
+  // restart can rebuild the cleanup schedule and not orphan the team
+  // channels. Written by the bot (NOT by the server). cleanup_at NULL =
+  // match still live; non-null = cleanup deadline (delete channels at this
+  // time). Rows are deleted by the bot once channels are gone.
+  await execute(`
+    CREATE TABLE IF NOT EXISTS discord_match_voice (
+      match_id INTEGER PRIMARY KEY REFERENCES matches(id) ON DELETE CASCADE,
+      radiant_channel_id TEXT NOT NULL,
+      dire_channel_id TEXT NOT NULL,
+      cleanup_at TIMESTAMP NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `)
+
   // Drop FK constraints on winner_captain_id so queue matches can store player IDs
   try { await execute('ALTER TABLE match_games DROP CONSTRAINT IF EXISTS match_games_winner_captain_id_fkey') } catch {}
   try { await execute('ALTER TABLE matches DROP CONSTRAINT IF EXISTS matches_winner_captain_id_fkey') } catch {}

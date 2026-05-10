@@ -50,6 +50,8 @@ router.get('/api/users', async (req, res) => {
     banned_by_name: p.banned_by_display_name || p.banned_by_name || null,
     banned_reason: p.banned_reason || null,
     twitch_username: p.twitch_username || null,
+    discord_id: p.discord_id || null,
+    discord_username: p.discord_username || null,
     created_at: p.created_at,
     last_online: p.last_online || null,
     steam_synced_at: p.steam_synced_at || null,
@@ -678,6 +680,65 @@ router.get('/api/teams/:captainId/profile', async (req, res) => {
     })),
     stats: { wins, losses, draws },
   })
+})
+
+// Manually link or change a player's Discord account. Used by AdminUsersPage
+// for cases where the OAuth-based linking flow can't be used (e.g. fixing a
+// mismatched link, helping a user who can't complete the OAuth round-trip).
+router.put('/api/admin/users/:id/discord', async (req, res) => {
+  const admin = await requirePermission(req, res, 'manage_users')
+  if (!admin) return
+  const playerId = Number(req.params.id)
+  if (!Number.isFinite(playerId)) return res.status(400).json({ error: 'Invalid id' })
+  const player = await queryOne('SELECT id FROM players WHERE id = $1', [playerId])
+  if (!player) return res.status(404).json({ error: 'Player not found' })
+
+  const { discord_id, discord_username } = req.body || {}
+  if (!discord_id || typeof discord_id !== 'string') {
+    return res.status(400).json({ error: 'discord_id (string) required' })
+  }
+  // Discord IDs are 17-20 digit snowflakes.
+  if (!/^\d{15,25}$/.test(discord_id)) {
+    return res.status(400).json({ error: 'discord_id must be a numeric Discord snowflake' })
+  }
+
+  // Enforce uniqueness: one Discord account ↔ at most one player. If
+  // another player is currently linked to this discord_id, refuse — admin
+  // must unlink the other side first.
+  const existing = await queryOne(
+    'SELECT id FROM players WHERE discord_id = $1 AND id <> $2',
+    [discord_id, playerId],
+  )
+  if (existing) {
+    return res.status(409).json({
+      error: 'Another player is already linked to that Discord account',
+      conflict_player_id: existing.id,
+    })
+  }
+
+  await execute(
+    `UPDATE players SET discord_id = $1, discord_username = $2 WHERE id = $3`,
+    [discord_id, discord_username || '', playerId],
+  )
+  const updated = await queryOne(
+    'SELECT id, discord_id, discord_username FROM players WHERE id = $1',
+    [playerId],
+  )
+  res.json({ ok: true, player: updated })
+})
+
+router.delete('/api/admin/users/:id/discord', async (req, res) => {
+  const admin = await requirePermission(req, res, 'manage_users')
+  if (!admin) return
+  const playerId = Number(req.params.id)
+  if (!Number.isFinite(playerId)) return res.status(400).json({ error: 'Invalid id' })
+  const player = await queryOne('SELECT id FROM players WHERE id = $1', [playerId])
+  if (!player) return res.status(404).json({ error: 'Player not found' })
+  await execute(
+    `UPDATE players SET discord_id = NULL, discord_username = NULL WHERE id = $1`,
+    [playerId],
+  )
+  res.json({ ok: true })
 })
 
 router.put('/api/players/:id', async (req, res) => {

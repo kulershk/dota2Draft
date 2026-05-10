@@ -8,7 +8,7 @@ import {
 import { Logger } from './logger.js'
 import { Settings } from './settings.js'
 import { env } from '../env.js'
-import { query } from './db.js'
+import { query, execute } from './db.js'
 
 interface TeamSpec {
   side: 'radiant' | 'dire'
@@ -31,10 +31,48 @@ function teamChannelName(team: TeamSpec, matchId: number): string {
 }
 
 // matchId -> { radiantChannelId, direChannelId, cleanupTimer }
+// Mirrored to the discord_match_voice table so a bot restart can rebuild
+// the in-memory entries (and reschedule any pending cleanups) instead of
+// orphaning the team channels forever.
 const liveMatches = new Map<
   number,
   { radiantChannelId: string; direChannelId: string; cleanupTimer: NodeJS.Timeout | null }
 >()
+
+async function persistLive(matchId: number, radiantId: string, direId: string): Promise<void> {
+  try {
+    await execute(
+      `INSERT INTO discord_match_voice (match_id, radiant_channel_id, dire_channel_id, cleanup_at)
+       VALUES ($1, $2, $3, NULL)
+       ON CONFLICT (match_id) DO UPDATE
+         SET radiant_channel_id = EXCLUDED.radiant_channel_id,
+             dire_channel_id    = EXCLUDED.dire_channel_id,
+             cleanup_at         = NULL`,
+      [matchId, radiantId, direId],
+    )
+  } catch (err) {
+    Logger.warn(`match-voice: persistLive(${matchId}) failed: ${(err as Error).message}`)
+  }
+}
+
+async function persistCleanupAt(matchId: number, cleanupAt: Date | null): Promise<void> {
+  try {
+    await execute(
+      `UPDATE discord_match_voice SET cleanup_at = $2 WHERE match_id = $1`,
+      [matchId, cleanupAt],
+    )
+  } catch (err) {
+    Logger.warn(`match-voice: persistCleanupAt(${matchId}) failed: ${(err as Error).message}`)
+  }
+}
+
+async function deletePersisted(matchId: number): Promise<void> {
+  try {
+    await execute(`DELETE FROM discord_match_voice WHERE match_id = $1`, [matchId])
+  } catch (err) {
+    Logger.warn(`match-voice: deletePersisted(${matchId}) failed: ${(err as Error).message}`)
+  }
+}
 
 function resolveGuildId(): string {
   return Settings.get('guild_id', env.DISCORD_GUILD_ID)
@@ -135,22 +173,28 @@ async function moveTeamMembersToInHouse(
 
 async function deleteMatchChannels(client: Client, matchId: number): Promise<void> {
   const state = liveMatches.get(matchId)
-  if (!state) return
+  if (!state) {
+    // Nothing in memory — still try to drop any persisted row so we don't
+    // hang on to stale state forever.
+    await deletePersisted(matchId)
+    return
+  }
   liveMatches.delete(matchId)
 
   const guild = await fetchGuild(client)
-  if (!guild) return
-
-  for (const channelId of [state.radiantChannelId, state.direChannelId]) {
-    const ch = guild.channels.cache.get(channelId) as VoiceChannel | undefined
-    if (!ch) continue
-    try {
-      await ch.delete(`Match #${matchId} ended`)
-      Logger.info(`match-voice: deleted ${ch.name}`)
-    } catch (err) {
-      Logger.warn(`match-voice: failed to delete ${ch.name}: ${(err as Error).message}`)
+  if (guild) {
+    for (const channelId of [state.radiantChannelId, state.direChannelId]) {
+      const ch = guild.channels.cache.get(channelId) as VoiceChannel | undefined
+      if (!ch) continue
+      try {
+        await ch.delete(`Match #${matchId} ended`)
+        Logger.info(`match-voice: deleted ${ch.name}`)
+      } catch (err) {
+        Logger.warn(`match-voice: failed to delete ${ch.name}: ${(err as Error).message}`)
+      }
     }
   }
+  await deletePersisted(matchId)
 }
 
 export async function startMatch(client: Client, payload: StartMatchPayload): Promise<{
@@ -198,6 +242,7 @@ export async function startMatch(client: Client, payload: StartMatchPayload): Pr
     direChannelId: direChannel.id,
     cleanupTimer: null,
   })
+  await persistLive(payload.matchId, radiantChannel.id, direChannel.id)
 
   Logger.info(
     `match-voice: match #${payload.matchId} → Radiant=${radiantChannel.id} Dire=${direChannel.id} moved=${moved}/${team1Discord.length + team2Discord.length}`,
@@ -240,16 +285,68 @@ export async function endMatch(
   const delayMin = Number(Settings.get('match_cleanup_delay_minutes', '0'))
   const delayMs = immediate ? 0 : Math.max(0, delayMin) * 60_000
 
+  const cleanupAt = new Date(Date.now() + delayMs)
   state.cleanupTimer = setTimeout(() => {
     deleteMatchChannels(client, matchId).catch((err) =>
       Logger.error(`deleteMatchChannels ${matchId} failed`, err),
     )
   }, delayMs)
+  // Persist the deadline so a crash before the timer fires can still
+  // resume the cleanup on the next bot startup.
+  void persistCleanupAt(matchId, cleanupAt)
 
   Logger.info(
     `match-voice: ended match #${matchId} — moved ${movedBack} back, channels delete in ${delayMs}ms`,
   )
   return { ok: true, movedBack }
+}
+
+/**
+ * Re-hydrate the in-memory liveMatches Map from the discord_match_voice
+ * table. Called on bot boot before /internal endpoints accept traffic so a
+ * crash mid-match can resume cleanup. Rows whose cleanup_at is already in
+ * the past are cleaned up immediately; rows with a future cleanup_at get
+ * a fresh setTimeout for the remaining delta; rows with cleanup_at NULL
+ * (match still ongoing at crash time) just rebuild the in-memory entry —
+ * /internal/match/end will eventually arrive and schedule cleanup normally.
+ */
+export async function restoreLiveMatches(client: Client): Promise<void> {
+  let rows: Array<{ match_id: number; radiant_channel_id: string; dire_channel_id: string; cleanup_at: string | null }> = []
+  try {
+    rows = await query(
+      `SELECT match_id, radiant_channel_id, dire_channel_id, cleanup_at FROM discord_match_voice`,
+    )
+  } catch (err) {
+    Logger.warn(`match-voice: restoreLiveMatches query failed: ${(err as Error).message}`)
+    return
+  }
+  if (!rows.length) return
+  Logger.info(`match-voice: restoring ${rows.length} live match(es) from DB`)
+  for (const r of rows) {
+    liveMatches.set(r.match_id, {
+      radiantChannelId: r.radiant_channel_id,
+      direChannelId: r.dire_channel_id,
+      cleanupTimer: null,
+    })
+    if (r.cleanup_at) {
+      const due = new Date(r.cleanup_at).getTime()
+      const remaining = due - Date.now()
+      if (remaining <= 0) {
+        // Cleanup window already elapsed — run now.
+        deleteMatchChannels(client, r.match_id).catch((err) =>
+          Logger.error(`restore: deleteMatchChannels(${r.match_id}) failed`, err),
+        )
+      } else {
+        const timer = setTimeout(() => {
+          deleteMatchChannels(client, r.match_id).catch((err) =>
+            Logger.error(`restore: deleteMatchChannels(${r.match_id}) failed`, err),
+          )
+        }, remaining)
+        const state = liveMatches.get(r.match_id)
+        if (state) state.cleanupTimer = timer
+      }
+    }
+  }
 }
 
 export function listLiveMatches(): Array<{ matchId: number; radiantChannelId: string; direChannelId: string }> {
