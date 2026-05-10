@@ -44,6 +44,7 @@ const totalPlayers = computed(() => teamSize.value * 2)
 const emptySlots = computed(() => teamSize.value - 1) // per team, excluding captain
 
 const currentUserId = computed(() => store.currentUser.value?.id || null)
+const hasShadowPlayersInQueue = computed(() => queue.queuePlayers.value.some(p => (p.shadowPool || 0) > 0))
 
 const iAmCaptain1 = computed(() => queue.activeMatch.value?.captain1.playerId === currentUserId.value)
 const iAmCaptain2 = computed(() => queue.activeMatch.value?.captain2.playerId === currentUserId.value)
@@ -618,7 +619,11 @@ onUnmounted(() => {
                 <div class="flex flex-col">
                   <div v-for="(p, idx) in (queue.teamsFormed.value?.team1 || [])" :key="p.playerId"
                     class="px-4 py-2.5 flex items-center gap-3 border-b border-border/20 last:border-b-0"
-                    :class="isInLobby(p.steamId) ? '' : 'opacity-80'">
+                    :class="[
+                      isInLobby(p.steamId) ? '' : 'opacity-80',
+                      p.shadowPool === 2 ? 'border-l-4 border-l-red-500/80' : '',
+                      p.shadowPool === 1 ? 'border-l-4 border-l-yellow-500/80' : ''
+                    ]">
                     <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-8 h-8 rounded-full" :class="idx === 0 ? 'ring-2 ring-cyan-500/40' : ''" />
                     <div class="flex-1 min-w-0">
                       <div class="flex items-center gap-2">
@@ -626,9 +631,6 @@ onUnmounted(() => {
                         <span v-if="idx === 0" class="text-[9px] font-bold text-cyan-400 bg-cyan-500/15 px-1.5 py-0.5 rounded">CPT</span>
                         <span v-if="topRoleOf(p.playerId)" class="text-[9px] font-bold text-purple-300 bg-purple-500/15 border border-purple-500/30 px-1.5 py-0.5 rounded">
                           {{ t('queueRoleShort_' + topRoleOf(p.playerId)) }}
-                        </span>
-                        <span v-if="(p.shadowPool || 0) > 0" class="text-[9px] font-bold uppercase tracking-wider text-violet-300 bg-violet-500/15 border border-violet-500/30 px-1.5 py-0.5 rounded">
-                          {{ t('queueShadowBadge') }}
                         </span>
                       </div>
                       <div class="text-[10px] text-muted-foreground">{{ p.mmr }} MMR</div>
@@ -663,7 +665,11 @@ onUnmounted(() => {
                 <div class="flex flex-col">
                   <div v-for="(p, idx) in (queue.teamsFormed.value?.team2 || [])" :key="p.playerId"
                     class="px-4 py-2.5 flex items-center gap-3 border-b border-border/20 last:border-b-0"
-                    :class="isInLobby(p.steamId) ? '' : 'opacity-80'">
+                    :class="[
+                      isInLobby(p.steamId) ? '' : 'opacity-80',
+                      p.shadowPool === 2 ? 'border-l-4 border-l-red-500/80' : '',
+                      p.shadowPool === 1 ? 'border-l-4 border-l-yellow-500/80' : ''
+                    ]">
                     <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-8 h-8 rounded-full" :class="idx === 0 ? 'ring-2 ring-red-500/40' : ''" />
                     <div class="flex-1 min-w-0">
                       <div class="flex items-center gap-2">
@@ -671,9 +677,6 @@ onUnmounted(() => {
                         <span v-if="idx === 0" class="text-[9px] font-bold text-red-400 bg-red-500/15 px-1.5 py-0.5 rounded">CPT</span>
                         <span v-if="topRoleOf(p.playerId)" class="text-[9px] font-bold text-purple-300 bg-purple-500/15 border border-purple-500/30 px-1.5 py-0.5 rounded">
                           {{ t('queueRoleShort_' + topRoleOf(p.playerId)) }}
-                        </span>
-                        <span v-if="(p.shadowPool || 0) > 0" class="text-[9px] font-bold uppercase tracking-wider text-violet-300 bg-violet-500/15 border border-violet-500/30 px-1.5 py-0.5 rounded">
-                          {{ t('queueShadowBadge') }}
                         </span>
                       </div>
                       <div class="text-[10px] text-muted-foreground">{{ p.mmr }} MMR</div>
@@ -995,10 +998,13 @@ onUnmounted(() => {
                     {{ t('queueNoPlayersInFilter') }}
                   </div>
                   <div v-for="(p, i) in queue.pickState.value.availablePlayers" :key="p.playerId"
-                    class="rounded-xl bg-background border flex items-center gap-3 px-3.5 py-2.5 transition-all"
-                    :class="isMyTurn && i === 0
-                      ? 'border-cyan-500/30 pool-card--highlight'
-                      : 'border-border'">
+                    class="rounded-xl bg-background border-2 flex items-center gap-3 px-3.5 py-2.5 transition-all"
+                    :class="[
+                      p.shadowPool === 2 ? 'border-red-500/80'
+                        : p.shadowPool === 1 ? 'border-yellow-500/80'
+                        : (isMyTurn && i === 0 ? 'border-cyan-500/30' : 'border-border'),
+                      isMyTurn && i === 0 ? 'pool-card--highlight' : ''
+                    ]">
                     <!-- Avatar (36px) -->
                     <img v-if="p.avatarUrl" :src="p.avatarUrl"
                       class="w-9 h-9 rounded-full object-cover shrink-0"
@@ -1012,10 +1018,6 @@ onUnmounted(() => {
                     <div class="flex flex-col gap-0.5 flex-1 min-w-0">
                       <div class="flex items-center gap-1.5 min-w-0">
                         <span class="text-[13px] font-bold truncate">{{ p.name }}</span>
-                        <span v-if="(p.shadowPool || 0) > 0"
-                          class="text-[8px] font-bold uppercase tracking-wider text-violet-300 bg-violet-500/15 border border-violet-500/30 px-1 py-0.5 rounded shrink-0">
-                          {{ t('queueShadowBadge') }}
-                        </span>
                       </div>
                       <div class="flex items-center gap-1.5 flex-wrap">
                         <span class="text-[10px] font-mono font-bold text-slate-300 tabular-nums">{{ p.mmr }}</span>
@@ -1297,7 +1299,12 @@ onUnmounted(() => {
                   <router-link
                     v-for="p in queue.queuePlayers.value" :key="p.playerId"
                     :to="{ name: 'player-profile', params: { id: p.playerId } }"
-                    class="flex flex-col items-center gap-2.5 min-w-0 px-2.5 py-3.5 rounded-[10px] bg-[#0F172A] border border-border/40 hover:border-primary/40 hover:bg-[#111d33] transition-colors"
+                    class="flex flex-col items-center gap-2.5 min-w-0 px-2.5 py-3.5 rounded-[10px] bg-[#0F172A] border-2 hover:bg-[#111d33] transition-colors"
+                    :class="p.shadowPool === 2
+                      ? 'border-red-500/80'
+                      : p.shadowPool === 1
+                        ? 'border-yellow-500/80'
+                        : 'border-border/40 hover:border-primary/40'"
                     :title="t('queuePlayerCardOpenProfile')"
                   >
                     <img
@@ -1314,10 +1321,6 @@ onUnmounted(() => {
                       <span class="text-primary text-lg font-bold">{{ (p.name || '?').charAt(0).toUpperCase() }}</span>
                     </div>
                     <span class="text-[13px] font-semibold truncate max-w-full">{{ p.name }}</span>
-                    <span v-if="(p.shadowPool || 0) > 0"
-                      class="text-[9px] font-bold uppercase tracking-wider text-violet-300 bg-violet-500/15 border border-violet-500/30 px-1.5 py-0.5 rounded">
-                      {{ t('queueShadowBadge') }}
-                    </span>
                     <span class="text-[11px] text-muted-foreground font-mono font-medium tabular-nums">{{ p.mmr }} MMR</span>
                     <span class="flex items-center gap-1 font-mono tabular-nums"
                       :title="t('queuePlayerStatsTooltip')">
@@ -1330,6 +1333,19 @@ onUnmounted(() => {
                     </span>
                   </router-link>
                 </div>
+              </div>
+
+              <!-- Shadow-pool legend -->
+              <div v-if="hasShadowPlayersInQueue"
+                class="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 px-3 py-2 rounded-lg bg-card/40 border border-border/40 text-[11px] text-muted-foreground">
+                <span class="flex items-center gap-2">
+                  <span class="inline-block w-3 h-3 rounded border-2 border-yellow-500/80"></span>
+                  <span>{{ t('queueShadowLegendSoft') }}</span>
+                </span>
+                <span class="flex items-center gap-2">
+                  <span class="inline-block w-3 h-3 rounded border-2 border-red-500/80"></span>
+                  <span>{{ t('queueShadowLegendHard') }}</span>
+                </span>
               </div>
 
               <!-- Recent Matches -->
