@@ -25,6 +25,7 @@ import { activeQueueMatches, playerInMatch, playerInQueue, poolQueues, getPoolQu
 import { socketPlayers } from '../socket/state.js'
 import { botPool } from '../services/botPool.js'
 import { kickPlayerFromQueue } from '../socket/queue.js'
+import { discordBot } from '../services/discordBotClient.js'
 
 export default function createQueueRouter(io) {
   const router = Router()
@@ -618,9 +619,16 @@ export default function createQueueRouter(io) {
         console.error('[Queue cancel] roster cleanup failed:', e.message)
       }
 
-      // Cancel the Dota 2 lobby via bot if one exists
+      // Cancel the Dota 2 lobby via bot if one exists, and tear down the
+      // discord match-voice channels immediately (move members back to
+      // In-House + delete radiant/dire channels). Mirrors cancelQueueMatch
+      // in server/socket/queue.js — without this, channels linger until
+      // the bot's next restart-recovery sweep.
       const qm = await queryOne('SELECT match_id FROM queue_matches WHERE id = $1', [qmId])
       if (qm?.match_id) {
+        discordBot.matchEnd(qm.match_id, true)
+          .catch((err) => console.warn('[Queue] discord matchEnd (admin cancel) failed:', err.message))
+
         const lobbies = await query(
           "SELECT id FROM match_lobbies WHERE match_id = $1 AND status NOT IN ('completed', 'cancelled', 'error')",
           [qm.match_id]
