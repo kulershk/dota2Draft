@@ -1248,6 +1248,8 @@ export default {
   queueAdminBan: 'Banot',
   queueShadowBadge: 'Ēna',
   queueAdminShadowTitle: 'Ēnu pūla atzīme — Nav: spēlē kā parasti · Mīksta: atzīmēts, bet spēlē kā parasti · Cieta: spēlē tikai tad, ja rindā ir cits ēnu spēlētājs',
+  queueAdminShadowLabel: 'Ēnu pūls',
+  queueAdminShadowHint: 'Mīksta = atzīmēts, spēlē kā parasti. Cieta = spēlē tikai tad, ja tajā pašā grupā ir vēl viens ēnu spēlētājs.',
   queueAdminShadow_0: 'Nav',
   queueAdminShadow_1: 'Mīksta',
   queueAdminShadow_2: 'Cieta',

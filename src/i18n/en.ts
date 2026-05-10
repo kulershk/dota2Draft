@@ -1261,6 +1261,8 @@ export default {
   queueAdminBan: 'Ban',
   queueShadowBadge: 'Shadow',
   queueAdminShadowTitle: 'Shadow pool flag — None: matches normally · Soft: marked, matches normally · Hard: only matches when another shadow player is present',
+  queueAdminShadowLabel: 'Shadow pool',
+  queueAdminShadowHint: 'Soft = marked, plays normally. Hard = only matched when at least one other shadow player is in the same group.',
   queueAdminShadow_0: 'None',
   queueAdminShadow_1: 'Soft',
   queueAdminShadow_2: 'Hard',

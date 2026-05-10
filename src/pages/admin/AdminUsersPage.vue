@@ -47,6 +47,7 @@ interface User {
   activity: { page: string; path: string; timestamp: number } | null
   discord_id: string | null
   discord_username: string | null
+  shadow_pool: number
 }
 
 const pageLabels: Record<string, string> = {
@@ -88,6 +89,8 @@ const editUserGroupIds = ref<number[]>([])
 const editUserDisplayName = ref('')
 const editUserMmr = ref(0)
 const editUserRoles = ref<string[]>([])
+const editUserShadowPool = ref<0 | 1 | 2>(0)
+const editUserShadowPoolOriginal = ref<0 | 1 | 2>(0)
 const savingUser = ref(false)
 const ALL_ROLES = ['Carry', 'Mid', 'Offlane', 'Pos4', 'Pos5']
 const onlinePlayerIds = ref<number[]>([])
@@ -193,6 +196,9 @@ async function openEditUser(user: User) {
   editUserDisplayName.value = user.display_name || ''
   editUserMmr.value = user.mmr
   editUserRoles.value = [...(user.roles || [])]
+  const sp = (user.shadow_pool === 1 || user.shadow_pool === 2) ? user.shadow_pool : 0
+  editUserShadowPool.value = sp
+  editUserShadowPoolOriginal.value = sp
   const groups = await api.getPlayerGroups(user.id)
   editUserGroupIds.value = groups.map((g: PermGroup) => g.id)
 }
@@ -229,6 +235,12 @@ async function saveEditUser() {
     // Only attempt to update permission groups if this admin can manage them.
     if (store.hasPerm('manage_permissions')) {
       calls.push(api.setPlayerGroups(editUser.value.id, editUserGroupIds.value))
+    }
+    // Shadow-pool flag uses the queue-admin endpoint (manage_queue_pools).
+    // Only send when changed AND this admin actually has the perm — otherwise
+    // we'd 403 noisily on every save.
+    if (editUserShadowPool.value !== editUserShadowPoolOriginal.value && store.hasPerm('manage_queue_pools')) {
+      calls.push(api.adminSetQueuePlayerShadow(editUser.value.id, editUserShadowPool.value))
     }
     await Promise.all(calls)
     editUser.value = null
@@ -836,6 +848,25 @@ function formatRelativeTime(dateStr: string | null) {
               <RoleBadge :role="role" size="sm" />
             </button>
           </div>
+        </div>
+
+        <!-- Shadow Pool (only shown to admins with manage_queue_pools) -->
+        <div v-if="store.hasPerm('manage_queue_pools')" class="flex flex-col gap-1.5">
+          <label class="block text-xs font-medium text-muted-foreground">{{ t('queueAdminShadowLabel') }}</label>
+          <div class="flex items-center rounded-lg border border-border overflow-hidden w-fit">
+            <button
+              v-for="opt in [0, 1, 2] as const" :key="opt"
+              type="button"
+              class="px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors"
+              :class="editUserShadowPool === opt
+                ? (opt === 0 ? 'bg-accent text-foreground' : 'bg-violet-500/20 text-violet-300')
+                : 'text-muted-foreground hover:bg-accent/60'"
+              @click="editUserShadowPool = opt"
+            >
+              {{ t('queueAdminShadow_' + opt) }}
+            </button>
+          </div>
+          <p class="text-xs text-muted-foreground">{{ t('queueAdminShadowHint') }}</p>
         </div>
 
         <!-- Permission Groups (only shown to admins with manage_permissions) -->

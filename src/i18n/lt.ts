@@ -1248,6 +1248,8 @@ export default {
   queueAdminBan: 'Banas',
   queueShadowBadge: 'Šešėlis',
   queueAdminShadowTitle: 'Šešėlinio pulo žymė — Nėra: žaidžia normaliai · Minkšta: pažymėtas, žaidžia normaliai · Kieta: žaidžia tik tada, kai eilėje yra kitas šešėlinis žaidėjas',
+  queueAdminShadowLabel: 'Šešėlinis pulas',
+  queueAdminShadowHint: 'Minkšta = pažymėtas, žaidžia normaliai. Kieta = žaidžia tik tada, kai toje pačioje grupėje yra dar vienas šešėlinis žaidėjas.',
   queueAdminShadow_0: 'Nėra',
   queueAdminShadow_1: 'Minkšta',
   queueAdminShadow_2: 'Kieta',
