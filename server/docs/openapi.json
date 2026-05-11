@@ -2705,7 +2705,7 @@
       "get": {
         "tags": ["Seasons"],
         "summary": "Public leaderboard for a season",
-        "description": "Filters out players below the season's `min_games_for_leaderboard` setting. Sorted by points DESC, then games DESC, then name ASC.",
+        "description": "Filters out players below the season's `min_games_for_leaderboard` setting. Sorted by points DESC, then games DESC, then name ASC. Each row includes the player's `shadow_pool` flag (0 = none, 1 = soft, 2 = hard) so the UI can colour the avatar ring.",
         "parameters": [
           { "name": "slug",   "in": "path",  "required": true, "schema": { "type": "string" } },
           { "name": "limit",  "in": "query", "schema": { "type": "integer", "default": 50, "maximum": 200 } },

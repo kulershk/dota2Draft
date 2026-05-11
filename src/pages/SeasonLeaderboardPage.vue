@@ -26,6 +26,7 @@ interface LeaderRow {
   avatar_url: string | null
   mmr: number
   mmr_verified_at: string | null
+  shadow_pool: number
   points: number
   peak_points: number
   games_played: number
@@ -74,6 +75,16 @@ function fmtRange(s: Season): string {
   const a = s.starts_at ? new Date(s.starts_at).toLocaleDateString() : '—'
   const b = s.ends_at   ? new Date(s.ends_at  ).toLocaleDateString() : '—'
   return `${a} → ${b}`
+}
+function shadowRingClass(sp: number | null | undefined): string {
+  if (sp === 2) return 'ring-2 ring-red-500/80'
+  if (sp === 1) return 'ring-2 ring-yellow-500/80'
+  return ''
+}
+function shadowTitle(sp: number | null | undefined): string {
+  if (sp === 2) return t('queueShadowLegendHard')
+  if (sp === 1) return t('queueShadowLegendSoft')
+  return ''
 }
 
 let socketHandler: ((p: any) => void) | null = null
@@ -149,8 +160,19 @@ onUnmounted(detachSocket)
                 <td class="px-4 py-2.5 text-right font-mono tabular-nums" :class="i < 3 ? 'text-amber-400 font-bold' : 'text-muted-foreground'">{{ i + 1 }}</td>
                 <td class="px-4 py-2.5">
                   <div class="flex items-center gap-2">
-                    <img v-if="row.avatar_url" :src="row.avatar_url" class="w-7 h-7 rounded-full object-cover" />
-                    <div v-else class="w-7 h-7 rounded-full bg-accent" />
+                    <img
+                      v-if="row.avatar_url"
+                      :src="row.avatar_url"
+                      class="w-7 h-7 rounded-full object-cover"
+                      :class="shadowRingClass(row.shadow_pool)"
+                      :title="shadowTitle(row.shadow_pool) || undefined"
+                    />
+                    <div
+                      v-else
+                      class="w-7 h-7 rounded-full bg-accent"
+                      :class="shadowRingClass(row.shadow_pool)"
+                      :title="shadowTitle(row.shadow_pool) || undefined"
+                    />
                     <span class="font-semibold">{{ row.display_name }}</span>
                     <BadgeCheck v-if="row.mmr_verified_at" class="w-4 h-4 text-cyan-400 shrink-0" :title="t('mmrVerifiedTooltip')" />
                     <span class="text-[11px] text-muted-foreground font-mono tabular-nums">{{ row.mmr }} MMR</span>
@@ -172,6 +194,17 @@ onUnmounted(detachSocket)
             </router-link>
           </tbody>
         </table>
+      </div>
+
+      <div v-if="rows.some(r => (r.shadow_pool || 0) > 0)" class="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-[11px] text-muted-foreground">
+        <span class="flex items-center gap-1.5">
+          <span class="inline-block w-3 h-3 rounded-full ring-2 ring-yellow-500/80"></span>
+          {{ t('queueShadowLegendSoft') }}
+        </span>
+        <span class="flex items-center gap-1.5">
+          <span class="inline-block w-3 h-3 rounded-full ring-2 ring-red-500/80"></span>
+          {{ t('queueShadowLegendHard') }}
+        </span>
       </div>
     </template>
   </div>
