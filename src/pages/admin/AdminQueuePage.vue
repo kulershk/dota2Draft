@@ -5,6 +5,7 @@ import { Plus, Trash2, Pencil, X, Check, Ban, RefreshCw, Swords, Loader2, UserX,
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
+import RichTextEditor from '@/components/common/RichTextEditor.vue'
 
 const { t } = useI18n()
 const api = useApi()
@@ -77,6 +78,8 @@ const form = ref<Record<string, any>>({
   decline_ban_minutes: 5,
   captain_eligibility_threshold: 1500,
   season_id: null,
+  rules_title: '',
+  rules_content: '',
 })
 
 function resetForm() {
@@ -91,6 +94,8 @@ function resetForm() {
     accept_timer: 20, decline_ban_minutes: 5,
     captain_eligibility_threshold: 1500,
     season_id: null,
+    rules_title: '',
+    rules_content: '',
   }
 }
 
@@ -804,6 +809,20 @@ onUnmounted(() => {
             <option :value="2">{{ t('penaltyLevel', { n: 2 }) }}</option>
             <option :value="3">{{ t('penaltyLevel', { n: 3 }) }}</option>
           </select>
+        </div>
+      </div>
+
+      <!-- Rules -->
+      <div class="border-t border-border/30 pt-4 mt-4 flex flex-col gap-3">
+        <span class="text-sm font-semibold text-muted-foreground">{{ t('queuePoolRulesSection') }}</span>
+        <p class="text-[11px] text-muted-foreground -mt-2">{{ t('queuePoolRulesSectionHint') }}</p>
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs text-muted-foreground">{{ t('queuePoolRulesTitle') }}</label>
+          <input type="text" class="input-field" v-model="form.rules_title" :placeholder="t('queuePoolRulesTitlePlaceholder')" />
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs text-muted-foreground">{{ t('queuePoolRulesContent') }}</label>
+          <RichTextEditor v-model="form.rules_content" />
         </div>
       </div>
 

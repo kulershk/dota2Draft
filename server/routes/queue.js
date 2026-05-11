@@ -390,6 +390,7 @@ export default function createQueueRouter(io) {
       accept_timer, decline_ban_minutes,
       captain_eligibility_threshold,
       season_id,
+      rules_title, rules_content,
     } = req.body
 
     if (!name) return res.status(400).json({ error: 'Name is required' })
@@ -406,8 +407,8 @@ export default function createQueueRouter(io) {
           xp_win, xp_participate,
           accept_timer, decline_ban_minutes,
           captain_eligibility_threshold,
-          season_id, created_by
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
+          season_id, rules_title, rules_content, created_by
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30)
         RETURNING *
       `, [
         name, enabled !== false, min_mmr || 0, max_mmr || 0,
@@ -420,7 +421,7 @@ export default function createQueueRouter(io) {
         xp_win ?? 15, xp_participate ?? 5,
         accept_timer ?? 20, decline_ban_minutes ?? 5,
         captain_eligibility_threshold ?? 1500,
-        season_id || null, admin.id,
+        season_id || null, rules_title || '', rules_content || '', admin.id,
       ])
       res.status(201).json(pool)
     } catch (e) {
@@ -452,6 +453,7 @@ export default function createQueueRouter(io) {
         'accept_timer', 'decline_ban_minutes',
         'captain_eligibility_threshold',
         'season_id',
+        'rules_title', 'rules_content',
       ]
       const setClauses = []
       const values = []

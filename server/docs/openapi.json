@@ -226,6 +226,8 @@
           "lobby_timeout_minutes": { "type": "integer" },
           "xp_win": { "type": "integer" },
           "xp_participate": { "type": "integer" },
+          "rules_title": { "type": "string", "description": "Heading shown above the rules block on /queue when this pool is selected. Empty = falls back to the localized 'Rules' label." },
+          "rules_content": { "type": "string", "description": "Sanitized HTML body shown in the collapsible rules card on /queue. Empty = no rules card is rendered for this pool." },
           "created_at": { "type": "string", "format": "date-time" },
           "queue_count": { "type": "integer", "description": "Number of players currently waiting in this pool. Included on the public /api/queue/pools listing for pool-selector badges; not persisted in the DB." }
         }
@@ -257,7 +259,9 @@
           "lobby_timeout_minutes": { "type": "integer", "default": 10 },
           "captain_eligibility_threshold": { "type": "integer", "default": 1500, "description": "MMR window for random captain selection. Players within this many MMR of the lobby's top get a random chance to be captain. Set to 0 to always pick the top 2 by MMR (legacy behavior)." },
           "xp_win": { "type": "integer", "default": 15 },
-          "xp_participate": { "type": "integer", "default": 5 }
+          "xp_participate": { "type": "integer", "default": 5 },
+          "rules_title": { "type": "string", "default": "", "description": "Heading for the rules block. Optional." },
+          "rules_content": { "type": "string", "default": "", "description": "Sanitized HTML body for the rules block. Optional." }
         }
       }
     }

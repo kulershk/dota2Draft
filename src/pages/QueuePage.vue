@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { Clock, Users, Swords, X, Check, Loader2, Shield, ShieldCheck, ChevronRight, Timer, Send, MessageCircle, Ban, Target, Copy, Eye, EyeOff, Hourglass, ListOrdered, UserPlus, Plus, Info, Crown, Medal, BadgeCheck } from 'lucide-vue-next'
+import { Clock, Users, Swords, X, Check, Loader2, Shield, ShieldCheck, ChevronRight, ChevronDown, Timer, Send, MessageCircle, Ban, Target, Copy, Eye, EyeOff, Hourglass, ListOrdered, UserPlus, Plus, Info, Crown, Medal, BadgeCheck } from 'lucide-vue-next'
 import { useQueueStore, type QueuePlayer, QUEUE_ROLES } from '@/composables/useQueueStore'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { getServerNow, getSocket } from '@/composables/useSocket'
@@ -40,6 +40,28 @@ watch(totalHistoryPages, (n) => { if (historyPage.value > n) historyPage.value =
 
 const selectedPool = computed(() => queue.pools.value.find(p => p.id === selectedPoolId.value) || null)
 const teamSize = computed(() => (selectedPool.value as any)?.team_size || 5)
+
+const RULES_COLLAPSED_KEY = 'queue_rules_collapsed'
+const rulesCollapsedByPool = ref<Record<string, boolean>>(loadRulesCollapsed())
+function loadRulesCollapsed(): Record<string, boolean> {
+  try { return JSON.parse(localStorage.getItem(RULES_COLLAPSED_KEY) || '{}') || {} } catch { return {} }
+}
+const selectedPoolRules = computed(() => {
+  const p = selectedPool.value as any
+  if (!p) return null
+  const content = (p.rules_content || '').trim()
+  if (!content) return null
+  return { title: (p.rules_title || '').trim() || t('queuePoolRulesDefaultTitle'), content }
+})
+const rulesCollapsed = computed(() =>
+  selectedPoolId.value != null ? !!rulesCollapsedByPool.value[String(selectedPoolId.value)] : false
+)
+function toggleRulesCollapsed() {
+  if (selectedPoolId.value == null) return
+  const key = String(selectedPoolId.value)
+  rulesCollapsedByPool.value = { ...rulesCollapsedByPool.value, [key]: !rulesCollapsedByPool.value[key] }
+  try { localStorage.setItem(RULES_COLLAPSED_KEY, JSON.stringify(rulesCollapsedByPool.value)) } catch {}
+}
 const totalPlayers = computed(() => teamSize.value * 2)
 const emptySlots = computed(() => teamSize.value - 1) // per team, excluding captain
 
@@ -477,6 +499,29 @@ onUnmounted(() => {
       </div>
 
       <template v-else>
+
+        <!-- Pool rules — collapsible, hidden during pick phase -->
+        <div
+          v-if="selectedPoolRules && !queue.activeMatch.value"
+          class="card mb-4 overflow-hidden"
+        >
+          <button
+            type="button"
+            class="w-full flex items-center gap-2 px-5 py-3 text-left hover:bg-accent/30 transition-colors"
+            :aria-expanded="!rulesCollapsed"
+            @click="toggleRulesCollapsed"
+          >
+            <Info class="w-4 h-4 text-primary shrink-0" />
+            <span class="text-sm font-semibold flex-1 truncate">{{ selectedPoolRules.title }}</span>
+            <ChevronDown class="w-4 h-4 text-muted-foreground transition-transform" :class="rulesCollapsed ? '-rotate-90' : ''" />
+          </button>
+          <div v-if="!rulesCollapsed" class="px-5 pb-5 pt-1 border-t border-border/40">
+            <div
+              class="prose prose-sm dark:prose-invert max-w-none text-muted-foreground leading-relaxed"
+              v-safe-html="selectedPoolRules.content"
+            />
+          </div>
+        </div>
 
         <!-- ═══════════════════ PICK PHASE ═══════════════════ -->
         <template v-if="queue.activeMatch.value">

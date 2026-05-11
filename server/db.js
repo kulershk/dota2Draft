@@ -747,6 +747,8 @@ export async function initDb() {
   try { await execute('ALTER TABLE queue_pools ADD COLUMN decline_ban_minutes INTEGER DEFAULT 5') } catch {}
   try { await execute('ALTER TABLE queue_pools ADD COLUMN created_by INTEGER NULL REFERENCES players(id) ON DELETE SET NULL') } catch {}
   try { await execute('ALTER TABLE queue_pools ADD COLUMN captain_eligibility_threshold INTEGER NOT NULL DEFAULT 1500') } catch {}
+  try { await execute(`ALTER TABLE queue_pools ADD COLUMN rules_title TEXT DEFAULT ''`) } catch {}
+  try { await execute(`ALTER TABLE queue_pools ADD COLUMN rules_content TEXT DEFAULT ''`) } catch {}
 
   // ─── Discord match-voice state ────────────────────────────────────────
   // The discord bot mirrors its in-memory liveMatches Map here so a bot
