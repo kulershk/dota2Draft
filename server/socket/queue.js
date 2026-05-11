@@ -10,19 +10,20 @@ import { botPool } from '../services/botPool.js'
 import { discordBot } from '../services/discordBotClient.js'
 import { hasPerk, PERK } from '../helpers/subscription.js'
 
-// Generate pick order for a given team size (snake draft).
-// For 5v5: [1,2,2,1,1,2,2,1] — captain 1 picks first, then captain 2 picks
-// back-to-back, then captain 1 back-to-back, etc., so each captain ends up
-// with the same number of picks and neither gets two in a row at the start.
+// Generate pick order for a given team size.
+// For 5v5: [1,2,1,2,1,2,2,1] — strict alternation, with the second-to-last
+// pick flipped so captain 2 gets a back-to-back at the end and captain 1
+// finishes. Each captain still ends up with the same number of picks (4-4
+// in 5v5) but neither has the consistent first-pick advantage every round.
 // For 1v1: no picks needed (both are captains).
 function generatePickOrder(teamSize) {
   if (teamSize <= 1) return []
-  const picks = []
   const totalPicks = (teamSize - 1) * 2
-  for (let i = 0; i < totalPicks; i++) {
-    if (i === 0) picks.push(1)
-    else if (i % 2 === 1) picks.push(picks[i - 1] === 1 ? 2 : 1) // odd index: switch
-    else picks.push(picks[i - 1]) // even index (>0): same as previous (back-to-back)
+  const picks = []
+  for (let i = 0; i < totalPicks; i++) picks.push(i % 2 === 0 ? 1 : 2)
+  if (totalPicks >= 4) {
+    const last = picks.length - 1
+    ;[picks[last - 1], picks[last]] = [picks[last], picks[last - 1]]
   }
   return picks
 }
