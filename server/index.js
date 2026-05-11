@@ -234,7 +234,7 @@ initDb().then(async () => {
     if (!matchGameId || !dotabuffId) throw new Error('Missing matchGameId or dotabuffId')
 
     const game = await queryOne(
-      'SELECT id, winner_captain_id, parsed FROM match_games WHERE id = $1',
+      'SELECT id, winner_captain_id, parsed, created_at FROM match_games WHERE id = $1',
       [matchGameId]
     )
     if (!game) throw new Error(`match_games #${matchGameId} not found`)
@@ -244,6 +244,12 @@ initDb().then(async () => {
         await enqueueJob({ type: 'enrich_match_stats', payload: { matchGameId, dotabuffId, startedAt: Date.now() }, maxAttempts: 999 })
       }
       return { status: 'already_resolved', winner: true, parsed: !!game.parsed }
+    }
+    // Give up on games that have gone unresolved for more than 7 days — the
+    // Dota match was almost certainly abandoned or the dotabuff_id is wrong.
+    const ageMs = Date.now() - new Date(game.created_at).getTime()
+    if (ageMs > 7 * 24 * 60 * 60 * 1000) {
+      return { status: 'abandoned_too_old', ageDays: Math.floor(ageMs / 86400000) }
     }
 
     const result = { dotabuffId, gc: null, steam: null, winner: false }

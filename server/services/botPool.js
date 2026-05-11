@@ -946,7 +946,7 @@ class BotPool {
         WHERE mg.dotabuff_id IS NOT NULL
           AND mg.dotabuff_id != ''
           AND (
-            mg.winner_captain_id IS NULL
+            (mg.winner_captain_id IS NULL AND mg.created_at > NOW() - INTERVAL '7 days')
             OR (mg.parsed = false AND mg.created_at > NOW() - INTERVAL '24 hours')
           )
         ORDER BY mg.created_at ASC
