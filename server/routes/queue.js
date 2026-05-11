@@ -24,7 +24,7 @@ async function getQueueAdminScope(req, res) {
 import { activeQueueMatches, playerInMatch, playerInQueue, poolQueues, getPoolQueuePlayers, clearPickTimer } from '../socket/queueState.js'
 import { socketPlayers } from '../socket/state.js'
 import { botPool } from '../services/botPool.js'
-import { kickPlayerFromQueue, broadcastQueueUpdate } from '../socket/queue.js'
+import { kickPlayerFromQueue, broadcastQueueUpdate, autoRequeueEligible } from '../socket/queue.js'
 import { discordBot } from '../services/discordBotClient.js'
 
 export default function createQueueRouter(io) {
@@ -604,19 +604,23 @@ export default function createQueueRouter(io) {
       // re-queuing. Walk the persisted roster and free anyone still pinned to
       // this queueMatchId. Idempotent and safe — the equality check ensures we
       // never free a player who's been since pulled into a different match.
+      let cancelledRosterIds = []
       try {
         const roster = await queryOne(
-          'SELECT team1_players, team2_players FROM queue_matches WHERE id = $1',
+          'SELECT pool_id, team1_players, team2_players FROM queue_matches WHERE id = $1',
           [qmId]
         )
-        const allIds = [
+        cancelledRosterIds = [
           ...((roster?.team1_players || []).map(p => p.playerId)),
           ...((roster?.team2_players || []).map(p => p.playerId)),
         ]
-        for (const pid of allIds) {
+        for (const pid of cancelledRosterIds) {
           if (playerInMatch.get(pid) === qmId) playerInMatch.delete(pid)
         }
         activeQueueMatches.delete(qmId)
+        // Auto-requeue subscribers — runs after playerInMatch is cleared so
+        // _doEnqueue won't reject them as already-in-match.
+        autoRequeueEligible(io, cancelledRosterIds, roster?.pool_id).catch(() => {})
       } catch (e) {
         console.error('[Queue cancel] roster cleanup failed:', e.message)
       }
@@ -683,6 +687,9 @@ export default function createQueueRouter(io) {
       activeQueueMatches.delete(qmId)
       // Notify any clients still pinned to the room so their UI clears.
       io.to(`queue-match:${qmId}`).emit('queue:cancelled', { queueMatchId: qmId, reason: 'Force-completed by admin' })
+      // Auto-requeue subscribers — runs after playerInMatch is cleared so
+      // _doEnqueue won't reject them as already-in-match.
+      autoRequeueEligible(io, allIds, qmRow.pool_id).catch(() => {})
 
       res.json({ ok: true, freedPlayers: allIds.length })
     } catch (e) {

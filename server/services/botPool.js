@@ -1,6 +1,5 @@
 import { query, queryOne, execute } from '../db.js'
 import { playerInMatch, activeQueueMatches } from '../socket/queueState.js'
-import { hasPerk, PERK } from '../helpers/subscription.js'
 import { socketPlayers } from '../socket/state.js'
 import { fetchAndSaveGameStats, fetchOpenDotaMatch, saveMatchGameStats, requestOpenDotaParse } from '../helpers/opendota.js'
 import { fetchSteamMatchDetails } from '../helpers/steam.js'
@@ -731,42 +730,20 @@ class BotPool {
 
       // Surgical auto-requeue for SHOWED-UP players only — the no-shows
       // already got the 10-min ban applied above, and _doEnqueue's ban
-      // check would reject them anyway. Same gates as the post-game
-      // requeue: perk + persistent flag + open socket. Players who showed
-      // up but closed the tab during the wait are silently skipped.
+      // check would reject them anyway. Players who showed up but closed
+      // the tab during the wait are silently skipped by autoRequeueEligible.
       try {
         const showedUpSteamIds = expected
           .map(e => String(e?.steam_id || ''))
           .filter(sid => sid && slottedSteamIds.has(sid))
-        if (showedUpSteamIds.length > 0) {
+        if (showedUpSteamIds.length > 0 && qm.pool_id) {
           const showedUpRows = await query(
             'SELECT id FROM players WHERE steam_id = ANY($1::text[])',
             [showedUpSteamIds]
           )
           const showedUpIds = showedUpRows.map(r => r.id)
-          const flagRows = showedUpIds.length
-            ? await query('SELECT id, auto_requeue_enabled FROM players WHERE id = ANY($1::int[])', [showedUpIds])
-            : []
-          const wantsByPid = new Map(flagRows.map(r => [r.id, !!r.auto_requeue_enabled]))
-          const onlinePids = new Set()
-          for (const pid of socketPlayers.values()) onlinePids.add(pid)
-          const eligibleIds = []
-          for (const pid of showedUpIds) {
-            if (!wantsByPid.get(pid)) continue
-            if (!onlinePids.has(pid)) {
-              console.log('[auto-requeue] (lobby-timeout) skipped player', pid, '— no open socket')
-              continue
-            }
-            if (await hasPerk(pid, PERK.AUTO_REQUEUE)) eligibleIds.push(pid)
-          }
-          if (eligibleIds.length && qm.pool_id) {
-            const { enqueuePlayerForRequeue } = await import('../socket/queue.js')
-            for (const pid of eligibleIds) {
-              enqueuePlayerForRequeue(this.io, pid, qm.pool_id).catch(e => {
-                console.error('[auto-requeue] (lobby-timeout) failed for player', pid, ':', e?.message)
-              })
-            }
-          }
+          const { autoRequeueEligible } = await import('../socket/queue.js')
+          await autoRequeueEligible(this.io, showedUpIds, qm.pool_id)
         }
       } catch (e) {
         console.error('[auto-requeue] lobby-timeout hook failed:', e?.message)
@@ -1145,37 +1122,13 @@ class BotPool {
         }
         activeQueueMatches.delete(queueMatchXp.id)
 
-        // Auto-requeue: pull the persistent flag for every just-released
-        // player and check the perk + an open socket. All three required —
-        // skipping the offline case avoids putting an absent player into a
-        // queue where they'd just rack up ready-check timeout bans. Lazy
-        // import avoids a circular dependency at module load (queue.js
-        // already imports botPool).
+        // Auto-requeue every just-released player whose persistent flag is
+        // on, who has the perk, and who has an open socket. Lazy import
+        // avoids a circular dependency at module load (queue.js already
+        // imports botPool).
         try {
-          const flagRows = allIds.length
-            ? await query('SELECT id, auto_requeue_enabled FROM players WHERE id = ANY($1::int[])', [allIds])
-            : []
-          const wantsByPid = new Map(flagRows.map(r => [r.id, !!r.auto_requeue_enabled]))
-          const onlinePids = new Set()
-          for (const pid of socketPlayers.values()) onlinePids.add(pid)
-          const eligibleIds = []
-          for (const pid of allIds) {
-            if (!wantsByPid.get(pid)) continue
-            if (!onlinePids.has(pid)) {
-              console.log('[auto-requeue] skipped player', pid, '— no open socket')
-              continue
-            }
-            if (await hasPerk(pid, PERK.AUTO_REQUEUE)) eligibleIds.push(pid)
-          }
-          if (eligibleIds.length) {
-            const targetPoolId = queueMatchXp.pool_id
-            const { enqueuePlayerForRequeue } = await import('../socket/queue.js')
-            for (const pid of eligibleIds) {
-              enqueuePlayerForRequeue(this.io, pid, targetPoolId).catch(e => {
-                console.error('[auto-requeue] failed for player', pid, ':', e?.message)
-              })
-            }
-          }
+          const { autoRequeueEligible } = await import('../socket/queue.js')
+          await autoRequeueEligible(this.io, allIds, queueMatchXp.pool_id)
         } catch (e) {
           console.error('[auto-requeue] match-end hook failed:', e?.message)
         }

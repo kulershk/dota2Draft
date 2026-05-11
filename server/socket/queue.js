@@ -141,6 +141,39 @@ export async function enqueuePlayerForRequeue(io, playerId, poolId) {
   return result
 }
 
+// Bulk auto-requeue hook used by every match-cleanup path (post-game in
+// botPool, admin cancel/force-complete, internal cancelQueueMatch, lobby
+// timeout). Same gates everywhere: persistent flag + perk + open socket.
+// Players who closed the tab are silently skipped — we don't want to drop
+// them into a ready check they'll fail. Caller must have already cleared
+// `playerInMatch` for these players, otherwise _doEnqueue will reject them
+// as "Already in an active match".
+export async function autoRequeueEligible(io, playerIds, poolId) {
+  if (!Array.isArray(playerIds) || !playerIds.length || !poolId) return
+  try {
+    const flagRows = await query(
+      'SELECT id, auto_requeue_enabled FROM players WHERE id = ANY($1::int[])',
+      [playerIds],
+    )
+    const wantsByPid = new Map(flagRows.map(r => [r.id, !!r.auto_requeue_enabled]))
+    const onlinePids = new Set()
+    for (const pid of socketPlayers.values()) onlinePids.add(pid)
+    for (const pid of playerIds) {
+      if (!wantsByPid.get(pid)) continue
+      if (!onlinePids.has(pid)) {
+        console.log('[auto-requeue] skipped player', pid, '— no open socket')
+        continue
+      }
+      if (!(await hasPerk(pid, PERK.AUTO_REQUEUE))) continue
+      enqueuePlayerForRequeue(io, pid, poolId).catch(e => {
+        console.error('[auto-requeue] failed for player', pid, ':', e?.message)
+      })
+    }
+  } catch (e) {
+    console.error('[auto-requeue] hook failed:', e?.message)
+  }
+}
+
 export function registerQueueHandlers(socket, io) {
 
   // ── Join queue ──
@@ -1183,16 +1216,20 @@ async function cancelQueueMatch(queueMatchId, reason, io) {
   // to the persisted roster — this is the safety net for the case where
   // memory drifted out of sync but playerInMatch still has stale entries.
   let allPlayerIds = match ? match.allPlayers.map(p => p.playerId) : []
-  if (!allPlayerIds.length) {
+  let poolId = match?.poolId || null
+  if (!allPlayerIds.length || !poolId) {
     try {
       const roster = await queryOne(
-        'SELECT team1_players, team2_players FROM queue_matches WHERE id = $1',
+        'SELECT pool_id, team1_players, team2_players FROM queue_matches WHERE id = $1',
         [queueMatchId]
       )
-      allPlayerIds = [
-        ...((roster?.team1_players || []).map(p => p.playerId)),
-        ...((roster?.team2_players || []).map(p => p.playerId)),
-      ]
+      if (!allPlayerIds.length) {
+        allPlayerIds = [
+          ...((roster?.team1_players || []).map(p => p.playerId)),
+          ...((roster?.team2_players || []).map(p => p.playerId)),
+        ]
+      }
+      if (!poolId) poolId = roster?.pool_id || null
     } catch (e) {
       console.error('[cancelQueueMatch] roster fallback failed:', e.message)
     }
@@ -1214,6 +1251,10 @@ async function cancelQueueMatch(queueMatchId, reason, io) {
   }
 
   activeQueueMatches.delete(queueMatchId)
+
+  // Auto-requeue subscribers AFTER playerInMatch is cleared, otherwise
+  // _doEnqueue rejects them as already in a match.
+  autoRequeueEligible(io, allPlayerIds, poolId).catch(() => {})
 }
 
 function buildMatchFoundPayload(match) {
