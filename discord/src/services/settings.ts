@@ -23,13 +23,23 @@ export async function loadSettings(): Promise<void> {
       `SELECT key, value FROM settings WHERE key LIKE $1`,
       [`${SETTINGS_PREFIX}%`],
     )
-    cache.values = new Map(rows.map((r) => [r.key, r.value]))
+    const next = new Map(rows.map((r) => [r.key, r.value]))
+    // Only log on first load or when the snapshot actually changes — the 60s
+    // refresh tick is otherwise silent so it doesn't dominate the log.
+    const changed = !cache.loaded || !sameSnapshot(cache.values, next)
+    cache.values = next
     cache.loaded = true
     cache.loadedAt = Date.now()
-    Logger.info(`Loaded ${cache.values.size} discord_* settings`)
+    if (changed) Logger.info(`Loaded ${cache.values.size} discord_* settings`)
   } catch (err) {
     Logger.error('Failed to load discord_* settings', err)
   }
+}
+
+function sameSnapshot(a: Map<string, string>, b: Map<string, string>): boolean {
+  if (a.size !== b.size) return false
+  for (const [k, v] of a) if (b.get(k) !== v) return false
+  return true
 }
 
 export function startSettingsRefresh(): void {
