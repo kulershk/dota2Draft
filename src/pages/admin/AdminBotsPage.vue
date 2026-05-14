@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Bot, Plus, Trash2, Plug, Unplug, ShieldQuestion, ChevronDown, ChevronUp, X, Circle, ExternalLink, Image as ImageIcon, Upload, Swords, Trophy } from 'lucide-vue-next'
+import { Bot, Plus, Trash2, Plug, Unplug, ShieldQuestion, ChevronDown, ChevronUp, X, Circle, ExternalLink, Image as ImageIcon, Upload, Swords, Trophy, History } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { getSocket } from '@/composables/useSocket'
+import { fmtDateTime } from '@/utils/format'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 
 const { t } = useI18n()
@@ -18,6 +19,8 @@ const steamGuardCode = ref('')
 const expandedBotId = ref<number | null>(null)
 const botLogs = ref<Record<number, any[]>>({})
 const logContainer = ref<HTMLElement | null>(null)
+const expandedTimelineBotId = ref<number | null>(null)
+const botHistory = ref<Record<number, any[]>>({})
 
 async function fetchBots() {
   try {
@@ -118,6 +121,19 @@ function scrollLogsToBottom() {
   }
 }
 
+async function toggleTimeline(botId: number) {
+  if (expandedTimelineBotId.value === botId) {
+    expandedTimelineBotId.value = null
+    return
+  }
+  expandedTimelineBotId.value = botId
+  try {
+    botHistory.value[botId] = await api.getBotStatusHistory(botId)
+  } catch {
+    botHistory.value[botId] = []
+  }
+}
+
 // ── Bulk avatar upload ──
 const avatarFile = ref<File | null>(null)
 const avatarPreview = ref<string>('')
@@ -184,6 +200,14 @@ function onBotStatusChanged(data: any) {
   if (bot) {
     bot.status = data.status
     bot.error_message = data.errorMessage || null
+  }
+  if (expandedTimelineBotId.value === data.botId && botHistory.value[data.botId]) {
+    botHistory.value[data.botId].unshift({
+      id: `live-${Date.now()}`,
+      status: data.status,
+      error_message: data.errorMessage || null,
+      created_at: new Date().toISOString(),
+    })
   }
 }
 
@@ -406,6 +430,14 @@ onUnmounted(() => {
           </button>
           <button
             class="p-1.5 rounded-md hover:bg-accent transition-colors"
+            :class="expandedTimelineBotId === bot.id ? 'bg-accent' : ''"
+            @click="toggleTimeline(bot.id)"
+            :title="t('botStatusTimeline')"
+          >
+            <History class="w-4 h-4 text-muted-foreground" />
+          </button>
+          <button
+            class="p-1.5 rounded-md hover:bg-accent transition-colors"
             @click="toggleLogs(bot.id)"
             :title="expandedBotId === bot.id ? 'Hide logs' : 'Show logs'"
           >
@@ -418,6 +450,39 @@ onUnmounted(() => {
           >
             <Trash2 class="w-4 h-4 text-muted-foreground hover:text-red-500" />
           </button>
+        </div>
+      </div>
+
+      <!-- Status timeline panel -->
+      <div v-if="expandedTimelineBotId === bot.id" class="border-t border-border">
+        <div class="p-4 max-h-[300px] overflow-y-auto">
+          <div v-if="!(botHistory[bot.id]?.length)" class="text-sm text-muted-foreground text-center py-4">
+            {{ t('noStatusHistory') }}
+          </div>
+          <div v-else class="flex flex-col">
+            <div
+              v-for="(entry, idx) in botHistory[bot.id]"
+              :key="entry.id"
+              class="flex items-start gap-3 relative pb-3 last:pb-0"
+            >
+              <!-- Dot + connector line -->
+              <div class="flex flex-col items-center shrink-0">
+                <Circle class="w-3 h-3 fill-current mt-1" :class="statusColor(entry.status)" />
+                <div
+                  v-if="idx !== botHistory[bot.id].length - 1"
+                  class="w-px flex-1 bg-border mt-1"
+                  style="min-height: 1rem"
+                />
+              </div>
+              <div class="flex-1 min-w-0 -mt-0.5">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="text-sm font-medium" :class="statusColor(entry.status)">{{ statusLabel(entry.status) }}</span>
+                  <span class="text-xs text-muted-foreground font-mono">{{ fmtDateTime(new Date(entry.created_at)) }}</span>
+                </div>
+                <p v-if="entry.error_message" class="text-xs text-red-500 mt-0.5">{{ entry.error_message }}</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 

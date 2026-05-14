@@ -654,6 +654,42 @@ export async function initDb() {
     }
   }
 
+  // Bot status timeline: every status transition on lobby_bots is recorded by
+  // a trigger, so it captures changes from any call site (manual connect,
+  // auto-connect, lobby lifecycle, the Go bot service, etc).
+  await execute(`
+    CREATE TABLE IF NOT EXISTS bot_status_history (
+      id SERIAL PRIMARY KEY,
+      bot_id INTEGER NOT NULL REFERENCES lobby_bots(id) ON DELETE CASCADE,
+      status TEXT NOT NULL,
+      error_message TEXT DEFAULT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `)
+  await execute(`CREATE INDEX IF NOT EXISTS idx_bot_status_history_bot ON bot_status_history(bot_id, id DESC)`)
+  await execute(`
+    CREATE OR REPLACE FUNCTION log_bot_status_change() RETURNS trigger AS $$
+    BEGIN
+      IF TG_OP = 'INSERT' OR NEW.status IS DISTINCT FROM OLD.status THEN
+        INSERT INTO bot_status_history (bot_id, status, error_message)
+        VALUES (NEW.id, NEW.status, NEW.error_message);
+        DELETE FROM bot_status_history
+         WHERE bot_id = NEW.id
+           AND id NOT IN (
+             SELECT id FROM bot_status_history WHERE bot_id = NEW.id ORDER BY id DESC LIMIT 200
+           );
+      END IF;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql
+  `)
+  await execute(`DROP TRIGGER IF EXISTS trg_bot_status_change ON lobby_bots`)
+  await execute(`
+    CREATE TRIGGER trg_bot_status_change
+      AFTER INSERT OR UPDATE OF status ON lobby_bots
+      FOR EACH ROW EXECUTE FUNCTION log_bot_status_change()
+  `)
+
   // ─── Competition helpers ──────────────────────────────────────────────
   // Per-competition collaborators. A user listed here is treated by
   // requireCompPermission as if they were the competition's creator —

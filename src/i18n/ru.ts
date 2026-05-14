@@ -778,6 +778,8 @@ export default {
   lobbyPassword: 'Пароль',
   noBotAvailable: 'Нет доступных ботов',
   noLogs: 'Логов пока нет.',
+  botStatusTimeline: 'История статусов',
+  noStatusHistory: 'Истории статусов пока нет.',
   lobbySettings: 'Настройки лобби',
   lobbyGameMode: 'Режим игры',
   lobbyServerRegion: 'Регион сервера',

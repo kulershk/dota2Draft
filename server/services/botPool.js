@@ -1245,6 +1245,17 @@ class BotPool {
     return this.botLogs.get(botId) || []
   }
 
+  async getBotStatusHistory(botId, limit = 100) {
+    return await query(
+      `SELECT id, status, error_message, created_at
+         FROM bot_status_history
+        WHERE bot_id = $1
+        ORDER BY id DESC
+        LIMIT $2`,
+      [botId, limit]
+    )
+  }
+
   async getBotStatuses() {
     return await query(`
       SELECT b.id, b.username, b.display_name, b.steam_id, b.status, b.error_message, b.auto_connect, b.last_used_at, b.created_at,

@@ -261,6 +261,8 @@ export function useApi() {
       request(`/api/admin/bots/${id}`, { method: 'DELETE' }),
     getBotLogs: (id: number) =>
       request(`/api/admin/bots/${id}/logs`),
+    getBotStatusHistory: (id: number) =>
+      request(`/api/admin/bots/${id}/status-history`),
     connectBot: (id: number) =>
       request(`/api/admin/bots/${id}/connect`, { method: 'POST' }),
     disconnectBot: (id: number) =>

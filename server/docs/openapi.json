@@ -357,6 +357,40 @@
         }
       }
     },
+    "/api/admin/bots/{botId}/status-history": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "Get the status transition timeline for a bot",
+        "description": "Requires the `manage_bots` permission. Returns the most recent status changes (newest first, up to 100) recorded for the bot. Every status transition on `lobby_bots` is captured by a DB trigger, so the timeline reflects changes from any source — manual connect/disconnect, auto-connect, lobby lifecycle, or the Go bot service.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "botId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Status history entries, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": { "type": "integer" },
+                      "status": { "type": "string" },
+                      "error_message": { "type": "string", "nullable": true },
+                      "created_at": { "type": "string", "format": "date-time" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": { "description": "Missing manage_bots permission" },
+          "500": { "description": "Server error" }
+        }
+      }
+    },
     "/api/admin/bots/connect-all": {
       "post": {
         "tags": ["Admin"],

@@ -932,6 +932,8 @@ export default {
   lobbyPassword: 'Slaptažodis',
   noBotAvailable: 'Nėra galimų botų',
   noLogs: 'Dar nėra žurnalų.',
+  botStatusTimeline: 'Būsenų istorija',
+  noStatusHistory: 'Dar nėra būsenų istorijos.',
   lobbySettings: 'Lobby nustatymai',
   lobbyGameMode: 'Žaidimo režimas',
   lobbyServerRegion: 'Serverio regionas',

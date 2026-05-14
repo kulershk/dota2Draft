@@ -938,6 +938,8 @@ export default {
   lobbyPassword: 'Password',
   noBotAvailable: 'No bot available',
   noLogs: 'No logs yet.',
+  botStatusTimeline: 'Status timeline',
+  noStatusHistory: 'No status history yet.',
   lobbySettings: 'Lobby Settings',
   lobbyGameMode: 'Game Mode',
   lobbyServerRegion: 'Server Region',

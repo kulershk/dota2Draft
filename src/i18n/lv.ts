@@ -932,6 +932,8 @@ export default {
   lobbyPassword: 'Parole',
   noBotAvailable: 'Nav pieejamu botu',
   noLogs: 'Vēl nav žurnālu.',
+  botStatusTimeline: 'Statusu vēsture',
+  noStatusHistory: 'Vēl nav statusu vēstures.',
   lobbySettings: 'Lobby iestatījumi',
   lobbyGameMode: 'Spēles režīms',
   lobbyServerRegion: 'Servera reģions',

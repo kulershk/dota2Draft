@@ -86,6 +86,17 @@ export default function createLobbyRouter(io) {
     }
   })
 
+  router.get('/api/admin/bots/:botId/status-history', async (req, res) => {
+    try {
+      const admin = await requirePermission(req, res, 'manage_bots')
+      if (!admin) return
+      const history = await botPool.getBotStatusHistory(Number(req.params.botId))
+      res.json(history)
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
   router.post('/api/admin/bots/:botId/free', async (req, res) => {
     try {
       const admin = await requirePermission(req, res, 'manage_bots')
