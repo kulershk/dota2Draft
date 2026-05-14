@@ -913,6 +913,8 @@ export default {
   autoConnect: 'Auto-connect',
   connectBot: 'Connect',
   disconnectBot: 'Disconnect',
+  connectAllBots: 'Connect all',
+  disconnectAllBots: 'Disconnect all',
   enterCode: 'Enter Code',
   steamUsername: 'Steam Username',
   steamPassword: 'Steam Password',

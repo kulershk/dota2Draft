@@ -907,6 +907,8 @@ export default {
   autoConnect: 'Auto-prisijungimas',
   connectBot: 'Prisijungti',
   disconnectBot: 'Atjungti',
+  connectAllBots: 'Prijungti visus',
+  disconnectAllBots: 'Atjungti visus',
   enterCode: 'Įvesti kodą',
   steamUsername: 'Steam vartotojo vardas',
   steamPassword: 'Steam slaptažodis',

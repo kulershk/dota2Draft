@@ -43,6 +43,28 @@ export default function createLobbyRouter(io) {
     }
   })
 
+  router.post('/api/admin/bots/connect-all', async (req, res) => {
+    try {
+      const admin = await requirePermission(req, res, 'manage_bots')
+      if (!admin) return
+      const result = await botPool.connectAllBots()
+      res.json({ ok: true, ...result })
+    } catch (e) {
+      res.status(400).json({ error: e.message })
+    }
+  })
+
+  router.post('/api/admin/bots/disconnect-all', async (req, res) => {
+    try {
+      const admin = await requirePermission(req, res, 'manage_bots')
+      if (!admin) return
+      const result = await botPool.disconnectAllBots()
+      res.json({ ok: true, ...result })
+    } catch (e) {
+      res.status(400).json({ error: e.message })
+    }
+  })
+
   router.delete('/api/admin/bots/:botId', async (req, res) => {
     try {
       const admin = await requirePermission(req, res, 'manage_bots')

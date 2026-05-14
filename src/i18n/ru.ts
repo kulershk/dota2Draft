@@ -753,6 +753,8 @@ export default {
   autoConnect: 'Авто-подключение',
   connectBot: 'Подключить',
   disconnectBot: 'Отключить',
+  connectAllBots: 'Подключить все',
+  disconnectAllBots: 'Отключить все',
   enterCode: 'Ввести код',
   steamUsername: 'Имя пользователя Steam',
   steamPassword: 'Пароль Steam',

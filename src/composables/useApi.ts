@@ -265,6 +265,10 @@ export function useApi() {
       request(`/api/admin/bots/${id}/connect`, { method: 'POST' }),
     disconnectBot: (id: number) =>
       request(`/api/admin/bots/${id}/disconnect`, { method: 'POST' }),
+    connectAllBots: () =>
+      request('/api/admin/bots/connect-all', { method: 'POST' }),
+    disconnectAllBots: () =>
+      request('/api/admin/bots/disconnect-all', { method: 'POST' }),
     submitSteamGuard: (id: number, code: string) =>
       request(`/api/admin/bots/${id}/steam-guard`, { method: 'POST', body: JSON.stringify({ code }) }),
     freeBusyBot: (id: number) =>

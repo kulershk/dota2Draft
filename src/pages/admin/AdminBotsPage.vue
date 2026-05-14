@@ -51,6 +51,26 @@ async function disconnectBot(id: number) {
   await fetchBots()
 }
 
+const bulkBusy = ref(false)
+
+async function connectAllBots() {
+  bulkBusy.value = true
+  try {
+    await api.connectAllBots()
+  } catch {}
+  bulkBusy.value = false
+  await fetchBots()
+}
+
+async function disconnectAllBots() {
+  bulkBusy.value = true
+  try {
+    await api.disconnectAllBots()
+  } catch {}
+  bulkBusy.value = false
+  await fetchBots()
+}
+
 async function submitGuard() {
   if (!steamGuardBotId.value || !steamGuardCode.value) return
   await api.submitSteamGuard(steamGuardBotId.value, steamGuardCode.value)
@@ -205,10 +225,30 @@ onUnmounted(() => {
         <Bot class="w-6 h-6 text-foreground" />
         <h1 class="text-xl font-bold text-foreground">{{ t('botManagement') }}</h1>
       </div>
-      <button class="btn-primary text-sm" @click="showAddBot = true">
-        <Plus class="w-4 h-4" />
-        {{ t('addBot') }}
-      </button>
+      <div class="flex items-center gap-2">
+        <button
+          v-if="bots.length"
+          class="btn-secondary text-sm"
+          :disabled="bulkBusy"
+          @click="connectAllBots"
+        >
+          <Plug class="w-4 h-4" />
+          {{ t('connectAllBots') }}
+        </button>
+        <button
+          v-if="bots.length"
+          class="btn-secondary text-sm"
+          :disabled="bulkBusy"
+          @click="disconnectAllBots"
+        >
+          <Unplug class="w-4 h-4" />
+          {{ t('disconnectAllBots') }}
+        </button>
+        <button class="btn-primary text-sm" @click="showAddBot = true">
+          <Plus class="w-4 h-4" />
+          {{ t('addBot') }}
+        </button>
+      </div>
     </div>
 
     <p class="text-sm text-muted-foreground">{{ t('botManagementDesc') }}</p>

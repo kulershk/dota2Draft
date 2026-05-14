@@ -357,6 +357,58 @@
         }
       }
     },
+    "/api/admin/bots/connect-all": {
+      "post": {
+        "tags": ["Admin"],
+        "summary": "Connect every offline or errored bot",
+        "description": "Requires the `manage_bots` permission. Iterates all bots whose status is `offline` or `error` and triggers a login for each. Login happens in the background; per-bot status updates arrive via the `bot:statusChanged` socket event.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Bulk connect initiated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "count": { "type": "integer", "description": "Number of bots a connect was triggered for" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Operation failed" },
+          "403": { "description": "Missing manage_bots permission" }
+        }
+      }
+    },
+    "/api/admin/bots/disconnect-all": {
+      "post": {
+        "tags": ["Admin"],
+        "summary": "Disconnect every bot that is not offline",
+        "description": "Requires the `manage_bots` permission. Iterates all bots whose status is not `offline` and disconnects each. Per-bot status updates arrive via the `bot:statusChanged` socket event.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Bulk disconnect completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "count": { "type": "integer", "description": "Number of bots disconnected" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Operation failed" },
+          "403": { "description": "Missing manage_bots permission" }
+        }
+      }
+    },
     "/api/admin/bots/avatar": {
       "post": {
         "tags": ["Admin"],

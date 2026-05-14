@@ -1311,6 +1311,26 @@ class BotPool {
     if (this.io) this.io.to('perm:manage_bots').emit('bot:statusChanged', { botId, status: 'offline' })
   }
 
+  async connectAllBots() {
+    const bots = await query("SELECT id FROM lobby_bots WHERE status IN ('offline', 'error') ORDER BY id")
+    for (const bot of bots) {
+      try {
+        await this.connectBot(bot.id)
+      } catch {}
+    }
+    return { count: bots.length }
+  }
+
+  async disconnectAllBots() {
+    const bots = await query("SELECT id FROM lobby_bots WHERE status != 'offline' ORDER BY id")
+    for (const bot of bots) {
+      try {
+        await this.disconnectBot(bot.id)
+      } catch {}
+    }
+    return { count: bots.length }
+  }
+
   async submitSteamGuard(botId, code) {
     this._sendToGo('steam_guard', { botId: String(botId), code })
   }
