@@ -226,6 +226,12 @@ initDb().then(async () => {
   })
   registerSchedule('cleanup_zombie_lobbies', { everyMs: 5 * 60_000 })
 
+  registerHandler('cleanup_stuck_connecting_bots', async () => {
+    await botPool._cleanupStuckConnectingBots()
+    return { ok: true }
+  })
+  registerSchedule('cleanup_stuck_connecting_bots', { everyMs: 60_000 })
+
   // ── Per-game stat fetching with tiered polling ──
   // Phase 1 (fetch_match_stats): GC every 60s until winner resolved
   // Phase 2 (enrich_match_stats): OpenDota every 10min for 2h, then every 1h for 3 days

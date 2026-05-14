@@ -910,6 +910,41 @@ class BotPool {
     }
   }
 
+  // Bots stuck in 'connecting' or 'connecting_gc' for >5 min mean the Steam
+  // login or GC handshake silently stalled — the bot never reaches 'available'
+  // or 'error' on its own. Force-restart them (disconnect, then reconnect).
+  // The "stuck since" timestamp comes from bot_status_history: the row where
+  // the bot entered its current status. Bots with no such row are skipped.
+  async _cleanupStuckConnectingBots() {
+    try {
+      const stuck = await query(`
+        SELECT b.id, b.username, h.created_at AS status_since
+          FROM lobby_bots b
+          JOIN LATERAL (
+            SELECT created_at FROM bot_status_history
+             WHERE bot_id = b.id AND status = b.status
+             ORDER BY id DESC LIMIT 1
+          ) h ON TRUE
+         WHERE b.status IN ('connecting', 'connecting_gc')
+           AND h.created_at < NOW() - INTERVAL '5 minutes'
+      `)
+      if (stuck.length === 0) return
+      console.log(`[Bot] Found ${stuck.length} bot(s) stuck connecting >5min, force-restarting`)
+      for (const bot of stuck) {
+        try {
+          await this.disconnectBot(bot.id)
+          await new Promise((r) => setTimeout(r, 2000))
+          await this.connectBot(bot.id)
+          console.log(`[Bot] Force-restarted stuck bot ${bot.id} (${bot.username})`)
+        } catch (e) {
+          console.error(`[Bot] Failed to force-restart stuck bot ${bot.id}:`, e.message)
+        }
+      }
+    } catch (e) {
+      console.error('[Bot] Stuck-connecting cleanup error:', e.message)
+    }
+  }
+
   // Safety net: find unresolved games that don't have a pending fetch_match_stats
   // job and enqueue one. Catches games missed during server restarts, manual
   // dotabuff_id edits, or if _scheduleStatsFetch failed.
