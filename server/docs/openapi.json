@@ -826,10 +826,10 @@
       "post": {
         "tags": ["Players"],
         "summary": "Register as participant",
-        "description": "Self-registration must be enabled via settings.allowSteamRegistration (admins bypass this).",
+        "description": "Self-registration must be enabled via settings.allowSteamRegistration (admins bypass this). For users with an admin-verified MMR (players.mmr_verified_at IS NOT NULL), the submitted mmr is ignored — competition_players.mmr mirrors the verified players.mmr.",
         "security": [{ "bearerAuth": [] }],
         "parameters": [{ "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }],
-        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "roles": { "type": "array", "items": { "type": "string" } }, "mmr": { "type": "integer" }, "info": { "type": "string" } } } } } },
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "roles": { "type": "array", "items": { "type": "string" } }, "mmr": { "type": "integer", "description": "Submitted MMR for this competition. Ignored when the caller's players.mmr_verified_at is set — both players.mmr and competition_players.mmr remain equal to the admin-verified value." }, "info": { "type": "string" } } } } } },
         "responses": {
           "200": { "description": "Registered" },
           "403": { "description": "Self-registration disabled, banned, or outside registration window" },

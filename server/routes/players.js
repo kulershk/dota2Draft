@@ -42,21 +42,31 @@ export default function createPlayersRouter(io) {
 
     const { roles, mmr, info } = req.body
 
-    await execute(
-      'UPDATE players SET roles = $1, mmr = $2, info = $3 WHERE id = $4',
-      [JSON.stringify(roles || []), mmr || 0, info || '', player.id]
-    )
+    const isVerified = !!player.mmr_verified_at
+    const effectiveMmr = isVerified ? player.mmr : (mmr || 0)
+
+    if (isVerified) {
+      await execute(
+        'UPDATE players SET roles = $1, info = $2 WHERE id = $3',
+        [JSON.stringify(roles || []), info || '', player.id]
+      )
+    } else {
+      await execute(
+        'UPDATE players SET roles = $1, mmr = $2, info = $3 WHERE id = $4',
+        [JSON.stringify(roles || []), effectiveMmr, info || '', player.id]
+      )
+    }
 
     if (existing) {
       await execute(
         'UPDATE competition_players SET roles = $1, mmr = $2, info = $3, in_pool = true WHERE id = $4',
-        [JSON.stringify(roles || []), mmr || 0, info || '', existing.id]
+        [JSON.stringify(roles || []), effectiveMmr, info || '', existing.id]
       )
     } else {
       await execute(
         `INSERT INTO competition_players (competition_id, player_id, roles, mmr, info, in_pool)
          VALUES ($1, $2, $3, $4, $5, true)`,
-        [compId, player.id, JSON.stringify(roles || []), mmr || 0, info || '']
+        [compId, player.id, JSON.stringify(roles || []), effectiveMmr, info || '']
       )
     }
 

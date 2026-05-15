@@ -176,6 +176,8 @@ export default {
     aboutYou: 'Apie jus',
     aboutPlaceholder: 'Trumpas aprašymas, pasiekimai, žaidimo stilius...',
     joining: 'Jungiamasi...',
+    mmrVerified: 'Patvirtinta',
+    mmrVerifiedNote: 'Jūsų MMR yra patvirtintas ir čia jo keisti negalima.',
   },
   editPlayerModal: {
     title: 'Redaguoti žaidėją',

@@ -176,6 +176,8 @@ export default {
     aboutYou: 'Par jums',
     aboutPlaceholder: 'Īss apraksts, sasniegumi, spēles stils...',
     joining: 'Pievienojas...',
+    mmrVerified: 'Verificēts',
+    mmrVerifiedNote: 'Jūsu MMR ir verificēts un šeit to mainīt nevar.',
   },
   editPlayerModal: {
     title: 'Rediģēt spēlētāju',

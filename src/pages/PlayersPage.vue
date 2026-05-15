@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Users, UserPlus, Search, Pencil, Trash2, LogIn, Shield, RefreshCw } from 'lucide-vue-next'
+import { Users, UserPlus, Search, Pencil, Trash2, LogIn, Shield, RefreshCw, BadgeCheck } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDraftStore } from '@/composables/useDraftStore'
@@ -53,6 +53,9 @@ const registerInfo = ref('')
 const registerError = ref('')
 const registering = ref(false)
 
+const isMmrVerified = computed(() => !!store.currentUser.value?.mmr_verified_at)
+const verifiedMmr = computed(() => store.currentUser.value?.mmr ?? 0)
+
 function loginWithSteam() {
   window.location.href = '/api/auth/steam'
 }
@@ -90,7 +93,9 @@ function openRegister() {
   const cu = store.compUser.value
   const user = store.currentUser.value
   const roles = cu?.roles?.length ? cu.roles : (user?.roles || [])
-  const mmr = cu?.mmr || user?.mmr || 0
+  const mmr = isMmrVerified.value
+    ? verifiedMmr.value
+    : (cu?.mmr || user?.mmr || 0)
   const info = cu?.info || user?.info || ''
   registerRoles.value = roles.map((r: string) => {
     for (const [display, short] of Object.entries(roleMap)) {
@@ -383,7 +388,18 @@ watch(searchQuery, () => { playersPage.value = 1 })
             </button>
           </div>
         </div>
-        <InputGroup label="MMR" :model-value="registerMmr" placeholder="e.g. 11000" @update:model-value="registerMmr = $event" />
+        <div v-if="isMmrVerified" class="flex flex-col gap-1.5">
+          <label class="label-text">MMR</label>
+          <div class="input-field flex items-center justify-between gap-2 opacity-90 cursor-not-allowed">
+            <span class="font-mono">{{ verifiedMmr.toLocaleString() }}</span>
+            <span class="inline-flex items-center gap-1 text-xs text-cyan-400">
+              <BadgeCheck class="w-3.5 h-3.5" :title="t('mmrVerifiedTooltip')" />
+              {{ t('joinModal.mmrVerified') }}
+            </span>
+          </div>
+          <p class="text-[11px] text-muted-foreground">{{ t('joinModal.mmrVerifiedNote') }}</p>
+        </div>
+        <InputGroup v-else label="MMR" :model-value="registerMmr" placeholder="e.g. 11000" @update:model-value="registerMmr = $event" />
         <div class="flex flex-col gap-1.5">
           <label class="label-text">{{ t('joinModal.aboutYou') }}</label>
           <textarea :value="registerInfo" maxlength="200" :placeholder="t('joinModal.aboutPlaceholder')" rows="3" class="textarea-field" @input="registerInfo = ($event.target as HTMLTextAreaElement).value" />

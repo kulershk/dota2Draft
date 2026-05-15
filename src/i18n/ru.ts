@@ -175,6 +175,8 @@ export default {
     aboutYou: 'О вас',
     aboutPlaceholder: 'Краткое описание, достижения, стиль игры...',
     joining: 'Присоединение...',
+    mmrVerified: 'Подтверждён',
+    mmrVerifiedNote: 'Ваш MMR подтверждён, изменить его здесь нельзя.',
   },
   editPlayerModal: {
     title: 'Редактировать игрока',

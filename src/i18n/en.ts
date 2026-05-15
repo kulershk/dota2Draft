@@ -176,6 +176,8 @@ export default {
     aboutYou: 'About You',
     aboutPlaceholder: 'Brief description, achievements, playstyle notes...',
     joining: 'Joining...',
+    mmrVerified: 'Verified',
+    mmrVerifiedNote: "Your MMR is verified and can't be changed here.",
   },
   editPlayerModal: {
     title: 'Edit Player',
