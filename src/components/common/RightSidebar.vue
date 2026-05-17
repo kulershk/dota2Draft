@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Bell, Users, MessageSquare, Plus, Headphones, User } from 'lucide-vue-next'
+import { Bell, Users, MessageSquare, User } from 'lucide-vue-next'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { useFriendStore } from '@/composables/useFriendStore'
 import { useSidePanels } from '@/composables/useSidePanels'
@@ -26,8 +25,6 @@ function initialFor(entry: any): string {
 }
 
 const { t } = useI18n()
-const route = useRoute()
-const router = useRouter()
 const store = useDraftStore()
 
 const user = computed(() => store.currentUser.value)
@@ -35,12 +32,6 @@ const initial = computed(() => {
   const n = user.value?.display_name || user.value?.name || user.value?.steam_name || '?'
   return n.charAt(0).toUpperCase()
 })
-
-const onQueueRoute = computed(() => route.path === '/queue')
-
-function goToQueue() {
-  if (!onQueueRoute.value) router.push('/queue')
-}
 
 function openProfilePanel() {
   panels.openProfile()
@@ -79,16 +70,6 @@ function openProfilePanel() {
       </span>
     </div>
 
-    <!-- VS / Find match -->
-    <button
-      class="rail-btn"
-      :class="onQueueRoute ? 'rail-btn-active' : ''"
-      :title="t('findMatch')"
-      @click="goToQueue"
-    >
-      <span class="text-[13px] font-black tracking-[0.5px]" style="color:#22D3EE">VS</span>
-    </button>
-
     <!-- Bell — opens Friends panel; shows pending-request count -->
     <button class="rail-btn relative" :title="t('notifications')" @click="panels.openFriends('friends')">
       <Bell class="w-4 h-4" style="color:#CBD5E1" />
@@ -116,11 +97,6 @@ function openProfilePanel() {
       <MessageSquare class="w-4 h-4" style="color:#CBD5E1" />
     </button>
 
-    <!-- Plus (placeholder) -->
-    <button class="rail-btn" :title="t('create')">
-      <Plus class="w-4 h-4" style="color:#22D3EE" />
-    </button>
-
     <!-- Friend tiles (first 2 friends) -->
     <router-link
       v-for="f in friendStore.friends.value.slice(0, 2)"
@@ -139,17 +115,6 @@ function openProfilePanel() {
       />
     </router-link>
 
-    <!-- Spacer -->
-    <div class="flex-1 min-h-[20px]" />
-
-    <!-- Voice (placeholder) -->
-    <button
-      class="w-[38px] h-[38px] rounded-lg flex items-center justify-center"
-      style="background:#22D3EE"
-      :title="t('voiceChat')"
-    >
-      <Headphones class="w-4 h-4" style="color:#0A0F1C" />
-    </button>
   </aside>
 </template>
 
