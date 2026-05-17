@@ -173,16 +173,6 @@ const brandName = computed(() => props.siteName || 'DOTA LATVIJA')
       </div>
 
       <router-link
-        v-if="isLoggedIn && store.currentUser.value?.id"
-        :to="{ name: 'player-profile', params: { id: store.currentUser.value.id } }"
-        class="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-semibold transition-colors"
-        :class="route.name === 'player-profile' ? 'sidebar-item-active' : 'sidebar-item-idle'"
-      >
-        <User class="w-[14px] h-[14px] shrink-0" :style="{ color: route.name === 'player-profile' ? '#22D3EE' : '#94A3B8' }" />
-        <span class="flex-1 truncate">{{ t('myProfile') }}</span>
-      </router-link>
-
-      <router-link
         v-if="isLoggedIn"
         to="/settings"
         class="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-semibold transition-colors"
