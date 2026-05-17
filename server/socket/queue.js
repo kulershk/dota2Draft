@@ -120,7 +120,7 @@ async function _doEnqueue(io, playerId, poolId) {
 
   if (q.size >= totalPlayers) await startReadyCheck(poolId, io)
 
-  return { ok: true, queueSize: q.size, totalPlayers }
+  return { ok: true, queueSize: q.size, totalPlayers, poolName: pool.name }
 }
 
 // Auto-requeue entry point used by botPool when a queue match ends. Walks
@@ -193,10 +193,30 @@ export function registerQueueHandlers(socket, io) {
             count: 0, players: [],
             ban: result.banner,
           })
+        } else {
+          // Failure path without a banner — still nudge the client to re-sync
+          // so an optimistic local "Searching" state can correct itself.
+          const inMatchId = playerInMatch.get(playerId) || null
+          socket.emit('queue:myState', {
+            inQueue: false, poolId: null, poolName: null,
+            inMatch: !!inMatchId, queueMatchId: inMatchId,
+            count: 0, players: [],
+          })
         }
         return socket.emit('queue:error', { message: result.error })
       }
       socket.join(`queue:${poolId}`)
+      // Confirm the join to the issuing socket so the client doesn't have to
+      // rely on optimistic local state.
+      socket.emit('queue:myState', {
+        inQueue: true,
+        poolId,
+        poolName: result.poolName || null,
+        inMatch: false,
+        queueMatchId: null,
+        count: getPoolQueueCount(poolId),
+        players: getPoolQueuePlayers(poolId),
+      })
     } catch (e) {
       console.error('[Queue] Join error:', e.message)
       socket.emit('queue:error', { message: 'Failed to join queue' })
