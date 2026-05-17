@@ -95,6 +95,7 @@ export default {
   queueIsEmpty: 'Būk pirmas!',
   queueFeatured: 'Pažymėta',
   queueFeaturedHint: 'Ši eilė rodoma dešinės juostos PLAY mygtuke. Vienu metu gali būti tik viena pažymėta eilė.',
+  matchFoundOpenPick: 'Rungtynės rastos — atidaryti pasirinkimą',
   lightMode: 'Šviesus režimas',
   darkMode: 'Tamsus režimas',
   claimAdmin: 'Gauti admin teises',

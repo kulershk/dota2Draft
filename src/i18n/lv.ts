@@ -95,6 +95,7 @@ export default {
   queueIsEmpty: 'Esi pirmais!',
   queueFeatured: 'Izceltā',
   queueFeaturedHint: 'Šī rinda parādās labās malas PLAY pogā. Vienlaicīgi var būt tikai viena izceltā rinda.',
+  matchFoundOpenPick: 'Spēle atrasta — atvērt sastādīšanu',
   lightMode: 'Gaišais režīms',
   darkMode: 'Tumšais režīms',
   claimAdmin: 'Iegūt admin tiesības',
