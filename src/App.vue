@@ -5,6 +5,7 @@ import { onMounted, ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { useQueueStore } from '@/composables/useQueueStore'
+import { useFriendStore } from '@/composables/useFriendStore'
 import { useApi, onBannedAction } from '@/composables/useApi'
 import { useNavStore, type NavItem, type NavRoot } from '@/composables/useNavStore'
 import { fmtDateOnly } from '@/utils/format'
@@ -25,6 +26,7 @@ const route = useRoute()
 const router = useRouter()
 const store = useDraftStore()
 const queue = useQueueStore()
+const friendStore = useFriendStore()
 const navStore = useNavStore()
 navStore.load().catch(() => {})
 
@@ -217,12 +219,25 @@ onMounted(async () => {
   // when loading the app on a non-queue page.
   if (store.currentUser.value) {
     queue.fetchPools().then(() => queue.requestMyState())
+    friendStore.loadAll()
   }
+
+  // Wire friend socket events — any of them just triggers a refetch and
+  // bumps the currentUser pending count from incoming.length.
+  const sock = getSocket()
+  sock.on('friend:request', () => { friendStore.loadAll().then(() => friendStore.bumpPendingFromBackend()) })
+  sock.on('friend:accepted', () => { friendStore.loadAll().then(() => friendStore.bumpPendingFromBackend()) })
+  sock.on('friend:removed', () => { friendStore.loadAll().then(() => friendStore.bumpPendingFromBackend()) })
 })
 
 // If the user gets logged in later (e.g. Steam redirect), also sync then.
 watch(() => store.currentUser.value?.id, (uid) => {
-  if (uid) queue.fetchPools().then(() => queue.requestMyState())
+  if (uid) {
+    queue.fetchPools().then(() => queue.requestMyState())
+    friendStore.loadAll()
+  } else {
+    friendStore.reset()
+  }
 })
 
 // Auto-navigate to /queue when a match is found while the user is on another
@@ -485,15 +500,20 @@ onMounted(() => {
             <Lock class="w-3.5 h-3.5" />
           </button>
 
-          <!-- Bell (placeholder) -->
-          <button
+          <!-- Bell — friend-request count -->
+          <router-link
+            to="/friends"
             class="hidden sm:flex relative w-9 h-9 rounded-md items-center justify-center transition-colors hover:bg-white/5"
             style="background:#0F172A;box-shadow:inset 0 0 0 1px #1E293B"
             :title="t('notifications')"
           >
             <Bell class="w-4 h-4" style="color:#94A3B8" />
-            <span class="absolute w-2 h-2 rounded-full" style="top:7px;right:7px;background:#EF4444;box-shadow:0 0 0 2px #0F172A" />
-          </button>
+            <span
+              v-if="friendStore.pendingCount.value > 0"
+              class="absolute inline-flex items-center justify-center text-[9px] font-black text-white px-[3px] rounded"
+              style="top:2px;right:2px;min-width:14px;height:14px;background:#EF4444;box-shadow:0 0 0 2px #0F172A"
+            >{{ friendStore.pendingCount.value }}</span>
+          </router-link>
 
           <!-- Language pill -->
           <div class="relative hidden sm:block">

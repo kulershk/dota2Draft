@@ -1130,6 +1130,27 @@ export async function initDb() {
   `)
   await execute(`CREATE INDEX IF NOT EXISTS idx_dotacoin_tx_player ON dotacoin_transactions(player_id, created_at DESC)`)
 
+  // Player-to-player friend graph. One directional row per request: requester
+  // sent to addressee. status pending|accepted is semantically symmetric (the
+  // single row represents the relationship for either party). status=blocked
+  // is directional — A→B blocked is independent of B→A blocked. The unique
+  // (requester_id, addressee_id) prevents duplicates in a single direction;
+  // the symmetry rule for pending/accepted is enforced in route handlers.
+  await execute(`
+    CREATE TABLE IF NOT EXISTS friendships (
+      id            SERIAL PRIMARY KEY,
+      requester_id  INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      addressee_id  INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      status        TEXT NOT NULL CHECK (status IN ('pending','accepted','blocked')),
+      created_at    TIMESTAMP NOT NULL DEFAULT NOW(),
+      responded_at  TIMESTAMP NULL,
+      CHECK (requester_id <> addressee_id),
+      UNIQUE (requester_id, addressee_id)
+    );
+  `)
+  await execute(`CREATE INDEX IF NOT EXISTS idx_friendships_addressee ON friendships (addressee_id, status)`)
+  await execute(`CREATE INDEX IF NOT EXISTS idx_friendships_requester ON friendships (requester_id, status)`)
+
   await execute(`
     CREATE TABLE IF NOT EXISTS user_subscriptions (
       id            SERIAL PRIMARY KEY,

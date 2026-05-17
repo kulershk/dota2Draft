@@ -463,6 +463,19 @@ export function useApi() {
         method: 'POST',
         body: JSON.stringify({ delta, reason: reason || null }),
       }),
+    getFriends: () => request('/api/friends'),
+    getFriendRequests: () => request('/api/friends/requests'),
+    getFriendBlocks: () => request('/api/friends/blocks'),
+    sendFriendRequest: (addresseeId: number) =>
+      request('/api/friends/requests', { method: 'POST', body: JSON.stringify({ addressee_id: addresseeId }) }),
+    acceptFriendRequest: (id: number) =>
+      request(`/api/friends/${id}/accept`, { method: 'POST' }),
+    removeFriendship: (id: number) =>
+      request(`/api/friends/${id}`, { method: 'DELETE' }),
+    blockUser: (addresseeId: number) =>
+      request('/api/friends/blocks', { method: 'POST', body: JSON.stringify({ addressee_id: addresseeId }) }),
+    unblockUser: (id: number) =>
+      request(`/api/friends/blocks/${id}`, { method: 'DELETE' }),
     generateTestUsers: (count: number) =>
       request('/api/admin/generate-test-users', { method: 'POST', body: JSON.stringify({ count }) }),
     parseSteamIds: (input: string) =>

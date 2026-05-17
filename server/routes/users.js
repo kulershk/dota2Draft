@@ -356,6 +356,30 @@ router.get('/api/players/:id/profile', async (req, res) => {
 
   const sub = await getActiveSubscription(player.id)
 
+  // Friendship state from the authed viewer's perspective. Cheap single-row
+  // lookup that powers the profile page's button cluster.
+  let friendship = null
+  const viewer = await getAuthPlayer(req)
+  if (viewer && viewer.id !== player.id) {
+    const fRow = await queryOne(
+      `SELECT id, requester_id, addressee_id, status FROM friendships
+        WHERE (requester_id = $1 AND addressee_id = $2)
+           OR (requester_id = $2 AND addressee_id = $1)
+        ORDER BY CASE status WHEN 'blocked' THEN 0 WHEN 'accepted' THEN 1 ELSE 2 END
+        LIMIT 1`,
+      [viewer.id, player.id],
+    )
+    if (fRow) {
+      const direction = fRow.requester_id === viewer.id ? 'outgoing' : 'incoming'
+      // Don't tell a blocked user they're blocked — only the blocker sees that.
+      if (fRow.status === 'blocked' && fRow.requester_id !== viewer.id) {
+        friendship = { id: null, status: 'unavailable', direction: null }
+      } else {
+        friendship = { id: fRow.id, status: fRow.status, direction }
+      }
+    }
+  }
+
   res.json({
     id: player.id,
     name: player.display_name || player.name,
@@ -369,6 +393,7 @@ router.get('/api/players/:id/profile', async (req, res) => {
     info: player.info || '',
     total_xp: player.total_xp || 0,
     level: Math.floor((player.total_xp || 0) / 1000) + 1,
+    friendship,
     subscription: sub ? {
       plan_id: sub.plan_id,
       plan_name: sub.plan_name,

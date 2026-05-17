@@ -41,6 +41,26 @@
       }
     },
     "schemas": {
+      "FriendshipEntry": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "responded_at": { "type": "string", "format": "date-time", "nullable": true },
+          "online": { "type": "boolean", "description": "Present only on /api/friends; true when the other player has any active socket." },
+          "player": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "integer" },
+              "name": { "type": "string" },
+              "display_name": { "type": "string", "nullable": true },
+              "steam_name": { "type": "string" },
+              "avatar_url": { "type": "string", "nullable": true },
+              "mmr": { "type": "integer" }
+            }
+          }
+        }
+      },
       "Job": {
         "type": "object",
         "properties": {
@@ -2097,6 +2117,113 @@
         "responses": {
           "200": { "description": "Player unbanned" },
           "404": { "description": "Player not found" }
+        }
+      }
+    },
+    "/api/friends": {
+      "get": {
+        "tags": ["Friends"],
+        "summary": "List my accepted friends (with online flag)",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Friends list", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/FriendshipEntry" } } } } },
+          "401": { "description": "Not authenticated" }
+        }
+      }
+    },
+    "/api/friends/requests": {
+      "get": {
+        "tags": ["Friends"],
+        "summary": "List my pending friend requests (incoming + outgoing)",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Pending requests", "content": { "application/json": { "schema": { "type": "object", "properties": { "incoming": { "type": "array", "items": { "$ref": "#/components/schemas/FriendshipEntry" } }, "outgoing": { "type": "array", "items": { "$ref": "#/components/schemas/FriendshipEntry" } } } } } } },
+          "401": { "description": "Not authenticated" }
+        }
+      },
+      "post": {
+        "tags": ["Friends"],
+        "summary": "Send a friend request",
+        "description": "Creates a `pending` row. If the addressee already has a pending request out to me, both rows collapse into a single `accepted` friendship (auto-accept). Rejects if either side blocked the other (403), if a duplicate exists (409), or if invalid (400).",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "required": ["addressee_id"], "properties": { "addressee_id": { "type": "integer" } } } } }
+        },
+        "responses": {
+          "200": { "description": "Pending or auto-accepted", "content": { "application/json": { "schema": { "type": "object", "properties": { "id": { "type": "integer" }, "status": { "type": "string", "enum": ["pending", "accepted"] } } } } } },
+          "400": { "description": "Invalid addressee" },
+          "403": { "description": "Either side has blocked the other" },
+          "404": { "description": "Player not found" },
+          "409": { "description": "Already friends or already pending" }
+        }
+      }
+    },
+    "/api/friends/{id}/accept": {
+      "post": {
+        "tags": ["Friends"],
+        "summary": "Accept an incoming friend request",
+        "description": "Only the addressee of the pending row may accept. Sets status=accepted and responded_at=NOW().",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": { "description": "Friendship accepted" },
+          "403": { "description": "Only the addressee can accept" },
+          "404": { "description": "Not found" },
+          "409": { "description": "Not pending" }
+        }
+      }
+    },
+    "/api/friends/{id}": {
+      "delete": {
+        "tags": ["Friends"],
+        "summary": "Cancel outgoing, reject incoming, or unfriend",
+        "description": "Either party can delete an accepted friendship. For pending rows only the requester (cancel) or addressee (reject) can call. Does not unblock — use /api/friends/blocks/{id}.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": { "description": "Deleted" },
+          "403": { "description": "Not your friendship, or row is a block" },
+          "404": { "description": "Not found" }
+        }
+      }
+    },
+    "/api/friends/blocks": {
+      "get": {
+        "tags": ["Friends"],
+        "summary": "List my blocked users",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Blocked list", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/FriendshipEntry" } } } } }
+        }
+      },
+      "post": {
+        "tags": ["Friends"],
+        "summary": "Block a user",
+        "description": "Drops any existing pending/accepted rows between the pair (in either direction) and inserts a directional `blocked` row. Both directions can have independent blocks.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "required": ["addressee_id"], "properties": { "addressee_id": { "type": "integer" } } } } }
+        },
+        "responses": {
+          "200": { "description": "Blocked" },
+          "400": { "description": "Invalid target" },
+          "404": { "description": "Player not found" }
+        }
+      }
+    },
+    "/api/friends/blocks/{id}": {
+      "delete": {
+        "tags": ["Friends"],
+        "summary": "Unblock a user",
+        "description": "Only the blocker can call. Deletes the directional block row.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": { "description": "Unblocked" },
+          "403": { "description": "Not your block" },
+          "404": { "description": "Not found" }
         }
       }
     },

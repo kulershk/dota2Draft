@@ -98,6 +98,11 @@ router.get('/api/auth/me', async (req, res) => {
   // which perks unlock UI (e.g. auto-requeue checkbox visibility).
   const sub = await getActiveSubscription(player.id)
 
+  const pendingFriendRow = await queryOne(
+    "SELECT COUNT(*)::int AS c FROM friendships WHERE addressee_id = $1 AND status = 'pending'",
+    [player.id],
+  )
+
   res.json({
     id: player.id,
     name: player.display_name || player.name,
@@ -113,6 +118,7 @@ router.get('/api/auth/me', async (req, res) => {
     info: player.info || '',
     total_xp: player.total_xp || 0,
     dotacoins: player.dotacoins || 0,
+    pending_friend_requests: pendingFriendRow?.c || 0,
     twitch_username: player.twitch_username || null,
     discord_username: player.discord_username || null,
     is_banned: !!player.is_banned,
@@ -159,6 +165,10 @@ router.put('/api/auth/me', async (req, res) => {
     [updated.id],
   )
   if (updatedHelperRow) updatedPerms.add('_helps_competition')
+  const updatedPendingFriend = await queryOne(
+    "SELECT COUNT(*)::int AS c FROM friendships WHERE addressee_id = $1 AND status = 'pending'",
+    [updated.id],
+  )
   res.json({
     id: updated.id,
     name: updated.display_name || updated.name,
@@ -174,6 +184,7 @@ router.put('/api/auth/me', async (req, res) => {
     info: updated.info || '',
     total_xp: updated.total_xp || 0,
     dotacoins: updated.dotacoins || 0,
+    pending_friend_requests: updatedPendingFriend?.c || 0,
     twitch_username: updated.twitch_username || null,
     discord_username: updated.discord_username || null,
   })

@@ -27,6 +27,7 @@ import permissionRoutes from './routes/permissions.js'
 import settingRoutes from './routes/settings.js'
 import discordSettingsRoutes from './routes/discordSettings.js'
 import userRoutes from './routes/users.js'
+import createFriendsRouter from './routes/friends.js'
 import createNewsRouter from './routes/news.js'
 import createLeaguesRouter from './routes/leagues.js'
 import createSubscriptionPlansRouter from './routes/subscriptionPlans.js'
@@ -144,6 +145,7 @@ app.use(permissionRoutes)
 app.use(settingRoutes)
 app.use(discordSettingsRoutes)
 app.use(userRoutes)
+app.use(createFriendsRouter(io))
 app.use(createNewsRouter(io))
 app.use(createLeaguesRouter())
 app.use(createSubscriptionPlansRouter())

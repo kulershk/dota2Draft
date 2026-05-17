@@ -4,6 +4,23 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Bell, Users, MessageSquare, Plus, Headphones, User } from 'lucide-vue-next'
 import { useDraftStore } from '@/composables/useDraftStore'
+import { useFriendStore } from '@/composables/useFriendStore'
+
+const friendStore = useFriendStore()
+
+const FRIEND_GRADIENTS = [
+  'linear-gradient(135deg,#F59E0B,#EF4444)',
+  'linear-gradient(135deg,#22C55E,#0891B2)',
+  'linear-gradient(135deg,#6366F1,#A21CAF)',
+  'linear-gradient(135deg,#EC4899,#F59E0B)',
+]
+function gradientFor(playerId: number): string {
+  return FRIEND_GRADIENTS[playerId % FRIEND_GRADIENTS.length]
+}
+function initialFor(entry: any): string {
+  const n = entry?.player?.display_name || entry?.player?.name || '?'
+  return n.charAt(0).toUpperCase()
+}
 
 const { t } = useI18n()
 const route = useRoute()
@@ -100,31 +117,23 @@ function goToProfile() {
       <Plus class="w-4 h-4" style="color:#22D3EE" />
     </button>
 
-    <!-- Friend tile L (placeholder) -->
-    <button
+    <!-- Friend tiles (first 2 friends) -->
+    <router-link
+      v-for="f in friendStore.friends.value.slice(0, 2)"
+      :key="f.id"
+      :to="{ name: 'player-profile', params: { id: f.player.id } }"
       class="relative w-[38px] h-[38px] rounded-full flex items-center justify-center"
-      style="background:linear-gradient(135deg,#F59E0B,#EF4444)"
-      title="Friend"
+      :style="{ background: gradientFor(f.player.id) }"
+      :title="f.player.display_name || f.player.name"
     >
-      <span class="text-white text-[15px] font-extrabold">L</span>
+      <img v-if="f.player.avatar_url" :src="f.player.avatar_url" class="w-full h-full rounded-full object-cover" />
+      <span v-else class="text-white text-[15px] font-extrabold">{{ initialFor(f) }}</span>
       <span
+        v-if="f.online"
         class="absolute right-[-2px] bottom-[-2px] w-[10px] h-[10px] rounded-full"
         style="background:#22C55E;box-shadow:inset 0 0 0 2px #0A0F1C"
       />
-    </button>
-
-    <!-- Friend tile V (placeholder) -->
-    <button
-      class="relative w-[38px] h-[38px] rounded-full flex items-center justify-center"
-      style="background:linear-gradient(135deg,#22C55E,#0891B2)"
-      title="Friend"
-    >
-      <span class="text-white text-[15px] font-extrabold">V</span>
-      <span
-        class="absolute right-[-2px] bottom-[-2px] w-[10px] h-[10px] rounded-full"
-        style="background:#22C55E;box-shadow:inset 0 0 0 2px #0A0F1C"
-      />
-    </button>
+    </router-link>
 
     <!-- Spacer -->
     <div class="flex-1 min-h-[20px]" />
