@@ -913,9 +913,9 @@ onUnmounted(() => {
               </span>
             </div>
 
-            <div class="grid grid-cols-[1fr_minmax(380px,420px)_1fr] min-h-[340px]">
+            <div class="grid grid-cols-1 lg:grid-cols-[1fr_minmax(380px,420px)_1fr] lg:min-h-[340px]">
               <!-- Team 1 (Radiant) -->
-              <div class="flex flex-col">
+              <div class="flex flex-col order-2 lg:order-1">
                 <!-- Header -->
                 <div class="px-5 py-4 border-b border-border/30 flex items-center justify-between gap-2 flex-wrap">
                   <div class="flex items-center gap-3 min-w-0">
@@ -1019,7 +1019,7 @@ onUnmounted(() => {
               </div>
 
               <!-- Available Pool (center column, compact redesign per Pencil) -->
-              <div class="border-x border-border/30 flex flex-col">
+              <div class="border-y lg:border-y-0 lg:border-x border-border/30 flex flex-col order-1 lg:order-2">
                 <!-- Pool header -->
                 <div class="px-5 py-4 border-b border-border/30 flex items-center justify-between gap-3">
                   <div class="flex items-center gap-3">
@@ -1112,7 +1112,7 @@ onUnmounted(() => {
               </div>
 
               <!-- Team 2 (Dire) -->
-              <div class="flex flex-col">
+              <div class="flex flex-col order-3">
                 <!-- Header -->
                 <div class="px-5 py-4 border-b border-border/30 flex items-center justify-between gap-2 flex-wrap">
                   <div class="flex items-center gap-3 min-w-0">
