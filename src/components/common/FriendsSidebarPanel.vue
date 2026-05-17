@@ -4,10 +4,12 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Users, UserPlus, X, Search, MessageCircle } from 'lucide-vue-next'
 import { useFriendStore, type FriendEntry } from '@/composables/useFriendStore'
+import { useSidePanels } from '@/composables/useSidePanels'
 
 const { t } = useI18n()
 const router = useRouter()
 const friendStore = useFriendStore()
+const panels = useSidePanels()
 
 const FRIEND_GRADIENTS = [
   ['#F59E0B', '#EF4444'],
@@ -30,8 +32,8 @@ function initialFor(f: FriendEntry): string {
 }
 
 const searchQuery = ref('')
-watch(() => friendStore.panelOpen.value, (open) => {
-  if (!open) searchQuery.value = ''
+watch(() => panels.active.value, (a) => {
+  if (a !== 'friends') searchQuery.value = ''
 })
 
 function matches(f: FriendEntry): boolean {
@@ -45,12 +47,12 @@ const offlineFriends = computed(() => friendStore.friends.value.filter(f => !f.o
 
 function goToProfile(friend: FriendEntry) {
   router.push({ name: 'player-profile', params: { id: friend.player.id } })
-  friendStore.closePanel()
+  panels.close()
 }
 
 function goToAddFriend() {
   router.push('/friends')
-  friendStore.closePanel()
+  panels.close()
 }
 </script>
 
@@ -58,7 +60,7 @@ function goToAddFriend() {
   <Teleport to="body">
     <Transition name="slide-right">
       <aside
-        v-if="friendStore.panelOpen.value"
+        v-if="panels.active.value === 'friends'"
         class="fixed top-0 bottom-0 w-[320px] z-50 flex flex-col shadow-[0_0_60px_0_rgba(0,0,0,0.8)] md:right-[70px] right-0"
         style="background:#0F172A;border-left:1px solid #22D3EE;border-right:1px solid #1E293B"
       >
@@ -84,7 +86,7 @@ function goToAddFriend() {
               class="w-[26px] h-[26px] rounded-md flex items-center justify-center transition-colors hover:opacity-80"
               style="background:#1E293B"
               :title="t('close')"
-              @click="friendStore.closePanel()"
+              @click="panels.close()"
             >
               <X class="w-[13px] h-[13px]" style="color:#94A3B8" />
             </button>
@@ -95,36 +97,36 @@ function goToAddFriend() {
         <div class="flex items-end gap-2 px-[18px] shrink-0" style="border-bottom:1px solid #1E293B">
           <button
             class="flex flex-col items-center gap-2 pt-3 pb-[10px] min-w-[85px]"
-            @click="friendStore.panelTab.value = 'friends'"
+            @click="panels.setFriendsTab('friends')"
           >
             <div class="flex items-center gap-1.5">
               <span
                 class="text-[12px] font-extrabold tracking-[1px]"
-                :style="{ color: friendStore.panelTab.value === 'friends' ? '#22D3EE' : '#64748B' }"
+                :style="{ color: panels.friendsTab.value === 'friends' ? '#22D3EE' : '#64748B' }"
               >FRIENDS</span>
               <span
                 class="text-[11px] font-bold"
-                :style="{ color: friendStore.panelTab.value === 'friends' ? '#22D3EE' : '#64748B' }"
+                :style="{ color: panels.friendsTab.value === 'friends' ? '#22D3EE' : '#64748B' }"
               >{{ friendStore.friends.value.length }}</span>
             </div>
             <div
               class="h-[2px] w-16 rounded-full"
-              :style="{ background: friendStore.panelTab.value === 'friends' ? '#22D3EE' : 'transparent' }"
+              :style="{ background: panels.friendsTab.value === 'friends' ? '#22D3EE' : 'transparent' }"
             />
           </button>
           <button
             class="flex flex-col items-center gap-2 pt-3 pb-[10px] px-4"
-            @click="friendStore.panelTab.value = 'chats'"
+            @click="panels.setFriendsTab('chats')"
           >
             <div class="flex items-center gap-1.5">
               <span
                 class="text-[12px] font-bold tracking-[1px]"
-                :style="{ color: friendStore.panelTab.value === 'chats' ? '#22D3EE' : '#64748B' }"
+                :style="{ color: panels.friendsTab.value === 'chats' ? '#22D3EE' : '#64748B' }"
               >CHATS</span>
             </div>
             <div
               class="h-[2px] w-10 rounded-full"
-              :style="{ background: friendStore.panelTab.value === 'chats' ? '#22D3EE' : 'transparent' }"
+              :style="{ background: panels.friendsTab.value === 'chats' ? '#22D3EE' : 'transparent' }"
             />
           </button>
         </div>
@@ -148,7 +150,7 @@ function goToAddFriend() {
 
         <!-- Body -->
         <div class="flex-1 overflow-y-auto">
-          <template v-if="friendStore.panelTab.value === 'friends'">
+          <template v-if="panels.friendsTab.value === 'friends'">
             <div v-if="onlineFriends.length" class="px-[10px] pt-[10px] pb-2 flex flex-col gap-0.5">
               <div class="flex items-center gap-1.5 px-2 py-1">
                 <span class="w-2 h-2 rounded-full" style="background:#22D3EE" />

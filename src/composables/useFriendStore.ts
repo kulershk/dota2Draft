@@ -25,11 +25,6 @@ const outgoing = ref<FriendEntry[]>([])
 const blocks = ref<FriendEntry[]>([])
 const loaded = ref(false)
 
-// Sidebar panel UI state — owned here so RightSidebar buttons and the panel
-// component in App.vue can share without prop drilling.
-const panelOpen = ref(false)
-const panelTab = ref<'friends' | 'chats'>('friends')
-
 async function loadAll() {
   const api = useApi()
   try {
@@ -64,13 +59,6 @@ export function useFriendStore() {
     const u = store.currentUser.value
     if (u) u.pending_friend_requests = incoming.value.length
   }
-  function openPanel(tab: 'friends' | 'chats' = 'friends') {
-    panelTab.value = tab
-    panelOpen.value = true
-  }
-  function closePanel() {
-    panelOpen.value = false
-  }
   return {
     friends: computed(() => friends.value),
     incoming: computed(() => incoming.value),
@@ -78,10 +66,6 @@ export function useFriendStore() {
     blocks: computed(() => blocks.value),
     pendingCount,
     loaded: computed(() => loaded.value),
-    panelOpen,
-    panelTab,
-    openPanel,
-    closePanel,
     loadAll,
     reset,
     bumpPendingFromBackend,

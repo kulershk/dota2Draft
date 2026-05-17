@@ -5,6 +5,9 @@ import { useI18n } from 'vue-i18n'
 import { Bell, Users, MessageSquare, Plus, Headphones, User } from 'lucide-vue-next'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { useFriendStore } from '@/composables/useFriendStore'
+import { useSidePanels } from '@/composables/useSidePanels'
+
+const panels = useSidePanels()
 
 const friendStore = useFriendStore()
 
@@ -39,8 +42,8 @@ function goToQueue() {
   if (!onQueueRoute.value) router.push('/queue')
 }
 
-function goToProfile() {
-  if (user.value?.id) router.push({ name: 'player-profile', params: { id: user.value.id } })
+function openProfilePanel() {
+  panels.openProfile()
 }
 </script>
 
@@ -55,7 +58,7 @@ function goToProfile() {
       class="relative w-[44px] h-[44px] rounded-full overflow-hidden flex items-center justify-center"
       style="background:linear-gradient(135deg,#22D3EE,#A21CAF)"
       :title="user.display_name || user.name"
-      @click="goToProfile"
+      @click="openProfilePanel"
     >
       <img v-if="user.avatar_url" :src="user.avatar_url" class="w-full h-full object-cover" />
       <span v-else class="text-white text-[18px] font-extrabold">{{ initial }}</span>
@@ -87,7 +90,7 @@ function goToProfile() {
     </button>
 
     <!-- Bell — opens Friends panel; shows pending-request count -->
-    <button class="rail-btn relative" :title="t('notifications')" @click="friendStore.openPanel('friends')">
+    <button class="rail-btn relative" :title="t('notifications')" @click="panels.openFriends('friends')">
       <Bell class="w-4 h-4" style="color:#CBD5E1" />
       <span
         v-if="friendStore.pendingCount.value > 0"
@@ -97,7 +100,7 @@ function goToProfile() {
     </button>
 
     <!-- Friends — opens Friends panel with friends tab -->
-    <button class="rail-btn relative" :title="t('friends')" @click="friendStore.openPanel('friends')">
+    <button class="rail-btn relative" :title="t('friends')" @click="panels.openFriends('friends')">
       <Users class="w-4 h-4" style="color:#CBD5E1" />
       <span
         v-if="friendStore.friends.value.length > 0"
@@ -109,7 +112,7 @@ function goToProfile() {
     <div class="w-[38px] h-px" style="background:#1E293B" />
 
     <!-- Messages — opens Friends panel on the Chats tab -->
-    <button class="rail-btn relative" :title="t('messages')" @click="friendStore.openPanel('chats')">
+    <button class="rail-btn relative" :title="t('messages')" @click="panels.openFriends('chats')">
       <MessageSquare class="w-4 h-4" style="color:#CBD5E1" />
     </button>
 

@@ -6,6 +6,7 @@ import { useI18n } from 'vue-i18n'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { useQueueStore } from '@/composables/useQueueStore'
 import { useFriendStore } from '@/composables/useFriendStore'
+import { useSidePanels } from '@/composables/useSidePanels'
 import { useApi, onBannedAction } from '@/composables/useApi'
 import { useNavStore, type NavItem, type NavRoot } from '@/composables/useNavStore'
 import { fmtDateOnly } from '@/utils/format'
@@ -19,6 +20,7 @@ import InputGroup from '@/components/common/InputGroup.vue'
 import LeftSidebar from '@/components/common/LeftSidebar.vue'
 import RightSidebar from '@/components/common/RightSidebar.vue'
 import FriendsSidebarPanel from '@/components/common/FriendsSidebarPanel.vue'
+import ProfileSidebarPanel from '@/components/common/ProfileSidebarPanel.vue'
 import { setLocale } from '@/i18n'
 import { getSocket } from '@/composables/useSocket'
 
@@ -28,6 +30,7 @@ const router = useRouter()
 const store = useDraftStore()
 const queue = useQueueStore()
 const friendStore = useFriendStore()
+const panels = useSidePanels()
 const navStore = useNavStore()
 navStore.load().catch(() => {})
 
@@ -506,7 +509,7 @@ onMounted(() => {
             class="hidden sm:flex relative w-9 h-9 rounded-md items-center justify-center transition-colors hover:bg-white/5"
             style="background:#0F172A;box-shadow:inset 0 0 0 1px #1E293B"
             :title="t('notifications')"
-            @click="friendStore.openPanel('friends')"
+            @click="panels.openFriends('friends')"
           >
             <Bell class="w-4 h-4" style="color:#94A3B8" />
             <span
@@ -679,8 +682,9 @@ onMounted(() => {
     <!-- Global queue status overlay (hidden while on /queue) -->
     <QueueStatusOverlay />
 
-    <!-- Friends sidebar panel (slide-in from the right) -->
+    <!-- Slide-in side panels (only one open at a time) -->
     <FriendsSidebarPanel />
+    <ProfileSidebarPanel />
 
     <!-- Global ready-check modal (visible on any route) -->
     <ReadyCheckModal />
