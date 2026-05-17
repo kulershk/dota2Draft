@@ -1113,6 +1113,73 @@ export async function initDb() {
   // match) so the preference survives across matches and server restarts.
   try { await execute(`ALTER TABLE players ADD COLUMN auto_requeue_enabled BOOLEAN NOT NULL DEFAULT false`) } catch {}
 
+  // In-site currency ("dotacoins") that admins can grant/deduct. There is no
+  // user-facing spending mechanism yet — this just sets up the balance + a
+  // full audit log so every change is attributable.
+  try { await execute(`ALTER TABLE players ADD COLUMN dotacoins INTEGER NOT NULL DEFAULT 0`) } catch {}
+
+  await execute(`
+    CREATE TABLE IF NOT EXISTS dotacoin_transactions (
+      id          SERIAL PRIMARY KEY,
+      player_id   INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      delta       INTEGER NOT NULL,
+      reason      TEXT NULL,
+      created_by  INTEGER NULL REFERENCES players(id) ON DELETE SET NULL,
+      created_at  TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+  `)
+  await execute(`CREATE INDEX IF NOT EXISTS idx_dotacoin_tx_player ON dotacoin_transactions(player_id, created_at DESC)`)
+
+  // Player-to-player friend graph. One directional row per request: requester
+  // sent to addressee. status pending|accepted is semantically symmetric (the
+  // single row represents the relationship for either party). status=blocked
+  // is directional — A→B blocked is independent of B→A blocked. The unique
+  // (requester_id, addressee_id) prevents duplicates in a single direction;
+  // the symmetry rule for pending/accepted is enforced in route handlers.
+  await execute(`
+    CREATE TABLE IF NOT EXISTS friendships (
+      id            SERIAL PRIMARY KEY,
+      requester_id  INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      addressee_id  INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      status        TEXT NOT NULL CHECK (status IN ('pending','accepted','blocked')),
+      created_at    TIMESTAMP NOT NULL DEFAULT NOW(),
+      responded_at  TIMESTAMP NULL,
+      CHECK (requester_id <> addressee_id),
+      UNIQUE (requester_id, addressee_id)
+    );
+  `)
+  await execute(`CREATE INDEX IF NOT EXISTS idx_friendships_addressee ON friendships (addressee_id, status)`)
+  await execute(`CREATE INDEX IF NOT EXISTS idx_friendships_requester ON friendships (requester_id, status)`)
+
+  // Notifications — admin announcements + (future) targeted notifications.
+  // `recipient_id NULL` = broadcast, visible to every logged-in user. Per-user
+  // read state lives in `notification_reads` so a single broadcast row can
+  // serve everyone without duplication.
+  await execute(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id           SERIAL PRIMARY KEY,
+      recipient_id INTEGER NULL REFERENCES players(id) ON DELETE CASCADE,
+      type         TEXT NOT NULL DEFAULT 'announcement',
+      title        TEXT NOT NULL,
+      body         TEXT NULL,
+      link         TEXT NULL,
+      created_by   INTEGER NULL REFERENCES players(id) ON DELETE SET NULL,
+      created_at   TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+  `)
+  await execute(`CREATE INDEX IF NOT EXISTS idx_notifications_broadcast ON notifications (created_at DESC) WHERE recipient_id IS NULL`)
+  await execute(`CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON notifications (recipient_id, created_at DESC) WHERE recipient_id IS NOT NULL`)
+
+  await execute(`
+    CREATE TABLE IF NOT EXISTS notification_reads (
+      notification_id INTEGER NOT NULL REFERENCES notifications(id) ON DELETE CASCADE,
+      player_id       INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      read_at         TIMESTAMP NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (notification_id, player_id)
+    );
+  `)
+  await execute(`CREATE INDEX IF NOT EXISTS idx_notification_reads_player ON notification_reads (player_id)`)
+
   await execute(`
     CREATE TABLE IF NOT EXISTS user_subscriptions (
       id            SERIAL PRIMARY KEY,

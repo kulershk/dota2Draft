@@ -458,6 +458,34 @@ export function useApi() {
       request(`/api/admin/players/${id}/ban`, { method: 'POST', body: JSON.stringify({ reason: reason || null }) }),
     unbanPlayer: (id: number) =>
       request(`/api/admin/players/${id}/unban`, { method: 'POST' }),
+    adjustDotacoins: (id: number, delta: number, reason?: string) =>
+      request<{ ok: boolean; dotacoins: number }>(`/api/admin/players/${id}/dotacoins`, {
+        method: 'POST',
+        body: JSON.stringify({ delta, reason: reason || null }),
+      }),
+    getFriends: () => request('/api/friends'),
+    getFriendRequests: () => request('/api/friends/requests'),
+    getFriendBlocks: () => request('/api/friends/blocks'),
+    sendFriendRequest: (addresseeId: number) =>
+      request('/api/friends/requests', { method: 'POST', body: JSON.stringify({ addressee_id: addresseeId }) }),
+    acceptFriendRequest: (id: number) =>
+      request(`/api/friends/${id}/accept`, { method: 'POST' }),
+    removeFriendship: (id: number) =>
+      request(`/api/friends/${id}`, { method: 'DELETE' }),
+    blockUser: (addresseeId: number) =>
+      request('/api/friends/blocks', { method: 'POST', body: JSON.stringify({ addressee_id: addresseeId }) }),
+    unblockUser: (id: number) =>
+      request(`/api/friends/blocks/${id}`, { method: 'DELETE' }),
+    getNotifications: () => request('/api/notifications'),
+    markNotificationRead: (id: number) =>
+      request(`/api/notifications/${id}/read`, { method: 'POST' }),
+    markAllNotificationsRead: () =>
+      request('/api/notifications/read-all', { method: 'POST' }),
+    listAdminNotifications: () => request('/api/admin/notifications'),
+    createAnnouncement: (data: { title: string; body?: string | null; link?: string | null }) =>
+      request('/api/admin/notifications', { method: 'POST', body: JSON.stringify(data) }),
+    deleteAnnouncement: (id: number) =>
+      request(`/api/admin/notifications/${id}`, { method: 'DELETE' }),
     generateTestUsers: (count: number) =>
       request('/api/admin/generate-test-users', { method: 'POST', body: JSON.stringify({ count }) }),
     parseSteamIds: (input: string) =>

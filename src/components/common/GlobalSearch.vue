@@ -177,7 +177,7 @@ const shortcutLabel = isMac ? '⌘K' : 'Ctrl+K'
 </script>
 
 <template>
-  <div ref="wrapperEl" class="relative w-full max-w-[280px]">
+  <div ref="wrapperEl" class="relative w-full">
     <div class="relative flex items-center">
       <Search class="absolute left-3 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
       <input

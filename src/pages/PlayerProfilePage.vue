@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { User, Trophy, Swords, Tv, Medal, MessageCircle, Star, ChevronLeft, ChevronRight, Percent, Target, Flame, Clock, Award, Zap, Check, X, Flag, Users, BadgeCheck, Ban } from 'lucide-vue-next'
+import { User, Trophy, Swords, Tv, Medal, MessageCircle, Star, ChevronLeft, ChevronRight, Percent, Target, Flame, Clock, Award, Zap, Check, X, Flag, Users, BadgeCheck, Ban, UserPlus, UserMinus, ShieldOff } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
+import { useDraftStore } from '@/composables/useDraftStore'
+import { useFriendStore } from '@/composables/useFriendStore'
 import { useDotaConstants } from '@/composables/useDotaConstants'
 import RoleBadge from '@/components/common/RoleBadge.vue'
 import MmrDisplay from '@/components/common/MmrDisplay.vue'
@@ -18,7 +20,42 @@ import { getRank } from '@/utils/ranks'
 const { t } = useI18n()
 const route = useRoute()
 const api = useApi()
+const store = useDraftStore()
+const friendStore = useFriendStore()
 const dota = useDotaConstants()
+
+async function refreshProfileAndFriends() {
+  const id = playerId.value
+  const [p] = await Promise.all([
+    api.getPlayerProfile(id),
+    friendStore.loadAll(),
+  ])
+  profile.value = p
+}
+
+async function friendAction_send() {
+  await api.sendFriendRequest(playerId.value)
+  await refreshProfileAndFriends()
+}
+async function friendAction_accept() {
+  if (!profile.value?.friendship?.id) return
+  await api.acceptFriendRequest(profile.value.friendship.id)
+  await refreshProfileAndFriends()
+}
+async function friendAction_remove() {
+  if (!profile.value?.friendship?.id) return
+  await api.removeFriendship(profile.value.friendship.id)
+  await refreshProfileAndFriends()
+}
+async function friendAction_block() {
+  await api.blockUser(playerId.value)
+  await refreshProfileAndFriends()
+}
+async function friendAction_unblock() {
+  if (!profile.value?.friendship?.id) return
+  await api.unblockUser(profile.value.friendship.id)
+  await refreshProfileAndFriends()
+}
 
 dota.loadConstants()
 
@@ -270,6 +307,64 @@ const streakBadge = computed(() => {
                   <img src="/icons/stratz.ico" class="w-5 h-5" alt="Stratz" />
                 </a>
               </div>
+            </div>
+
+            <!-- Friend actions -->
+            <div v-if="store.currentUser.value && store.currentUser.value.id !== profile.id" class="flex flex-wrap items-center gap-2">
+              <template v-if="!profile.friendship">
+                <button class="btn-primary text-xs" @click="friendAction_send">
+                  <UserPlus class="w-3.5 h-3.5" />
+                  {{ t('sendFriendRequest') }}
+                </button>
+                <button class="btn-secondary text-xs" @click="friendAction_block">
+                  <Ban class="w-3.5 h-3.5" />
+                  {{ t('blockUser') }}
+                </button>
+              </template>
+              <template v-else-if="profile.friendship.status === 'pending' && profile.friendship.direction === 'outgoing'">
+                <span class="text-xs text-muted-foreground">{{ t('friendRequestSent') }}</span>
+                <button class="btn-secondary text-xs" @click="friendAction_remove">
+                  <X class="w-3.5 h-3.5" />
+                  {{ t('cancelRequest') }}
+                </button>
+              </template>
+              <template v-else-if="profile.friendship.status === 'pending' && profile.friendship.direction === 'incoming'">
+                <button class="btn-primary text-xs" @click="friendAction_accept">
+                  <Check class="w-3.5 h-3.5" />
+                  {{ t('acceptRequest') }}
+                </button>
+                <button class="btn-secondary text-xs" @click="friendAction_remove">
+                  <X class="w-3.5 h-3.5" />
+                  {{ t('rejectRequest') }}
+                </button>
+              </template>
+              <template v-else-if="profile.friendship.status === 'accepted'">
+                <span class="inline-flex items-center gap-1 text-xs text-primary font-semibold">
+                  <Check class="w-3.5 h-3.5" />
+                  {{ t('alreadyFriends') }}
+                </span>
+                <button class="btn-secondary text-xs" @click="friendAction_remove">
+                  <UserMinus class="w-3.5 h-3.5" />
+                  {{ t('removeFriend') }}
+                </button>
+                <button class="btn-secondary text-xs text-destructive" @click="friendAction_block">
+                  <Ban class="w-3.5 h-3.5" />
+                  {{ t('blockUser') }}
+                </button>
+              </template>
+              <template v-else-if="profile.friendship.status === 'blocked'">
+                <span class="inline-flex items-center gap-1 text-xs text-destructive font-semibold">
+                  <Ban class="w-3.5 h-3.5" />
+                  {{ t('blocked') }}
+                </span>
+                <button class="btn-secondary text-xs" @click="friendAction_unblock">
+                  <ShieldOff class="w-3.5 h-3.5" />
+                  {{ t('unblockUser') }}
+                </button>
+              </template>
+              <template v-else-if="profile.friendship.status === 'unavailable'">
+                <span class="text-xs text-muted-foreground">{{ t('unavailable') }}</span>
+              </template>
             </div>
 
             <!-- Socials + bio -->

@@ -61,6 +61,9 @@ export function initSocket(io) {
       const player = await queryOne('SELECT id, is_banned, is_admin FROM players WHERE id = $1', [playerId])
       if (!player) return null
       socketPlayers.set(socket.id, player.id)
+      // Per-user room so server routes can emit private events (friend
+      // requests, etc.) without scanning socketPlayers.
+      socket.join(`user:${player.id}`)
       if (player.is_banned) bannedSockets.add(socket.id)
       else bannedSockets.delete(socket.id)
 

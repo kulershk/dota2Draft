@@ -98,6 +98,19 @@ router.get('/api/auth/me', async (req, res) => {
   // which perks unlock UI (e.g. auto-requeue checkbox visibility).
   const sub = await getActiveSubscription(player.id)
 
+  const pendingFriendRow = await queryOne(
+    "SELECT COUNT(*)::int AS c FROM friendships WHERE addressee_id = $1 AND status = 'pending'",
+    [player.id],
+  )
+  const unreadNotifRow = await queryOne(
+    `SELECT COUNT(*)::int AS c
+       FROM notifications n
+       LEFT JOIN notification_reads r ON r.notification_id = n.id AND r.player_id = $1
+      WHERE (n.recipient_id IS NULL OR n.recipient_id = $1)
+        AND r.notification_id IS NULL`,
+    [player.id],
+  )
+
   res.json({
     id: player.id,
     name: player.display_name || player.name,
@@ -112,6 +125,9 @@ router.get('/api/auth/me', async (req, res) => {
     mmr_verified_at: player.mmr_verified_at || null,
     info: player.info || '',
     total_xp: player.total_xp || 0,
+    dotacoins: player.dotacoins || 0,
+    pending_friend_requests: pendingFriendRow?.c || 0,
+    unread_notifications: unreadNotifRow?.c || 0,
     twitch_username: player.twitch_username || null,
     discord_username: player.discord_username || null,
     is_banned: !!player.is_banned,
@@ -158,6 +174,18 @@ router.put('/api/auth/me', async (req, res) => {
     [updated.id],
   )
   if (updatedHelperRow) updatedPerms.add('_helps_competition')
+  const updatedPendingFriend = await queryOne(
+    "SELECT COUNT(*)::int AS c FROM friendships WHERE addressee_id = $1 AND status = 'pending'",
+    [updated.id],
+  )
+  const updatedUnreadNotif = await queryOne(
+    `SELECT COUNT(*)::int AS c
+       FROM notifications n
+       LEFT JOIN notification_reads r ON r.notification_id = n.id AND r.player_id = $1
+      WHERE (n.recipient_id IS NULL OR n.recipient_id = $1)
+        AND r.notification_id IS NULL`,
+    [updated.id],
+  )
   res.json({
     id: updated.id,
     name: updated.display_name || updated.name,
@@ -172,6 +200,9 @@ router.put('/api/auth/me', async (req, res) => {
     mmr_verified_at: updated.mmr_verified_at || null,
     info: updated.info || '',
     total_xp: updated.total_xp || 0,
+    dotacoins: updated.dotacoins || 0,
+    pending_friend_requests: updatedPendingFriend?.c || 0,
+    unread_notifications: updatedUnreadNotif?.c || 0,
     twitch_username: updated.twitch_username || null,
     discord_username: updated.discord_username || null,
   })
