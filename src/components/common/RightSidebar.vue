@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Bell, Users, MessageSquare, User } from 'lucide-vue-next'
+import { Bell, Users, MessageSquare, User, Play } from 'lucide-vue-next'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { useFriendStore } from '@/composables/useFriendStore'
 import { useNotificationStore } from '@/composables/useNotificationStore'
+import { useQueueStore } from '@/composables/useQueueStore'
 import { useSidePanels } from '@/composables/useSidePanels'
 
 const panels = useSidePanels()
 
 const friendStore = useFriendStore()
 const notifStore = useNotificationStore()
+const queueStore = useQueueStore()
 
 const FRIEND_GRADIENTS = [
   'linear-gradient(135deg,#F59E0B,#EF4444)',
@@ -71,6 +73,17 @@ function openProfilePanel() {
         {{ user.mmr_verified_at ? '✓' : '—' }}
       </span>
     </div>
+
+    <!-- PLAY — opens Queue panel -->
+    <button
+      class="w-[38px] h-[38px] rounded-lg flex items-center justify-center transition-transform relative"
+      :class="queueStore.inQueue.value ? 'animate-pulse' : 'hover:scale-105'"
+      style="background:#22D3EE;box-shadow:0 0 18px rgba(34,211,238,0.35)"
+      :title="t('findMatch')"
+      @click="panels.openQueue()"
+    >
+      <Play class="w-[16px] h-[16px]" style="color:#0A0F1C" fill="#0A0F1C" />
+    </button>
 
     <!-- Bell — opens Notifications panel -->
     <button class="rail-btn relative" :title="t('notifications')" @click="panels.openNotifications()">
