@@ -458,6 +458,11 @@ export function useApi() {
       request(`/api/admin/players/${id}/ban`, { method: 'POST', body: JSON.stringify({ reason: reason || null }) }),
     unbanPlayer: (id: number) =>
       request(`/api/admin/players/${id}/unban`, { method: 'POST' }),
+    adjustDotacoins: (id: number, delta: number, reason?: string) =>
+      request<{ ok: boolean; dotacoins: number }>(`/api/admin/players/${id}/dotacoins`, {
+        method: 'POST',
+        body: JSON.stringify({ delta, reason: reason || null }),
+      }),
     generateTestUsers: (count: number) =>
       request('/api/admin/generate-test-users', { method: 'POST', body: JSON.stringify({ count }) }),
     parseSteamIds: (input: string) =>

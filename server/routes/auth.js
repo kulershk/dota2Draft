@@ -112,6 +112,7 @@ router.get('/api/auth/me', async (req, res) => {
     mmr_verified_at: player.mmr_verified_at || null,
     info: player.info || '',
     total_xp: player.total_xp || 0,
+    dotacoins: player.dotacoins || 0,
     twitch_username: player.twitch_username || null,
     discord_username: player.discord_username || null,
     is_banned: !!player.is_banned,
@@ -172,6 +173,7 @@ router.put('/api/auth/me', async (req, res) => {
     mmr_verified_at: updated.mmr_verified_at || null,
     info: updated.info || '',
     total_xp: updated.total_xp || 0,
+    dotacoins: updated.dotacoins || 0,
     twitch_username: updated.twitch_username || null,
     discord_username: updated.discord_username || null,
   })

@@ -528,15 +528,15 @@ onMounted(() => {
 
           <div class="w-px h-6 hidden sm:block" style="background:#1E293B" />
 
-          <!-- Wallet (XP) — or Login when logged out -->
+          <!-- Wallet (dotacoins) — or Login when logged out -->
           <div
             v-if="isLoggedIn"
             class="hidden sm:flex items-center gap-2 rounded-md px-3 py-1.5"
             style="background:#0F172A;box-shadow:inset 0 0 0 1px #1E293B"
-            :title="'XP'"
+            :title="t('dotacoins')"
           >
             <Coins class="w-3.5 h-3.5" style="color:#FACC15" />
-            <span class="text-[12px] font-bold font-mono" style="color:#F1F5F9">{{ (store.currentUser.value?.total_xp || 0).toLocaleString() }}</span>
+            <span class="text-[12px] font-bold font-mono" style="color:#F1F5F9">{{ (store.currentUser.value?.dotacoins || 0).toLocaleString() }}</span>
           </div>
           <button
             v-else

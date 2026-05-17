@@ -141,6 +141,7 @@ export interface CurrentUser {
   mmr_verified_at: string | null
   info: string
   total_xp: number
+  dotacoins: number
   twitch_username: string | null
   discord_username: string | null
   is_banned: boolean

@@ -1113,6 +1113,23 @@ export async function initDb() {
   // match) so the preference survives across matches and server restarts.
   try { await execute(`ALTER TABLE players ADD COLUMN auto_requeue_enabled BOOLEAN NOT NULL DEFAULT false`) } catch {}
 
+  // In-site currency ("dotacoins") that admins can grant/deduct. There is no
+  // user-facing spending mechanism yet — this just sets up the balance + a
+  // full audit log so every change is attributable.
+  try { await execute(`ALTER TABLE players ADD COLUMN dotacoins INTEGER NOT NULL DEFAULT 0`) } catch {}
+
+  await execute(`
+    CREATE TABLE IF NOT EXISTS dotacoin_transactions (
+      id          SERIAL PRIMARY KEY,
+      player_id   INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      delta       INTEGER NOT NULL,
+      reason      TEXT NULL,
+      created_by  INTEGER NULL REFERENCES players(id) ON DELETE SET NULL,
+      created_at  TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+  `)
+  await execute(`CREATE INDEX IF NOT EXISTS idx_dotacoin_tx_player ON dotacoin_transactions(player_id, created_at DESC)`)
+
   await execute(`
     CREATE TABLE IF NOT EXISTS user_subscriptions (
       id            SERIAL PRIMARY KEY,

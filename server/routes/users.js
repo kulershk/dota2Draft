@@ -58,7 +58,39 @@ router.get('/api/users', async (req, res) => {
     permission_groups: groupsByPlayer[p.id] || [],
     online: onlineIds.has(p.id),
     activity: activities[p.id] || null,
+    dotacoins: p.dotacoins || 0,
   })))
+})
+
+// Adjust a player's dotacoins balance by a signed delta. Writes a row to
+// dotacoin_transactions for audit. Requires manage_users.
+router.post('/api/admin/players/:id/dotacoins', async (req, res) => {
+  const admin = await requirePermission(req, res, 'manage_users')
+  if (!admin) return
+  const playerId = Number(req.params.id)
+  if (!Number.isFinite(playerId)) return res.status(400).json({ error: 'Invalid player id' })
+  const delta = Math.trunc(Number(req.body?.delta))
+  if (!Number.isFinite(delta) || delta === 0) return res.status(400).json({ error: 'delta must be a non-zero integer' })
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 280) || null : null
+
+  const player = await queryOne('SELECT id, dotacoins FROM players WHERE id = $1', [playerId])
+  if (!player) return res.status(404).json({ error: 'Player not found' })
+  const newBalance = (player.dotacoins || 0) + delta
+  if (newBalance < 0) return res.status(400).json({ error: 'Balance cannot go negative' })
+
+  await execute('BEGIN')
+  try {
+    await execute('UPDATE players SET dotacoins = $1 WHERE id = $2', [newBalance, playerId])
+    await execute(
+      'INSERT INTO dotacoin_transactions (player_id, delta, reason, created_by) VALUES ($1, $2, $3, $4)',
+      [playerId, delta, reason, admin.id],
+    )
+    await execute('COMMIT')
+  } catch (e) {
+    await execute('ROLLBACK')
+    throw e
+  }
+  res.json({ ok: true, dotacoins: newBalance })
 })
 
 // Player search (authenticated, for standin selection etc.)

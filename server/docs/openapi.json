@@ -2100,6 +2100,38 @@
         }
       }
     },
+    "/api/admin/players/{id}/dotacoins": {
+      "post": {
+        "tags": ["Users"],
+        "summary": "Adjust a player's dotacoins balance",
+        "description": "Applies a signed delta to the player's dotacoins balance and writes a row to dotacoin_transactions for audit. Resulting balance must not go negative. Requires `manage_users` permission.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["delta"],
+                "properties": {
+                  "delta": { "type": "integer", "description": "Signed amount to add (positive) or subtract (negative). Must be non-zero." },
+                  "reason": { "type": "string", "nullable": true, "description": "Optional note recorded with the transaction (≤280 chars)." }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Balance updated",
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "ok": { "type": "boolean" }, "dotacoins": { "type": "integer" } } } } }
+          },
+          "400": { "description": "Invalid delta or resulting balance would be negative" },
+          "404": { "description": "Player not found" }
+        }
+      }
+    },
     "/api/admin/parse-steam-ids": {
       "post": {
         "tags": ["Users"],

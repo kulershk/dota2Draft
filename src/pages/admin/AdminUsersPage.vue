@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Users, Search, ExternalLink, Ban, CheckCircle, LogIn, UserPlus, Pencil, ArrowUp, ArrowDown, Upload, RefreshCw, Network, Link as LinkIcon, Unlink } from 'lucide-vue-next'
+import { Users, Search, ExternalLink, Ban, CheckCircle, LogIn, UserPlus, Pencil, ArrowUp, ArrowDown, Upload, RefreshCw, Network, Link as LinkIcon, Unlink, Coins } from 'lucide-vue-next'
 import RoleBadge from '@/components/common/RoleBadge.vue'
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -48,6 +48,7 @@ interface User {
   discord_id: string | null
   discord_username: string | null
   shadow_pool: number
+  dotacoins: number
 }
 
 const pageLabels: Record<string, string> = {
@@ -325,6 +326,40 @@ async function confirmToggleBan() {
   banConfirmUser.value = null
   banReason.value = ''
   await fetchUsers()
+}
+
+const dotacoinsUser = ref<User | null>(null)
+const dotacoinsDelta = ref<number | null>(null)
+const dotacoinsReason = ref('')
+const dotacoinsError = ref('')
+const dotacoinsSaving = ref(false)
+
+function openDotacoinsModal(user: User) {
+  dotacoinsUser.value = user
+  dotacoinsDelta.value = null
+  dotacoinsReason.value = ''
+  dotacoinsError.value = ''
+}
+
+async function confirmDotacoinsAdjust() {
+  if (!dotacoinsUser.value) return
+  const delta = Math.trunc(Number(dotacoinsDelta.value))
+  if (!Number.isFinite(delta) || delta === 0) {
+    dotacoinsError.value = t('dotacoinsDelta')
+    return
+  }
+  dotacoinsSaving.value = true
+  dotacoinsError.value = ''
+  try {
+    const res = await api.adjustDotacoins(dotacoinsUser.value.id, delta, dotacoinsReason.value.trim() || undefined)
+    const u = users.value.find(x => x.id === dotacoinsUser.value!.id)
+    if (u) u.dotacoins = res.dotacoins
+    dotacoinsUser.value = null
+  } catch (e: any) {
+    dotacoinsError.value = e?.message || 'Failed to adjust'
+  } finally {
+    dotacoinsSaving.value = false
+  }
 }
 
 async function impersonateUser(user: User) {
@@ -657,6 +692,10 @@ function formatRelativeTime(dateStr: string | null) {
                   <button v-if="store.hasPerm('impersonate_users')" class="btn-ghost p-2" :title="t('loginAs')" @click="impersonateUser(user)">
                     <LogIn class="w-4 h-4" />
                   </button>
+                  <button class="btn-ghost p-2 flex items-center gap-1 text-yellow-500" :title="`${t('dotacoins')}: ${(user.dotacoins || 0).toLocaleString()}`" @click="openDotacoinsModal(user)">
+                    <Coins class="w-4 h-4" />
+                    <span class="text-xs font-mono">{{ (user.dotacoins || 0).toLocaleString() }}</span>
+                  </button>
                 </div>
               </td>
             </tr>
@@ -676,6 +715,48 @@ function formatRelativeTime(dateStr: string | null) {
         <span class="text-xs text-muted-foreground">{{ t('showingAll', { count: filteredUsers.length }) }}</span>
       </div>
     </div>
+
+    <!-- Dotacoins Adjust Modal -->
+    <ModalOverlay :show="!!dotacoinsUser" @close="dotacoinsUser = null">
+      <div class="px-7 py-6 flex flex-col gap-4">
+        <div>
+          <h2 class="text-xl font-semibold text-foreground flex items-center gap-2">
+            <Coins class="w-5 h-5 text-yellow-500" />
+            {{ t('adjustDotacoins') }}
+          </h2>
+          <p class="text-sm text-muted-foreground mt-2">
+            {{ dotacoinsUser?.name }} — <span class="font-mono">{{ (dotacoinsUser?.dotacoins || 0).toLocaleString() }}</span>
+          </p>
+        </div>
+        <div>
+          <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{{ t('dotacoinsDelta') }}</label>
+          <input
+            v-model.number="dotacoinsDelta"
+            type="number"
+            step="1"
+            class="input-field w-full mt-1.5 font-mono"
+            placeholder="0"
+          />
+        </div>
+        <div>
+          <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{{ t('dotacoinsReason') }}</label>
+          <input
+            v-model="dotacoinsReason"
+            type="text"
+            class="input-field w-full mt-1.5"
+            maxlength="280"
+          />
+        </div>
+        <p v-if="dotacoinsError" class="text-sm text-red-500">{{ dotacoinsError }}</p>
+      </div>
+      <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
+        <button class="btn-primary w-full justify-center" :disabled="dotacoinsSaving" @click="confirmDotacoinsAdjust">
+          <Coins class="w-4 h-4" />
+          {{ t('apply') }}
+        </button>
+        <button class="btn-secondary w-full justify-center" @click="dotacoinsUser = null">{{ t('cancel') }}</button>
+      </div>
+    </ModalOverlay>
 
     <!-- Ban Confirmation Modal -->
     <ModalOverlay :show="!!banConfirmUser" @close="banConfirmUser = null">
