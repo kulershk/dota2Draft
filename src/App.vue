@@ -15,6 +15,7 @@ import QueueStatusOverlay from '@/components/common/QueueStatusOverlay.vue'
 import ReadyCheckModal from '@/components/common/ReadyCheckModal.vue'
 import UpdateAvailableModal from '@/components/common/UpdateAvailableModal.vue'
 import InputGroup from '@/components/common/InputGroup.vue'
+import LeftSidebar from '@/components/common/LeftSidebar.vue'
 import { setLocale } from '@/i18n'
 import { getSocket } from '@/composables/useSocket'
 
@@ -423,11 +424,24 @@ onMounted(() => {
       </div>
     </div>
 
+    <!-- Shell: sidebar (desktop) + main column -->
+    <div class="flex flex-row flex-1 min-h-0">
+      <LeftSidebar
+        :site-name="customSiteName"
+        :logo-url="customLogoUrl"
+        :is-dark="isDark"
+        :is-logged-in="isLoggedIn"
+        :my-match-count="myMatchCount"
+        @toggle-theme="toggleTheme"
+        @login="loginWithSteam"
+        @logout="handleLogout"
+      />
+      <div class="flex-1 flex flex-col min-w-0">
     <!-- Top Navigation Bar -->
     <header class="bg-muted border-b border-border" @click="showLangMenu = false; showUserMenu = false">
       <div class="max-w-[1400px] mx-auto w-full flex items-center justify-between px-4 md:px-8 h-14">
-        <!-- Left: Logo + Divider + Nav Links -->
-        <div class="flex items-center gap-7 h-full">
+        <!-- Left: Logo + Divider + Nav Links — hidden on desktop (lives in the sidebar) -->
+        <div class="md:hidden flex items-center gap-7 h-full">
           <router-link to="/" class="flex items-center gap-2.5">
             <img v-if="customLogoUrl" :src="customLogoUrl" class="w-[52px] h-[52px] rounded-md object-contain" />
             <div v-else class="w-[52px] h-[52px] rounded-md bg-primary flex items-center justify-center">
@@ -797,6 +811,8 @@ onMounted(() => {
       <!-- Footer (only on public pages) -->
       <AppFooter v-if="!route.path.startsWith('/admin') && !route.path.startsWith('/c/')" class="mt-auto relative z-[1]" />
     </main>
+      </div>
+    </div>
 
     <!-- Global queue status overlay (hidden while on /queue) -->
     <QueueStatusOverlay />
