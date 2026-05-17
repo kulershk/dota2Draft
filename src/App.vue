@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Gamepad2, Shield, ShieldAlert, LogOut, Sun, Moon, Menu, X, Home, LogIn, Lock, Globe, Settings, Swords, Info, Radio, ChevronDown, Check, LayoutDashboard, Bell, User, Newspaper, Calendar, Trophy, Medal, Ban, Megaphone, Play, Coins } from 'lucide-vue-next'
+import { Gamepad2, Shield, ShieldAlert, LogOut, Sun, Moon, Menu, X, Home, LogIn, Lock, Globe, Settings, Swords, Info, Radio, ChevronDown, Check, LayoutDashboard, Bell, User, Newspaper, Calendar, Trophy, Medal, Ban, Megaphone, Coins } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { onMounted, ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -479,7 +479,7 @@ onMounted(() => {
           <GlobalSearch class="w-full" />
         </div>
 
-        <!-- Right: bell + lang pill + PLAY + divider + wallet -->
+        <!-- Right: bell + lang pill + divider + wallet -->
         <div class="flex items-center gap-3 shrink-0">
           <button v-if="isLoggedIn && !store.isAdmin.value && showClaimAdminButton" class="text-xs text-muted-foreground hover:text-foreground transition-colors" @click="showClaimAdmin = true">
             <Lock class="w-3.5 h-3.5" />
@@ -525,16 +525,6 @@ onMounted(() => {
               </button>
             </div>
           </div>
-
-          <!-- PLAY button -->
-          <router-link
-            to="/queue"
-            class="flex items-center gap-2 rounded-md px-5 py-2 text-[13px] font-extrabold transition-transform hover:scale-[1.02]"
-            style="background:#22D3EE;color:#0A0F1C;box-shadow:0 0 16px rgba(34,211,238,0.25)"
-          >
-            <Play class="w-3.5 h-3.5" />
-            PLAY
-          </router-link>
 
           <div class="w-px h-6 hidden sm:block" style="background:#1E293B" />
 
