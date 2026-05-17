@@ -444,17 +444,17 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
             <!-- Mobile: card list -->
             <div class="md:hidden max-h-[400px] overflow-y-auto flex flex-col gap-2">
               <div v-for="player in filteredAvailablePlayers" :key="player.id" class="border border-border rounded-lg p-3 hover:bg-accent/30 transition-colors">
-                <div class="flex items-center justify-between">
-                  <div class="min-w-0">
+                <div class="flex items-center justify-between gap-2">
+                  <div class="min-w-0 flex-1">
                     <p class="text-sm font-medium text-foreground truncate">{{ player.name }}</p>
-                    <div class="flex items-center gap-2 mt-1">
+                    <div class="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
                       <div class="flex flex-wrap gap-1">
                         <RoleBadge v-for="role in sortedRoles(player.roles)" :key="role" :role="role" size="xs" />
                       </div>
                       <MmrDisplay :mmr="player.mmr" />
                     </div>
                   </div>
-                  <button v-if="canNominate" class="text-xs py-1.5 px-3 flex-shrink-0 ml-2" :class="isNominator ? 'btn-primary' : 'btn-outline border-amber-500 text-amber-500 hover:bg-amber-500/10'" @click="nominatePlayer(player.id)">{{ t('nominate') }}</button>
+                  <button v-if="canNominate" class="text-xs py-1.5 px-3 flex-shrink-0" :class="isNominator ? 'btn-primary' : 'btn-outline border-amber-500 text-amber-500 hover:bg-amber-500/10'" @click="nominatePlayer(player.id)">{{ t('nominate') }}</button>
                 </div>
                 <div v-if="canNominate" class="mt-2">
                   <input
@@ -524,10 +524,10 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
                 </span>
                 <span v-else class="badge-bidding ml-2">{{ isPaused ? t('paused') : t('bidding') }}</span>
               </div>
-              <div class="p-4 flex flex-col gap-4" v-if="store.auction.nominatedPlayer">
-                <div class="flex flex-col items-center text-center gap-1">
+              <div class="p-4 flex flex-col gap-4 min-w-0" v-if="store.auction.nominatedPlayer">
+                <div class="flex flex-col items-center text-center gap-1 min-w-0 w-full">
                   <MmrDisplay :mmr="store.auction.nominatedPlayer.mmr" size="lg" />
-                  <p class="text-[72px] leading-tight font-bold text-foreground mt-1">{{ store.auction.nominatedPlayer.name }}</p>
+                  <p class="text-3xl sm:text-5xl md:text-[72px] leading-tight font-bold text-foreground mt-1 break-words max-w-full">{{ store.auction.nominatedPlayer.name }}</p>
                   <p class="text-sm text-muted-foreground">
                     {{ sortedRoles(store.auction.nominatedPlayer.roles).join(', ') }}
                   </p>
@@ -555,7 +555,7 @@ watch(() => store.auction.status, (newStatus, oldStatus) => {
                   <div class="rounded border border-border p-2 md:p-3 text-center">
                     <p class="text-[10px] md:text-xs text-muted-foreground uppercase tracking-wider">{{ t('currentBid') }}</p>
                     <p class="text-lg md:text-2xl font-bold text-primary font-mono mt-1">{{ store.auction.currentBid }}g</p>
-                    <p class="text-xs text-muted-foreground" v-if="store.auction.currentBidder">by {{ store.auction.currentBidder.name }}</p>
+                    <p class="text-xs text-muted-foreground truncate" v-if="store.auction.currentBidder">by {{ store.auction.currentBidder.name }}</p>
                   </div>
                   <div class="rounded border border-border p-2 md:p-3 text-center">
                     <p class="text-[10px] md:text-xs text-muted-foreground uppercase tracking-wider">{{ t('timeLeft') }}</p>
