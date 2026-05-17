@@ -20,10 +20,12 @@ export interface QueuePool {
   id: number
   name: string
   enabled: boolean
+  is_featured?: boolean
   min_mmr: number
   max_mmr: number
   pick_timer: number
   best_of: number
+  team_size?: number
   lobby_server_region: number
   lobby_game_mode: number
   lobby_league_id: number

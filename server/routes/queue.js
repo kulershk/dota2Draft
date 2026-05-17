@@ -453,7 +453,7 @@ export default function createQueueRouter(io) {
         'accept_timer', 'decline_ban_minutes',
         'captain_eligibility_threshold',
         'season_id',
-        'rules_title', 'rules_content',
+        'rules_title', 'rules_content', 'is_featured',
       ]
       const setClauses = []
       const values = []
@@ -466,6 +466,11 @@ export default function createQueueRouter(io) {
       if (setClauses.length === 0) return res.json(existing)
 
       values.push(poolId)
+      // Featured pools are mutually exclusive — flipping this pool to featured
+      // demotes any others in the same TX so the UI always sees one star.
+      if (req.body.is_featured === true) {
+        await execute('UPDATE queue_pools SET is_featured = FALSE WHERE id <> $1', [poolId])
+      }
       const updated = await queryOne(
         `UPDATE queue_pools SET ${setClauses.join(', ')} WHERE id = $${values.length} RETURNING *`,
         values

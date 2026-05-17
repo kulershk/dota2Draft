@@ -53,6 +53,7 @@ function setTab(tab: QueueTab) {
 const form = ref<Record<string, any>>({
   name: '',
   enabled: true,
+  is_featured: false,
   min_mmr: 0,
   max_mmr: 0,
   pick_timer: 30,
@@ -84,7 +85,7 @@ const form = ref<Record<string, any>>({
 
 function resetForm() {
   form.value = {
-    name: '', enabled: true, min_mmr: 0, max_mmr: 0, pick_timer: 30, best_of: 1, team_size: 5,
+    name: '', enabled: true, is_featured: false, min_mmr: 0, max_mmr: 0, pick_timer: 30, best_of: 1, team_size: 5,
     lobby_server_region: 3, lobby_game_mode: 2, lobby_league_id: 0, lobby_dotv_delay: 1,
     lobby_cheats: false, lobby_allow_spectating: true, lobby_pause_setting: 0,
     lobby_selection_priority: 0, lobby_cm_pick: 0, lobby_auto_assign_teams: true,
@@ -635,9 +636,15 @@ onUnmounted(() => {
           <label class="text-xs text-muted-foreground">{{ t('queuePoolName') }}</label>
           <input class="input-field" v-model="form.name" />
         </div>
-        <div class="flex items-center gap-2 pt-5">
-          <input type="checkbox" :checked="form.enabled" @change="form.enabled = ($event.target as HTMLInputElement).checked" />
-          <span class="text-sm">{{ t('queueEnabled') }}</span>
+        <div class="flex items-center gap-4 pt-5">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" :checked="form.enabled" @change="form.enabled = ($event.target as HTMLInputElement).checked" />
+            <span class="text-sm">{{ t('queueEnabled') }}</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer" :title="t('queueFeaturedHint')">
+            <input type="checkbox" :checked="form.is_featured" @change="form.is_featured = ($event.target as HTMLInputElement).checked" />
+            <span class="text-sm">{{ t('queueFeatured') }}</span>
+          </label>
         </div>
 
         <!-- MMR -->

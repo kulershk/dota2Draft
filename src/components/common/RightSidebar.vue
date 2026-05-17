@@ -74,15 +74,21 @@ function openProfilePanel() {
       </span>
     </div>
 
-    <!-- PLAY — opens Queue panel -->
+    <!-- PLAY — opens Queue panel. Dim by default; lights up while searching. -->
     <button
-      class="w-[38px] h-[38px] rounded-lg flex items-center justify-center transition-transform relative"
-      :class="queueStore.inQueue.value ? 'animate-pulse' : 'hover:scale-105'"
-      style="background:#22D3EE;box-shadow:0 0 18px rgba(34,211,238,0.35)"
+      class="w-[38px] h-[38px] rounded-lg flex items-center justify-center transition-all relative"
+      :class="queueStore.inQueue.value ? 'animate-pulse' : 'hover:bg-white/5'"
+      :style="queueStore.inQueue.value
+        ? 'background:#22D3EE;box-shadow:0 0 18px rgba(34,211,238,0.45)'
+        : 'background:transparent;box-shadow:inset 0 0 0 1px #1E3A5F'"
       :title="t('findMatch')"
       @click="panels.openQueue()"
     >
-      <Play class="w-[16px] h-[16px]" style="color:#0A0F1C" fill="#0A0F1C" />
+      <Play
+        class="w-[16px] h-[16px]"
+        :style="{ color: queueStore.inQueue.value ? '#0A0F1C' : '#22D3EE' }"
+        :fill="queueStore.inQueue.value ? '#0A0F1C' : '#22D3EE'"
+      />
     </button>
 
     <!-- Bell — opens Notifications panel -->

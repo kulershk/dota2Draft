@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Swords, X, Play, Loader2, LogOut, Users } from 'lucide-vue-next'
+import { Swords, X, Play, Loader2, LogOut, Users, Star } from 'lucide-vue-next'
 import { useQueueStore } from '@/composables/useQueueStore'
 import { useSidePanels } from '@/composables/useSidePanels'
 import { useDraftStore } from '@/composables/useDraftStore'
+import { getSocket } from '@/composables/useSocket'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -13,16 +14,55 @@ const queue = useQueueStore()
 const panels = useSidePanels()
 const store = useDraftStore()
 
-const visiblePools = computed(() => queue.pools.value.filter(p => p.enabled))
-
 const isLoggedIn = computed(() => !!store.currentUser.value)
 
-function poolCount(poolId: number): number {
-  return (queue.poolCounts.value as any)?.[poolId] ?? 0
+// Featured = the pool with is_featured=true; fall back to the first enabled
+// pool so newly-seeded DBs work without an admin flipping anything.
+const featuredPool = computed(() => {
+  const enabled = queue.pools.value.filter(p => p.enabled)
+  return enabled.find(p => p.is_featured) || enabled[0] || null
+})
+
+const featuredPlayers = computed(() => {
+  if (!featuredPool.value) return [] as typeof queue.queuePlayers.value
+  if (queue.currentPoolId.value === featuredPool.value.id) return queue.queuePlayers.value
+  return []
+})
+
+const featuredCount = computed(() => {
+  if (!featuredPool.value) return 0
+  const cnt = (queue.poolCounts.value as any)?.[featuredPool.value.id]
+  return typeof cnt === 'number' ? cnt : featuredPlayers.value.length
+})
+
+// While the panel is open, watch the featured pool so its player list keeps
+// flowing in over the socket. Skip if the user is already queuing somewhere
+// else — leaving their current pool's room would lose their state.
+function watchFeatured() {
+  const p = featuredPool.value
+  if (!p) return
+  if (queue.inQueue.value && queue.currentPoolId.value !== p.id) return
+  queue.currentPoolId.value = p.id
+  queue.currentPoolName.value = p.name
+  getSocket().emit('queue:getState', { poolId: p.id })
 }
 
-function join(poolId: number) {
-  queue.joinQueue(poolId)
+watch(() => panels.active.value, (a) => {
+  if (a === 'queue') watchFeatured()
+})
+
+watch(featuredPool, (p) => {
+  if (panels.active.value === 'queue' && p) watchFeatured()
+})
+
+onMounted(() => {
+  if (queue.pools.value.length === 0) queue.fetchPools().then(() => {
+    if (panels.active.value === 'queue') watchFeatured()
+  })
+})
+
+function join() {
+  if (featuredPool.value) queue.joinQueue(featuredPool.value.id)
 }
 
 function leave() {
@@ -34,9 +74,10 @@ function openQueuePage() {
   panels.close()
 }
 
-onMounted(() => {
-  if (queue.pools.value.length === 0) queue.fetchPools()
-})
+function goToProfile(playerId: number) {
+  router.push({ name: 'player-profile', params: { id: playerId } })
+  panels.close()
+}
 </script>
 
 <template>
@@ -75,71 +116,109 @@ onMounted(() => {
             {{ t('loginToQueue') }}
           </div>
 
-          <!-- Currently queuing -->
-          <div v-else-if="queue.inQueue.value" class="p-4 flex flex-col gap-4">
-            <div
-              class="rounded-lg p-4 flex flex-col items-center gap-2"
-              style="background:#0A0F1C;box-shadow:inset 0 0 0 1px rgba(34,211,238,0.3)"
-            >
-              <Loader2 class="w-6 h-6 animate-spin" style="color:#22D3EE" />
-              <div class="text-[13px] font-bold" style="color:#F1F5F9">{{ t('searching') }}</div>
-              <div class="text-[11px]" style="color:#94A3B8">{{ queue.currentPoolName.value }}</div>
-              <div class="flex items-center gap-1.5 mt-1">
-                <Users class="w-3.5 h-3.5" style="color:#22D3EE" />
-                <span class="text-[12px] font-mono font-bold" style="color:#22D3EE">{{ queue.queueCount.value }}</span>
-              </div>
-            </div>
-            <button
-              class="flex items-center justify-center gap-2 rounded-md px-4 py-2.5 text-[13px] font-extrabold transition-colors"
-              style="background:#1E293B;color:#FCA5A5"
-              @click="leave"
-            >
-              <LogOut class="w-4 h-4" />
-              {{ t('leaveQueue') }}
-            </button>
-            <button
-              class="text-[11px] font-semibold underline transition-colors hover:opacity-80"
-              style="color:#22D3EE"
-              @click="openQueuePage"
-            >
-              {{ t('openFullQueue') }}
-            </button>
+          <!-- No featured pool -->
+          <div v-else-if="!featuredPool" class="px-6 py-12 text-center text-[12px]" style="color:#475569">
+            {{ t('noQueuePoolsAvailable') }}
           </div>
 
-          <!-- Pool list -->
-          <div v-else class="p-3 flex flex-col gap-2">
-            <div
-              v-if="visiblePools.length === 0"
-              class="px-3 py-12 text-center text-[12px]"
-              style="color:#475569"
-            >
-              {{ t('noQueuePoolsAvailable') }}
-            </div>
-            <button
-              v-for="pool in visiblePools"
-              :key="pool.id"
-              class="flex items-center gap-3 rounded-lg p-3 transition-colors hover:bg-white/5 text-left"
-              style="background:#0A0F1C;box-shadow:inset 0 0 0 1px #1E293B"
-              @click="join(pool.id)"
-            >
+          <template v-else>
+            <!-- Featured pool card -->
+            <div class="p-4">
               <div
-                class="w-10 h-10 rounded-md flex items-center justify-center shrink-0"
-                style="background:linear-gradient(135deg,#22D3EE,#0EA5E9)"
+                class="rounded-lg p-4 flex flex-col gap-3"
+                :style="queue.inQueue.value
+                  ? 'background:#0A0F1C;box-shadow:inset 0 0 0 1px rgba(34,211,238,0.45)'
+                  : 'background:#0A0F1C;box-shadow:inset 0 0 0 1px #1E293B'"
               >
-                <Play class="w-5 h-5" style="color:#0A0F1C" fill="#0A0F1C" />
-              </div>
-              <div class="flex-1 min-w-0">
-                <div class="text-[13px] font-bold truncate" style="color:#F1F5F9">{{ pool.name }}</div>
-                <div class="text-[10px] font-mono mt-0.5" style="color:#64748B">
-                  {{ pool.min_mmr }} – {{ pool.max_mmr }} MMR · Bo{{ pool.best_of }}
+                <div class="flex items-center gap-2">
+                  <Star class="w-3.5 h-3.5" style="color:#FACC15" fill="#FACC15" />
+                  <span class="text-[10px] font-extrabold tracking-[1.2px]" style="color:#FACC15">
+                    {{ t('featured').toUpperCase() }}
+                  </span>
+                  <span class="flex-1 text-right text-[10px] font-mono" style="color:#64748B">
+                    {{ featuredPool.min_mmr }} – {{ featuredPool.max_mmr }} MMR · Bo{{ featuredPool.best_of }}
+                  </span>
+                </div>
+                <div class="text-[15px] font-extrabold" style="color:#F1F5F9">
+                  {{ featuredPool.name }}
+                </div>
+                <!-- CTA -->
+                <button
+                  v-if="!queue.inQueue.value"
+                  class="flex items-center justify-center gap-2 rounded-md px-4 py-3 text-[14px] font-extrabold transition-transform hover:scale-[1.02]"
+                  style="background:#22D3EE;color:#0A0F1C;box-shadow:0 0 18px rgba(34,211,238,0.35)"
+                  @click="join"
+                >
+                  <Play class="w-4 h-4" style="color:#0A0F1C" fill="#0A0F1C" />
+                  {{ t('joinQueue') }}
+                </button>
+                <button
+                  v-else
+                  class="flex items-center justify-center gap-2 rounded-md px-4 py-3 text-[13px] font-extrabold transition-colors"
+                  style="background:#1E293B;color:#FCA5A5"
+                  @click="leave"
+                >
+                  <LogOut class="w-4 h-4" />
+                  {{ t('leaveQueue') }}
+                </button>
+                <div v-if="queue.inQueue.value" class="flex items-center justify-center gap-2 text-[12px]" style="color:#22D3EE">
+                  <Loader2 class="w-3.5 h-3.5 animate-spin" />
+                  {{ t('searching') }}
                 </div>
               </div>
-              <div class="flex items-center gap-1 shrink-0">
-                <Users class="w-3 h-3" style="color:#64748B" />
-                <span class="text-[11px] font-mono font-bold" style="color:#94A3B8">{{ poolCount(pool.id) }}</span>
+            </div>
+
+            <!-- Players in queue -->
+            <div class="px-[10px] pb-3 flex flex-col gap-0.5">
+              <div class="flex items-center gap-1.5 px-2 py-1">
+                <Users class="w-3 h-3" style="color:#22D3EE" />
+                <span class="text-[10px] font-extrabold tracking-[1.2px]" style="color:#22D3EE">
+                  {{ t('inQueue').toUpperCase() }} — {{ featuredCount }}
+                </span>
               </div>
-            </button>
-          </div>
+              <div
+                v-if="featuredPlayers.length === 0"
+                class="px-3 py-6 text-center text-[12px]"
+                style="color:#475569"
+              >
+                {{ t('queueIsEmpty') }}
+              </div>
+              <button
+                v-for="p in featuredPlayers"
+                :key="p.playerId"
+                class="flex items-center gap-2.5 rounded-md p-2 text-left transition-colors hover:bg-white/5"
+                @click="goToProfile(p.playerId)"
+              >
+                <img
+                  v-if="p.avatarUrl"
+                  :src="p.avatarUrl"
+                  class="w-8 h-8 rounded-full object-cover shrink-0"
+                />
+                <div
+                  v-else
+                  class="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+                  style="background:#1E293B"
+                >
+                  <span class="text-white text-[12px] font-extrabold">{{ (p.name || '?').charAt(0).toUpperCase() }}</span>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-[12px] font-bold truncate" style="color:#F1F5F9">{{ p.name }}</div>
+                  <div class="text-[10px] font-mono" style="color:#64748B">{{ p.mmr }} MMR</div>
+                </div>
+              </button>
+            </div>
+
+            <!-- Deep-link to the full queue page for the pick phase, etc. -->
+            <div class="px-4 pb-4 text-center">
+              <button
+                class="text-[11px] font-semibold underline transition-opacity hover:opacity-80"
+                style="color:#22D3EE"
+                @click="openQueuePage"
+              >
+                {{ t('openFullQueue') }}
+              </button>
+            </div>
+          </template>
         </div>
       </aside>
     </Transition>
