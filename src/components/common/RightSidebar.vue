@@ -5,6 +5,7 @@ import { Bell, Users, MessageSquare, User, Play } from 'lucide-vue-next'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { useFriendStore } from '@/composables/useFriendStore'
 import { useNotificationStore } from '@/composables/useNotificationStore'
+import { useMessageStore } from '@/composables/useMessageStore'
 import { useQueueStore } from '@/composables/useQueueStore'
 import { useSidePanels } from '@/composables/useSidePanels'
 
@@ -12,6 +13,7 @@ const panels = useSidePanels()
 
 const friendStore = useFriendStore()
 const notifStore = useNotificationStore()
+const messageStore = useMessageStore()
 const queueStore = useQueueStore()
 
 const FRIEND_GRADIENTS = [
@@ -122,6 +124,11 @@ function openProfilePanel() {
     <!-- Messages — opens Chats panel -->
     <button class="rail-btn relative" :title="t('messages')" @click="panels.openChats()">
       <MessageSquare class="w-4 h-4" style="color:#CBD5E1" />
+      <span
+        v-if="messageStore.unreadCount.value > 0"
+        class="absolute inline-flex items-center justify-center text-[9px] font-black px-[3px] rounded text-white"
+        style="top:6px;right:2px;min-width:14px;height:12px;background:#EF4444"
+      >{{ messageStore.unreadCount.value }}</span>
     </button>
 
     <!-- Friend tiles (first 2 friends) -->
