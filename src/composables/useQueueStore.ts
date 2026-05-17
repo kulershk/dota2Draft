@@ -385,8 +385,11 @@ export function useQueueStore() {
     const p = pools.value.find(x => x.id === poolId)
     if (p) currentPoolName.value = p.name
     cancelled.value = null
+    // No optimistic `inQueue = true` — server confirms via queue:myState
+    // (success) or rejects via queue:error + myState reset. Optimism caused
+    // the UI to flip to "Searching… Leave" after the server returned
+    // "Already in an active match".
     getSocket().emit('queue:join', { poolId })
-    inQueue.value = true
   }
 
   function requestMyState() {
