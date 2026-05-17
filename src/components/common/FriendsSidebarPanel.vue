@@ -59,8 +59,8 @@ function goToAddFriend() {
     <Transition name="slide-right">
       <aside
         v-if="friendStore.panelOpen.value"
-        class="fixed right-0 top-0 bottom-0 w-[320px] z-50 flex flex-col shadow-[0_0_60px_0_rgba(0,0,0,0.8)]"
-        style="background:#0F172A;border-left:1px solid #22D3EE"
+        class="fixed top-0 bottom-0 w-[320px] z-50 flex flex-col shadow-[0_0_60px_0_rgba(0,0,0,0.8)] md:right-[70px] right-0"
+        style="background:#0F172A;border-left:1px solid #22D3EE;border-right:1px solid #1E293B"
       >
         <!-- Header -->
         <div
