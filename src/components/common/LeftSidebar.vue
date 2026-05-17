@@ -1,32 +1,42 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   Swords, Home, Calendar, Newspaper, Trophy, Medal, Settings, Shield, User, Radio,
-  Store, HelpCircle, LogOut, LogIn, Sun, Moon,
+  LogIn, ChevronDown,
 } from 'lucide-vue-next'
 import { useNavStore, type NavItem, type NavRoot } from '@/composables/useNavStore'
-import { useDraftStore } from '@/composables/useDraftStore'
 
 const props = defineProps<{
   siteName: string
   logoUrl: string
-  isDark: boolean
   isLoggedIn: boolean
   myMatchCount: number
 }>()
 
 const emit = defineEmits<{
-  toggleTheme: []
   login: []
-  logout: []
 }>()
 
 const { t, locale } = useI18n()
 const route = useRoute()
 const navStore = useNavStore()
-const store = useDraftStore()
+
+const expanded = ref<Set<number>>(new Set())
+function isExpanded(id: number) { return expanded.value.has(id) }
+function toggleExpanded(id: number) {
+  const next = new Set(expanded.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  expanded.value = next
+}
+// Auto-expand any parent whose active child matches the current route.
+watch(() => route.path, () => {
+  for (const root of navStore.tree.value) {
+    if (root.children.length && root.children.some(isActive)) expanded.value.add(root.id)
+  }
+}, { immediate: true })
 
 const ICON_MAP: Record<string, any> = {
   Home, Swords, Calendar, Newspaper, Trophy, Medal, Settings, Shield, User, Radio,
@@ -92,134 +102,111 @@ const brandName = computed(() => props.siteName || 'DOTA LATVIJA')
       </div>
 
       <template v-for="root in navStore.tree.value" :key="root.id">
-        <a
-          v-if="root.is_external && root.path"
-          :href="root.path"
-          target="_blank"
-          rel="noopener"
-          class="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-semibold transition-colors hover:bg-white/5"
-          style="color:#CBD5E1"
-        >
-          <component :is="iconFor(root.icon)" class="w-[14px] h-[14px] shrink-0" style="color:#94A3B8" />
-          <span class="flex-1 truncate">{{ labelFor(root) }}</span>
-        </a>
-
-        <router-link
-          v-else-if="root.path"
-          :to="root.path"
-          class="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-semibold transition-colors"
-          :class="isAnyActive(root) ? 'sidebar-item-active' : 'sidebar-item-idle'"
-        >
-          <component
-            :is="iconFor(root.icon)"
-            class="w-[14px] h-[14px] shrink-0"
-            :style="{ color: isAnyActive(root) ? '#22D3EE' : '#94A3B8' }"
-          />
-          <span class="flex-1 truncate">{{ labelFor(root) }}</span>
-          <span
-            v-if="root.badge === 'my-matches' && myMatchCount > 0"
-            class="inline-flex items-center justify-center text-[10px] font-extrabold text-white px-[7px] py-[1px] rounded-[5px]"
-            style="background:#EF4444"
-          >
-            {{ myMatchCount }}
-          </span>
-        </router-link>
-
-        <div
-          v-else
-          class="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-semibold select-none"
-          style="color:#94A3B8"
-        >
-          <component :is="iconFor(root.icon)" class="w-[14px] h-[14px] shrink-0" style="color:#94A3B8" />
-          <span class="flex-1 truncate">{{ labelFor(root) }}</span>
-        </div>
-
-        <!-- Child links nested under their parent -->
-        <template v-for="child in root.children" :key="child.id">
+        <!-- Leaf: no children → external link / router-link / label -->
+        <template v-if="root.children.length === 0">
           <a
-            v-if="child.is_external && child.path"
-            :href="child.path"
+            v-if="root.is_external && root.path"
+            :href="root.path"
             target="_blank"
             rel="noopener"
-            class="flex items-center gap-2.5 rounded-lg pl-9 pr-3 py-2 text-[12px] transition-colors hover:bg-white/5"
-            style="color:#94A3B8"
+            class="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-semibold transition-colors hover:bg-white/5"
+            style="color:#CBD5E1"
           >
-            <component :is="iconFor(child.icon)" class="w-[12px] h-[12px] shrink-0" />
-            <span class="flex-1 truncate">{{ labelFor(child) }}</span>
+            <component :is="iconFor(root.icon)" class="w-[14px] h-[14px] shrink-0" style="color:#94A3B8" />
+            <span class="flex-1 truncate">{{ labelFor(root) }}</span>
           </a>
           <router-link
-            v-else-if="child.path"
-            :to="child.path"
-            class="flex items-center gap-2.5 rounded-lg pl-9 pr-3 py-2 text-[12px] transition-colors"
-            :class="isActive(child) ? 'sidebar-child-active' : 'sidebar-child-idle'"
+            v-else-if="root.path"
+            :to="root.path"
+            class="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-semibold transition-colors"
+            :class="isAnyActive(root) ? 'sidebar-item-active' : 'sidebar-item-idle'"
           >
             <component
-              :is="iconFor(child.icon)"
-              class="w-[12px] h-[12px] shrink-0"
-              :style="{ color: isActive(child) ? '#22D3EE' : '#94A3B8' }"
+              :is="iconFor(root.icon)"
+              class="w-[14px] h-[14px] shrink-0"
+              :style="{ color: isAnyActive(root) ? '#22D3EE' : '#94A3B8' }"
             />
-            <span class="flex-1 truncate">{{ labelFor(child) }}</span>
+            <span class="flex-1 truncate">{{ labelFor(root) }}</span>
+            <span
+              v-if="root.badge === 'my-matches' && myMatchCount > 0"
+              class="inline-flex items-center justify-center text-[10px] font-extrabold text-white px-[7px] py-[1px] rounded-[5px]"
+              style="background:#EF4444"
+            >
+              {{ myMatchCount }}
+            </span>
           </router-link>
+          <div
+            v-else
+            class="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-semibold select-none"
+            style="color:#94A3B8"
+          >
+            <component :is="iconFor(root.icon)" class="w-[14px] h-[14px] shrink-0" style="color:#94A3B8" />
+            <span class="flex-1 truncate">{{ labelFor(root) }}</span>
+          </div>
+        </template>
+
+        <!-- Parent: children collapse/expand on click -->
+        <template v-else>
+          <button
+            type="button"
+            class="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-semibold w-full text-left transition-colors"
+            :class="isAnyActive(root) && !isExpanded(root.id) ? 'sidebar-item-active' : 'sidebar-item-idle'"
+            @click="toggleExpanded(root.id)"
+          >
+            <component
+              :is="iconFor(root.icon)"
+              class="w-[14px] h-[14px] shrink-0"
+              :style="{ color: isAnyActive(root) ? '#22D3EE' : '#94A3B8' }"
+            />
+            <span class="flex-1 truncate">{{ labelFor(root) }}</span>
+            <ChevronDown
+              class="w-3.5 h-3.5 shrink-0 transition-transform"
+              :class="isExpanded(root.id) ? 'rotate-180' : ''"
+              :style="{ color: isAnyActive(root) ? '#22D3EE' : '#475569' }"
+            />
+          </button>
+          <template v-if="isExpanded(root.id)">
+            <template v-for="child in root.children" :key="child.id">
+              <a
+                v-if="child.is_external && child.path"
+                :href="child.path"
+                target="_blank"
+                rel="noopener"
+                class="flex items-center gap-2.5 rounded-lg pl-9 pr-3 py-2 text-[12px] transition-colors hover:bg-white/5"
+                style="color:#94A3B8"
+              >
+                <component :is="iconFor(child.icon)" class="w-[12px] h-[12px] shrink-0" />
+                <span class="flex-1 truncate">{{ labelFor(child) }}</span>
+              </a>
+              <router-link
+                v-else-if="child.path"
+                :to="child.path"
+                class="flex items-center gap-2.5 rounded-lg pl-9 pr-3 py-2 text-[12px] transition-colors"
+                :class="isActive(child) ? 'sidebar-child-active' : 'sidebar-child-idle'"
+              >
+                <component
+                  :is="iconFor(child.icon)"
+                  class="w-[12px] h-[12px] shrink-0"
+                  :style="{ color: isActive(child) ? '#22D3EE' : '#94A3B8' }"
+                />
+                <span class="flex-1 truncate">{{ labelFor(child) }}</span>
+              </router-link>
+            </template>
+          </template>
         </template>
       </template>
     </div>
 
-    <div class="h-px w-full" style="background:#1E293B" />
-
-    <!-- ACCOUNT -->
-    <div class="flex flex-col gap-0.5">
-      <div class="px-3 pt-1 pb-1.5">
-        <span class="text-[9px] font-extrabold tracking-[1.2px]" style="color:#475569">{{ t('navSectionAccount') }}</span>
-      </div>
-
-      <router-link
-        v-if="isLoggedIn"
-        to="/settings"
-        class="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-semibold transition-colors"
-        :class="route.path === '/settings' ? 'sidebar-item-active' : 'sidebar-item-idle'"
-      >
-        <Settings class="w-[14px] h-[14px] shrink-0" :style="{ color: route.path === '/settings' ? '#22D3EE' : '#94A3B8' }" />
-        <span class="flex-1 truncate">{{ t('settingsTitle') }}</span>
-      </router-link>
-
-      <router-link
-        v-if="store.canAccessAdmin.value"
-        to="/admin"
-        class="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-semibold transition-colors"
-        :class="route.path.startsWith('/admin') ? 'sidebar-item-active' : 'sidebar-item-idle'"
-      >
-        <Shield class="w-[14px] h-[14px] shrink-0" :style="{ color: route.path.startsWith('/admin') ? '#22D3EE' : '#94A3B8' }" />
-        <span class="flex-1 truncate">{{ t('adminPanel') }}</span>
-      </router-link>
-
+    <template v-if="!isLoggedIn">
+      <div class="h-px w-full" style="background:#1E293B" />
       <button
-        class="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-semibold sidebar-item-idle transition-colors"
-        @click="emit('toggleTheme')"
-      >
-        <Moon v-if="isDark" class="w-[14px] h-[14px] shrink-0" style="color:#94A3B8" />
-        <Sun v-else class="w-[14px] h-[14px] shrink-0" style="color:#94A3B8" />
-        <span class="flex-1 truncate text-left">{{ isDark ? t('lightMode') : t('darkMode') }}</span>
-      </button>
-
-      <button
-        v-if="isLoggedIn"
-        class="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-semibold transition-colors hover:bg-white/5"
-        style="color:#FCA5A5"
-        @click="emit('logout')"
-      >
-        <LogOut class="w-[14px] h-[14px] shrink-0" />
-        <span class="flex-1 truncate text-left">{{ t('logout') }}</span>
-      </button>
-
-      <button
-        v-else
         class="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-semibold sidebar-item-idle transition-colors"
         @click="emit('login')"
       >
         <LogIn class="w-[14px] h-[14px] shrink-0" style="color:#94A3B8" />
         <span class="flex-1 truncate text-left">{{ t('loginWithSteam') }}</span>
       </button>
-    </div>
+    </template>
   </aside>
 </template>
 

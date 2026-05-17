@@ -2,14 +2,16 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { User, X, Settings, Shield, LogOut, ChevronRight, BadgeCheck } from 'lucide-vue-next'
+import { User, X, Settings, Shield, LogOut, ChevronRight, BadgeCheck, Sun, Moon } from 'lucide-vue-next'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { useSidePanels } from '@/composables/useSidePanels'
+import { useTheme } from '@/composables/useTheme'
 
 const { t } = useI18n()
 const router = useRouter()
 const store = useDraftStore()
 const panels = useSidePanels()
+const theme = useTheme()
 
 const user = computed(() => store.currentUser.value)
 const initial = computed(() => {
@@ -121,6 +123,16 @@ function logout() {
             </span>
             <span class="flex-1 text-left text-[13px] font-semibold" style="color:#F1F5F9">{{ t('adminPanel') }}</span>
             <ChevronRight class="w-3.5 h-3.5" style="color:#475569" />
+          </button>
+
+          <button class="profile-row" @click="theme.toggle()">
+            <span class="profile-row-icon">
+              <Moon v-if="theme.isDark.value" class="w-[14px] h-[14px]" style="color:#22D3EE" />
+              <Sun v-else class="w-[14px] h-[14px]" style="color:#22D3EE" />
+            </span>
+            <span class="flex-1 text-left text-[13px] font-semibold" style="color:#F1F5F9">
+              {{ theme.isDark.value ? t('lightMode') : t('darkMode') }}
+            </span>
           </button>
 
           <div class="my-2 mx-3 h-px" style="background:#1E293B" />

@@ -109,17 +109,7 @@ function closeDropdown() {
 
 watch(() => route.path, () => closeDropdown())
 
-const isDark = ref(localStorage.getItem('draft_theme') !== 'light')
-
-function toggleTheme() {
-  isDark.value = !isDark.value
-  document.documentElement.classList.toggle('dark', isDark.value)
-  localStorage.setItem('draft_theme', isDark.value ? 'dark' : 'light')
-}
-
-if (isDark.value) {
-  document.documentElement.classList.add('dark')
-}
+// theme is managed by `useTheme` (composable); imports applied via panels.
 
 const showClaimAdmin = ref(false)
 const adminPassword = ref('')
@@ -456,12 +446,9 @@ onMounted(() => {
       <LeftSidebar
         :site-name="customSiteName"
         :logo-url="customLogoUrl"
-        :is-dark="isDark"
         :is-logged-in="isLoggedIn"
         :my-match-count="myMatchCount"
-        @toggle-theme="toggleTheme"
         @login="loginWithSteam"
-        @logout="handleLogout"
       />
       <div class="flex-1 flex flex-col min-w-0">
     <!-- Top Bar (Pencil v7U1o style) -->
