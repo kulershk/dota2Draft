@@ -95,7 +95,11 @@ async function sendMessage(body: string): Promise<{ ok: boolean; error?: string 
     const msg: DirectMessage = await api.sendMessage(currentPeerId.value, body)
     const peerId = currentPeerId.value
     const list = threadMessages.value[peerId] || []
-    threadMessages.value = { ...threadMessages.value, [peerId]: [...list, msg] }
+    // Dedupe — the server also emits message:new to our own user room, so
+    // the socket handler may have appended the row before this POST returned.
+    if (!list.find(m => m.id === msg.id)) {
+      threadMessages.value = { ...threadMessages.value, [peerId]: [...list, msg] }
+    }
     // Bump the thread to the top of the list and update last_message.
     threads.value = [
       { ...(threads.value.find(t => t.peer.id === peerId)!), last_message: msg },
