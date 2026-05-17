@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Gamepad2, Shield, ShieldAlert, LogOut, Sun, Moon, Menu, X, Home, LogIn, Lock, Globe, Settings, Swords, Info, Radio, ChevronDown, Check, LayoutDashboard, Bell, User, Newspaper, Calendar, Trophy, Medal, Ban, Megaphone } from 'lucide-vue-next'
+import { Gamepad2, Shield, ShieldAlert, LogOut, Sun, Moon, Menu, X, Home, LogIn, Lock, Globe, Settings, Swords, Info, Radio, ChevronDown, Check, LayoutDashboard, Bell, User, Newspaper, Calendar, Trophy, Medal, Ban, Megaphone, Play, Coins } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { onMounted, ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -248,6 +248,13 @@ const mobileMenuOpen = ref(false)
 
 const isLoggedIn = computed(() => !!store.currentUser.value)
 
+const topbarPageLabel = computed(() => {
+  if (route.path === '/') return ''
+  const name = route.name?.toString() || ''
+  if (!name) return ''
+  return name.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+})
+
 // MMR verification nudge banner — shown above the header for any logged-in
 // user whose MMR has never been verified. Dismissible per browser session.
 const MMR_BANNER_KEY = 'mmr_verify_banner_dismissed'
@@ -438,168 +445,66 @@ onMounted(() => {
         @logout="handleLogout"
       />
       <div class="flex-1 flex flex-col min-w-0">
-    <!-- Top Navigation Bar -->
-    <header class="bg-muted border-b border-border" @click="showLangMenu = false; showUserMenu = false">
-      <div class="max-w-[1400px] mx-auto w-full flex items-center justify-between px-4 md:px-8 h-14">
-        <!-- Left: Logo + Divider + Nav Links — hidden on desktop (lives in the sidebar) -->
-        <div class="md:hidden flex items-center gap-7 h-full">
-          <router-link to="/" class="flex items-center gap-2.5">
-            <img v-if="customLogoUrl" :src="customLogoUrl" class="w-[52px] h-[52px] rounded-md object-contain" />
-            <div v-else class="w-[52px] h-[52px] rounded-md bg-primary flex items-center justify-center">
-              <Gamepad2 class="w-7 h-7 text-primary-foreground" />
-            </div>
-          </router-link>
-          <div class="w-px h-6 bg-border hidden sm:block" />
-          <nav class="hidden sm:flex items-center gap-1 h-full">
-            <template v-for="root in navStore.tree.value" :key="root.id">
-              <!-- Item without children: simple link (or label if no path) -->
-              <template v-if="root.children.length === 0">
-                <a
-                  v-if="root.is_external && root.path"
-                  :href="root.path"
-                  target="_blank"
-                  rel="noopener"
-                  class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] tracking-wide transition-colors text-muted-foreground hover:text-foreground border border-transparent"
-                >
-                  <component :is="iconFor(root.icon)" class="w-[15px] h-[15px]" />
-                  {{ labelFor(root) }}
-                </a>
-                <router-link
-                  v-else-if="root.path"
-                  :to="root.path"
-                  class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] tracking-wide transition-colors"
-                  :class="isActive(root)
-                    ? 'bg-primary/15 text-primary font-semibold border border-primary/30'
-                    : 'text-muted-foreground hover:text-foreground border border-transparent'"
-                >
-                  <component :is="iconFor(root.icon)" class="w-[15px] h-[15px]" />
-                  {{ labelFor(root) }}
-                  <span v-if="root.badge === 'my-matches' && myMatchCount > 0" class="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full px-1 text-[10px] font-bold bg-primary text-primary-foreground">{{ myMatchCount }}</span>
-                </router-link>
-                <span
-                  v-else
-                  class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] tracking-wide text-muted-foreground/60 border border-transparent select-none"
-                >
-                  <component :is="iconFor(root.icon)" class="w-[15px] h-[15px]" />
-                  {{ labelFor(root) }}
-                </span>
-              </template>
-
-              <!-- Item with children: dropdown trigger -->
-              <div
-                v-else
-                class="relative h-full flex items-center"
-                @mouseenter="openDropdown(root.id)"
-                @mouseleave="scheduleCloseDropdown"
-              >
-                <router-link
-                  v-if="root.path"
-                  :to="root.path"
-                  class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] tracking-wide transition-colors"
-                  :class="isAnyActive(root) || openDropdownId === root.id
-                    ? 'bg-primary/15 text-primary font-semibold border border-primary/30'
-                    : 'text-muted-foreground hover:text-foreground border border-transparent'"
-                  @click="toggleDropdown(root.id)"
-                >
-                  <component :is="iconFor(root.icon)" class="w-[15px] h-[15px]" />
-                  {{ labelFor(root) }}
-                  <ChevronDown
-                    class="w-3.5 h-3.5 transition-transform"
-                    :class="openDropdownId === root.id ? 'rotate-180' : ''"
-                  />
-                </router-link>
-                <button
-                  v-else
-                  type="button"
-                  class="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] tracking-wide transition-colors"
-                  :class="isAnyActive(root) || openDropdownId === root.id
-                    ? 'bg-primary/15 text-primary font-semibold border border-primary/30'
-                    : 'text-muted-foreground hover:text-foreground border border-transparent'"
-                  @click="toggleDropdown(root.id)"
-                >
-                  <component :is="iconFor(root.icon)" class="w-[15px] h-[15px]" />
-                  {{ labelFor(root) }}
-                  <ChevronDown
-                    class="w-3.5 h-3.5 transition-transform"
-                    :class="openDropdownId === root.id ? 'rotate-180' : ''"
-                  />
-                </button>
-
-                <!-- Dropdown panel -->
-                <div
-                  v-if="openDropdownId === root.id"
-                  class="absolute left-0 top-full mt-2 rounded-xl bg-card border border-border shadow-lg shadow-black/40 z-40"
-                  :style="{ minWidth: groupChildren(root.children).length > 1 ? '520px' : '240px' }"
-                  @mouseenter="openDropdown(root.id)"
-                  @mouseleave="scheduleCloseDropdown"
-                  @click="closeDropdown"
-                >
-                  <div class="grid p-3 gap-3" :style="{ gridTemplateColumns: `repeat(${groupChildren(root.children).length}, minmax(0, 1fr))` }">
-                    <div v-for="(group, gi) in groupChildren(root.children)" :key="gi" class="flex flex-col gap-1 min-w-[200px]">
-                      <p v-if="group.label" class="px-2 pt-1 pb-1 text-[10px] font-mono font-semibold uppercase tracking-[1.5px] text-text-tertiary">
-                        {{ group.label }}
-                      </p>
-                      <template v-for="child in group.items" :key="child.id">
-                        <a
-                          v-if="child.is_external && child.path"
-                          :href="child.path"
-                          target="_blank"
-                          rel="noopener"
-                          class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors text-muted-foreground hover:bg-accent/40 hover:text-foreground"
-                        >
-                          <component :is="iconFor(child.icon)" class="w-4 h-4 shrink-0" />
-                          <span class="flex-1 truncate">{{ labelFor(child) }}</span>
-                        </a>
-                        <router-link
-                          v-else-if="child.path"
-                          :to="child.path"
-                          class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors"
-                          :class="isActive(child)
-                            ? 'bg-primary/10 text-primary'
-                            : 'text-muted-foreground hover:bg-accent/40 hover:text-foreground'"
-                        >
-                          <component :is="iconFor(child.icon)" class="w-4 h-4 shrink-0" />
-                          <span class="flex-1 truncate">{{ labelFor(child) }}</span>
-                        </router-link>
-                        <span
-                          v-else
-                          class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground/60 select-none"
-                        >
-                          <component :is="iconFor(child.icon)" class="w-4 h-4 shrink-0" />
-                          <span class="flex-1 truncate">{{ labelFor(child) }}</span>
-                        </span>
-                      </template>
-                    </div>
-                  </div>
-                </div>
-              </div>
+    <!-- Top Bar (Pencil v7U1o style) -->
+    <header
+      class="border-b shrink-0"
+      style="background:#0F172A;border-color:#1E293B"
+      @click="showLangMenu = false; showUserMenu = false"
+    >
+      <div class="flex items-center h-[52px] px-6 gap-4">
+        <!-- Left: hamburger (mobile) + breadcrumb (desktop) -->
+        <div class="flex items-center gap-3 min-w-0">
+          <button class="md:hidden p-1.5 rounded hover:bg-accent" @click="mobileMenuOpen = !mobileMenuOpen">
+            <X v-if="mobileMenuOpen" class="w-5 h-5 text-foreground" />
+            <Menu v-else class="w-5 h-5 text-foreground" />
+          </button>
+          <div class="hidden md:flex items-center gap-3 min-w-0">
+            <router-link
+              to="/"
+              class="flex items-center gap-1.5 text-[14px] font-semibold transition-colors"
+              :style="{ color: route.path === '/' ? '#F1F5F9' : '#94A3B8' }"
+            >
+              <Home class="w-3.5 h-3.5" />
+              {{ t('home') }}
+            </router-link>
+            <template v-if="topbarPageLabel">
+              <span class="text-[13px]" style="color:#475569">/</span>
+              <span class="text-[13px] font-medium truncate" style="color:#22D3EE">{{ topbarPageLabel }}</span>
             </template>
-          </nav>
+          </div>
         </div>
 
-        <!-- Right: Live + Divider + Lang + Divider + User -->
-        <div class="flex items-center gap-4 h-full">
-          <!-- Claim admin (hidden unless ?admin) -->
+        <!-- Center: search -->
+        <div class="hidden md:flex flex-1 max-w-[480px] mx-auto">
+          <GlobalSearch class="w-full" />
+        </div>
+
+        <!-- Right: bell + lang pill + PLAY + divider + wallet -->
+        <div class="flex items-center gap-3 shrink-0">
           <button v-if="isLoggedIn && !store.isAdmin.value && showClaimAdminButton" class="text-xs text-muted-foreground hover:text-foreground transition-colors" @click="showClaimAdmin = true">
             <Lock class="w-3.5 h-3.5" />
           </button>
 
-          <!-- Global search (desktop only — mobile gets it inside the menu) -->
-          <div class="hidden md:block">
-            <GlobalSearch />
-          </div>
+          <!-- Bell (placeholder) -->
+          <button
+            class="hidden sm:flex relative w-9 h-9 rounded-md items-center justify-center transition-colors hover:bg-white/5"
+            style="background:#0F172A;box-shadow:inset 0 0 0 1px #1E293B"
+            :title="t('notifications')"
+          >
+            <Bell class="w-4 h-4" style="color:#94A3B8" />
+            <span class="absolute w-2 h-2 rounded-full" style="top:7px;right:7px;background:#EF4444;box-shadow:0 0 0 2px #0F172A" />
+          </button>
 
-          <!-- Language -->
+          <!-- Language pill -->
           <div class="relative hidden sm:block">
             <button
-              class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-border text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+              class="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-bold transition-colors hover:bg-white/5"
+              style="background:#0F172A;box-shadow:inset 0 0 0 1px #1E293B;color:#F1F5F9"
               @click.stop="showLangMenu = !showLangMenu; showUserMenu = false"
             >
-              <Globe class="w-3.5 h-3.5 text-text-tertiary" />
+              <Globe class="w-3 h-3" style="color:#94A3B8" />
               {{ locale.toUpperCase() }}
-              <ChevronDown class="w-3 h-3 text-text-tertiary" />
             </button>
-            <!-- Language Dropdown -->
             <div v-if="showLangMenu" class="absolute right-0 top-full mt-2 rounded-xl bg-muted border border-border shadow-lg shadow-black/30 py-3 z-50 w-40" @click.stop>
               <div class="px-3.5 pb-2">
                 <span class="text-[11px] font-semibold text-text-tertiary tracking-wider">Language</span>
@@ -621,91 +526,35 @@ onMounted(() => {
             </div>
           </div>
 
-          <div class="w-px h-6 bg-border hidden sm:block" />
+          <!-- PLAY button -->
+          <router-link
+            to="/queue"
+            class="flex items-center gap-2 rounded-md px-5 py-2 text-[13px] font-extrabold transition-transform hover:scale-[1.02]"
+            style="background:#22D3EE;color:#0A0F1C;box-shadow:0 0 16px rgba(34,211,238,0.25)"
+          >
+            <Play class="w-3.5 h-3.5" />
+            PLAY
+          </router-link>
 
-          <!-- User Area -->
-          <template v-if="isLoggedIn">
-            <div class="relative">
-              <button
-                class="flex items-center gap-2.5 cursor-pointer"
-                @click.stop="showUserMenu = !showUserMenu; showLangMenu = false"
-              >
-                <div class="relative w-8 h-8 rounded-full overflow-hidden border-[1.5px] border-primary/40">
-                  <img v-if="store.currentUser.value?.avatar_url" :src="store.currentUser.value.avatar_url" class="w-full h-full object-cover" />
-                  <div v-else class="w-full h-full bg-card flex items-center justify-center">
-                    <User class="w-4 h-4 text-primary" />
-                  </div>
-                </div>
-                <div class="hidden sm:flex flex-col">
-                  <span class="text-sm font-medium text-foreground leading-tight">{{ store.currentUser.value?.name }}</span>
-                  <span class="text-[9px] font-semibold font-mono text-primary">{{ userRoleLabel }}</span>
-                </div>
-                <ChevronDown class="w-3.5 h-3.5 text-text-tertiary hidden sm:block" />
-              </button>
+          <div class="w-px h-6 hidden sm:block" style="background:#1E293B" />
 
-              <!-- User Dropdown -->
-              <div v-if="showUserMenu" class="absolute right-0 top-full mt-2 rounded-xl bg-muted border border-border shadow-lg shadow-black/30 z-50 w-56" @click.stop>
-                <!-- User header -->
-                <div class="flex items-center gap-3 px-4 py-3 border-b border-border">
-                  <div class="w-9 h-9 rounded-full overflow-hidden border-[1.5px] border-primary/40 shrink-0">
-                    <img v-if="store.currentUser.value?.avatar_url" :src="store.currentUser.value.avatar_url" class="w-full h-full object-cover" />
-                    <div v-else class="w-full h-full bg-card flex items-center justify-center">
-                      <User class="w-[18px] h-[18px] text-primary" />
-                    </div>
-                  </div>
-                  <div class="flex flex-col min-w-0">
-                    <span class="text-sm font-semibold text-foreground truncate">{{ store.currentUser.value?.name }}</span>
-                    <span class="text-[11px] text-text-tertiary truncate">{{ store.currentUser.value?.steam_id }}</span>
-                  </div>
-                </div>
-                <!-- Role badge -->
-                <div v-if="store.currentUser.value?.is_admin" class="px-4 py-2 border-b border-border">
-                  <span class="badge-accent">ADMIN</span>
-                </div>
-                <!-- Menu items -->
-                <div class="py-1">
-                  <router-link v-if="store.currentUser.value?.id" :to="{ name: 'player-profile', params: { id: store.currentUser.value.id } }" class="flex items-center gap-3 px-4 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-card/50 transition-colors" @click="showUserMenu = false">
-                    <User class="w-4 h-4" />
-                    {{ t('myProfile') }}
-                  </router-link>
-                  <router-link to="/settings" class="flex items-center gap-3 px-4 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-card/50 transition-colors" @click="showUserMenu = false">
-                    <Settings class="w-4 h-4" />
-                    {{ t('settingsTitle') }}
-                  </router-link>
-                  <router-link v-if="store.canAccessAdmin.value" to="/admin" class="flex items-center gap-3 px-4 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-card/50 transition-colors" @click="showUserMenu = false">
-                    <Shield class="w-4 h-4" />
-                    {{ t('adminPanel') || 'Admin Panel' }}
-                  </router-link>
-                  <button class="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-card/50 transition-colors" @click="toggleTheme">
-                    <Moon v-if="isDark" class="w-4 h-4" />
-                    <Sun v-else class="w-4 h-4" />
-                    {{ isDark ? t('lightMode') : t('darkMode') }}
-                  </button>
-                </div>
-                <!-- Sign out -->
-                <div class="h-px bg-border" />
-                <button class="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-destructive hover:bg-card/50 transition-colors" @click="handleLogout(); showUserMenu = false">
-                  <LogOut class="w-4 h-4" />
-                  {{ t('logout') }}
-                </button>
-              </div>
-            </div>
-          </template>
-          <template v-else>
-            <button class="p-1.5 rounded hover:bg-accent" :title="isDark ? t('lightMode') : t('darkMode')" @click="toggleTheme">
-              <Moon v-if="isDark" class="w-4 h-4 text-muted-foreground" />
-              <Sun v-else class="w-4 h-4 text-muted-foreground" />
-            </button>
-            <button class="flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors" @click="loginWithSteam">
-              <LogIn class="w-4 h-4" />
-              {{ t('loginWithSteam') }}
-            </button>
-          </template>
-
-          <!-- Mobile hamburger -->
-          <button class="md:hidden p-1.5 rounded hover:bg-accent" @click="mobileMenuOpen = !mobileMenuOpen">
-            <X v-if="mobileMenuOpen" class="w-5 h-5 text-foreground" />
-            <Menu v-else class="w-5 h-5 text-foreground" />
+          <!-- Wallet (XP) — or Login when logged out -->
+          <div
+            v-if="isLoggedIn"
+            class="hidden sm:flex items-center gap-2 rounded-md px-3 py-1.5"
+            style="background:#0F172A;box-shadow:inset 0 0 0 1px #1E293B"
+            :title="'XP'"
+          >
+            <Coins class="w-3.5 h-3.5" style="color:#FACC15" />
+            <span class="text-[12px] font-bold font-mono" style="color:#F1F5F9">{{ (store.currentUser.value?.total_xp || 0).toLocaleString() }}</span>
+          </div>
+          <button
+            v-else
+            class="hidden sm:flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            @click="loginWithSteam"
+          >
+            <LogIn class="w-4 h-4" />
+            {{ t('loginWithSteam') }}
           </button>
         </div>
       </div>
