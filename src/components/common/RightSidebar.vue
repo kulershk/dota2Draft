@@ -4,11 +4,13 @@ import { useI18n } from 'vue-i18n'
 import { Bell, Users, MessageSquare, User } from 'lucide-vue-next'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { useFriendStore } from '@/composables/useFriendStore'
+import { useNotificationStore } from '@/composables/useNotificationStore'
 import { useSidePanels } from '@/composables/useSidePanels'
 
 const panels = useSidePanels()
 
 const friendStore = useFriendStore()
+const notifStore = useNotificationStore()
 
 const FRIEND_GRADIENTS = [
   'linear-gradient(135deg,#F59E0B,#EF4444)',
@@ -70,14 +72,14 @@ function openProfilePanel() {
       </span>
     </div>
 
-    <!-- Bell — opens Friends panel; shows pending-request count -->
-    <button class="rail-btn relative" :title="t('notifications')" @click="panels.openFriends('friends')">
+    <!-- Bell — opens notifications tab; badge shows unread count -->
+    <button class="rail-btn relative" :title="t('notifications')" @click="panels.openFriends('notifications')">
       <Bell class="w-4 h-4" style="color:#CBD5E1" />
       <span
-        v-if="friendStore.pendingCount.value > 0"
+        v-if="notifStore.unreadCount.value > 0"
         class="absolute inline-flex items-center justify-center text-[9px] font-black px-[3px] rounded text-white"
         style="top:6px;right:2px;min-width:14px;height:12px;background:#EF4444"
-      >{{ friendStore.pendingCount.value }}</span>
+      >{{ notifStore.unreadCount.value }}</span>
     </button>
 
     <!-- Friends — opens Friends panel with friends tab -->

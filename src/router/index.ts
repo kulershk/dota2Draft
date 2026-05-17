@@ -57,6 +57,7 @@ const router = createRouter({
         { path: 'competitions/:compId', name: 'admin-competition-setup', meta: { permissions: ['manage_competitions', 'manage_own_competitions', '_helps_competition'] }, component: () => import('@/pages/admin/AdminCompetitionSetupPage.vue') },
         { path: 'users', name: 'admin-users', meta: { permissions: ['manage_users'] }, component: () => import('@/pages/admin/AdminUsersPage.vue') },
         { path: 'news', name: 'admin-news', meta: { permissions: ['manage_news'] }, component: () => import('@/pages/admin/AdminNewsPage.vue') },
+        { path: 'announcements', name: 'admin-announcements', meta: { permissions: ['manage_notifications'] }, component: () => import('@/pages/admin/AdminAnnouncementsPage.vue') },
         { path: 'settings', name: 'admin-settings', meta: { permissions: ['manage_site_settings'] }, component: () => import('@/pages/admin/AdminSiteSettingsPage.vue') },
         { path: 'discord', name: 'admin-discord', meta: { permissions: ['manage_discord_settings'] }, component: () => import('@/pages/admin/AdminDiscordSettingsPage.vue') },
         { path: 'permissions', name: 'admin-permissions', meta: { permissions: ['manage_permissions'] }, component: () => import('@/pages/admin/AdminPermissionsPage.vue') },

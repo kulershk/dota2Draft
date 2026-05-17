@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 
-export type FriendsTab = 'friends' | 'chats'
+export type FriendsTab = 'friends' | 'chats' | 'notifications'
 export type SidePanel = 'friends' | 'profile' | null
 
 const active = ref<SidePanel>(null)

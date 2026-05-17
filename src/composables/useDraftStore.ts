@@ -143,6 +143,7 @@ export interface CurrentUser {
   total_xp: number
   dotacoins: number
   pending_friend_requests: number
+  unread_notifications: number
   twitch_username: string | null
   discord_username: string | null
   is_banned: boolean

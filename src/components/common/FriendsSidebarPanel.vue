@@ -4,12 +4,19 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Users, UserPlus, X, Search, MessageCircle } from 'lucide-vue-next'
 import { useFriendStore, type FriendEntry } from '@/composables/useFriendStore'
+import { useNotificationStore } from '@/composables/useNotificationStore'
 import { useSidePanels } from '@/composables/useSidePanels'
+import { formatRelativeTime } from '@/utils/format'
 
 const { t } = useI18n()
 const router = useRouter()
 const friendStore = useFriendStore()
+const notifStore = useNotificationStore()
 const panels = useSidePanels()
+
+function relativeTime(iso: string): string {
+  return formatRelativeTime(iso)
+}
 
 const FRIEND_GRADIENTS = [
   ['#F59E0B', '#EF4444'],
@@ -112,6 +119,26 @@ function goToAddFriend() {
             <div
               class="h-[2px] w-16 rounded-full"
               :style="{ background: panels.friendsTab.value === 'friends' ? '#22D3EE' : 'transparent' }"
+            />
+          </button>
+          <button
+            class="flex flex-col items-center gap-2 pt-3 pb-[10px] px-3"
+            @click="panels.setFriendsTab('notifications')"
+          >
+            <div class="flex items-center gap-1.5">
+              <span
+                class="text-[12px] font-bold tracking-[1px]"
+                :style="{ color: panels.friendsTab.value === 'notifications' ? '#22D3EE' : '#64748B' }"
+              >NOTIFICATIONS</span>
+              <span
+                v-if="notifStore.unreadCount.value > 0"
+                class="inline-flex items-center justify-center text-[9px] font-black px-[6px] rounded text-white"
+                style="background:#EF4444"
+              >{{ notifStore.unreadCount.value }}</span>
+            </div>
+            <div
+              class="h-[2px] w-[100px] rounded-full"
+              :style="{ background: panels.friendsTab.value === 'notifications' ? '#22D3EE' : 'transparent' }"
             />
           </button>
           <button
@@ -240,6 +267,52 @@ function goToAddFriend() {
               style="color:#475569"
             >
               {{ searchQuery ? t('noMatchingFriends') : t('noFriendsYet') }}
+            </div>
+          </template>
+
+          <template v-else-if="panels.friendsTab.value === 'notifications'">
+            <div class="px-[10px] pt-[10px] flex items-center justify-between">
+              <span class="text-[10px] font-extrabold tracking-[1.2px] px-2" style="color:#22D3EE">
+                {{ t('notifications').toUpperCase() }}
+              </span>
+              <button
+                v-if="notifStore.unreadCount.value > 0"
+                class="text-[11px] font-semibold transition-colors"
+                style="color:#22D3EE"
+                @click="notifStore.markAllRead()"
+              >
+                {{ t('markAllRead') }}
+              </button>
+            </div>
+            <div v-if="notifStore.rows.value.length === 0" class="px-6 py-12 text-center text-[12px]" style="color:#475569">
+              {{ t('noNotifications') }}
+            </div>
+            <div v-else class="flex flex-col gap-1 px-[10px] py-2 pb-3">
+              <component
+                :is="n.link ? 'a' : 'div'"
+                v-for="n in notifStore.rows.value"
+                :key="n.id"
+                :href="n.link || undefined"
+                :target="n.link ? '_blank' : undefined"
+                :rel="n.link ? 'noopener' : undefined"
+                class="flex gap-2.5 rounded-md p-2.5 transition-colors hover:bg-white/5 cursor-pointer"
+                :style="{ background: n.read_at ? 'transparent' : 'rgba(34,211,238,0.05)', boxShadow: n.read_at ? 'none' : 'inset 0 0 0 1px rgba(34,211,238,0.2)' }"
+                @click="!n.read_at && notifStore.markRead(n.id)"
+              >
+                <span
+                  class="mt-1 w-1.5 h-1.5 rounded-full shrink-0"
+                  :style="{ background: n.read_at ? '#475569' : '#22D3EE' }"
+                />
+                <div class="flex-1 min-w-0">
+                  <div class="text-[13px] font-bold truncate" :style="{ color: n.read_at ? '#94A3B8' : '#F1F5F9' }">
+                    {{ n.title }}
+                  </div>
+                  <div v-if="n.body" class="text-[11px] mt-0.5 line-clamp-3" style="color:#94A3B8">
+                    {{ n.body }}
+                  </div>
+                  <div class="text-[10px] mt-1" style="color:#475569">{{ relativeTime(n.created_at) }}</div>
+                </div>
+              </component>
             </div>
           </template>
 

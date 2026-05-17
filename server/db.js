@@ -1151,6 +1151,35 @@ export async function initDb() {
   await execute(`CREATE INDEX IF NOT EXISTS idx_friendships_addressee ON friendships (addressee_id, status)`)
   await execute(`CREATE INDEX IF NOT EXISTS idx_friendships_requester ON friendships (requester_id, status)`)
 
+  // Notifications — admin announcements + (future) targeted notifications.
+  // `recipient_id NULL` = broadcast, visible to every logged-in user. Per-user
+  // read state lives in `notification_reads` so a single broadcast row can
+  // serve everyone without duplication.
+  await execute(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id           SERIAL PRIMARY KEY,
+      recipient_id INTEGER NULL REFERENCES players(id) ON DELETE CASCADE,
+      type         TEXT NOT NULL DEFAULT 'announcement',
+      title        TEXT NOT NULL,
+      body         TEXT NULL,
+      link         TEXT NULL,
+      created_by   INTEGER NULL REFERENCES players(id) ON DELETE SET NULL,
+      created_at   TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+  `)
+  await execute(`CREATE INDEX IF NOT EXISTS idx_notifications_broadcast ON notifications (created_at DESC) WHERE recipient_id IS NULL`)
+  await execute(`CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON notifications (recipient_id, created_at DESC) WHERE recipient_id IS NOT NULL`)
+
+  await execute(`
+    CREATE TABLE IF NOT EXISTS notification_reads (
+      notification_id INTEGER NOT NULL REFERENCES notifications(id) ON DELETE CASCADE,
+      player_id       INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      read_at         TIMESTAMP NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (notification_id, player_id)
+    );
+  `)
+  await execute(`CREATE INDEX IF NOT EXISTS idx_notification_reads_player ON notification_reads (player_id)`)
+
   await execute(`
     CREATE TABLE IF NOT EXISTS user_subscriptions (
       id            SERIAL PRIMARY KEY,

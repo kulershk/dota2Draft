@@ -476,6 +476,16 @@ export function useApi() {
       request('/api/friends/blocks', { method: 'POST', body: JSON.stringify({ addressee_id: addresseeId }) }),
     unblockUser: (id: number) =>
       request(`/api/friends/blocks/${id}`, { method: 'DELETE' }),
+    getNotifications: () => request('/api/notifications'),
+    markNotificationRead: (id: number) =>
+      request(`/api/notifications/${id}/read`, { method: 'POST' }),
+    markAllNotificationsRead: () =>
+      request('/api/notifications/read-all', { method: 'POST' }),
+    listAdminNotifications: () => request('/api/admin/notifications'),
+    createAnnouncement: (data: { title: string; body?: string | null; link?: string | null }) =>
+      request('/api/admin/notifications', { method: 'POST', body: JSON.stringify(data) }),
+    deleteAnnouncement: (id: number) =>
+      request(`/api/admin/notifications/${id}`, { method: 'DELETE' }),
     generateTestUsers: (count: number) =>
       request('/api/admin/generate-test-users', { method: 'POST', body: JSON.stringify({ count }) }),
     parseSteamIds: (input: string) =>
