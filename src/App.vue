@@ -475,7 +475,7 @@ onMounted(() => {
         </div>
 
         <!-- Center: search -->
-        <div class="hidden md:flex flex-1 max-w-[480px] mx-auto">
+        <div class="hidden md:flex flex-1 max-w-[960px] mx-auto">
           <GlobalSearch class="w-full" />
         </div>
 
