@@ -47,7 +47,7 @@ function goToProfile() {
 <template>
   <aside
     v-if="user"
-    class="hidden md:flex flex-col items-center shrink-0 w-[70px] py-[18px] gap-[14px] border-l"
+    class="hidden md:flex flex-col items-center shrink-0 w-[70px] py-[18px] gap-[14px] border-l relative z-[60]"
     style="background:#0A0F1C;border-color:#1E293B"
   >
     <!-- Avatar with online dot -->

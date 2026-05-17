@@ -255,11 +255,10 @@ function goToAddFriend() {
 <style scoped>
 .slide-right-enter-active,
 .slide-right-leave-active {
-  transition: transform 220ms ease, opacity 220ms ease;
+  transition: transform 220ms ease;
 }
 .slide-right-enter-from,
 .slide-right-leave-to {
   transform: translateX(100%);
-  opacity: 0;
 }
 </style>
