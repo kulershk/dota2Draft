@@ -325,6 +325,13 @@ function initSocket() {
       queueCount.value = data.count
       queuePlayers.value = data.players
     }
+    // Server is authoritative — if it says we're not queued and not in a
+    // match, any stale ready-check / active-match state on the client is
+    // bogus and must be cleared so the modal + overlay don't linger.
+    if (!data.inQueue && !data.inMatch) {
+      readyCheck.value = null
+      activeMatch.value = null
+    }
     // Don't clear queueCount/queuePlayers when idle: those reflect the
     // currently-viewed pool (owned by the queue:updated path triggered by
     // selectPool → requestState), not the player's own queue membership.
@@ -393,6 +400,11 @@ export function useQueueStore() {
     currentPoolName.value = null
     queueCount.value = 0
     queuePlayers.value = []
+    // You can't be in a ready check / active match if you've left the queue.
+    // Clearing here keeps the ReadyCheckModal + match-found CTA from
+    // persisting after manual leave.
+    readyCheck.value = null
+    activeMatch.value = null
     // Re-join the pool room so chat keeps working while still browsing this pool
     if (poolId) getSocket().emit('queue:getState', { poolId })
   }

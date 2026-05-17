@@ -95,6 +95,7 @@ export default {
   queueIsEmpty: 'Будь первым!',
   queueFeatured: 'Главная',
   queueFeaturedHint: 'Эта очередь видна в кнопке PLAY справа. Может быть только одна главная очередь.',
+  matchFoundOpenPick: 'Матч найден — открыть пик',
   lightMode: 'Светлая тема',
   darkMode: 'Тёмная тема',
   claimAdmin: 'Получить права админа',

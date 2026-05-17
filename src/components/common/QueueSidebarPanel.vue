@@ -2,7 +2,7 @@
 import { computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Swords, X, Play, Loader2, LogOut, Users, Star } from 'lucide-vue-next'
+import { Swords, X, Play, Loader2, LogOut, Users, Star, AlertCircle, CheckCircle2 } from 'lucide-vue-next'
 import { useQueueStore } from '@/composables/useQueueStore'
 import { useSidePanels } from '@/composables/useSidePanels'
 import { useDraftStore } from '@/composables/useDraftStore'
@@ -41,6 +41,10 @@ const featuredCount = computed(() => {
 function watchFeatured() {
   const p = featuredPool.value
   if (!p) return
+  // Re-pull authoritative server state every time the panel opens so a
+  // stale local `inQueue` / `activeMatch` ref (e.g. left over from a
+  // reload mid-flow) gets corrected.
+  if (isLoggedIn.value) queue.requestMyState()
   if (queue.inQueue.value && queue.currentPoolId.value !== p.id) return
   queue.currentPoolId.value = p.id
   queue.currentPoolName.value = p.name
@@ -122,11 +126,21 @@ function goToProfile(playerId: number) {
           </div>
 
           <template v-else>
+            <!-- Error banner -->
+            <div
+              v-if="queue.queueError.value"
+              class="mx-4 mt-4 rounded-md p-3 flex items-start gap-2 text-[12px]"
+              style="background:rgba(239,68,68,0.1);box-shadow:inset 0 0 0 1px rgba(239,68,68,0.35);color:#FCA5A5"
+            >
+              <AlertCircle class="w-4 h-4 shrink-0 mt-0.5" />
+              <span class="flex-1">{{ queue.queueError.value }}</span>
+            </div>
+
             <!-- Featured pool card -->
             <div class="p-4">
               <div
                 class="rounded-lg p-4 flex flex-col gap-3"
-                :style="queue.inQueue.value
+                :style="(queue.inQueue.value || !!queue.activeMatch.value)
                   ? 'background:#0A0F1C;box-shadow:inset 0 0 0 1px rgba(34,211,238,0.45)'
                   : 'background:#0A0F1C;box-shadow:inset 0 0 0 1px #1E293B'"
               >
@@ -142,29 +156,46 @@ function goToProfile(playerId: number) {
                 <div class="text-[15px] font-extrabold" style="color:#F1F5F9">
                   {{ featuredPool.name }}
                 </div>
-                <!-- CTA -->
-                <button
-                  v-if="!queue.inQueue.value"
-                  class="flex items-center justify-center gap-2 rounded-md px-4 py-3 text-[14px] font-extrabold transition-transform hover:scale-[1.02]"
-                  style="background:#22D3EE;color:#0A0F1C;box-shadow:0 0 18px rgba(34,211,238,0.35)"
-                  @click="join"
-                >
-                  <Play class="w-4 h-4" style="color:#0A0F1C" fill="#0A0F1C" />
-                  {{ t('joinQueue') }}
-                </button>
-                <button
-                  v-else
-                  class="flex items-center justify-center gap-2 rounded-md px-4 py-3 text-[13px] font-extrabold transition-colors"
-                  style="background:#1E293B;color:#FCA5A5"
-                  @click="leave"
-                >
-                  <LogOut class="w-4 h-4" />
-                  {{ t('leaveQueue') }}
-                </button>
-                <div v-if="queue.inQueue.value" class="flex items-center justify-center gap-2 text-[12px]" style="color:#22D3EE">
-                  <Loader2 class="w-3.5 h-3.5 animate-spin" />
-                  {{ t('searching') }}
-                </div>
+
+                <!-- In an active match (pick / lobby): clear CTA to the pick page -->
+                <template v-if="queue.activeMatch.value">
+                  <button
+                    class="flex items-center justify-center gap-2 rounded-md px-4 py-3 text-[14px] font-extrabold transition-transform hover:scale-[1.02]"
+                    style="background:#22D3EE;color:#0A0F1C;box-shadow:0 0 18px rgba(34,211,238,0.35)"
+                    @click="openQueuePage"
+                  >
+                    <CheckCircle2 class="w-4 h-4" style="color:#0A0F1C" />
+                    {{ t('matchFoundOpenPick') }}
+                  </button>
+                </template>
+
+                <!-- Currently searching: leave button + spinner -->
+                <template v-else-if="queue.inQueue.value">
+                  <button
+                    class="flex items-center justify-center gap-2 rounded-md px-4 py-3 text-[13px] font-extrabold transition-colors"
+                    style="background:#1E293B;color:#FCA5A5"
+                    @click="leave"
+                  >
+                    <LogOut class="w-4 h-4" />
+                    {{ t('leaveQueue') }}
+                  </button>
+                  <div class="flex items-center justify-center gap-2 text-[12px]" style="color:#22D3EE">
+                    <Loader2 class="w-3.5 h-3.5 animate-spin" />
+                    {{ t('searching') }}
+                  </div>
+                </template>
+
+                <!-- Idle: join button -->
+                <template v-else>
+                  <button
+                    class="flex items-center justify-center gap-2 rounded-md px-4 py-3 text-[14px] font-extrabold transition-transform hover:scale-[1.02]"
+                    style="background:#22D3EE;color:#0A0F1C;box-shadow:0 0 18px rgba(34,211,238,0.35)"
+                    @click="join"
+                  >
+                    <Play class="w-4 h-4" style="color:#0A0F1C" fill="#0A0F1C" />
+                    {{ t('joinQueue') }}
+                  </button>
+                </template>
               </div>
             </div>
 

@@ -74,20 +74,26 @@ function openProfilePanel() {
       </span>
     </div>
 
-    <!-- PLAY — opens Queue panel. Dim by default; lights up while searching. -->
+    <!-- PLAY — opens Queue panel. Three states: idle (dim), searching (pulse), in match (solid). -->
     <button
       class="w-[38px] h-[38px] rounded-lg flex items-center justify-center transition-all relative"
       :class="queueStore.inQueue.value ? 'animate-pulse' : 'hover:bg-white/5'"
-      :style="queueStore.inQueue.value
+      :style="(queueStore.inQueue.value || !!queueStore.activeMatch.value)
         ? 'background:#22D3EE;box-shadow:0 0 18px rgba(34,211,238,0.45)'
         : 'background:transparent;box-shadow:inset 0 0 0 1px #1E3A5F'"
-      :title="t('findMatch')"
+      :title="queueStore.activeMatch.value ? t('matchFoundOpenPick') : t('findMatch')"
       @click="panels.openQueue()"
     >
       <Play
         class="w-[16px] h-[16px]"
-        :style="{ color: queueStore.inQueue.value ? '#0A0F1C' : '#22D3EE' }"
-        :fill="queueStore.inQueue.value ? '#0A0F1C' : '#22D3EE'"
+        :style="{ color: (queueStore.inQueue.value || !!queueStore.activeMatch.value) ? '#0A0F1C' : '#22D3EE' }"
+        :fill="(queueStore.inQueue.value || !!queueStore.activeMatch.value) ? '#0A0F1C' : '#22D3EE'"
+      />
+      <!-- Small green dot when a match has been found and we're waiting for the user to enter the pick phase -->
+      <span
+        v-if="queueStore.activeMatch.value"
+        class="absolute right-[-2px] top-[-2px] w-[10px] h-[10px] rounded-full"
+        style="background:#22C55E;box-shadow:inset 0 0 0 2px #0A0F1C"
       />
     </button>
 

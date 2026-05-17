@@ -95,6 +95,7 @@ export default {
   queueIsEmpty: 'Be the first to join.',
   queueFeatured: 'Featured',
   queueFeaturedHint: 'Surfaces this pool in the right-rail PLAY button. Only one pool can be featured at a time.',
+  matchFoundOpenPick: 'Match found — open pick phase',
   lightMode: 'Light mode',
   darkMode: 'Dark mode',
   claimAdmin: 'Claim Admin',
