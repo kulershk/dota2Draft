@@ -4,19 +4,12 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Users, UserPlus, X, Search, MessageCircle } from 'lucide-vue-next'
 import { useFriendStore, type FriendEntry } from '@/composables/useFriendStore'
-import { useNotificationStore } from '@/composables/useNotificationStore'
 import { useSidePanels } from '@/composables/useSidePanels'
-import { formatRelativeTime } from '@/utils/format'
 
 const { t } = useI18n()
 const router = useRouter()
 const friendStore = useFriendStore()
-const notifStore = useNotificationStore()
 const panels = useSidePanels()
-
-function relativeTime(iso: string): string {
-  return formatRelativeTime(iso)
-}
 
 const FRIEND_GRADIENTS = [
   ['#F59E0B', '#EF4444'],
@@ -78,7 +71,9 @@ function goToAddFriend() {
         >
           <div class="flex items-center gap-2">
             <Users class="w-[15px] h-[15px]" style="color:#22D3EE" />
-            <span class="text-[15px] font-extrabold" style="color:#F1F5F9">{{ t('social') }}</span>
+            <span class="text-[15px] font-extrabold" style="color:#F1F5F9">
+              {{ t('friends') }} <span style="color:#475569">({{ friendStore.friends.value.length }})</span>
+            </span>
           </div>
           <div class="flex items-center gap-1.5">
             <button
@@ -100,64 +95,6 @@ function goToAddFriend() {
           </div>
         </div>
 
-        <!-- Tabs -->
-        <div class="flex items-end gap-2 px-[18px] shrink-0" style="border-bottom:1px solid #1E293B">
-          <button
-            class="flex flex-col items-center gap-2 pt-3 pb-[10px] min-w-[85px]"
-            @click="panels.setFriendsTab('friends')"
-          >
-            <div class="flex items-center gap-1.5">
-              <span
-                class="text-[12px] font-extrabold tracking-[1px]"
-                :style="{ color: panels.friendsTab.value === 'friends' ? '#22D3EE' : '#64748B' }"
-              >FRIENDS</span>
-              <span
-                class="text-[11px] font-bold"
-                :style="{ color: panels.friendsTab.value === 'friends' ? '#22D3EE' : '#64748B' }"
-              >{{ friendStore.friends.value.length }}</span>
-            </div>
-            <div
-              class="h-[2px] w-16 rounded-full"
-              :style="{ background: panels.friendsTab.value === 'friends' ? '#22D3EE' : 'transparent' }"
-            />
-          </button>
-          <button
-            class="flex flex-col items-center gap-2 pt-3 pb-[10px] px-3"
-            @click="panels.setFriendsTab('notifications')"
-          >
-            <div class="flex items-center gap-1.5">
-              <span
-                class="text-[12px] font-bold tracking-[1px]"
-                :style="{ color: panels.friendsTab.value === 'notifications' ? '#22D3EE' : '#64748B' }"
-              >NOTIFICATIONS</span>
-              <span
-                v-if="notifStore.unreadCount.value > 0"
-                class="inline-flex items-center justify-center text-[9px] font-black px-[6px] rounded text-white"
-                style="background:#EF4444"
-              >{{ notifStore.unreadCount.value }}</span>
-            </div>
-            <div
-              class="h-[2px] w-[100px] rounded-full"
-              :style="{ background: panels.friendsTab.value === 'notifications' ? '#22D3EE' : 'transparent' }"
-            />
-          </button>
-          <button
-            class="flex flex-col items-center gap-2 pt-3 pb-[10px] px-4"
-            @click="panels.setFriendsTab('chats')"
-          >
-            <div class="flex items-center gap-1.5">
-              <span
-                class="text-[12px] font-bold tracking-[1px]"
-                :style="{ color: panels.friendsTab.value === 'chats' ? '#22D3EE' : '#64748B' }"
-              >CHATS</span>
-            </div>
-            <div
-              class="h-[2px] w-10 rounded-full"
-              :style="{ background: panels.friendsTab.value === 'chats' ? '#22D3EE' : 'transparent' }"
-            />
-          </button>
-        </div>
-
         <!-- Search -->
         <div class="px-[18px] py-2.5 shrink-0" style="border-bottom:1px solid #1E293B">
           <div
@@ -177,150 +114,96 @@ function goToAddFriend() {
 
         <!-- Body -->
         <div class="flex-1 overflow-y-auto">
-          <template v-if="panels.friendsTab.value === 'friends'">
-            <div v-if="onlineFriends.length" class="px-[10px] pt-[10px] pb-2 flex flex-col gap-0.5">
-              <div class="flex items-center gap-1.5 px-2 py-1">
-                <span class="w-2 h-2 rounded-full" style="background:#22D3EE" />
-                <span class="text-[10px] font-extrabold tracking-[1.2px]" style="color:#22D3EE">
-                  ONLINE — {{ onlineFriends.length }}
-                </span>
-              </div>
-              <button
-                v-for="f in onlineFriends"
-                :key="f.id"
-                class="flex items-center gap-2.5 rounded-md p-2 text-left transition-colors hover:bg-white/5"
-                @click="goToProfile(f)"
-              >
-                <div class="relative w-9 h-9 shrink-0">
-                  <div
-                    class="w-9 h-9 rounded-full flex items-center justify-center"
-                    :style="{ background: gradientFor(f.player.id) }"
-                  >
-                    <img v-if="f.player.avatar_url" :src="f.player.avatar_url" class="w-full h-full rounded-full object-cover" />
-                    <span v-else class="text-white text-[15px] font-extrabold">{{ initialFor(f) }}</span>
-                  </div>
-                  <span
-                    class="absolute right-[-2px] bottom-[-2px] w-[10px] h-[10px] rounded-full"
-                    style="background:#22D3EE;box-shadow:inset 0 0 0 2px #0F172A"
-                  />
-                </div>
-                <div class="flex-1 min-w-0">
-                  <div class="text-[13px] font-bold truncate" style="color:#F1F5F9">
-                    {{ f.player.display_name || f.player.name }}
-                  </div>
-                  <div class="text-[11px] truncate" style="color:#64748B">{{ t('online') }}</div>
-                </div>
-                <span
-                  class="w-7 h-7 rounded-md flex items-center justify-center shrink-0"
-                  style="background:#1E293B;box-shadow:inset 0 0 0 1px #1E293B"
-                  :title="t('messages')"
-                >
-                  <MessageCircle class="w-[13px] h-[13px]" style="color:#94A3B8" />
-                </span>
-              </button>
-            </div>
-
-            <div v-if="offlineFriends.length" class="px-[10px] pt-2 pb-3 flex flex-col gap-0.5">
-              <div class="flex items-center gap-1.5 px-2 py-1">
-                <span class="w-2 h-2 rounded-full" style="background:#475569" />
-                <span class="text-[10px] font-extrabold tracking-[1.2px]" style="color:#475569">
-                  OFFLINE — {{ offlineFriends.length }}
-                </span>
-              </div>
-              <button
-                v-for="f in offlineFriends"
-                :key="f.id"
-                class="flex items-center gap-2.5 rounded-md p-2 text-left transition-colors hover:bg-white/5"
-                @click="goToProfile(f)"
-              >
-                <div class="relative w-9 h-9 shrink-0">
-                  <div
-                    class="w-9 h-9 rounded-full flex items-center justify-center"
-                    :style="{ background: gradientFor(f.player.id), opacity: 0.55 }"
-                  >
-                    <img v-if="f.player.avatar_url" :src="f.player.avatar_url" class="w-full h-full rounded-full object-cover" />
-                    <span v-else class="text-white text-[15px] font-extrabold" style="opacity:0.7">{{ initialFor(f) }}</span>
-                  </div>
-                  <span
-                    class="absolute right-[-2px] bottom-[-2px] w-[10px] h-[10px] rounded-full"
-                    style="background:#475569;box-shadow:inset 0 0 0 2px #0F172A"
-                  />
-                </div>
-                <div class="flex-1 min-w-0">
-                  <div class="text-[13px] font-bold truncate" style="color:#94A3B8">
-                    {{ f.player.display_name || f.player.name }}
-                  </div>
-                  <div class="text-[11px] truncate" style="color:#475569">{{ t('offline') }}</div>
-                </div>
-                <span
-                  class="w-7 h-7 rounded-md flex items-center justify-center shrink-0"
-                  style="background:#1E293B;box-shadow:inset 0 0 0 1px #1E293B"
-                >
-                  <MessageCircle class="w-[13px] h-[13px]" style="color:#475569" />
-                </span>
-              </button>
-            </div>
-
-            <div
-              v-if="!onlineFriends.length && !offlineFriends.length"
-              class="px-6 py-12 text-center text-[12px]"
-              style="color:#475569"
-            >
-              {{ searchQuery ? t('noMatchingFriends') : t('noFriendsYet') }}
-            </div>
-          </template>
-
-          <template v-else-if="panels.friendsTab.value === 'notifications'">
-            <div class="px-[10px] pt-[10px] flex items-center justify-between">
-              <span class="text-[10px] font-extrabold tracking-[1.2px] px-2" style="color:#22D3EE">
-                {{ t('notifications').toUpperCase() }}
+          <div v-if="onlineFriends.length" class="px-[10px] pt-[10px] pb-2 flex flex-col gap-0.5">
+            <div class="flex items-center gap-1.5 px-2 py-1">
+              <span class="w-2 h-2 rounded-full" style="background:#22D3EE" />
+              <span class="text-[10px] font-extrabold tracking-[1.2px]" style="color:#22D3EE">
+                ONLINE — {{ onlineFriends.length }}
               </span>
-              <button
-                v-if="notifStore.unreadCount.value > 0"
-                class="text-[11px] font-semibold transition-colors"
-                style="color:#22D3EE"
-                @click="notifStore.markAllRead()"
-              >
-                {{ t('markAllRead') }}
-              </button>
             </div>
-            <div v-if="notifStore.rows.value.length === 0" class="px-6 py-12 text-center text-[12px]" style="color:#475569">
-              {{ t('noNotifications') }}
-            </div>
-            <div v-else class="flex flex-col gap-1 px-[10px] py-2 pb-3">
-              <component
-                :is="n.link ? 'a' : 'div'"
-                v-for="n in notifStore.rows.value"
-                :key="n.id"
-                :href="n.link || undefined"
-                :target="n.link ? '_blank' : undefined"
-                :rel="n.link ? 'noopener' : undefined"
-                class="flex gap-2.5 rounded-md p-2.5 transition-colors hover:bg-white/5 cursor-pointer"
-                :style="{ background: n.read_at ? 'transparent' : 'rgba(34,211,238,0.05)', boxShadow: n.read_at ? 'none' : 'inset 0 0 0 1px rgba(34,211,238,0.2)' }"
-                @click="!n.read_at && notifStore.markRead(n.id)"
-              >
-                <span
-                  class="mt-1 w-1.5 h-1.5 rounded-full shrink-0"
-                  :style="{ background: n.read_at ? '#475569' : '#22D3EE' }"
-                />
-                <div class="flex-1 min-w-0">
-                  <div class="text-[13px] font-bold truncate" :style="{ color: n.read_at ? '#94A3B8' : '#F1F5F9' }">
-                    {{ n.title }}
-                  </div>
-                  <div v-if="n.body" class="text-[11px] mt-0.5 line-clamp-3" style="color:#94A3B8">
-                    {{ n.body }}
-                  </div>
-                  <div class="text-[10px] mt-1" style="color:#475569">{{ relativeTime(n.created_at) }}</div>
+            <button
+              v-for="f in onlineFriends"
+              :key="f.id"
+              class="flex items-center gap-2.5 rounded-md p-2 text-left transition-colors hover:bg-white/5"
+              @click="goToProfile(f)"
+            >
+              <div class="relative w-9 h-9 shrink-0">
+                <div
+                  class="w-9 h-9 rounded-full flex items-center justify-center"
+                  :style="{ background: gradientFor(f.player.id) }"
+                >
+                  <img v-if="f.player.avatar_url" :src="f.player.avatar_url" class="w-full h-full rounded-full object-cover" />
+                  <span v-else class="text-white text-[15px] font-extrabold">{{ initialFor(f) }}</span>
                 </div>
-              </component>
-            </div>
-          </template>
+                <span
+                  class="absolute right-[-2px] bottom-[-2px] w-[10px] h-[10px] rounded-full"
+                  style="background:#22D3EE;box-shadow:inset 0 0 0 2px #0F172A"
+                />
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="text-[13px] font-bold truncate" style="color:#F1F5F9">
+                  {{ f.player.display_name || f.player.name }}
+                </div>
+                <div class="text-[11px] truncate" style="color:#64748B">{{ t('online') }}</div>
+              </div>
+              <span
+                class="w-7 h-7 rounded-md flex items-center justify-center shrink-0"
+                style="background:#1E293B;box-shadow:inset 0 0 0 1px #1E293B"
+                :title="t('messages')"
+              >
+                <MessageCircle class="w-[13px] h-[13px]" style="color:#94A3B8" />
+              </span>
+            </button>
+          </div>
 
-          <template v-else>
-            <div class="px-6 py-12 text-center text-[12px]" style="color:#475569">
-              {{ t('chatsComingSoon') }}
+          <div v-if="offlineFriends.length" class="px-[10px] pt-2 pb-3 flex flex-col gap-0.5">
+            <div class="flex items-center gap-1.5 px-2 py-1">
+              <span class="w-2 h-2 rounded-full" style="background:#475569" />
+              <span class="text-[10px] font-extrabold tracking-[1.2px]" style="color:#475569">
+                OFFLINE — {{ offlineFriends.length }}
+              </span>
             </div>
-          </template>
+            <button
+              v-for="f in offlineFriends"
+              :key="f.id"
+              class="flex items-center gap-2.5 rounded-md p-2 text-left transition-colors hover:bg-white/5"
+              @click="goToProfile(f)"
+            >
+              <div class="relative w-9 h-9 shrink-0">
+                <div
+                  class="w-9 h-9 rounded-full flex items-center justify-center"
+                  :style="{ background: gradientFor(f.player.id), opacity: 0.55 }"
+                >
+                  <img v-if="f.player.avatar_url" :src="f.player.avatar_url" class="w-full h-full rounded-full object-cover" />
+                  <span v-else class="text-white text-[15px] font-extrabold" style="opacity:0.7">{{ initialFor(f) }}</span>
+                </div>
+                <span
+                  class="absolute right-[-2px] bottom-[-2px] w-[10px] h-[10px] rounded-full"
+                  style="background:#475569;box-shadow:inset 0 0 0 2px #0F172A"
+                />
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="text-[13px] font-bold truncate" style="color:#94A3B8">
+                  {{ f.player.display_name || f.player.name }}
+                </div>
+                <div class="text-[11px] truncate" style="color:#475569">{{ t('offline') }}</div>
+              </div>
+              <span
+                class="w-7 h-7 rounded-md flex items-center justify-center shrink-0"
+                style="background:#1E293B;box-shadow:inset 0 0 0 1px #1E293B"
+              >
+                <MessageCircle class="w-[13px] h-[13px]" style="color:#475569" />
+              </span>
+            </button>
+          </div>
+
+          <div
+            v-if="!onlineFriends.length && !offlineFriends.length"
+            class="px-6 py-12 text-center text-[12px]"
+            style="color:#475569"
+          >
+            {{ searchQuery ? t('noMatchingFriends') : t('noFriendsYet') }}
+          </div>
         </div>
       </aside>
     </Transition>

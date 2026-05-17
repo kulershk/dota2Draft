@@ -72,8 +72,8 @@ function openProfilePanel() {
       </span>
     </div>
 
-    <!-- Bell — opens notifications tab; badge shows unread count -->
-    <button class="rail-btn relative" :title="t('notifications')" @click="panels.openFriends('notifications')">
+    <!-- Bell — opens Notifications panel -->
+    <button class="rail-btn relative" :title="t('notifications')" @click="panels.openNotifications()">
       <Bell class="w-4 h-4" style="color:#CBD5E1" />
       <span
         v-if="notifStore.unreadCount.value > 0"
@@ -82,8 +82,8 @@ function openProfilePanel() {
       >{{ notifStore.unreadCount.value }}</span>
     </button>
 
-    <!-- Friends — opens Friends panel with friends tab -->
-    <button class="rail-btn relative" :title="t('friends')" @click="panels.openFriends('friends')">
+    <!-- Friends — opens Friends panel -->
+    <button class="rail-btn relative" :title="t('friends')" @click="panels.openFriends()">
       <Users class="w-4 h-4" style="color:#CBD5E1" />
       <span
         v-if="friendStore.friends.value.length > 0"
@@ -94,8 +94,8 @@ function openProfilePanel() {
 
     <div class="w-[38px] h-px" style="background:#1E293B" />
 
-    <!-- Messages — opens Friends panel on the Chats tab -->
-    <button class="rail-btn relative" :title="t('messages')" @click="panels.openFriends('chats')">
+    <!-- Messages — opens Chats panel -->
+    <button class="rail-btn relative" :title="t('messages')" @click="panels.openChats()">
       <MessageSquare class="w-4 h-4" style="color:#CBD5E1" />
     </button>
 

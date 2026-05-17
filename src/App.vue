@@ -21,6 +21,8 @@ import InputGroup from '@/components/common/InputGroup.vue'
 import LeftSidebar from '@/components/common/LeftSidebar.vue'
 import RightSidebar from '@/components/common/RightSidebar.vue'
 import FriendsSidebarPanel from '@/components/common/FriendsSidebarPanel.vue'
+import NotificationsSidebarPanel from '@/components/common/NotificationsSidebarPanel.vue'
+import ChatsSidebarPanel from '@/components/common/ChatsSidebarPanel.vue'
 import ProfileSidebarPanel from '@/components/common/ProfileSidebarPanel.vue'
 import { setLocale } from '@/i18n'
 import { getSocket } from '@/composables/useSocket'
@@ -505,7 +507,7 @@ onMounted(() => {
             class="hidden sm:flex relative w-9 h-9 rounded-md items-center justify-center transition-colors hover:bg-white/5"
             style="background:#0F172A;box-shadow:inset 0 0 0 1px #1E293B"
             :title="t('notifications')"
-            @click="panels.openFriends('notifications')"
+            @click="panels.openNotifications()"
           >
             <Bell class="w-4 h-4" style="color:#94A3B8" />
             <span
@@ -680,6 +682,8 @@ onMounted(() => {
 
     <!-- Slide-in side panels (only one open at a time) -->
     <FriendsSidebarPanel />
+    <NotificationsSidebarPanel />
+    <ChatsSidebarPanel />
     <ProfileSidebarPanel />
 
     <!-- Global ready-check modal (visible on any route) -->
