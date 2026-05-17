@@ -6,7 +6,7 @@ import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
-import { fmtDateOnly } from '@/utils/format'
+import { fmtDateOnly, localDatetimeToISO } from '@/utils/format'
 import InputGroup from '@/components/common/InputGroup.vue'
 import RichTextEditor from '@/components/common/RichTextEditor.vue'
 import DatePicker from '@/components/common/DatePicker.vue'
@@ -44,9 +44,9 @@ async function createCompetition() {
   await api.createCompetition({
     name: newComp.value.name,
     description: newComp.value.description,
-    starts_at: newComp.value.starts_at || undefined,
-    registration_start: newComp.value.registration_start || undefined,
-    registration_end: newComp.value.registration_end || undefined,
+    starts_at: newComp.value.starts_at ? localDatetimeToISO(newComp.value.starts_at) : undefined,
+    registration_start: newComp.value.registration_start ? localDatetimeToISO(newComp.value.registration_start) : undefined,
+    registration_end: newComp.value.registration_end ? localDatetimeToISO(newComp.value.registration_end) : undefined,
     settings: template?.settings || undefined,
   })
   newComp.value = { name: '', description: '', starts_at: '', registration_start: '', registration_end: '' }
