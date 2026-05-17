@@ -86,30 +86,31 @@ function goToProfile() {
       <span class="text-[13px] font-black tracking-[0.5px]" style="color:#22D3EE">VS</span>
     </button>
 
-    <!-- Bell (placeholder) -->
-    <button class="rail-btn relative" :title="t('notifications')">
+    <!-- Bell — opens Friends panel; shows pending-request count -->
+    <button class="rail-btn relative" :title="t('notifications')" @click="friendStore.openPanel('friends')">
       <Bell class="w-4 h-4" style="color:#CBD5E1" />
-      <span class="absolute w-2 h-2 rounded-full" style="top:8px;right:8px;background:#EF4444;box-shadow:inset 0 0 0 1px #0A0F1C" />
+      <span
+        v-if="friendStore.pendingCount.value > 0"
+        class="absolute inline-flex items-center justify-center text-[9px] font-black px-[3px] rounded text-white"
+        style="top:6px;right:2px;min-width:14px;height:12px;background:#EF4444"
+      >{{ friendStore.pendingCount.value }}</span>
     </button>
 
-    <!-- Party (placeholder) -->
-    <button class="rail-btn relative" :title="t('party')">
+    <!-- Friends — opens Friends panel with friends tab -->
+    <button class="rail-btn relative" :title="t('friends')" @click="friendStore.openPanel('friends')">
       <Users class="w-4 h-4" style="color:#CBD5E1" />
       <span
+        v-if="friendStore.friends.value.length > 0"
         class="absolute inline-flex items-center justify-center text-[9px] font-black px-[3px] rounded"
         style="top:6px;right:2px;min-width:14px;height:12px;background:#22D3EE;color:#0A0F1C"
-      >3</span>
+      >{{ friendStore.friends.value.length }}</span>
     </button>
 
     <div class="w-[38px] h-px" style="background:#1E293B" />
 
-    <!-- Messages (placeholder) -->
-    <button class="rail-btn relative" :title="t('messages')">
+    <!-- Messages — opens Friends panel on the Chats tab -->
+    <button class="rail-btn relative" :title="t('messages')" @click="friendStore.openPanel('chats')">
       <MessageSquare class="w-4 h-4" style="color:#CBD5E1" />
-      <span
-        class="absolute inline-flex items-center justify-center text-[9px] font-black px-[3px] rounded text-white"
-        style="top:6px;right:2px;min-width:14px;height:12px;background:#EF4444"
-      >1</span>
     </button>
 
     <!-- Plus (placeholder) -->

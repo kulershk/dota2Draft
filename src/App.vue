@@ -18,6 +18,7 @@ import UpdateAvailableModal from '@/components/common/UpdateAvailableModal.vue'
 import InputGroup from '@/components/common/InputGroup.vue'
 import LeftSidebar from '@/components/common/LeftSidebar.vue'
 import RightSidebar from '@/components/common/RightSidebar.vue'
+import FriendsSidebarPanel from '@/components/common/FriendsSidebarPanel.vue'
 import { setLocale } from '@/i18n'
 import { getSocket } from '@/composables/useSocket'
 
@@ -500,12 +501,12 @@ onMounted(() => {
             <Lock class="w-3.5 h-3.5" />
           </button>
 
-          <!-- Bell — friend-request count -->
-          <router-link
-            to="/friends"
+          <!-- Bell — opens friends panel; badge shows pending friend requests -->
+          <button
             class="hidden sm:flex relative w-9 h-9 rounded-md items-center justify-center transition-colors hover:bg-white/5"
             style="background:#0F172A;box-shadow:inset 0 0 0 1px #1E293B"
             :title="t('notifications')"
+            @click="friendStore.openPanel('friends')"
           >
             <Bell class="w-4 h-4" style="color:#94A3B8" />
             <span
@@ -513,7 +514,7 @@ onMounted(() => {
               class="absolute inline-flex items-center justify-center text-[9px] font-black text-white px-[3px] rounded"
               style="top:2px;right:2px;min-width:14px;height:14px;background:#EF4444;box-shadow:0 0 0 2px #0F172A"
             >{{ friendStore.pendingCount.value }}</span>
-          </router-link>
+          </button>
 
           <!-- Language pill -->
           <div class="relative hidden sm:block">
@@ -677,6 +678,9 @@ onMounted(() => {
 
     <!-- Global queue status overlay (hidden while on /queue) -->
     <QueueStatusOverlay />
+
+    <!-- Friends sidebar panel (slide-in from the right) -->
+    <FriendsSidebarPanel />
 
     <!-- Global ready-check modal (visible on any route) -->
     <ReadyCheckModal />
