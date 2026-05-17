@@ -41,6 +41,10 @@ const featuredCount = computed(() => {
 function watchFeatured() {
   const p = featuredPool.value
   if (!p) return
+  // Re-pull authoritative server state every time the panel opens so a
+  // stale local `inQueue` / `activeMatch` ref (e.g. left over from a
+  // reload mid-flow) gets corrected.
+  if (isLoggedIn.value) queue.requestMyState()
   if (queue.inQueue.value && queue.currentPoolId.value !== p.id) return
   queue.currentPoolId.value = p.id
   queue.currentPoolName.value = p.name
