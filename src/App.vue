@@ -16,6 +16,7 @@ import ReadyCheckModal from '@/components/common/ReadyCheckModal.vue'
 import UpdateAvailableModal from '@/components/common/UpdateAvailableModal.vue'
 import InputGroup from '@/components/common/InputGroup.vue'
 import LeftSidebar from '@/components/common/LeftSidebar.vue'
+import RightSidebar from '@/components/common/RightSidebar.vue'
 import { setLocale } from '@/i18n'
 import { getSocket } from '@/composables/useSocket'
 
@@ -812,6 +813,7 @@ onMounted(() => {
       <AppFooter v-if="!route.path.startsWith('/admin') && !route.path.startsWith('/c/')" class="mt-auto relative z-[1]" />
     </main>
       </div>
+      <RightSidebar />
     </div>
 
     <!-- Global queue status overlay (hidden while on /queue) -->
