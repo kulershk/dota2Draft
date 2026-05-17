@@ -4,11 +4,13 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Users, UserPlus, X, Search, MessageCircle } from 'lucide-vue-next'
 import { useFriendStore, type FriendEntry } from '@/composables/useFriendStore'
+import { useMessageStore } from '@/composables/useMessageStore'
 import { useSidePanels } from '@/composables/useSidePanels'
 
 const { t } = useI18n()
 const router = useRouter()
 const friendStore = useFriendStore()
+const messageStore = useMessageStore()
 const panels = useSidePanels()
 
 const FRIEND_GRADIENTS = [
@@ -48,6 +50,18 @@ const offlineFriends = computed(() => friendStore.friends.value.filter(f => !f.o
 function goToProfile(friend: FriendEntry) {
   router.push({ name: 'player-profile', params: { id: friend.player.id } })
   panels.close()
+}
+
+function openChatWith(friend: FriendEntry) {
+  messageStore.openThread({
+    id: friend.player.id,
+    name: friend.player.name,
+    display_name: friend.player.display_name,
+    steam_name: friend.player.steam_name,
+    avatar_url: friend.player.avatar_url,
+    mmr: friend.player.mmr,
+  })
+  panels.openChats()
 }
 
 function goToAddFriend() {
@@ -121,39 +135,41 @@ function goToAddFriend() {
                 ONLINE — {{ onlineFriends.length }}
               </span>
             </div>
-            <button
+            <div
               v-for="f in onlineFriends"
               :key="f.id"
-              class="flex items-center gap-2.5 rounded-md p-2 text-left transition-colors hover:bg-white/5"
-              @click="goToProfile(f)"
+              class="flex items-center gap-2.5 rounded-md p-2 transition-colors hover:bg-white/5"
             >
-              <div class="relative w-9 h-9 shrink-0">
-                <div
-                  class="w-9 h-9 rounded-full flex items-center justify-center"
-                  :style="{ background: gradientFor(f.player.id) }"
-                >
-                  <img v-if="f.player.avatar_url" :src="f.player.avatar_url" class="w-full h-full rounded-full object-cover" />
-                  <span v-else class="text-white text-[15px] font-extrabold">{{ initialFor(f) }}</span>
+              <button class="flex items-center gap-2.5 flex-1 min-w-0 text-left" @click="goToProfile(f)">
+                <div class="relative w-9 h-9 shrink-0">
+                  <div
+                    class="w-9 h-9 rounded-full flex items-center justify-center"
+                    :style="{ background: gradientFor(f.player.id) }"
+                  >
+                    <img v-if="f.player.avatar_url" :src="f.player.avatar_url" class="w-full h-full rounded-full object-cover" />
+                    <span v-else class="text-white text-[15px] font-extrabold">{{ initialFor(f) }}</span>
+                  </div>
+                  <span
+                    class="absolute right-[-2px] bottom-[-2px] w-[10px] h-[10px] rounded-full"
+                    style="background:#22D3EE;box-shadow:inset 0 0 0 2px #0F172A"
+                  />
                 </div>
-                <span
-                  class="absolute right-[-2px] bottom-[-2px] w-[10px] h-[10px] rounded-full"
-                  style="background:#22D3EE;box-shadow:inset 0 0 0 2px #0F172A"
-                />
-              </div>
-              <div class="flex-1 min-w-0">
-                <div class="text-[13px] font-bold truncate" style="color:#F1F5F9">
-                  {{ f.player.display_name || f.player.name }}
+                <div class="flex-1 min-w-0">
+                  <div class="text-[13px] font-bold truncate" style="color:#F1F5F9">
+                    {{ f.player.display_name || f.player.name }}
+                  </div>
+                  <div class="text-[11px] truncate" style="color:#64748B">{{ t('online') }}</div>
                 </div>
-                <div class="text-[11px] truncate" style="color:#64748B">{{ t('online') }}</div>
-              </div>
-              <span
-                class="w-7 h-7 rounded-md flex items-center justify-center shrink-0"
+              </button>
+              <button
+                class="w-7 h-7 rounded-md flex items-center justify-center shrink-0 transition-colors hover:bg-white/10"
                 style="background:#1E293B;box-shadow:inset 0 0 0 1px #1E293B"
                 :title="t('messages')"
+                @click="openChatWith(f)"
               >
                 <MessageCircle class="w-[13px] h-[13px]" style="color:#94A3B8" />
-              </span>
-            </button>
+              </button>
+            </div>
           </div>
 
           <div v-if="offlineFriends.length" class="px-[10px] pt-2 pb-3 flex flex-col gap-0.5">
@@ -163,38 +179,41 @@ function goToAddFriend() {
                 OFFLINE — {{ offlineFriends.length }}
               </span>
             </div>
-            <button
+            <div
               v-for="f in offlineFriends"
               :key="f.id"
-              class="flex items-center gap-2.5 rounded-md p-2 text-left transition-colors hover:bg-white/5"
-              @click="goToProfile(f)"
+              class="flex items-center gap-2.5 rounded-md p-2 transition-colors hover:bg-white/5"
             >
-              <div class="relative w-9 h-9 shrink-0">
-                <div
-                  class="w-9 h-9 rounded-full flex items-center justify-center"
-                  :style="{ background: gradientFor(f.player.id), opacity: 0.55 }"
-                >
-                  <img v-if="f.player.avatar_url" :src="f.player.avatar_url" class="w-full h-full rounded-full object-cover" />
-                  <span v-else class="text-white text-[15px] font-extrabold" style="opacity:0.7">{{ initialFor(f) }}</span>
+              <button class="flex items-center gap-2.5 flex-1 min-w-0 text-left" @click="goToProfile(f)">
+                <div class="relative w-9 h-9 shrink-0">
+                  <div
+                    class="w-9 h-9 rounded-full flex items-center justify-center"
+                    :style="{ background: gradientFor(f.player.id), opacity: 0.55 }"
+                  >
+                    <img v-if="f.player.avatar_url" :src="f.player.avatar_url" class="w-full h-full rounded-full object-cover" />
+                    <span v-else class="text-white text-[15px] font-extrabold" style="opacity:0.7">{{ initialFor(f) }}</span>
+                  </div>
+                  <span
+                    class="absolute right-[-2px] bottom-[-2px] w-[10px] h-[10px] rounded-full"
+                    style="background:#475569;box-shadow:inset 0 0 0 2px #0F172A"
+                  />
                 </div>
-                <span
-                  class="absolute right-[-2px] bottom-[-2px] w-[10px] h-[10px] rounded-full"
-                  style="background:#475569;box-shadow:inset 0 0 0 2px #0F172A"
-                />
-              </div>
-              <div class="flex-1 min-w-0">
-                <div class="text-[13px] font-bold truncate" style="color:#94A3B8">
-                  {{ f.player.display_name || f.player.name }}
+                <div class="flex-1 min-w-0">
+                  <div class="text-[13px] font-bold truncate" style="color:#94A3B8">
+                    {{ f.player.display_name || f.player.name }}
+                  </div>
+                  <div class="text-[11px] truncate" style="color:#475569">{{ t('offline') }}</div>
                 </div>
-                <div class="text-[11px] truncate" style="color:#475569">{{ t('offline') }}</div>
-              </div>
-              <span
-                class="w-7 h-7 rounded-md flex items-center justify-center shrink-0"
+              </button>
+              <button
+                class="w-7 h-7 rounded-md flex items-center justify-center shrink-0 transition-colors hover:bg-white/10"
                 style="background:#1E293B;box-shadow:inset 0 0 0 1px #1E293B"
+                :title="t('messages')"
+                @click="openChatWith(f)"
               >
                 <MessageCircle class="w-[13px] h-[13px]" style="color:#475569" />
-              </span>
-            </button>
+              </button>
+            </div>
           </div>
 
           <div

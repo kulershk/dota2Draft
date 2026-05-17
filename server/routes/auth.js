@@ -110,6 +110,10 @@ router.get('/api/auth/me', async (req, res) => {
         AND r.notification_id IS NULL`,
     [player.id],
   )
+  const unreadMessagesRow = await queryOne(
+    'SELECT COUNT(*)::int AS c FROM direct_messages WHERE recipient_id = $1 AND read_at IS NULL',
+    [player.id],
+  )
 
   res.json({
     id: player.id,
@@ -128,6 +132,7 @@ router.get('/api/auth/me', async (req, res) => {
     dotacoins: player.dotacoins || 0,
     pending_friend_requests: pendingFriendRow?.c || 0,
     unread_notifications: unreadNotifRow?.c || 0,
+    unread_messages: unreadMessagesRow?.c || 0,
     twitch_username: player.twitch_username || null,
     discord_username: player.discord_username || null,
     is_banned: !!player.is_banned,
@@ -186,6 +191,10 @@ router.put('/api/auth/me', async (req, res) => {
         AND r.notification_id IS NULL`,
     [updated.id],
   )
+  const updatedUnreadMessages = await queryOne(
+    'SELECT COUNT(*)::int AS c FROM direct_messages WHERE recipient_id = $1 AND read_at IS NULL',
+    [updated.id],
+  )
   res.json({
     id: updated.id,
     name: updated.display_name || updated.name,
@@ -203,6 +212,7 @@ router.put('/api/auth/me', async (req, res) => {
     dotacoins: updated.dotacoins || 0,
     pending_friend_requests: updatedPendingFriend?.c || 0,
     unread_notifications: updatedUnreadNotif?.c || 0,
+    unread_messages: updatedUnreadMessages?.c || 0,
     twitch_username: updated.twitch_username || null,
     discord_username: updated.discord_username || null,
   })

@@ -1184,6 +1184,27 @@ export async function initDb() {
   `)
   await execute(`CREATE INDEX IF NOT EXISTS idx_notification_reads_player ON notification_reads (player_id)`)
 
+  // Friend-to-friend direct messages. Body is capped at 200 chars (also
+  // enforced server-side in the route). Rows are deleted via player CASCADE
+  // when an account goes away; otherwise messages persist indefinitely.
+  await execute(`
+    CREATE TABLE IF NOT EXISTS direct_messages (
+      id           SERIAL PRIMARY KEY,
+      sender_id    INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      recipient_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      body         TEXT NOT NULL,
+      created_at   TIMESTAMP NOT NULL DEFAULT NOW(),
+      read_at      TIMESTAMP NULL,
+      CHECK (sender_id <> recipient_id),
+      CHECK (char_length(body) BETWEEN 1 AND 200)
+    );
+  `)
+  // Unread-count lookups go through (recipient_id, read_at IS NULL); thread
+  // queries pull the most recent N rows between two players (either direction).
+  await execute(`CREATE INDEX IF NOT EXISTS idx_dm_unread ON direct_messages (recipient_id) WHERE read_at IS NULL`)
+  await execute(`CREATE INDEX IF NOT EXISTS idx_dm_thread_a ON direct_messages (sender_id, recipient_id, created_at DESC)`)
+  await execute(`CREATE INDEX IF NOT EXISTS idx_dm_thread_b ON direct_messages (recipient_id, sender_id, created_at DESC)`)
+
   await execute(`
     CREATE TABLE IF NOT EXISTS user_subscriptions (
       id            SERIAL PRIMARY KEY,

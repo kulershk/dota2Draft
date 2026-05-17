@@ -41,6 +41,35 @@
       }
     },
     "schemas": {
+      "DirectMessage": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "sender_id": { "type": "integer" },
+          "recipient_id": { "type": "integer" },
+          "body": { "type": "string", "maxLength": 200 },
+          "created_at": { "type": "string", "format": "date-time" },
+          "read_at": { "type": "string", "format": "date-time", "nullable": true }
+        }
+      },
+      "MessageThread": {
+        "type": "object",
+        "properties": {
+          "peer": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "integer" },
+              "name": { "type": "string" },
+              "display_name": { "type": "string", "nullable": true },
+              "steam_name": { "type": "string" },
+              "avatar_url": { "type": "string", "nullable": true },
+              "mmr": { "type": "integer" }
+            }
+          },
+          "last_message": { "$ref": "#/components/schemas/DirectMessage" },
+          "unread": { "type": "integer" }
+        }
+      },
       "NotificationEntry": {
         "type": "object",
         "properties": {
@@ -2303,6 +2332,74 @@
         "security": [{ "bearerAuth": [] }],
         "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
         "responses": { "200": { "description": "Deleted" }, "403": { "description": "Forbidden" } }
+      }
+    },
+    "/api/messages/threads": {
+      "get": {
+        "tags": ["Messages"],
+        "summary": "List my conversations with latest message + unread count",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Conversations",
+            "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/MessageThread" } } } }
+          },
+          "401": { "description": "Not authenticated" }
+        }
+      }
+    },
+    "/api/messages/{friendId}": {
+      "get": {
+        "tags": ["Messages"],
+        "summary": "Fetch a conversation with one user (oldest→newest)",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "friendId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50, "minimum": 1, "maximum": 100 } },
+          { "name": "before", "in": "query", "schema": { "type": "integer" }, "description": "Return only messages with id < this for backwards pagination." }
+        ],
+        "responses": {
+          "200": { "description": "Messages", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/DirectMessage" } } } } },
+          "400": { "description": "Invalid friend id" }
+        }
+      }
+    },
+    "/api/messages": {
+      "post": {
+        "tags": ["Messages"],
+        "summary": "Send a direct message",
+        "description": "Body is capped at 200 characters. Rejects (403 \"Unavailable\") if either party has blocked the other so the blocked side can't infer who blocked them.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["recipient_id", "body"],
+                "properties": {
+                  "recipient_id": { "type": "integer" },
+                  "body": { "type": "string", "maxLength": 200 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Sent", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DirectMessage" } } } },
+          "400": { "description": "Invalid recipient or empty / oversized body" },
+          "403": { "description": "Blocked in either direction" },
+          "404": { "description": "Recipient not found" }
+        }
+      }
+    },
+    "/api/messages/{friendId}/read": {
+      "post": {
+        "tags": ["Messages"],
+        "summary": "Mark all unread messages from friendId as read",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "friendId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Marked", "content": { "application/json": { "schema": { "type": "object", "properties": { "ok": { "type": "boolean" }, "marked": { "type": "integer" } } } } } } }
       }
     },
     "/api/admin/players/{id}/dotacoins": {

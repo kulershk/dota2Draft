@@ -7,6 +7,7 @@ import { useDraftStore } from '@/composables/useDraftStore'
 import { useQueueStore } from '@/composables/useQueueStore'
 import { useFriendStore } from '@/composables/useFriendStore'
 import { useNotificationStore } from '@/composables/useNotificationStore'
+import { useMessageStore } from '@/composables/useMessageStore'
 import { useSidePanels } from '@/composables/useSidePanels'
 import { useApi, onBannedAction } from '@/composables/useApi'
 import { useNavStore, type NavItem, type NavRoot } from '@/composables/useNavStore'
@@ -35,6 +36,7 @@ const store = useDraftStore()
 const queue = useQueueStore()
 const friendStore = useFriendStore()
 const notifStore = useNotificationStore()
+const messageStore = useMessageStore()
 const panels = useSidePanels()
 const navStore = useNavStore()
 navStore.load().catch(() => {})
@@ -220,6 +222,7 @@ onMounted(async () => {
     queue.fetchPools().then(() => queue.requestMyState())
     friendStore.loadAll()
     notifStore.loadAll()
+    messageStore.loadThreads()
   }
 
   // Wire friend socket events — any of them just triggers a refetch and
@@ -232,6 +235,15 @@ onMounted(async () => {
   // Notifications — broadcasts and admin deletes both just refetch.
   sock.on('notification:new', () => { notifStore.loadAll() })
   sock.on('notification:removed', () => { notifStore.loadAll() })
+
+  // Direct messages — sender + recipient both receive their copy.
+  sock.on('message:new', (msg: any) => {
+    const myId = store.currentUser.value?.id
+    if (myId) messageStore.onIncomingMessage(msg, myId)
+  })
+  sock.on('message:read', (data: { reader_id: number; message_ids: number[] }) => {
+    messageStore.onMessagesRead(data.reader_id, data.message_ids)
+  })
 })
 
 // If the user gets logged in later (e.g. Steam redirect), also sync then.
@@ -240,9 +252,11 @@ watch(() => store.currentUser.value?.id, (uid) => {
     queue.fetchPools().then(() => queue.requestMyState())
     friendStore.loadAll()
     notifStore.loadAll()
+    messageStore.loadThreads()
   } else {
     friendStore.reset()
     notifStore.reset()
+    messageStore.reset()
   }
 })
 

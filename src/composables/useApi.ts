@@ -486,6 +486,13 @@ export function useApi() {
       request('/api/admin/notifications', { method: 'POST', body: JSON.stringify(data) }),
     deleteAnnouncement: (id: number) =>
       request(`/api/admin/notifications/${id}`, { method: 'DELETE' }),
+    getMessageThreads: () => request('/api/messages/threads'),
+    getMessageThread: (friendId: number, before?: number) =>
+      request(`/api/messages/${friendId}${before ? `?before=${before}` : ''}`),
+    sendMessage: (recipientId: number, body: string) =>
+      request('/api/messages', { method: 'POST', body: JSON.stringify({ recipient_id: recipientId, body }) }),
+    markMessagesRead: (friendId: number) =>
+      request(`/api/messages/${friendId}/read`, { method: 'POST' }),
     generateTestUsers: (count: number) =>
       request('/api/admin/generate-test-users', { method: 'POST', body: JSON.stringify({ count }) }),
     parseSteamIds: (input: string) =>
