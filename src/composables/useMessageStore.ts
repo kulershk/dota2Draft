@@ -116,8 +116,6 @@ function onIncomingMessage(msg: DirectMessage, myId: number) {
       threadMessages.value = { ...threadMessages.value, [peerId]: [...list, msg] }
     }
   }
-  // Update the thread head + bump unread when it's a message TO me from a
-  // peer who isn't the currently-open thread.
   const existing = threads.value.find(t => t.peer.id === peerId)
   if (existing) {
     existing.last_message = msg
@@ -128,6 +126,13 @@ function onIncomingMessage(msg: DirectMessage, myId: number) {
   } else {
     // Unknown peer — refresh the threads list to get their player info.
     loadThreads()
+  }
+  // If the user is actively viewing this thread, tell the server we've
+  // already seen the new message so reloading the app doesn't resurrect
+  // the unread badge.
+  if (msg.recipient_id === myId && currentPeerId.value === peerId) {
+    const api = useApi()
+    api.markMessagesRead(peerId).catch(() => {})
   }
 }
 
