@@ -785,6 +785,10 @@ export async function initDb() {
   try { await execute('ALTER TABLE queue_pools ADD COLUMN captain_eligibility_threshold INTEGER NOT NULL DEFAULT 1500') } catch {}
   try { await execute(`ALTER TABLE queue_pools ADD COLUMN rules_title TEXT DEFAULT ''`) } catch {}
   try { await execute(`ALTER TABLE queue_pools ADD COLUMN rules_content TEXT DEFAULT ''`) } catch {}
+  // The right-rail PLAY button and the Queue side panel surface a single
+  // pool; this flag picks it. Only one row should be TRUE at a time but it's
+  // not DB-enforced (admin UI handles the swap).
+  try { await execute(`ALTER TABLE queue_pools ADD COLUMN is_featured BOOLEAN NOT NULL DEFAULT FALSE`) } catch {}
 
   // ─── Discord match-voice state ────────────────────────────────────────
   // The discord bot mirrors its in-memory liveMatches Map here so a bot

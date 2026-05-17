@@ -24,6 +24,7 @@ import FriendsSidebarPanel from '@/components/common/FriendsSidebarPanel.vue'
 import NotificationsSidebarPanel from '@/components/common/NotificationsSidebarPanel.vue'
 import ChatsSidebarPanel from '@/components/common/ChatsSidebarPanel.vue'
 import ProfileSidebarPanel from '@/components/common/ProfileSidebarPanel.vue'
+import QueueSidebarPanel from '@/components/common/QueueSidebarPanel.vue'
 import { setLocale } from '@/i18n'
 import { getSocket } from '@/composables/useSocket'
 
@@ -684,6 +685,7 @@ onMounted(() => {
     <FriendsSidebarPanel />
     <NotificationsSidebarPanel />
     <ChatsSidebarPanel />
+    <QueueSidebarPanel />
     <ProfileSidebarPanel />
 
     <!-- Global ready-check modal (visible on any route) -->

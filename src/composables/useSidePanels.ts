@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 
-export type SidePanel = 'friends' | 'chats' | 'notifications' | 'profile' | null
+export type SidePanel = 'friends' | 'chats' | 'notifications' | 'profile' | 'queue' | null
 
 const active = ref<SidePanel>(null)
 
@@ -15,6 +15,7 @@ export function useSidePanels() {
     openChats() { toggle('chats') },
     openNotifications() { toggle('notifications') },
     openProfile() { toggle('profile') },
+    openQueue() { toggle('queue') },
     close() { active.value = null },
   }
 }
