@@ -1973,6 +1973,8 @@ export default {
   queueInhouseCooldownWarn: 'Brīdinājums',
   queueInhouseCooldownBan: 'Bans',
   queueInhouseCleanGamesDecay: 'Tīrās spēles, lai noņemtu strike',
+  queueInhouseReportWindow: 'Ziņojumu logs (min pēc spēles beigām)',
+  queueInhouseReportWindowHint: 'Toksiski/grief ziņojumi pret komandas biedriem un pretiniekiem ir iespējami šī laika ietvaros pēc spēles beigām. 0 = tikai kamēr spēle ir aktīva.',
   queueInhousePrizePct: 'Balvu top X% (aktīvie spēlētāji)',
   queueInhouseAddTier: 'Pievienot rindu',
   inhouseReportToxic: 'Ziņot par toksiskumu',

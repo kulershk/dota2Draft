@@ -32,18 +32,24 @@ function _allPlayerIds(qm) {
   return []
 }
 
-// Returns the reporter's most recent non-cancelled queue match id, or null
-// if they have none. Used to enforce "you can only report someone from your
-// last game" — prevents weaponising the report system months later.
-async function _reportersLastMatchId(reporterId) {
-  const row = await queryOne(`
-    SELECT id FROM queue_matches
-    WHERE all_player_ids @> $1::jsonb
-      AND status IN ('picking', 'lobby_creating', 'live', 'completed')
-    ORDER BY created_at DESC
-    LIMIT 1
-  `, [JSON.stringify([reporterId])])
-  return row?.id ?? null
+// Is this match reportable right now for `reporterId`? Rules:
+//   * status must not be 'cancelled' (the game didn't happen)
+//   * if the match is completed, completed_at must be within
+//     pool.report_window_minutes — defaults to 15. While the match is
+//     still active (picking/lobby_creating/live) the window doesn't apply
+//     yet.
+// Returns { ok: true } or { ok: false, error: string }.
+function _isWithinReportWindow(qm, pool) {
+  if (qm.status === 'cancelled') return { ok: false, error: 'Cancelled matches cannot be reported' }
+  if (qm.status === 'completed') {
+    const windowMin = Math.max(0, Number(pool?.report_window_minutes ?? 15))
+    if (!qm.completed_at) return { ok: false, error: 'Match has no completion time' }
+    const ageMs = Date.now() - new Date(qm.completed_at).getTime()
+    if (ageMs > windowMin * 60 * 1000) {
+      return { ok: false, error: `Report window expired (${windowMin} min after match end)` }
+    }
+  }
+  return { ok: true }
 }
 
 // Returns 1, 2, or null — which team a player ended up on for this match.
@@ -111,12 +117,11 @@ export default function createInhouseReportsRouter(io) {
     if (!allIds.includes(reporter.id)) return res.status(403).json({ error: 'You were not in this match' })
     if (!allIds.includes(reportedId))  return res.status(400).json({ error: 'Reported player was not in this match' })
 
-    // Window: only the reporter's most-recent match is reportable. Prevents
-    // someone digging through history to weaponise old encounters.
-    const lastMatchId = await _reportersLastMatchId(reporter.id)
-    if (lastMatchId !== queueMatchId) {
-      return res.status(403).json({ error: 'You can only report players from your most recent inhouse match' })
-    }
+    // Window: matches stay reportable for pool.report_window_minutes after
+    // they complete (default 15). Prevents weaponising the system months
+    // later while still tolerating "let me re-queue first then report".
+    const windowCheck = _isWithinReportWindow(qm, pool)
+    if (!windowCheck.ok) return res.status(403).json({ error: windowCheck.error })
 
     const client = await pgPool.connect()
     try {
@@ -230,11 +235,10 @@ export default function createInhouseReportsRouter(io) {
     if (!reporterTeam || !reportedTeam) return res.status(400).json({ error: 'Player not on a team in this match' })
     if (reporterTeam !== reportedTeam) return res.status(403).json({ error: 'Captains can only report their own team' })
 
-    // Window: same rule as toxic — only the reporter's most-recent match.
-    const lastMatchId = await _reportersLastMatchId(reporter.id)
-    if (lastMatchId !== queueMatchId) {
-      return res.status(403).json({ error: 'You can only report players from your most recent inhouse match' })
-    }
+    // Window: same rule as toxic — reportable until pool.report_window_minutes
+    // after completion.
+    const windowCheck = _isWithinReportWindow(qm, pool)
+    if (!windowCheck.ok) return res.status(403).json({ error: windowCheck.error })
 
     try {
       const inserted = await queryOne(

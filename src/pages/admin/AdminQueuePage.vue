@@ -69,6 +69,7 @@ const INHOUSE_DEFAULTS = {
   toxic_strike_cooldowns: [{ strikes: 2, action: 'warn' }, { strikes: 3, hours: 12 }, { strikes: 4, hours: 24 }, { strikes: 5, hours: 72 }],
   grief_strike_cooldowns: [{ strikes: 1, action: 'warn' }, { strikes: 2, hours: 24 }, { strikes: 3, hours: 72 }, { strikes: 4, action: 'ban' }],
   clean_games_to_decay_strike: 5,
+  report_window_minutes: 15,
 }
 
 const form = ref<Record<string, any>>({
@@ -1034,10 +1035,15 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-3">
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
               <div>
                 <label class="text-xs text-muted-foreground">{{ t('queueInhouseCleanGamesDecay') }}</label>
                 <input type="number" min="1" class="input-field" v-model.number="form.clean_games_to_decay_strike" />
+              </div>
+              <div>
+                <label class="text-xs text-muted-foreground">{{ t('queueInhouseReportWindow') }}</label>
+                <input type="number" min="0" class="input-field" v-model.number="form.report_window_minutes" />
+                <p class="text-[11px] text-muted-foreground mt-1">{{ t('queueInhouseReportWindowHint') }}</p>
               </div>
               <div>
                 <label class="text-xs text-muted-foreground">{{ t('queueInhousePrizePct') }}</label>

@@ -1973,6 +1973,8 @@ export default {
   queueInhouseCooldownWarn: 'Įspėjimas',
   queueInhouseCooldownBan: 'Banas',
   queueInhouseCleanGamesDecay: 'Švarios rungtynės, kad nuimti strike',
+  queueInhouseReportWindow: 'Pranešimų langas (min po rungtynių)',
+  queueInhouseReportWindowHint: 'Toks/grief pranešimai prieš komandos draugus ir varžovus galimi tiek laiko po rungtynių pabaigos. 0 = tik kol rungtynės aktyvios.',
   queueInhousePrizePct: 'Prizo top X% (aktyvūs žaidėjai)',
   queueInhouseAddTier: 'Pridėti eilutę',
   inhouseReportToxic: 'Pranešti apie toksiškumą',

@@ -1984,6 +1984,8 @@ export default {
   queueInhouseCooldownWarn: 'Warn',
   queueInhouseCooldownBan: 'Ban',
   queueInhouseCleanGamesDecay: 'Clean games to decay strike',
+  queueInhouseReportWindow: 'Report window (min after match end)',
+  queueInhouseReportWindowHint: 'Toxic/grief reports against teammates and opponents stay open this long after the match completes. 0 = only while the match is still live.',
   queueInhousePrizePct: 'Prize top X% (active players)',
   queueInhouseAddTier: 'Add row',
   inhouseReportToxic: 'Report toxic',

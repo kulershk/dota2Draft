@@ -1048,6 +1048,7 @@ export async function initDb() {
     ['toxic_strike_cooldowns',      `JSONB NOT NULL DEFAULT '[{"strikes":2,"action":"warn"},{"strikes":3,"hours":12},{"strikes":4,"hours":24},{"strikes":5,"hours":72}]'::jsonb`],
     ['grief_strike_cooldowns',      `JSONB NOT NULL DEFAULT '[{"strikes":1,"action":"warn"},{"strikes":2,"hours":24},{"strikes":3,"hours":72},{"strikes":4,"action":"ban"}]'::jsonb`],
     ['clean_games_to_decay_strike', 'INTEGER NOT NULL DEFAULT 5'],
+    ['report_window_minutes',       'INTEGER NOT NULL DEFAULT 15'],
   ]) {
     const has = await queryOne(
       `SELECT 1 FROM information_schema.columns WHERE table_name = 'queue_pools' AND column_name = $1`, [col]
