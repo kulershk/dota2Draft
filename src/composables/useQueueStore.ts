@@ -47,6 +47,7 @@ export interface QueuePickState {
 
 export interface QueueMatchFound {
   queueMatchId: number
+  poolId: number
   players: QueuePlayer[]
   captain1: QueuePlayer
   captain2: QueuePlayer
@@ -73,6 +74,21 @@ const lobbyInfo = ref<{ matchId: number; gameName: string; password: string; exp
 const lobbyPlayersJoined = ref<string[]>([])
 const queueError = ref<string | null>(null)
 const cancelled = ref<string | null>(null)
+
+// Snapshot of the just-finished inhouse match, kept around after
+// queue:gameStarted clears activeMatch/teamsFormed so the player still has
+// a UI surface for filing toxic / grief reports during the report window.
+// Cleared when a new match begins or the user dismisses it.
+export interface PostMatchSnapshot {
+  queueMatchId: number
+  poolId: number
+  team1: QueuePlayer[]
+  team2: QueuePlayer[]
+  captain1Id: number
+  captain2Id: number
+  snapshotAt: number
+}
+const postMatch = ref<PostMatchSnapshot | null>(null)
 
 export interface QueueReadyCheck {
   readyCheckId: number
@@ -160,6 +176,8 @@ function initSocket() {
     readyCheckFailed.value = null
     rolePreferences.value = data.rolePreferences || {}
     inQueue.value = false
+    // New match supersedes any prior post-match snapshot.
+    postMatch.value = null
   })
 
   socket.on('queue:rolePreferencesUpdate', (data: { queueMatchId: number; playerId: number; roles: string[] }) => {
@@ -342,6 +360,22 @@ function initSocket() {
   })
 
   socket.on('queue:gameStarted', (_data: { queueMatchId: number; dotaMatchId: string }) => {
+    // Snapshot the just-started match BEFORE clearing the active-match
+    // state so the QueuePage can keep showing the rosters with Report
+    // buttons during the post-match window.
+    const am = activeMatch.value
+    const tf = teamsFormed.value
+    if (am && tf) {
+      postMatch.value = {
+        queueMatchId: am.queueMatchId,
+        poolId: am.poolId,
+        team1: tf.team1,
+        team2: tf.team2,
+        captain1Id: am.captain1.playerId,
+        captain2Id: am.captain2.playerId,
+        snapshotAt: Date.now(),
+      }
+    }
     activeMatch.value = null
     pickState.value = null
     teamsFormed.value = null
@@ -510,6 +544,10 @@ export function useQueueStore() {
     if (autoRequeueStateCb) autoRequeueStateCb(!!data?.enabled)
   })
 
+  function dismissPostMatch() {
+    postMatch.value = null
+  }
+
   return {
     pools,
     inQueue,
@@ -520,6 +558,8 @@ export function useQueueStore() {
     activeMatch,
     pickState,
     teamsFormed,
+    postMatch,
+    dismissPostMatch,
     lobbyInfo,
     lobbyPlayersJoined,
     queueError,

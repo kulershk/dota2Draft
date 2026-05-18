@@ -1994,6 +1994,8 @@ export default {
   inhouseReportGriefPrompt: 'Describe {name}\'s griefing (required):',
   inhouseReportGriefCommentRequired: 'A comment is required for grief reports.',
   inhouseReportFiled: 'Report filed.',
+  queuePostMatchTitle: 'Last match',
+  queuePostMatchHint: 'Report toxic / grief while the report window is open.',
   adminGriefReports: 'Grief reports',
   adminGriefReportsDesc: 'Captain-filed grief reports awaiting admin review.',
   griefTab_pending: 'Pending',
