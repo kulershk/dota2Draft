@@ -15,7 +15,8 @@ const siteHeroParagraph = ref('')
 const discordUrl = ref('')
 const logoUrl = ref('')
 const heroBannerUrl = ref('')
-const heroBannerPosition = ref<'top' | 'center' | 'bottom'>('center')
+// Hero banner vertical offset as % (0 = top, 50 = center, 100 = bottom).
+const heroBannerPosition = ref<number>(50)
 const socketsEnabled = ref(true)
 const topbarEnabled = ref(false)
 const topbarHtml = ref('')
@@ -52,7 +53,8 @@ onMounted(async () => {
   discordUrl.value = data.site_discord_url || ''
   logoUrl.value = data.site_logo_url || ''
   heroBannerUrl.value = data.site_hero_banner_url || ''
-  heroBannerPosition.value = (data.site_hero_banner_position as any) || 'center'
+  heroBannerPosition.value = typeof data.site_hero_banner_position === 'number'
+    ? data.site_hero_banner_position : 50
   sponsors.value = data.site_sponsors || []
   socketsEnabled.value = data.sockets_enabled !== false
   topbarEnabled.value = data.site_topbar_enabled === true
@@ -272,7 +274,7 @@ async function removeBanner() {
           <!-- Live preview -->
           <div class="relative overflow-hidden rounded-lg border border-border mb-3">
             <div v-if="heroBannerUrl" class="absolute inset-0">
-              <img :src="heroBannerUrl" class="w-full h-full object-cover" :style="{ objectPosition: `center ${heroBannerPosition}` }" />
+              <img :src="heroBannerUrl" class="w-full h-full object-cover" :style="{ objectPosition: `center ${heroBannerPosition}%` }" />
               <div class="absolute inset-0 bg-gradient-to-b from-background/70 via-background/50 to-background" />
             </div>
             <div class="relative flex flex-col items-center text-center py-10 px-6">
@@ -294,13 +296,21 @@ async function removeBanner() {
           <p class="text-[11px] text-muted-foreground mt-1.5">Recommended: 1200×400px. Displayed as the hero background on the home page.</p>
         </div>
         <div>
-          <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('siteHeroBannerPosition') }}</label>
-          <select v-model="heroBannerPosition" class="input-field w-full max-w-[240px]">
-            <option value="top">{{ t('siteHeroBannerPositionTop') }}</option>
-            <option value="center">{{ t('siteHeroBannerPositionCenter') }}</option>
-            <option value="bottom">{{ t('siteHeroBannerPositionBottom') }}</option>
-          </select>
-          <p class="text-[11px] text-muted-foreground mt-1">{{ t('siteHeroBannerPositionHint') }}</p>
+          <div class="flex items-center justify-between mb-1">
+            <label class="block text-xs font-medium text-muted-foreground">{{ t('siteHeroBannerPosition') }}</label>
+            <span class="text-[11px] font-mono font-semibold text-foreground tabular-nums">{{ heroBannerPosition }}%</span>
+          </div>
+          <input
+            type="range" min="0" max="100" step="1"
+            v-model.number="heroBannerPosition"
+            class="w-full max-w-[420px] accent-primary"
+          />
+          <div class="flex justify-between max-w-[420px] text-[10px] text-muted-foreground mt-1">
+            <span>{{ t('siteHeroBannerPositionTop') }}</span>
+            <span>{{ t('siteHeroBannerPositionCenter') }}</span>
+            <span>{{ t('siteHeroBannerPositionBottom') }}</span>
+          </div>
+          <p class="text-[11px] text-muted-foreground mt-1.5">{{ t('siteHeroBannerPositionHint') }}</p>
         </div>
         <div>
           <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('siteHeroTitle') }}</label>

@@ -40,11 +40,19 @@ router.get('/api/site-settings', async (req, res) => {
     site_name: obj.site_name || '',
     site_logo_url: obj.site_logo_url || '',
     site_hero_banner_url: obj.site_hero_banner_url || '',
-    // Vertical alignment of the hero banner image — 'top' | 'center' | 'bottom'.
-    // Maps to CSS `object-position: ... <value>` on the <img>. Defaults to center.
-    site_hero_banner_position: ['top', 'center', 'bottom'].includes(obj.site_hero_banner_position)
-      ? obj.site_hero_banner_position
-      : 'center',
+    // Vertical offset of the hero banner image as a percentage (0 = top,
+    // 50 = center, 100 = bottom). Applied as CSS `object-position: center N%`.
+    // Legacy values ('top'/'center'/'bottom') are normalized on read so older
+    // rows don't break.
+    site_hero_banner_position: (() => {
+      const raw = obj.site_hero_banner_position
+      if (raw === 'top') return 0
+      if (raw === 'bottom') return 100
+      if (raw === 'center') return 50
+      const n = parseInt(raw, 10)
+      if (!Number.isFinite(n)) return 50
+      return Math.min(100, Math.max(0, n))
+    })(),
     site_sponsors: sponsors,
     // Boolean view of the persisted 'site_sockets_enabled' string. Default
     // is true if the row has never been written.
@@ -68,8 +76,16 @@ router.put('/api/site-settings', async (req, res) => {
     site_title, site_subtitle, site_hero_paragraph, site_discord_url, site_name, sockets_enabled,
     site_topbar_enabled, site_topbar_html, site_topbar_color, site_hero_banner_position,
   } = req.body
-  const bannerPos = ['top', 'center', 'bottom'].includes(site_hero_banner_position)
-    ? site_hero_banner_position : undefined
+  let bannerPos
+  if (site_hero_banner_position !== undefined) {
+    // Accept either a 0-100 number or the legacy 'top'/'center'/'bottom' string.
+    let n
+    if (site_hero_banner_position === 'top') n = 0
+    else if (site_hero_banner_position === 'center') n = 50
+    else if (site_hero_banner_position === 'bottom') n = 100
+    else n = parseInt(site_hero_banner_position, 10)
+    if (Number.isFinite(n)) bannerPos = String(Math.min(100, Math.max(0, n)))
+  }
   for (const [key, value] of [
     ['site_title', site_title],
     ['site_subtitle', site_subtitle],
