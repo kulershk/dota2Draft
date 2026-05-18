@@ -68,6 +68,19 @@ function _cooldownFor(strikes, rules) {
   return rules.find(r => Number(r.strikes) === Number(strikes)) || null
 }
 
+// Insert a `notifications` row for the punished player. Called INSIDE the
+// strike transaction so it rolls back atomically; the caller is responsible
+// for emitting `notification:new` to user:${id} AFTER commit so the bell
+// badge updates in real time. Returns the inserted notification id.
+async function _insertStrikeNotification(client, { playerId, type, title, body, link, byAdminId }) {
+  const r = await client.query(
+    `INSERT INTO notifications (recipient_id, type, title, body, link, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+    [playerId, type, title, body || null, link || null, byAdminId || null]
+  )
+  return r.rows[0].id
+}
+
 // Insert a queue_bans row reflecting a strike-driven cooldown. Returns the
 // ISO string of `banned_until` (or null for permanent).
 async function _applyCooldown(client, playerId, poolId, rule, reasonText, banner) {
@@ -315,6 +328,7 @@ export default function createInhouseReportsRouter(io) {
       let newStrikes = Number(updated.toxic_strikes)
       let banUntil = null
       let cooldownRule = null
+      let notificationId = null
       if (strikeDelta > 0 || newlyFired.length) {
         newStrikes = Number(updated.toxic_strikes) + strikeDelta
         const mergedFired = [...fired, ...newlyFired]
@@ -332,6 +346,23 @@ export default function createInhouseReportsRouter(io) {
           const reasonText = `Toxic strike ${newStrikes}${cooldownRule.hours ? ` (${cooldownRule.hours}h cooldown)` : (cooldownRule.action === 'ban' ? ' (banned)' : ' (warning)')}`
           banUntil = await _applyCooldown(client, report.reported_player_id, report.pool_id, cooldownRule, reasonText, admin.id)
         }
+        // Notify the reported player — bell badge + sidebar entry.
+        const bodyLines = [`You received a toxic strike (now at ${newStrikes}).`]
+        if (banUntil) {
+          bodyLines.push(`Queue cooldown until ${new Date(banUntil).toLocaleString()}.`)
+        } else if (cooldownRule?.action === 'ban') {
+          bodyLines.push('Permanently banned from the queue.')
+        } else if (cooldownRule?.action === 'warn') {
+          bodyLines.push('This is a warning — no cooldown yet.')
+        }
+        notificationId = await _insertStrikeNotification(client, {
+          playerId: report.reported_player_id,
+          type: 'inhouse_strike_toxic',
+          title: `Toxic strike +${strikeDelta}`,
+          body: bodyLines.join(' '),
+          link: '/queue',
+          byAdminId: admin.id,
+        })
       }
 
       await client.query('COMMIT')
@@ -343,6 +374,9 @@ export default function createInhouseReportsRouter(io) {
           strikeDelta,
           banUntil: banUntil ? new Date(banUntil).toISOString() : null,
         })
+      }
+      if (notificationId) {
+        io.to(`user:${report.reported_player_id}`).emit('notification:new', { id: notificationId })
       }
       io.to(`user:${report.reporter_player_id}`).emit('inhouse:toxicReviewed', { reportId, status: 'approved' })
       io.to(`user:${report.reported_player_id}`).emit('inhouse:toxicReviewed', { reportId, status: 'approved' })
@@ -471,6 +505,25 @@ export default function createInhouseReportsRouter(io) {
         captainRevoked = true
       }
 
+      // Notify the reported player.
+      const bodyLines = [`A grief report was upheld. You now have ${newStrikes} grief strike${newStrikes === 1 ? '' : 's'}.`]
+      if (banUntil) {
+        bodyLines.push(`Queue cooldown until ${new Date(banUntil).toLocaleString()}.`)
+      } else if (cooldown?.action === 'ban') {
+        bodyLines.push('Permanently banned from the queue.')
+      } else if (cooldown?.action === 'warn') {
+        bodyLines.push('This is a warning — no cooldown yet.')
+      }
+      if (captainRevoked) bodyLines.push('Captain status revoked.')
+      const notificationId = await _insertStrikeNotification(client, {
+        playerId: report.reported_player_id,
+        type: 'inhouse_strike_grief',
+        title: 'Grief strike +1',
+        body: bodyLines.join(' '),
+        link: '/queue',
+        byAdminId: admin.id,
+      })
+
       await client.query('COMMIT')
 
       io.to(`user:${report.reported_player_id}`).emit('inhouse:strikeApplied', {
@@ -480,6 +533,7 @@ export default function createInhouseReportsRouter(io) {
         banUntil: banUntil ? new Date(banUntil).toISOString() : null,
         captainRevoked,
       })
+      io.to(`user:${report.reported_player_id}`).emit('notification:new', { id: notificationId })
       io.to(`user:${report.reporter_player_id}`).emit('inhouse:griefReviewed', { reportId, status: 'approved' })
       io.to(`user:${report.reported_player_id}`).emit('inhouse:griefReviewed', { reportId, status: 'approved' })
       res.json({ ok: true, newStrikes, banUntil, captainRevoked })
