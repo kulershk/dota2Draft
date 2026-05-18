@@ -99,9 +99,20 @@ function openProfilePanel() {
       />
     </button>
 
-    <!-- Bell — opens Notifications panel -->
-    <button class="rail-btn relative" :title="t('notifications')" @click="panels.openNotifications()">
-      <Bell class="w-4 h-4" style="color:#CBD5E1" />
+    <!-- Bell — opens Notifications panel.
+         Red icon + red outline mirror the Friends "you have something
+         waiting" pattern so the rail's three alert states are visually
+         consistent. -->
+    <button
+      class="rail-btn relative"
+      :class="{ 'rail-btn-alert': notifStore.unreadCount.value > 0 }"
+      :title="t('notifications')"
+      @click="panels.openNotifications()"
+    >
+      <Bell
+        class="w-4 h-4"
+        :style="{ color: notifStore.unreadCount.value > 0 ? '#EF4444' : '#CBD5E1' }"
+      />
       <span
         v-if="notifStore.unreadCount.value > 0"
         class="absolute inline-flex items-center justify-center text-[9px] font-black px-[3px] rounded text-white"
@@ -139,9 +150,17 @@ function openProfilePanel() {
 
     <div class="w-[38px] h-px" style="background:#1E293B" />
 
-    <!-- Messages — opens Chats panel -->
-    <button class="rail-btn relative" :title="t('messages')" @click="panels.openChats()">
-      <MessageSquare class="w-4 h-4" style="color:#CBD5E1" />
+    <!-- Messages — opens Chats panel. Same red icon + outline pattern. -->
+    <button
+      class="rail-btn relative"
+      :class="{ 'rail-btn-alert': messageStore.unreadCount.value > 0 }"
+      :title="t('messages')"
+      @click="panels.openChats()"
+    >
+      <MessageSquare
+        class="w-4 h-4"
+        :style="{ color: messageStore.unreadCount.value > 0 ? '#EF4444' : '#CBD5E1' }"
+      />
       <span
         v-if="messageStore.unreadCount.value > 0"
         class="absolute inline-flex items-center justify-center text-[9px] font-black px-[3px] rounded text-white"
