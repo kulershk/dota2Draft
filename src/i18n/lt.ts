@@ -1985,6 +1985,7 @@ export default {
   inhouseReportFiled: 'Pranešimas pateiktas.',
   queuePostMatchTitle: 'Paskutinės rungtynės',
   queuePostMatchHint: 'Praneškite apie toksiškumą / griefą, kol pranešimų langas atviras.',
+  queuePostMatchOpen: 'Atidaryti rungtynių puslapį →',
   adminGriefReports: 'Grief pranešimai',
   adminGriefReportsDesc: 'Kapitonų pateikti grief pranešimai, laukiantys admin peržiūros.',
   griefTab_pending: 'Laukia',

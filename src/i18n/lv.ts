@@ -1985,6 +1985,7 @@ export default {
   inhouseReportFiled: 'Ziņojums iesniegts.',
   queuePostMatchTitle: 'Pēdējā spēle',
   queuePostMatchHint: 'Ziņo par toksiskumu / griefu, kamēr ziņojumu logs ir atvērts.',
+  queuePostMatchOpen: 'Atvērt spēles lapu →',
   adminGriefReports: 'Grief ziņojumi',
   adminGriefReportsDesc: 'Kapteiņu iesniegtie grief ziņojumi, kas gaida admin pārskatīšanu.',
   griefTab_pending: 'Gaidām',

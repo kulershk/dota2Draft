@@ -547,9 +547,15 @@ onUnmounted(() => {
             <span class="text-sm font-semibold">{{ t('queuePostMatchTitle') }}</span>
             <span class="text-[11px] text-muted-foreground">{{ t('queuePostMatchHint') }}</span>
           </div>
-          <button type="button" class="text-xs text-muted-foreground hover:text-foreground" @click="queue.dismissPostMatch()">
-            {{ t('dismiss') }}
-          </button>
+          <div class="flex items-center gap-3">
+            <router-link
+              :to="{ name: 'queue-match', params: { id: queue.postMatch.value.queueMatchId } }"
+              class="text-xs text-primary hover:underline"
+            >{{ t('queuePostMatchOpen') }}</router-link>
+            <button type="button" class="text-xs text-muted-foreground hover:text-foreground" @click="queue.dismissPostMatch()">
+              {{ t('dismiss') }}
+            </button>
+          </div>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-px bg-border/30">
           <!-- Team 1 -->

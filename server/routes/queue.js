@@ -235,6 +235,8 @@ export default function createQueueRouter(io) {
         p1.name AS captain1_name, COALESCE(p1.display_name, p1.name) AS captain1_display_name, p1.avatar_url AS captain1_avatar, p1.steam_id AS captain1_steam_id, p1.mmr_verified_at AS captain1_mmr_verified_at,
         p2.name AS captain2_name, COALESCE(p2.display_name, p2.name) AS captain2_display_name, p2.avatar_url AS captain2_avatar, p2.steam_id AS captain2_steam_id, p2.mmr_verified_at AS captain2_mmr_verified_at,
         qp.name AS pool_name,
+        qp.inhouse_enabled AS pool_inhouse_enabled,
+        qp.report_window_minutes AS pool_report_window_minutes,
         s.id AS season_id_full, s.name AS season_name, s.slug AS season_slug, s.is_active AS season_is_active
       FROM queue_matches qm
       LEFT JOIN players p1 ON p1.id = qm.captain1_player_id

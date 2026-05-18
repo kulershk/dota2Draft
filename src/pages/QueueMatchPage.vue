@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ExternalLink, Clock, Trophy, Loader2, ChevronDown } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
+import { useDraftStore } from '@/composables/useDraftStore'
 import { useDotaConstants } from '@/composables/useDotaConstants'
 import LiveMatchBanner from '@/components/match/LiveMatchBanner.vue'
 import GameStatsTable from '@/components/match/GameStatsTable.vue'
@@ -15,8 +16,11 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const api = useApi()
+const store = useDraftStore()
 const dota = useDotaConstants()
 dota.loadConstants()
+
+const currentUserId = computed(() => store.currentUser.value?.id || null)
 
 const match = ref<any>(null)
 const loading = ref(true)
@@ -176,6 +180,69 @@ onMounted(async () => {
   }
   loading.value = false
 })
+
+// Inhouse reports. Buttons only render when the match's pool has
+// inhouse_enabled. Authoritative gating still lives on the server
+// (participation, captain-of-team, report_window_minutes) — UI just
+// avoids showing dead buttons.
+const isInhouseMatch = computed(() => !!match.value?.pool_inhouse_enabled)
+const iAmInMatch = computed(() => {
+  const uid = currentUserId.value
+  if (!uid) return false
+  return [...team1.value, ...team2.value].some((p: any) => p.playerId === uid)
+})
+const myTeam = computed<1 | 2 | null>(() => {
+  const uid = currentUserId.value
+  if (!uid) return null
+  if (team1.value.some((p: any) => p.playerId === uid)) return 1
+  if (team2.value.some((p: any) => p.playerId === uid)) return 2
+  return null
+})
+const iAmCaptain = computed(() => {
+  const uid = currentUserId.value
+  if (!uid || !match.value) return false
+  return match.value.captain1_player_id === uid || match.value.captain2_player_id === uid
+})
+
+const reporting = ref(false)
+function canReportToxic(playerId: number): boolean {
+  if (!isInhouseMatch.value || !iAmInMatch.value) return false
+  return playerId !== currentUserId.value
+}
+function canReportGrief(playerId: number, side: 1 | 2): boolean {
+  if (!isInhouseMatch.value || !iAmCaptain.value) return false
+  if (playerId === currentUserId.value) return false
+  return side === myTeam.value
+}
+async function reportToxic(playerId: number, name: string) {
+  if (!match.value || reporting.value) return
+  const comment = prompt(t('inhouseReportToxicPrompt', { name })) ?? ''
+  if (comment === null) return
+  reporting.value = true
+  try {
+    await api.reportToxic({ queue_match_id: match.value.id, reported_player_id: playerId, comment })
+    alert(t('inhouseReportFiled'))
+  } catch (e: any) {
+    alert(e?.message || 'Report failed')
+  } finally {
+    reporting.value = false
+  }
+}
+async function reportGrief(playerId: number, name: string) {
+  if (!match.value || reporting.value) return
+  const comment = prompt(t('inhouseReportGriefPrompt', { name }))
+  if (comment == null) return
+  if (!comment.trim()) { alert(t('inhouseReportGriefCommentRequired')); return }
+  reporting.value = true
+  try {
+    await api.reportGrief({ queue_match_id: match.value.id, reported_player_id: playerId, comment })
+    alert(t('inhouseReportFiled'))
+  } catch (e: any) {
+    alert(e?.message || 'Report failed')
+  } finally {
+    reporting.value = false
+  }
+}
 </script>
 
 <template>
@@ -255,7 +322,18 @@ onMounted(async () => {
               seasonDelta: p.season_delta,
               verified: p.mmr_verified_at,
             }))"
-          />
+          >
+            <template #row-action="{ player }">
+              <button v-if="canReportToxic(player.id)"
+                class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 shrink-0"
+                :disabled="reporting" :title="t('inhouseReportToxic')"
+                @click="reportToxic(player.id, player.name)">!</button>
+              <button v-if="canReportGrief(player.id, 1)"
+                class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 shrink-0"
+                :disabled="reporting" :title="t('inhouseReportGrief')"
+                @click="reportGrief(player.id, player.name)">G</button>
+            </template>
+          </TeamRosterTable>
           <TeamRosterTable
             team-color="red"
             :team-name="match.captain2_display_name || match.captain2_name"
@@ -271,7 +349,18 @@ onMounted(async () => {
               seasonDelta: p.season_delta,
               verified: p.mmr_verified_at,
             }))"
-          />
+          >
+            <template #row-action="{ player }">
+              <button v-if="canReportToxic(player.id)"
+                class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 shrink-0"
+                :disabled="reporting" :title="t('inhouseReportToxic')"
+                @click="reportToxic(player.id, player.name)">!</button>
+              <button v-if="canReportGrief(player.id, 2)"
+                class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 shrink-0"
+                :disabled="reporting" :title="t('inhouseReportGrief')"
+                @click="reportGrief(player.id, player.name)">G</button>
+            </template>
+          </TeamRosterTable>
         </div>
 
         <!-- Games -->

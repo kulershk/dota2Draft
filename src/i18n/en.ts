@@ -1996,6 +1996,7 @@ export default {
   inhouseReportFiled: 'Report filed.',
   queuePostMatchTitle: 'Last match',
   queuePostMatchHint: 'Report toxic / grief while the report window is open.',
+  queuePostMatchOpen: 'Open match page →',
   adminGriefReports: 'Grief reports',
   adminGriefReportsDesc: 'Captain-filed grief reports awaiting admin review.',
   griefTab_pending: 'Pending',
