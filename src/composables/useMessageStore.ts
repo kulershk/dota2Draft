@@ -28,6 +28,30 @@ export interface MessageThread {
 const threads = ref<MessageThread[]>([])
 const threadMessages = ref<Record<number, DirectMessage[]>>({})
 const currentPeerId = ref<number | null>(null)
+
+// Lazy-built shared audio element for the incoming-message chime. Reusing
+// one instance avoids spawning a new HTMLAudioElement per message and
+// lets the browser tag the user-gesture autoplay unlock once. SSR-safe
+// because we only construct it on first play in the browser.
+let incomingAudio: HTMLAudioElement | null = null
+function playIncomingMessageSound() {
+  if (typeof window === 'undefined') return
+  try {
+    if (!incomingAudio) {
+      incomingAudio = new Audio('/sounds/message.wav')
+      incomingAudio.preload = 'auto'
+      incomingAudio.volume = 0.6
+    }
+    // Restart from the top so two messages in quick succession each play
+    // rather than the second one being a no-op.
+    incomingAudio.currentTime = 0
+    // Browsers reject .play() before the first user gesture — swallow the
+    // resulting NotAllowedError so the message handler isn't disturbed.
+    void incomingAudio.play().catch(() => {})
+  } catch {
+    // ignore — sound is a nice-to-have, never block the message flow.
+  }
+}
 const loadedThreads = ref(false)
 
 const unreadCount = computed(() =>
@@ -137,6 +161,12 @@ function onIncomingMessage(msg: DirectMessage, myId: number) {
   if (msg.recipient_id === myId && currentPeerId.value === peerId) {
     const api = useApi()
     api.markMessagesRead(peerId).catch(() => {})
+  }
+  // Audio cue for messages actually addressed to me — skips my own echo
+  // (server fans the message back into my user room so my other tabs
+  // stay in sync).
+  if (msg.recipient_id === myId) {
+    playIncomingMessageSound()
   }
 }
 
