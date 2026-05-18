@@ -3953,7 +3953,7 @@
         "post": {
           "tags": ["Inhouse"],
           "summary": "File a toxic-behaviour report against a match participant",
-          "description": "Reporter must be a participant of the queue match. Inhouse-pool only. The unique-on-(reporter,reported,match) constraint prevents duplicates (409 on retry). When the reported player's lifetime report count crosses a configured threshold, a strike is awarded and may insert a queue_bans row.",
+          "description": "Reporter must be a participant of the queue match AND the match must be the reporter's most recent inhouse queue match (prevents weaponising old games). Inhouse-pool only. The unique-on-(reporter,reported,match) constraint prevents duplicates (409 on retry). When the reported player's lifetime report count crosses a configured threshold, a strike is awarded and may insert a queue_bans row.",
           "security": [{ "bearerAuth": [] }],
           "requestBody": {
             "required": true,
@@ -3979,7 +3979,7 @@
         "post": {
           "tags": ["Inhouse"],
           "summary": "Captain-only grief report against a teammate",
-          "description": "Reporter must be the team's captain (captain1 or captain2 of the queue match). Reported player must be on the reporter's team. Comment is mandatory. Inserts a pending report — strikes only apply on admin approval.",
+          "description": "Reporter must be the team's captain (captain1 or captain2 of the queue match) AND the match must be the captain's most recent inhouse queue match. Reported player must be on the reporter's team. Comment is mandatory. Inserts a pending report — strikes only apply on admin approval.",
           "security": [{ "bearerAuth": [] }],
           "requestBody": {
             "required": true,

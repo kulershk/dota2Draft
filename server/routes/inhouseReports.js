@@ -32,6 +32,20 @@ function _allPlayerIds(qm) {
   return []
 }
 
+// Returns the reporter's most recent non-cancelled queue match id, or null
+// if they have none. Used to enforce "you can only report someone from your
+// last game" — prevents weaponising the report system months later.
+async function _reportersLastMatchId(reporterId) {
+  const row = await queryOne(`
+    SELECT id FROM queue_matches
+    WHERE all_player_ids @> $1::jsonb
+      AND status IN ('picking', 'lobby_creating', 'live', 'completed')
+    ORDER BY created_at DESC
+    LIMIT 1
+  `, [JSON.stringify([reporterId])])
+  return row?.id ?? null
+}
+
 // Returns 1, 2, or null — which team a player ended up on for this match.
 function _teamOf(qm, playerId) {
   for (const p of (qm.team1_players || [])) if (Number(p.playerId) === Number(playerId)) return 1
@@ -96,6 +110,13 @@ export default function createInhouseReportsRouter(io) {
     const allIds = _allPlayerIds(qm)
     if (!allIds.includes(reporter.id)) return res.status(403).json({ error: 'You were not in this match' })
     if (!allIds.includes(reportedId))  return res.status(400).json({ error: 'Reported player was not in this match' })
+
+    // Window: only the reporter's most-recent match is reportable. Prevents
+    // someone digging through history to weaponise old encounters.
+    const lastMatchId = await _reportersLastMatchId(reporter.id)
+    if (lastMatchId !== queueMatchId) {
+      return res.status(403).json({ error: 'You can only report players from your most recent inhouse match' })
+    }
 
     const client = await pgPool.connect()
     try {
@@ -208,6 +229,12 @@ export default function createInhouseReportsRouter(io) {
     const reportedTeam = _teamOf(qm, reportedId)
     if (!reporterTeam || !reportedTeam) return res.status(400).json({ error: 'Player not on a team in this match' })
     if (reporterTeam !== reportedTeam) return res.status(403).json({ error: 'Captains can only report their own team' })
+
+    // Window: same rule as toxic — only the reporter's most-recent match.
+    const lastMatchId = await _reportersLastMatchId(reporter.id)
+    if (lastMatchId !== queueMatchId) {
+      return res.status(403).json({ error: 'You can only report players from your most recent inhouse match' })
+    }
 
     try {
       const inserted = await queryOne(
