@@ -2,7 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Users, UserPlus, X, Search, MessageCircle, Check, Ban, ShieldOff, Loader2 } from 'lucide-vue-next'
+import { Users, UserPlus, X, Search, MessageCircle, Check, ShieldOff, Loader2 } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { useFriendStore, type FriendEntry } from '@/composables/useFriendStore'
 import { useMessageStore } from '@/composables/useMessageStore'
@@ -17,43 +17,37 @@ const messageStore = useMessageStore()
 const draftStore = useDraftStore()
 const panels = useSidePanels()
 
-type Tab = 'friends' | 'requests' | 'blocked' | 'add'
-const activeTab = ref<Tab>('friends')
-const searchQuery = ref('')
-const searchResults = ref<any[]>([])
-const searching = ref(false)
-let searchTimer: ReturnType<typeof setTimeout> | null = null
+// Local filter for the Online/Offline/Requests/Blocked sections.
+const filterQuery = ref('')
+// Separate query for the Add Friend section — debounced server-side search.
+const addQuery = ref('')
+const addResults = ref<any[]>([])
+const addSearching = ref(false)
+let addTimer: ReturnType<typeof setTimeout> | null = null
 
-// Reset search when panel closes or tab changes so each view starts fresh.
+// Reset both inputs when the panel closes.
 watch(() => panels.active.value, (a) => {
   if (a !== 'friends') {
-    searchQuery.value = ''
-    searchResults.value = []
-    activeTab.value = 'friends'
+    filterQuery.value = ''
+    addQuery.value = ''
+    addResults.value = []
   }
-})
-watch(activeTab, () => {
-  searchQuery.value = ''
-  searchResults.value = []
 })
 
-// `Add` tab hits the player-search endpoint with debounce; other tabs use the
-// query as a local filter against already-loaded data.
-watch(searchQuery, (v) => {
-  if (activeTab.value !== 'add') return
-  if (searchTimer) clearTimeout(searchTimer)
+watch(addQuery, (v) => {
+  if (addTimer) clearTimeout(addTimer)
   if (!v || v.trim().length < 2) {
-    searchResults.value = []
+    addResults.value = []
     return
   }
-  searchTimer = setTimeout(async () => {
-    searching.value = true
+  addTimer = setTimeout(async () => {
+    addSearching.value = true
     try {
-      searchResults.value = await api.searchPlayers(v.trim())
+      addResults.value = await api.searchPlayers(v.trim())
     } catch {
-      searchResults.value = []
+      addResults.value = []
     } finally {
-      searching.value = false
+      addSearching.value = false
     }
   }, 250)
 })
@@ -77,8 +71,8 @@ function initialFor(name: string | null | undefined): string {
 }
 
 function nameMatches(name: string | null | undefined): boolean {
-  if (!searchQuery.value.trim()) return true
-  const q = searchQuery.value.trim().toLowerCase()
+  if (!filterQuery.value.trim()) return true
+  const q = filterQuery.value.trim().toLowerCase()
   return (name || '').toLowerCase().includes(q)
 }
 
@@ -131,19 +125,18 @@ async function removeFriendship(id: number) {
   await api.removeFriendship(id)
   await friendStore.loadAll()
 }
-async function block(playerId: number) {
-  await api.blockUser(playerId)
-  await friendStore.loadAll()
-}
 async function unblock(id: number) {
   await api.unblockUser(id)
   await friendStore.loadAll()
 }
 
-function searchPlaceholder(): string {
-  if (activeTab.value === 'add') return t('searchPlayers')
-  return t('search')
-}
+const showEmptyState = computed(() =>
+  onlineFriends.value.length === 0 &&
+  offlineFriends.value.length === 0 &&
+  incomingFiltered.value.length === 0 &&
+  outgoingFiltered.value.length === 0 &&
+  blockedFiltered.value.length === 0,
+)
 </script>
 
 <template>
@@ -175,35 +168,7 @@ function searchPlaceholder(): string {
           </button>
         </div>
 
-        <!-- Tabs -->
-        <div class="grid grid-cols-4 shrink-0" style="background:#0A0F1C;border-bottom:1px solid #1E293B">
-          <button
-            v-for="tab in (['friends','requests','blocked','add'] as Tab[])" :key="tab"
-            class="flex items-center justify-center gap-1 h-[36px] text-[11px] font-extrabold tracking-[0.6px] uppercase transition-colors relative"
-            :style="{
-              color: activeTab === tab ? '#22D3EE' : '#64748B',
-              borderBottom: activeTab === tab ? '2px solid #22D3EE' : '2px solid transparent',
-            }"
-            @click="activeTab = tab"
-          >
-            <template v-if="tab === 'friends'">{{ t('friends') }}</template>
-            <template v-else-if="tab === 'requests'">
-              {{ t('requests') }}
-              <span v-if="friendStore.incoming.value.length > 0"
-                    class="inline-flex items-center justify-center min-w-[16px] h-[16px] rounded-full px-1 text-[9px] font-extrabold"
-                    style="background:#EF4444;color:#fff">
-                {{ friendStore.incoming.value.length }}
-              </span>
-            </template>
-            <template v-else-if="tab === 'blocked'">{{ t('blocked') }}</template>
-            <template v-else>
-              <UserPlus class="w-[12px] h-[12px]" />
-              {{ t('addFriend') }}
-            </template>
-          </button>
-        </div>
-
-        <!-- Search -->
+        <!-- Filter for friends / requests / blocked -->
         <div class="px-[18px] py-2.5 shrink-0" style="border-bottom:1px solid #1E293B">
           <div
             class="flex items-center gap-2 rounded-lg px-3 py-2"
@@ -211,221 +176,227 @@ function searchPlaceholder(): string {
           >
             <Search class="w-[13px] h-[13px] shrink-0" style="color:#475569" />
             <input
-              v-model="searchQuery"
+              v-model="filterQuery"
               type="text"
-              :placeholder="searchPlaceholder()"
+              :placeholder="t('search')"
               class="flex-1 bg-transparent outline-none text-[12px] min-w-0"
               style="color:#F1F5F9"
             />
-            <Loader2 v-if="activeTab === 'add' && searching" class="w-[13px] h-[13px] animate-spin shrink-0" style="color:#475569" />
           </div>
         </div>
 
-        <!-- Body -->
+        <!-- Body — all sections stack vertically -->
         <div class="flex-1 overflow-y-auto">
-          <!-- ─── FRIENDS TAB ─── -->
-          <template v-if="activeTab === 'friends'">
-            <div v-if="onlineFriends.length" class="px-[10px] pt-[10px] pb-2 flex flex-col gap-0.5">
-              <div class="flex items-center gap-1.5 px-2 py-1">
-                <span class="w-2 h-2 rounded-full" style="background:#22D3EE" />
-                <span class="text-[10px] font-extrabold tracking-[1.2px]" style="color:#22D3EE">
-                  ONLINE — {{ onlineFriends.length }}
-                </span>
-              </div>
-              <div
-                v-for="f in onlineFriends" :key="f.id"
-                class="flex items-center gap-2.5 rounded-md p-2 transition-colors hover:bg-white/5"
-              >
-                <button class="flex items-center gap-2.5 flex-1 min-w-0 text-left" @click="goToProfile(f.player.id)">
-                  <div class="relative w-9 h-9 shrink-0">
-                    <div
-                      class="w-9 h-9 rounded-full flex items-center justify-center"
-                      :style="{ background: gradientFor(f.player.id) }"
-                    >
-                      <img v-if="f.player.avatar_url" :src="f.player.avatar_url" class="w-full h-full rounded-full object-cover" />
-                      <span v-else class="text-white text-[15px] font-extrabold">{{ initialFor(f.player.display_name || f.player.name) }}</span>
-                    </div>
-                    <span
-                      class="absolute right-[-2px] bottom-[-2px] w-[10px] h-[10px] rounded-full"
-                      style="background:#22D3EE;box-shadow:inset 0 0 0 2px #0F172A"
-                    />
-                  </div>
-                  <div class="flex-1 min-w-0">
-                    <div class="text-[13px] font-bold truncate" style="color:#F1F5F9">{{ f.player.display_name || f.player.name }}</div>
-                    <div class="text-[11px] truncate" style="color:#64748B">{{ t('online') }}</div>
-                  </div>
-                </button>
-                <button
-                  class="w-7 h-7 rounded-md flex items-center justify-center shrink-0 transition-colors hover:bg-white/10"
-                  style="background:#1E293B"
-                  :title="t('messages')"
-                  @click="openChatWith(f)"
-                >
-                  <MessageCircle class="w-[13px] h-[13px]" style="color:#94A3B8" />
-                </button>
-              </div>
+          <!-- ONLINE -->
+          <div v-if="onlineFriends.length" class="px-[10px] pt-[10px] pb-2 flex flex-col gap-0.5">
+            <div class="flex items-center gap-1.5 px-2 py-1">
+              <span class="w-2 h-2 rounded-full" style="background:#22D3EE" />
+              <span class="text-[10px] font-extrabold tracking-[1.2px]" style="color:#22D3EE">
+                ONLINE — {{ onlineFriends.length }}
+              </span>
             </div>
-
-            <div v-if="offlineFriends.length" class="px-[10px] pt-2 pb-3 flex flex-col gap-0.5">
-              <div class="flex items-center gap-1.5 px-2 py-1">
-                <span class="w-2 h-2 rounded-full" style="background:#475569" />
-                <span class="text-[10px] font-extrabold tracking-[1.2px]" style="color:#475569">
-                  OFFLINE — {{ offlineFriends.length }}
-                </span>
-              </div>
-              <div
-                v-for="f in offlineFriends" :key="f.id"
-                class="flex items-center gap-2.5 rounded-md p-2 transition-colors hover:bg-white/5"
-              >
-                <button class="flex items-center gap-2.5 flex-1 min-w-0 text-left" @click="goToProfile(f.player.id)">
-                  <div class="relative w-9 h-9 shrink-0">
-                    <div
-                      class="w-9 h-9 rounded-full flex items-center justify-center"
-                      :style="{ background: gradientFor(f.player.id), opacity: 0.55 }"
-                    >
-                      <img v-if="f.player.avatar_url" :src="f.player.avatar_url" class="w-full h-full rounded-full object-cover" />
-                      <span v-else class="text-white text-[15px] font-extrabold" style="opacity:0.7">{{ initialFor(f.player.display_name || f.player.name) }}</span>
-                    </div>
-                    <span
-                      class="absolute right-[-2px] bottom-[-2px] w-[10px] h-[10px] rounded-full"
-                      style="background:#475569;box-shadow:inset 0 0 0 2px #0F172A"
-                    />
+            <div
+              v-for="f in onlineFriends" :key="f.id"
+              class="flex items-center gap-2.5 rounded-md p-2 transition-colors hover:bg-white/5"
+            >
+              <button class="flex items-center gap-2.5 flex-1 min-w-0 text-left" @click="goToProfile(f.player.id)">
+                <div class="relative w-9 h-9 shrink-0">
+                  <div class="w-9 h-9 rounded-full flex items-center justify-center" :style="{ background: gradientFor(f.player.id) }">
+                    <img v-if="f.player.avatar_url" :src="f.player.avatar_url" class="w-full h-full rounded-full object-cover" />
+                    <span v-else class="text-white text-[15px] font-extrabold">{{ initialFor(f.player.display_name || f.player.name) }}</span>
                   </div>
-                  <div class="flex-1 min-w-0">
-                    <div class="text-[13px] font-bold truncate" style="color:#94A3B8">{{ f.player.display_name || f.player.name }}</div>
-                    <div class="text-[11px] truncate" style="color:#475569">{{ t('offline') }}</div>
-                  </div>
-                </button>
-                <button
-                  class="w-7 h-7 rounded-md flex items-center justify-center shrink-0 transition-colors hover:bg-white/10"
-                  style="background:#1E293B"
-                  :title="t('messages')"
-                  @click="openChatWith(f)"
-                >
-                  <MessageCircle class="w-[13px] h-[13px]" style="color:#475569" />
-                </button>
-              </div>
-            </div>
-
-            <div v-if="!onlineFriends.length && !offlineFriends.length" class="px-6 py-12 text-center text-[12px]" style="color:#475569">
-              {{ searchQuery ? t('noMatchingFriends') : t('noFriendsYet') }}
-            </div>
-          </template>
-
-          <!-- ─── REQUESTS TAB ─── -->
-          <template v-else-if="activeTab === 'requests'">
-            <div v-if="incomingFiltered.length" class="px-[10px] pt-[10px] pb-2 flex flex-col gap-0.5">
-              <div class="flex items-center gap-1.5 px-2 py-1">
-                <span class="text-[10px] font-extrabold tracking-[1.2px]" style="color:#FACC15">
-                  {{ t('incomingRequests').toUpperCase() }} — {{ incomingFiltered.length }}
-                </span>
-              </div>
-              <div
-                v-for="r in incomingFiltered" :key="r.id"
-                class="flex items-center gap-2 rounded-md p-2 transition-colors hover:bg-white/5"
-              >
-                <button class="flex items-center gap-2.5 flex-1 min-w-0 text-left" @click="goToProfile(r.player.id)">
-                  <div class="w-9 h-9 rounded-full flex items-center justify-center shrink-0" :style="{ background: gradientFor(r.player.id) }">
-                    <img v-if="r.player.avatar_url" :src="r.player.avatar_url" class="w-full h-full rounded-full object-cover" />
-                    <span v-else class="text-white text-[15px] font-extrabold">{{ initialFor(r.player.display_name || r.player.name) }}</span>
-                  </div>
-                  <div class="flex-1 min-w-0">
-                    <div class="text-[13px] font-bold truncate" style="color:#F1F5F9">{{ r.player.display_name || r.player.name }}</div>
-                    <div class="text-[11px] truncate" style="color:#64748B">{{ r.player.mmr }} MMR</div>
-                  </div>
-                </button>
-                <button
-                  class="w-7 h-7 rounded-md flex items-center justify-center shrink-0 transition-colors hover:brightness-110"
-                  style="background:#0891B2"
-                  :title="t('acceptRequest')"
-                  @click="acceptRequest(r.id)"
-                >
-                  <Check class="w-[13px] h-[13px]" style="color:#fff" />
-                </button>
-                <button
-                  class="w-7 h-7 rounded-md flex items-center justify-center shrink-0 transition-colors hover:bg-white/10"
-                  style="background:#1E293B"
-                  :title="t('rejectRequest')"
-                  @click="removeFriendship(r.id)"
-                >
-                  <X class="w-[13px] h-[13px]" style="color:#94A3B8" />
-                </button>
-              </div>
-            </div>
-
-            <div v-if="outgoingFiltered.length" class="px-[10px] pt-2 pb-3 flex flex-col gap-0.5">
-              <div class="flex items-center gap-1.5 px-2 py-1">
-                <span class="text-[10px] font-extrabold tracking-[1.2px]" style="color:#475569">
-                  {{ t('outgoingRequests').toUpperCase() }} — {{ outgoingFiltered.length }}
-                </span>
-              </div>
-              <div
-                v-for="r in outgoingFiltered" :key="r.id"
-                class="flex items-center gap-2 rounded-md p-2 transition-colors hover:bg-white/5"
-              >
-                <button class="flex items-center gap-2.5 flex-1 min-w-0 text-left" @click="goToProfile(r.player.id)">
-                  <div class="w-9 h-9 rounded-full flex items-center justify-center shrink-0" :style="{ background: gradientFor(r.player.id), opacity: 0.7 }">
-                    <img v-if="r.player.avatar_url" :src="r.player.avatar_url" class="w-full h-full rounded-full object-cover" />
-                    <span v-else class="text-white text-[15px] font-extrabold">{{ initialFor(r.player.display_name || r.player.name) }}</span>
-                  </div>
-                  <div class="flex-1 min-w-0">
-                    <div class="text-[13px] font-bold truncate" style="color:#CBD5E1">{{ r.player.display_name || r.player.name }}</div>
-                    <div class="text-[11px] truncate" style="color:#475569">{{ t('friendRequestSent') }}</div>
-                  </div>
-                </button>
-                <button
-                  class="w-7 h-7 rounded-md flex items-center justify-center shrink-0 transition-colors hover:bg-white/10"
-                  style="background:#1E293B"
-                  :title="t('cancelRequest')"
-                  @click="removeFriendship(r.id)"
-                >
-                  <X class="w-[13px] h-[13px]" style="color:#94A3B8" />
-                </button>
-              </div>
-            </div>
-
-            <div v-if="!incomingFiltered.length && !outgoingFiltered.length" class="px-6 py-12 text-center text-[12px]" style="color:#475569">
-              {{ searchQuery ? t('noMatchingFriends') : t('noIncomingRequests') }}
-            </div>
-          </template>
-
-          <!-- ─── BLOCKED TAB ─── -->
-          <template v-else-if="activeTab === 'blocked'">
-            <div v-if="blockedFiltered.length" class="px-[10px] pt-[10px] pb-3 flex flex-col gap-0.5">
-              <div
-                v-for="b in blockedFiltered" :key="b.id"
-                class="flex items-center gap-2 rounded-md p-2 transition-colors hover:bg-white/5"
-              >
-                <div class="w-9 h-9 rounded-full flex items-center justify-center shrink-0" :style="{ background: gradientFor(b.player.id), opacity: 0.45 }">
-                  <img v-if="b.player.avatar_url" :src="b.player.avatar_url" class="w-full h-full rounded-full object-cover" />
-                  <span v-else class="text-white text-[15px] font-extrabold" style="opacity:0.7">{{ initialFor(b.player.display_name || b.player.name) }}</span>
+                  <span class="absolute right-[-2px] bottom-[-2px] w-[10px] h-[10px] rounded-full"
+                        style="background:#22D3EE;box-shadow:inset 0 0 0 2px #0F172A" />
                 </div>
                 <div class="flex-1 min-w-0">
-                  <div class="text-[13px] font-bold truncate" style="color:#94A3B8">{{ b.player.display_name || b.player.name }}</div>
-                  <div class="text-[11px] truncate" style="color:#475569">{{ t('blocked') }}</div>
+                  <div class="text-[13px] font-bold truncate" style="color:#F1F5F9">{{ f.player.display_name || f.player.name }}</div>
+                  <div class="text-[11px] truncate" style="color:#64748B">{{ t('online') }}</div>
                 </div>
-                <button
-                  class="h-7 px-2.5 rounded-md flex items-center gap-1.5 shrink-0 transition-colors hover:bg-white/10"
-                  style="background:#1E293B"
-                  :title="t('unblockUser')"
-                  @click="unblock(b.id)"
-                >
-                  <ShieldOff class="w-[12px] h-[12px]" style="color:#94A3B8" />
-                  <span class="text-[11px] font-bold" style="color:#94A3B8">{{ t('unblockUser') }}</span>
-                </button>
+              </button>
+              <button
+                class="w-7 h-7 rounded-md flex items-center justify-center shrink-0 transition-colors hover:bg-white/10"
+                style="background:#1E293B"
+                :title="t('messages')"
+                @click="openChatWith(f)"
+              >
+                <MessageCircle class="w-[13px] h-[13px]" style="color:#94A3B8" />
+              </button>
+            </div>
+          </div>
+
+          <!-- OFFLINE -->
+          <div v-if="offlineFriends.length" class="px-[10px] pt-2 pb-2 flex flex-col gap-0.5">
+            <div class="flex items-center gap-1.5 px-2 py-1">
+              <span class="w-2 h-2 rounded-full" style="background:#475569" />
+              <span class="text-[10px] font-extrabold tracking-[1.2px]" style="color:#475569">
+                OFFLINE — {{ offlineFriends.length }}
+              </span>
+            </div>
+            <div
+              v-for="f in offlineFriends" :key="f.id"
+              class="flex items-center gap-2.5 rounded-md p-2 transition-colors hover:bg-white/5"
+            >
+              <button class="flex items-center gap-2.5 flex-1 min-w-0 text-left" @click="goToProfile(f.player.id)">
+                <div class="relative w-9 h-9 shrink-0">
+                  <div class="w-9 h-9 rounded-full flex items-center justify-center"
+                       :style="{ background: gradientFor(f.player.id), opacity: 0.55 }">
+                    <img v-if="f.player.avatar_url" :src="f.player.avatar_url" class="w-full h-full rounded-full object-cover" />
+                    <span v-else class="text-white text-[15px] font-extrabold" style="opacity:0.7">{{ initialFor(f.player.display_name || f.player.name) }}</span>
+                  </div>
+                  <span class="absolute right-[-2px] bottom-[-2px] w-[10px] h-[10px] rounded-full"
+                        style="background:#475569;box-shadow:inset 0 0 0 2px #0F172A" />
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-[13px] font-bold truncate" style="color:#94A3B8">{{ f.player.display_name || f.player.name }}</div>
+                  <div class="text-[11px] truncate" style="color:#475569">{{ t('offline') }}</div>
+                </div>
+              </button>
+              <button
+                class="w-7 h-7 rounded-md flex items-center justify-center shrink-0 transition-colors hover:bg-white/10"
+                style="background:#1E293B"
+                :title="t('messages')"
+                @click="openChatWith(f)"
+              >
+                <MessageCircle class="w-[13px] h-[13px]" style="color:#475569" />
+              </button>
+            </div>
+          </div>
+
+          <!-- INCOMING REQUESTS -->
+          <div v-if="incomingFiltered.length" class="px-[10px] pt-2 pb-2 flex flex-col gap-0.5">
+            <div class="flex items-center gap-1.5 px-2 py-1">
+              <span class="w-2 h-2 rounded-full" style="background:#FACC15" />
+              <span class="text-[10px] font-extrabold tracking-[1.2px]" style="color:#FACC15">
+                {{ t('incomingRequests').toUpperCase() }} — {{ incomingFiltered.length }}
+              </span>
+            </div>
+            <div
+              v-for="r in incomingFiltered" :key="r.id"
+              class="flex items-center gap-2 rounded-md p-2 transition-colors hover:bg-white/5"
+            >
+              <button class="flex items-center gap-2.5 flex-1 min-w-0 text-left" @click="goToProfile(r.player.id)">
+                <div class="w-9 h-9 rounded-full flex items-center justify-center shrink-0" :style="{ background: gradientFor(r.player.id) }">
+                  <img v-if="r.player.avatar_url" :src="r.player.avatar_url" class="w-full h-full rounded-full object-cover" />
+                  <span v-else class="text-white text-[15px] font-extrabold">{{ initialFor(r.player.display_name || r.player.name) }}</span>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-[13px] font-bold truncate" style="color:#F1F5F9">{{ r.player.display_name || r.player.name }}</div>
+                  <div class="text-[11px] truncate" style="color:#64748B">{{ r.player.mmr }} MMR</div>
+                </div>
+              </button>
+              <button
+                class="w-7 h-7 rounded-md flex items-center justify-center shrink-0 transition-colors hover:brightness-110"
+                style="background:#0891B2"
+                :title="t('acceptRequest')"
+                @click="acceptRequest(r.id)"
+              >
+                <Check class="w-[13px] h-[13px]" style="color:#fff" />
+              </button>
+              <button
+                class="w-7 h-7 rounded-md flex items-center justify-center shrink-0 transition-colors hover:bg-white/10"
+                style="background:#1E293B"
+                :title="t('rejectRequest')"
+                @click="removeFriendship(r.id)"
+              >
+                <X class="w-[13px] h-[13px]" style="color:#94A3B8" />
+              </button>
+            </div>
+          </div>
+
+          <!-- OUTGOING REQUESTS -->
+          <div v-if="outgoingFiltered.length" class="px-[10px] pt-2 pb-2 flex flex-col gap-0.5">
+            <div class="flex items-center gap-1.5 px-2 py-1">
+              <span class="w-2 h-2 rounded-full" style="background:#94A3B8" />
+              <span class="text-[10px] font-extrabold tracking-[1.2px]" style="color:#94A3B8">
+                {{ t('outgoingRequests').toUpperCase() }} — {{ outgoingFiltered.length }}
+              </span>
+            </div>
+            <div
+              v-for="r in outgoingFiltered" :key="r.id"
+              class="flex items-center gap-2 rounded-md p-2 transition-colors hover:bg-white/5"
+            >
+              <button class="flex items-center gap-2.5 flex-1 min-w-0 text-left" @click="goToProfile(r.player.id)">
+                <div class="w-9 h-9 rounded-full flex items-center justify-center shrink-0" :style="{ background: gradientFor(r.player.id), opacity: 0.7 }">
+                  <img v-if="r.player.avatar_url" :src="r.player.avatar_url" class="w-full h-full rounded-full object-cover" />
+                  <span v-else class="text-white text-[15px] font-extrabold">{{ initialFor(r.player.display_name || r.player.name) }}</span>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-[13px] font-bold truncate" style="color:#CBD5E1">{{ r.player.display_name || r.player.name }}</div>
+                  <div class="text-[11px] truncate" style="color:#475569">{{ t('friendRequestSent') }}</div>
+                </div>
+              </button>
+              <button
+                class="w-7 h-7 rounded-md flex items-center justify-center shrink-0 transition-colors hover:bg-white/10"
+                style="background:#1E293B"
+                :title="t('cancelRequest')"
+                @click="removeFriendship(r.id)"
+              >
+                <X class="w-[13px] h-[13px]" style="color:#94A3B8" />
+              </button>
+            </div>
+          </div>
+
+          <!-- BLOCKED -->
+          <div v-if="blockedFiltered.length" class="px-[10px] pt-2 pb-2 flex flex-col gap-0.5">
+            <div class="flex items-center gap-1.5 px-2 py-1">
+              <span class="w-2 h-2 rounded-full" style="background:#EF4444" />
+              <span class="text-[10px] font-extrabold tracking-[1.2px]" style="color:#EF4444">
+                {{ t('blockedUsers').toUpperCase() }} — {{ blockedFiltered.length }}
+              </span>
+            </div>
+            <div
+              v-for="b in blockedFiltered" :key="b.id"
+              class="flex items-center gap-2 rounded-md p-2 transition-colors hover:bg-white/5"
+            >
+              <div class="w-9 h-9 rounded-full flex items-center justify-center shrink-0" :style="{ background: gradientFor(b.player.id), opacity: 0.45 }">
+                <img v-if="b.player.avatar_url" :src="b.player.avatar_url" class="w-full h-full rounded-full object-cover" />
+                <span v-else class="text-white text-[15px] font-extrabold" style="opacity:0.7">{{ initialFor(b.player.display_name || b.player.name) }}</span>
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="text-[13px] font-bold truncate" style="color:#94A3B8">{{ b.player.display_name || b.player.name }}</div>
+                <div class="text-[11px] truncate" style="color:#475569">{{ t('blocked') }}</div>
+              </div>
+              <button
+                class="w-7 h-7 rounded-md flex items-center justify-center shrink-0 transition-colors hover:bg-white/10"
+                style="background:#1E293B"
+                :title="t('unblockUser')"
+                @click="unblock(b.id)"
+              >
+                <ShieldOff class="w-[13px] h-[13px]" style="color:#94A3B8" />
+              </button>
+            </div>
+          </div>
+
+          <!-- Empty state when no friends/requests/blocked at all (and not filtering for nothing) -->
+          <div v-if="showEmptyState" class="px-6 py-8 text-center text-[12px]" style="color:#475569">
+            {{ filterQuery ? t('noMatchingFriends') : t('noFriendsYet') }}
+          </div>
+
+          <!-- ADD FRIEND — always last, own server-side search -->
+          <div class="px-[10px] pt-3 pb-4 mt-1 flex flex-col gap-2" style="border-top:1px solid #1E293B">
+            <div class="flex items-center gap-1.5 px-2">
+              <UserPlus class="w-[12px] h-[12px]" style="color:#22D3EE" />
+              <span class="text-[10px] font-extrabold tracking-[1.2px]" style="color:#22D3EE">
+                {{ t('addFriend').toUpperCase() }}
+              </span>
+            </div>
+            <div class="px-2">
+              <div class="flex items-center gap-2 rounded-lg px-3 py-2"
+                   style="background:#0A0F1C;box-shadow:inset 0 0 0 1px #1E293B">
+                <Search class="w-[13px] h-[13px] shrink-0" style="color:#475569" />
+                <input
+                  v-model="addQuery"
+                  type="text"
+                  :placeholder="t('searchPlayers')"
+                  class="flex-1 bg-transparent outline-none text-[12px] min-w-0"
+                  style="color:#F1F5F9"
+                />
+                <Loader2 v-if="addSearching" class="w-[13px] h-[13px] animate-spin shrink-0" style="color:#475569" />
               </div>
             </div>
-
-            <div v-else class="px-6 py-12 text-center text-[12px]" style="color:#475569">
-              {{ searchQuery ? t('noMatchingFriends') : t('noBlockedUsers') }}
-            </div>
-          </template>
-
-          <!-- ─── ADD TAB ─── -->
-          <template v-else>
-            <div v-if="searchResults.length" class="px-[10px] pt-[10px] pb-3 flex flex-col gap-0.5">
+            <div v-if="addResults.length" class="flex flex-col gap-0.5">
               <div
-                v-for="r in searchResults" :key="r.id"
+                v-for="r in addResults" :key="r.id"
                 class="flex items-center gap-2 rounded-md p-2 transition-colors hover:bg-white/5"
               >
                 <button class="flex items-center gap-2.5 flex-1 min-w-0 text-left" @click="goToProfile(r.id)">
@@ -465,11 +436,10 @@ function searchPlaceholder(): string {
                 </button>
               </div>
             </div>
-
-            <div v-else class="px-6 py-12 text-center text-[12px]" style="color:#475569">
-              {{ searchQuery.trim().length >= 2 && !searching ? t('noResults') : t('addFriendHint') }}
+            <div v-else class="px-2 py-2 text-[11px]" style="color:#475569">
+              {{ addQuery.trim().length >= 2 && !addSearching ? t('noResults') : t('addFriendHint') }}
             </div>
-          </template>
+          </div>
         </div>
       </aside>
     </Transition>
