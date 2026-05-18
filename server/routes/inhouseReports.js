@@ -123,91 +123,27 @@ export default function createInhouseReportsRouter(io) {
     const windowCheck = _isWithinReportWindow(qm, pool)
     if (!windowCheck.ok) return res.status(403).json({ error: windowCheck.error })
 
-    const client = await pgPool.connect()
+    // Insert as pending. The unique constraint still blocks dupes for the
+    // same (reporter, reported, match). The strike + cooldown logic lives
+    // on the admin approve endpoint — see /api/admin/inhouse/toxic-reports/:id/approve.
     try {
-      await client.query('BEGIN')
-
-      // Insert (the unique constraint blocks dupes — return 409).
       let insertedId
       try {
-        const ins = await client.query(
-          `INSERT INTO inhouse_toxic_reports (reporter_player_id, reported_player_id, queue_match_id, pool_id, comment)
-           VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+        const ins = await queryOne(
+          `INSERT INTO inhouse_toxic_reports (reporter_player_id, reported_player_id, queue_match_id, pool_id, comment, status)
+           VALUES ($1, $2, $3, $4, $5, 'pending') RETURNING id`,
           [reporter.id, reportedId, queueMatchId, qm.pool_id, comment || null]
         )
-        insertedId = ins.rows[0].id
+        insertedId = ins.id
       } catch (e) {
-        await client.query('ROLLBACK')
         if (e.code === '23505') return res.status(409).json({ error: 'You already reported this player for this match' })
         throw e
       }
-
-      // Atomically bump the lifetime counter on the reported player and
-      // read the fired-thresholds set so we can decide whether new
-      // strikes should fire.
-      const updated = (await client.query(
-        `UPDATE players
-            SET toxic_reports_received = toxic_reports_received + 1
-          WHERE id = $1
-          RETURNING toxic_reports_received, toxic_strikes, toxic_thresholds_fired`,
-        [reportedId]
-      )).rows[0]
-      const newReportCount = updated.toxic_reports_received
-      const firedRaw = Array.isArray(updated.toxic_thresholds_fired) ? updated.toxic_thresholds_fired : []
-      const fired = new Set(firedRaw.map(n => Number(n)))
-      const thresholds = Array.isArray(pool.toxic_report_thresholds) ? pool.toxic_report_thresholds : []
-
-      let strikeDelta = 0
-      const newlyFired = []
-      for (const t of thresholds) {
-        const n = Number(t.reports)
-        if (!Number.isFinite(n)) continue
-        if (fired.has(n)) continue
-        if (newReportCount < n) continue
-        strikeDelta += Number(t.strike_delta) || 0
-        newlyFired.push(n)
-      }
-
-      let strikeApplied = null
-      let banUntil = null
-      if (strikeDelta > 0 || newlyFired.length) {
-        const newStrikes = Number(updated.toxic_strikes) + strikeDelta
-        const mergedFired = [...fired, ...newlyFired]
-        await client.query(
-          `UPDATE players SET toxic_strikes = $1, toxic_thresholds_fired = $2::jsonb, toxic_clean_games_since_last_strike = 0 WHERE id = $3`,
-          [newStrikes, JSON.stringify(mergedFired), reportedId]
-        )
-        await client.query(
-          `INSERT INTO inhouse_strike_log (player_id, kind, delta, reason, source_report_id, source_queue_match_id)
-           VALUES ($1, 'toxic', $2, $3, $4, $5)`,
-          [reportedId, strikeDelta, `Reached toxic-report threshold(s): ${newlyFired.join(',')}`, insertedId, queueMatchId]
-        )
-        const cooldown = _cooldownFor(newStrikes, pool.toxic_strike_cooldowns)
-        if (cooldown) {
-          const reasonText = `Toxic strike ${newStrikes}${cooldown.hours ? ` (${cooldown.hours}h cooldown)` : (cooldown.action === 'ban' ? ' (banned)' : ' (warning)')}`
-          banUntil = await _applyCooldown(client, reportedId, qm.pool_id, cooldown, reasonText, null)
-        }
-        strikeApplied = { newStrikes, strikeDelta, cooldown: cooldown || null, banUntil }
-      }
-
-      await client.query('COMMIT')
-
       io.to(`user:${reporter.id}`).emit('inhouse:reportFiled', { kind: 'toxic', queueMatchId, reportedPlayerId: reportedId })
-      if (strikeApplied) {
-        io.to(`user:${reportedId}`).emit('inhouse:strikeApplied', {
-          kind: 'toxic',
-          newStrikes: strikeApplied.newStrikes,
-          strikeDelta: strikeApplied.strikeDelta,
-          banUntil: strikeApplied.banUntil ? new Date(strikeApplied.banUntil).toISOString() : null,
-        })
-      }
-      res.status(201).json({ ok: true, reportId: insertedId, strike: strikeApplied })
+      res.status(201).json({ ok: true, reportId: insertedId, status: 'pending' })
     } catch (e) {
-      try { await client.query('ROLLBACK') } catch {}
       console.error('[inhouse toxic]', e)
       res.status(500).json({ error: e.message })
-    } finally {
-      client.release()
     }
   })
 
@@ -282,22 +218,21 @@ export default function createInhouseReportsRouter(io) {
   })
 
   // ── Admin: list toxic reports ──
-  // Read-only — toxic reports auto-accumulate into strikes via the report
-  // endpoint, there's no approve/reject step. Optional ?player_id filter
-  // shows only reports against one specific player. Same permission as
-  // grief reports.
+  // Defaults to status='pending'. Optional ?player_id filter shows only
+  // reports against one specific player. Same permission as grief reports.
   router.get('/api/admin/inhouse/toxic-reports', async (req, res) => {
     const admin = await getAuthPlayer(req)
     if (!admin) return res.status(401).json({ error: 'Not authenticated' })
     const allowed = admin.is_admin || await hasPermission(admin, 'review_grief_reports')
     if (!allowed) return res.status(403).json({ error: 'Permission denied' })
+    const status = (req.query.status || 'pending').toString()
     const playerId = req.query.player_id ? Number(req.query.player_id) : null
     const limit = Math.min(Number(req.query.limit) || 100, 500)
-    const params = []
-    let where = ''
+    const params = [status]
+    let where = `WHERE tr.status = $1`
     if (playerId) {
       params.push(playerId)
-      where = `WHERE tr.reported_player_id = $${params.length}`
+      where += ` AND tr.reported_player_id = $${params.length}`
     }
     params.push(limit)
     try {
@@ -318,6 +253,131 @@ export default function createInhouseReportsRouter(io) {
       `, params)
       res.json(rows)
     } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  // ── Admin: approve a toxic report ──
+  // This is where the strike + cooldown actually happen — the user-facing
+  // POST only files a pending report. Re-uses the same threshold-firing
+  // logic the original auto-fire flow had: bump toxic_reports_received,
+  // walk pool.toxic_report_thresholds for any unfired thresholds <= the
+  // new count, apply the strike delta, and (if the new strike count
+  // matches a cooldown rule) insert a queue_bans row.
+  router.post('/api/admin/inhouse/toxic-reports/:id/approve', async (req, res) => {
+    const admin = await getAuthPlayer(req)
+    if (!admin) return res.status(401).json({ error: 'Not authenticated' })
+    const allowed = admin.is_admin || await hasPermission(admin, 'review_grief_reports')
+    if (!allowed) return res.status(403).json({ error: 'Permission denied' })
+    const reportId = Number(req.params.id)
+    const note = (req.body?.review_note || '').toString().trim() || null
+
+    const client = await pgPool.connect()
+    try {
+      await client.query('BEGIN')
+      const report = (await client.query(
+        `SELECT * FROM inhouse_toxic_reports WHERE id = $1 FOR UPDATE`,
+        [reportId]
+      )).rows[0]
+      if (!report) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Report not found' }) }
+      if (report.status !== 'pending') { await client.query('ROLLBACK'); return res.status(409).json({ error: `Report already ${report.status}` }) }
+
+      const pool = (await client.query('SELECT * FROM queue_pools WHERE id = $1', [report.pool_id])).rows[0]
+
+      await client.query(
+        `UPDATE inhouse_toxic_reports SET status = 'approved', reviewed_by = $1, reviewed_at = NOW(), review_note = $2 WHERE id = $3`,
+        [admin.id, note, reportId]
+      )
+
+      const updated = (await client.query(
+        `UPDATE players
+            SET toxic_reports_received = toxic_reports_received + 1
+          WHERE id = $1
+          RETURNING toxic_reports_received, toxic_strikes, toxic_thresholds_fired`,
+        [report.reported_player_id]
+      )).rows[0]
+      const newReportCount = updated.toxic_reports_received
+      const firedRaw = Array.isArray(updated.toxic_thresholds_fired) ? updated.toxic_thresholds_fired : []
+      const fired = new Set(firedRaw.map(n => Number(n)))
+      const thresholds = Array.isArray(pool?.toxic_report_thresholds) ? pool.toxic_report_thresholds : []
+
+      let strikeDelta = 0
+      const newlyFired = []
+      for (const t of thresholds) {
+        const n = Number(t.reports)
+        if (!Number.isFinite(n)) continue
+        if (fired.has(n)) continue
+        if (newReportCount < n) continue
+        strikeDelta += Number(t.strike_delta) || 0
+        newlyFired.push(n)
+      }
+
+      let newStrikes = Number(updated.toxic_strikes)
+      let banUntil = null
+      let cooldownRule = null
+      if (strikeDelta > 0 || newlyFired.length) {
+        newStrikes = Number(updated.toxic_strikes) + strikeDelta
+        const mergedFired = [...fired, ...newlyFired]
+        await client.query(
+          `UPDATE players SET toxic_strikes = $1, toxic_thresholds_fired = $2::jsonb, toxic_clean_games_since_last_strike = 0 WHERE id = $3`,
+          [newStrikes, JSON.stringify(mergedFired), report.reported_player_id]
+        )
+        await client.query(
+          `INSERT INTO inhouse_strike_log (player_id, kind, delta, reason, source_report_id, source_queue_match_id, applied_by)
+           VALUES ($1, 'toxic', $2, $3, $4, $5, $6)`,
+          [report.reported_player_id, strikeDelta, `Reached toxic-report threshold(s): ${newlyFired.join(',')}`, reportId, report.queue_match_id, admin.id]
+        )
+        cooldownRule = _cooldownFor(newStrikes, pool?.toxic_strike_cooldowns)
+        if (cooldownRule) {
+          const reasonText = `Toxic strike ${newStrikes}${cooldownRule.hours ? ` (${cooldownRule.hours}h cooldown)` : (cooldownRule.action === 'ban' ? ' (banned)' : ' (warning)')}`
+          banUntil = await _applyCooldown(client, report.reported_player_id, report.pool_id, cooldownRule, reasonText, admin.id)
+        }
+      }
+
+      await client.query('COMMIT')
+
+      if (strikeDelta > 0) {
+        io.to(`user:${report.reported_player_id}`).emit('inhouse:strikeApplied', {
+          kind: 'toxic',
+          newStrikes,
+          strikeDelta,
+          banUntil: banUntil ? new Date(banUntil).toISOString() : null,
+        })
+      }
+      io.to(`user:${report.reporter_player_id}`).emit('inhouse:toxicReviewed', { reportId, status: 'approved' })
+      io.to(`user:${report.reported_player_id}`).emit('inhouse:toxicReviewed', { reportId, status: 'approved' })
+      res.json({ ok: true, newReportCount, strikeDelta, newStrikes, banUntil })
+    } catch (e) {
+      try { await client.query('ROLLBACK') } catch {}
+      console.error('[inhouse toxic approve]', e)
+      res.status(500).json({ error: e.message })
+    } finally {
+      client.release()
+    }
+  })
+
+  // ── Admin: reject a toxic report ──
+  router.post('/api/admin/inhouse/toxic-reports/:id/reject', async (req, res) => {
+    const admin = await getAuthPlayer(req)
+    if (!admin) return res.status(401).json({ error: 'Not authenticated' })
+    const allowed = admin.is_admin || await hasPermission(admin, 'review_grief_reports')
+    if (!allowed) return res.status(403).json({ error: 'Permission denied' })
+    const reportId = Number(req.params.id)
+    const note = (req.body?.review_note || '').toString().trim() || null
+    try {
+      const updated = await queryOne(
+        `UPDATE inhouse_toxic_reports
+            SET status = 'rejected', reviewed_by = $1, reviewed_at = NOW(), review_note = $2
+          WHERE id = $3 AND status = 'pending'
+          RETURNING reporter_player_id, reported_player_id`,
+        [admin.id, note, reportId]
+      )
+      if (!updated) return res.status(404).json({ error: 'Report not found or already reviewed' })
+      io.to(`user:${updated.reporter_player_id}`).emit('inhouse:toxicReviewed', { reportId, status: 'rejected' })
+      io.to(`user:${updated.reported_player_id}`).emit('inhouse:toxicReviewed', { reportId, status: 'rejected' })
+      res.json({ ok: true })
+    } catch (e) {
+      console.error('[inhouse toxic reject]', e)
       res.status(500).json({ error: e.message })
     }
   })

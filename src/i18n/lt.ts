@@ -2016,6 +2016,7 @@ export default {
   griefReviewNoteLabel: 'Pastaba (neprivaloma)',
   griefReviewNotePlaceholder: 'Matoma tik audit log.',
   griefApproveExplain: 'Pridės grief strike, taikys baudą (jei nustatyta) ir atims kapitono statusą (jei buvo).',
+  toxicApproveExplain: 'Bus įskaityta į žaidėjo bendrą pranešimų skaičių. Jei pasiekia nustatytą ribą, taikomas strike (ir galbūt bauda).',
   griefTab_pending: 'Laukia',
   griefTab_approved: 'Patvirtinti',
   griefTab_rejected: 'Atmesti',

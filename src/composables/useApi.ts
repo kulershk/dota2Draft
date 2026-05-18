@@ -707,13 +707,17 @@ export function useApi() {
       request('/api/inhouse/reports/grief', { method: 'POST', body: JSON.stringify(data) }),
     getAdminGriefReports: (status: 'pending' | 'approved' | 'rejected' = 'pending') =>
       request(`/api/admin/inhouse/grief-reports?status=${status}`),
-    getAdminToxicReports: (params?: { player_id?: number; limit?: number }) => {
+    getAdminToxicReports: (params?: { status?: 'pending' | 'approved' | 'rejected'; player_id?: number; limit?: number }) => {
       const qs = new URLSearchParams()
+      qs.set('status', params?.status || 'pending')
       if (params?.player_id) qs.set('player_id', String(params.player_id))
       if (params?.limit) qs.set('limit', String(params.limit))
-      const tail = qs.toString() ? `?${qs}` : ''
-      return request(`/api/admin/inhouse/toxic-reports${tail}`)
+      return request(`/api/admin/inhouse/toxic-reports?${qs}`)
     },
+    approveToxicReport: (id: number, review_note?: string) =>
+      request(`/api/admin/inhouse/toxic-reports/${id}/approve`, { method: 'POST', body: JSON.stringify({ review_note }) }),
+    rejectToxicReport: (id: number, review_note?: string) =>
+      request(`/api/admin/inhouse/toxic-reports/${id}/reject`, { method: 'POST', body: JSON.stringify({ review_note }) }),
     getAdminStrikeLog: (params?: { player_id?: number; limit?: number }) => {
       const qs = new URLSearchParams()
       if (params?.player_id) qs.set('player_id', String(params.player_id))

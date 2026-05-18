@@ -2027,6 +2027,7 @@ export default {
   griefReviewNoteLabel: 'Note (optional)',
   griefReviewNotePlaceholder: 'Visible only in the audit log.',
   griefApproveExplain: 'This adds a grief strike, applies a cooldown if configured, and revokes captain status if the player was a captain.',
+  toxicApproveExplain: 'This counts the report toward the player\'s lifetime total. If it crosses a configured threshold, a strike (and possibly a cooldown) is applied.',
   griefTab_pending: 'Pending',
   griefTab_approved: 'Approved',
   griefTab_rejected: 'Rejected',

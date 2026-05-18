@@ -2016,6 +2016,7 @@ export default {
   griefReviewNoteLabel: 'Piezīme (nav obligāta)',
   griefReviewNotePlaceholder: 'Redzama tikai audit logā.',
   griefApproveExplain: 'Pievienos grief strike, piemēros sodu (ja konfigurēts) un atņems kapteiņa statusu (ja bija).',
+  toxicApproveExplain: 'Tiks ieskaitīts spēlētāja kopējā ziņojumu skaitā. Ja sasniedz konfigurētu slieksni, tiks piemērots strike (un, iespējams, sods).',
   griefTab_pending: 'Gaidām',
   griefTab_approved: 'Apstiprināti',
   griefTab_rejected: 'Noraidīti',

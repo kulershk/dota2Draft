@@ -3953,7 +3953,7 @@
         "post": {
           "tags": ["Inhouse"],
           "summary": "File a toxic-behaviour report against a match participant",
-          "description": "Reporter must be a participant of the queue match. Inhouse-pool only. The match must either still be active (picking/lobby_creating/live) or have completed within `pool.report_window_minutes` (default 15). Cancelled matches are never reportable. The unique-on-(reporter,reported,match) constraint prevents duplicates (409 on retry). When the reported player's lifetime report count crosses a configured threshold, a strike is awarded and may insert a queue_bans row.",
+          "description": "Reporter must be a participant of the queue match. Inhouse-pool only. The match must either still be active (picking/lobby_creating/live) or have completed within `pool.report_window_minutes` (default 15). Cancelled matches are never reportable. The unique-on-(reporter,reported,match) constraint prevents duplicates (409 on retry). The report is inserted with `status='pending'` — strikes only apply once an admin approves via /api/admin/inhouse/toxic-reports/:id/approve.",
           "security": [{ "bearerAuth": [] }],
           "requestBody": {
             "required": true,
@@ -4004,13 +4004,46 @@
         "get": {
           "tags": ["Inhouse"],
           "summary": "List toxic reports (admin)",
-          "description": "Read-only feed of peer reports. Requires `review_grief_reports` permission. Optional `player_id` filters to reports against one player.",
+          "description": "Defaults to status='pending'. Requires `review_grief_reports` permission. Optional `player_id` filters to reports against one player.",
           "security": [{ "bearerAuth": [] }],
           "parameters": [
+            { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["pending", "approved", "rejected"], "default": "pending" } },
             { "name": "player_id", "in": "query", "schema": { "type": "integer" } },
             { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 500, "default": 100 } }
           ],
           "responses": { "200": { "description": "Array of toxic-report rows with reporter/reported denormalised fields and the reported player's current toxic_reports_received + toxic_strikes." } }
+        }
+      },
+      "/api/admin/inhouse/toxic-reports/{id}/approve": {
+        "post": {
+          "tags": ["Inhouse"],
+          "summary": "Approve a toxic report",
+          "description": "Marks the report approved, increments `players.toxic_reports_received`, fires any newly-crossed threshold (adding the configured `strike_delta`), and applies a queue_bans cooldown if the resulting strike count matches a pool toxic_strike_cooldowns rule. Requires `review_grief_reports`.",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+          "requestBody": {
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "review_note": { "type": "string" } } } } }
+          },
+          "responses": {
+            "200": { "description": "{ ok, newReportCount, strikeDelta, newStrikes, banUntil }" },
+            "404": { "description": "Report not found" },
+            "409": { "description": "Report already reviewed" }
+          }
+        }
+      },
+      "/api/admin/inhouse/toxic-reports/{id}/reject": {
+        "post": {
+          "tags": ["Inhouse"],
+          "summary": "Reject a toxic report",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+          "requestBody": {
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "review_note": { "type": "string" } } } } }
+          },
+          "responses": {
+            "200": { "description": "{ ok }" },
+            "404": { "description": "Report not found or already reviewed" }
+          }
         }
       },
       "/api/admin/inhouse/strike-log": {
