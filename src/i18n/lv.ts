@@ -44,6 +44,7 @@ export default {
   dotacoinsReason: 'Iemesls (neobligāts)',
   apply: 'Piemērot',
   friends: 'Draugi',
+  friendsPendingTooltip: '{n} jaunie draugu pieprasījumi',
   friendsSubtitle: 'Pārvaldi savus draugus un pieprasījumus',
   addFriend: 'Pievienot draugu',
   searchPlayers: 'Meklēt spēlētājus…',

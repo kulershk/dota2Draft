@@ -44,6 +44,7 @@ export default {
   dotacoinsReason: 'Priežastis (neprivaloma)',
   apply: 'Taikyti',
   friends: 'Draugai',
+  friendsPendingTooltip: '{n} nauji draugystės prašymai',
   friendsSubtitle: 'Tvarkyk savo draugus ir užklausas',
   addFriend: 'Pridėti draugą',
   searchPlayers: 'Ieškoti žaidėjų…',

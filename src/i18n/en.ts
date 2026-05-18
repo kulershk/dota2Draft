@@ -44,6 +44,7 @@ export default {
   dotacoinsReason: 'Reason (optional)',
   apply: 'Apply',
   friends: 'Friends',
+  friendsPendingTooltip: '{n} new friend request(s)',
   friendsSubtitle: 'Manage your friend connections and requests',
   addFriend: 'Add friend',
   searchPlayers: 'Search players by name…',
