@@ -76,6 +76,10 @@ const heroTitle = ref(_cachedSettings.site_title || 'Latvian Dota 2 League')
 const heroSubtitle = ref(_cachedSettings.site_subtitle || '')
 const heroParagraph = ref(_cachedSettings.site_hero_paragraph || '')
 const heroBannerUrl = ref<string>(_cachedSettings.site_hero_banner_url || '')
+const heroBannerPosition = ref<'top' | 'center' | 'bottom'>(
+  ['top', 'center', 'bottom'].includes(_cachedSettings.site_hero_banner_position)
+    ? _cachedSettings.site_hero_banner_position : 'center'
+)
 
 // Daily check-in
 const daily = ref<{ claimed_today: boolean; streak: number; next_xp: number } | null>(null)
@@ -182,6 +186,9 @@ async function loadAll() {
     if (settings.site_subtitle) heroSubtitle.value = settings.site_subtitle
     if (settings.site_hero_paragraph) heroParagraph.value = settings.site_hero_paragraph
     heroBannerUrl.value = settings.site_hero_banner_url || ''
+    if (['top', 'center', 'bottom'].includes(settings.site_hero_banner_position)) {
+      heroBannerPosition.value = settings.site_hero_banner_position
+    }
   }
   loadDaily()
 }
@@ -289,8 +296,9 @@ onUnmounted(() => {
         radial-gradient(circle at 50% 0%, #1E0B3A 0%, transparent 60%),
         linear-gradient(180deg, #0A0F1C 0%, #0F172A 50%, #0A0F1C 100%);"
     >
-      <!-- Optional admin-uploaded banner image sits behind decoration. -->
-      <img v-if="heroBannerUrl" :src="heroBannerUrl" class="absolute inset-0 w-full h-full object-cover opacity-60" alt="" />
+      <!-- Optional admin-uploaded banner image sits behind decoration. Vertical alignment driven by site_hero_banner_position setting. -->
+      <img v-if="heroBannerUrl" :src="heroBannerUrl" class="absolute inset-0 w-full h-full object-cover opacity-60" alt=""
+           :style="{ objectPosition: `center ${heroBannerPosition}` }" />
 
       <!-- Grid pattern overlay -->
       <div class="absolute inset-0 opacity-30"

@@ -40,6 +40,11 @@ router.get('/api/site-settings', async (req, res) => {
     site_name: obj.site_name || '',
     site_logo_url: obj.site_logo_url || '',
     site_hero_banner_url: obj.site_hero_banner_url || '',
+    // Vertical alignment of the hero banner image — 'top' | 'center' | 'bottom'.
+    // Maps to CSS `object-position: ... <value>` on the <img>. Defaults to center.
+    site_hero_banner_position: ['top', 'center', 'bottom'].includes(obj.site_hero_banner_position)
+      ? obj.site_hero_banner_position
+      : 'center',
     site_sponsors: sponsors,
     // Boolean view of the persisted 'site_sockets_enabled' string. Default
     // is true if the row has never been written.
@@ -61,8 +66,10 @@ router.put('/api/site-settings', async (req, res) => {
   if (!admin) return
   const {
     site_title, site_subtitle, site_hero_paragraph, site_discord_url, site_name, sockets_enabled,
-    site_topbar_enabled, site_topbar_html, site_topbar_color,
+    site_topbar_enabled, site_topbar_html, site_topbar_color, site_hero_banner_position,
   } = req.body
+  const bannerPos = ['top', 'center', 'bottom'].includes(site_hero_banner_position)
+    ? site_hero_banner_position : undefined
   for (const [key, value] of [
     ['site_title', site_title],
     ['site_subtitle', site_subtitle],
@@ -71,6 +78,7 @@ router.put('/api/site-settings', async (req, res) => {
     ['site_name', site_name],
     ['site_topbar_html', site_topbar_html],
     ['site_topbar_color', site_topbar_color],
+    ['site_hero_banner_position', bannerPos],
   ]) {
     if (value !== undefined) {
       await execute(

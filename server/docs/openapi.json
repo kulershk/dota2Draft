@@ -2606,6 +2606,7 @@
                     "site_name": { "type": "string" },
                     "site_logo_url": { "type": "string" },
                     "site_hero_banner_url": { "type": "string" },
+                    "site_hero_banner_position": { "type": "string", "enum": ["top", "center", "bottom"], "description": "Vertical alignment of the hero banner image. Maps to CSS `object-position: center <value>`." },
                     "site_sponsors": { "type": "array", "items": { "type": "object" } },
                     "sockets_enabled": { "type": "boolean", "description": "Realtime kill switch. Default true." },
                     "site_topbar_enabled": { "type": "boolean", "description": "When true, every page renders a top-bar notification with site_topbar_html. Dismissible per-session, keyed by HTML hash so updates re-show." },
@@ -2623,7 +2624,7 @@
         "summary": "Update site settings",
         "security": [{ "bearerAuth": [] }],
         "description": "Requires manage_site_settings permission. Setting `sockets_enabled: false` immediately disconnects all currently-connected Socket.io clients and refuses new handshakes until re-enabled. The flag is persisted, so it survives server restarts.",
-        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "site_title": { "type": "string" }, "site_subtitle": { "type": "string" }, "site_hero_paragraph": { "type": "string" }, "site_discord_url": { "type": "string" }, "site_name": { "type": "string" }, "sockets_enabled": { "type": "boolean" }, "site_topbar_enabled": { "type": "boolean" }, "site_topbar_html": { "type": "string" }, "site_topbar_color": { "type": "string" } } } } } },
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "site_title": { "type": "string" }, "site_subtitle": { "type": "string" }, "site_hero_paragraph": { "type": "string" }, "site_discord_url": { "type": "string" }, "site_name": { "type": "string" }, "sockets_enabled": { "type": "boolean" }, "site_topbar_enabled": { "type": "boolean" }, "site_topbar_html": { "type": "string" }, "site_topbar_color": { "type": "string" }, "site_hero_banner_position": { "type": "string", "enum": ["top", "center", "bottom"] } } } } } },
         "responses": { "200": { "description": "Updated" } }
       }
     },
