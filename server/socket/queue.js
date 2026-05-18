@@ -10,15 +10,25 @@ import { botPool } from '../services/botPool.js'
 import { discordBot } from '../services/discordBotClient.js'
 import { hasPerk, PERK } from '../helpers/subscription.js'
 
-// Generate pick order for a given team size.
-// For 5v5: [1,2,1,2,1,2,2,1] — strict alternation, with the second-to-last
-// pick flipped so captain 2 gets a back-to-back at the end and captain 1
-// finishes. Each captain still ends up with the same number of picks (4-4
-// in 5v5) but neither has the consistent first-pick advantage every round.
-// For 1v1: no picks needed (both are captains).
-function generatePickOrder(teamSize) {
+// Generate pick order for a given pool + team size.
+// When pool.pick_order is a valid CSV of "1"/"2" with the right per-captain
+// totals, use it verbatim — this is how inhouse encodes patterns like
+// 1,2,1,2,1,2,2,1. Otherwise (legacy / empty / malformed) fall back to the
+// strict-alternation-with-second-to-last-flip behavior the queue has shipped
+// with. For 1v1: no picks needed (both are captains).
+function generatePickOrder(pool, teamSize) {
   if (teamSize <= 1) return []
-  const totalPicks = (teamSize - 1) * 2
+  const expectedPerCap = teamSize - 1
+  const csv = pool?.pick_order
+  if (typeof csv === 'string' && csv.trim()) {
+    const parts = csv.split(',').map(s => s.trim())
+    if (parts.every(p => p === '1' || p === '2')
+        && parts.filter(p => p === '1').length === expectedPerCap
+        && parts.filter(p => p === '2').length === expectedPerCap) {
+      return parts.map(p => Number(p))
+    }
+  }
+  const totalPicks = expectedPerCap * 2
   const picks = []
   for (let i = 0; i < totalPicks; i++) picks.push(i % 2 === 0 ? 1 : 2)
   if (totalPicks >= 4) {
@@ -52,7 +62,7 @@ async function _doEnqueue(io, playerId, poolId) {
   const pool = await queryOne('SELECT * FROM queue_pools WHERE id = $1 AND enabled = true', [poolId])
   if (!pool) return { ok: false, error: 'Queue pool not found or disabled' }
 
-  const player = await queryOne('SELECT id, name, display_name, steam_id, avatar_url, mmr, mmr_verified_at, shadow_pool FROM players WHERE id = $1', [playerId])
+  const player = await queryOne('SELECT id, name, display_name, steam_id, avatar_url, mmr, mmr_verified_at, shadow_pool, captain_pool FROM players WHERE id = $1', [playerId])
   if (!player?.steam_id) return { ok: false, error: 'Steam account required to queue' }
   if (!player.mmr || player.mmr <= 0) return { ok: false, error: 'You must set your MMR before queuing' }
   if (pool.min_mmr > 0 && player.mmr < pool.min_mmr) return { ok: false, error: `Minimum MMR for this pool is ${pool.min_mmr}` }
@@ -109,6 +119,7 @@ async function _doEnqueue(io, playerId, poolId) {
     avatarUrl: player.avatar_url,
     mmr: player.mmr,
     shadowPool: player.shadow_pool || 0,
+    captainPool: !!player.captain_pool,
   })
   playerInQueue.set(playerId, poolId)
 
@@ -737,6 +748,31 @@ async function startReadyCheck(poolId, io) {
     }
   }
 
+  // Inhouse captain-pool rule: when require_captain_pool is on, the group
+  // must contain >= 2 captain-pool players. Walk the rest of the queue and
+  // swap out non-captains for captains until the count is met. If we can't
+  // reach 2, abort — the group waits for more captains to join.
+  if (pool?.inhouse_enabled && pool?.require_captain_pool) {
+    const needCaptains = 2
+    let captainCount = players.filter(p => p.captainPool).length
+    if (captainCount < needCaptains) {
+      const reservoir = []
+      let seen = 0
+      for (const [, info] of q) {
+        if (seen++ < totalPlayers) continue
+        if (info.captainPool) reservoir.push(info)
+      }
+      for (let i = players.length - 1; i >= 0 && captainCount < needCaptains; i--) {
+        if (players[i].captainPool) continue
+        const replacement = reservoir.shift()
+        if (!replacement) break
+        players[i] = replacement
+        captainCount++
+      }
+      if (captainCount < needCaptains) return
+    }
+  }
+
   // Move from in-queue → in-ready-check
   for (const p of players) {
     q.delete(p.playerId)
@@ -953,34 +989,44 @@ async function startQueueMatch(poolId, io, preselectedPlayers = null, preselecte
     console.error('[Queue] enrich players failed:', e.message)
   }
 
-  // Sort by MMR descending — top 2 are captains.
+  // Sort by MMR descending — used by the threshold-window captain logic.
   // Captain 1 picks first; assign captain 1 = LOWER MMR of the two so the
   // weaker captain gets first pick. If MMRs are equal, pick randomly.
   players.sort((a, b) => b.mmr - a.mmr)
-  // Captain selection: an eligibility window. Anyone within `threshold` MMR
-  // of the lobby's top MMR is a captain candidate; two are drawn at random.
-  // Lower-MMR captain still picks first as a balance handicap. Threshold is
-  // configurable per pool (queue_pools.captain_eligibility_threshold,
-  // default 1500). When fewer than 2 players sit inside the window (extreme
-  // outlier) we fall back to top-2-by-MMR — preserves the prior behavior.
-  // Setting the threshold to 0 always falls into the fallback branch and
-  // restores the legacy "top 2 always captain" behavior.
-  const threshold = pool?.captain_eligibility_threshold ?? 1500
-  const topMmr = players[0].mmr
-  const eligible = players.filter(p => p.mmr >= topMmr - threshold)
+  // Captain selection has two modes:
+  //   * Inhouse + require_captain_pool: captains MUST come from the captain
+  //     pool. Take the two LOWEST-MMR captain-pool players in the group.
+  //     (Lowest picks first per spec; second-lowest is captain 2.) If only
+  //     one captain is in the group we fall through to the legacy path —
+  //     the group-swap rule should have prevented this, but never throw.
+  //   * Otherwise: an eligibility window. Anyone within `threshold` MMR of
+  //     the lobby's top MMR is a captain candidate; two are drawn at random.
+  //     Lower-MMR captain still picks first as a balance handicap. Threshold
+  //     is configurable per pool (queue_pools.captain_eligibility_threshold,
+  //     default 1500). Setting threshold to 0 reduces to top-2-by-MMR.
   let pickA, pickB
-  if (eligible.length < 2) {
-    pickA = players[0]
-    pickB = players[1]
+  const captainPoolPlayers = players.filter(p => p.captainPool)
+  if (pool?.inhouse_enabled && pool?.require_captain_pool && captainPoolPlayers.length >= 2) {
+    const sortedAsc = [...captainPoolPlayers].sort((a, b) => a.mmr - b.mmr)
+    pickA = sortedAsc[0]
+    pickB = sortedAsc[1]
   } else {
-    // Fisher-Yates partial shuffle — only need the first two slots.
-    const pool2 = [...eligible]
-    const i0 = Math.floor(Math.random() * pool2.length)
-    ;[pool2[0], pool2[i0]] = [pool2[i0], pool2[0]]
-    const i1 = 1 + Math.floor(Math.random() * (pool2.length - 1))
-    ;[pool2[1], pool2[i1]] = [pool2[i1], pool2[1]]
-    pickA = pool2[0]
-    pickB = pool2[1]
+    const threshold = pool?.captain_eligibility_threshold ?? 1500
+    const topMmr = players[0].mmr
+    const eligible = players.filter(p => p.mmr >= topMmr - threshold)
+    if (eligible.length < 2) {
+      pickA = players[0]
+      pickB = players[1]
+    } else {
+      // Fisher-Yates partial shuffle — only need the first two slots.
+      const pool2 = [...eligible]
+      const i0 = Math.floor(Math.random() * pool2.length)
+      ;[pool2[0], pool2[i0]] = [pool2[i0], pool2[0]]
+      const i1 = 1 + Math.floor(Math.random() * (pool2.length - 1))
+      ;[pool2[1], pool2[i1]] = [pool2[i1], pool2[1]]
+      pickA = pool2[0]
+      pickB = pool2[1]
+    }
   }
   let captain1, captain2
   if (pickA.mmr === pickB.mmr) {
@@ -997,7 +1043,7 @@ async function startQueueMatch(poolId, io, preselectedPlayers = null, preselecte
   const captainIds = new Set([captain1.playerId, captain2.playerId])
   const available = players.filter(p => !captainIds.has(p.playerId))
 
-  const pickOrder = generatePickOrder(teamSize)
+  const pickOrder = generatePickOrder(pool, teamSize)
   const pickTimer = pool?.pick_timer || 30
 
   // Seed role preferences from each player's saved set.
@@ -1166,7 +1212,19 @@ async function finalizeQueueMatch(queueMatchId, io) {
     const team1Players = team1.map(p => ({ steam_id: p.steamId, name: p.name, team: 'radiant' }))
     const team2Players = team2.map(p => ({ steam_id: p.steamId, name: p.name, team: 'dire' }))
 
-    const lobby = await botPool.createQueueLobby(match.poolId, matchRow.id, 1, team1Players, team2Players)
+    // Inhouse: weekday → captains draft (16), Friday → captains mode (2)
+    // by default. Both modes are pool-configurable and only kick in when
+    // inhouse_enabled. Otherwise the bot uses pool.lobby_game_mode as before.
+    let gameModeOverride
+    if (match.pool?.inhouse_enabled) {
+      const isFriday = new Date().getDay() === 5
+      gameModeOverride = isFriday
+        ? (match.pool.friday_game_mode ?? 2)
+        : (match.pool.weekday_game_mode ?? 16)
+      try { await execute('UPDATE queue_matches SET game_mode_used = $1 WHERE id = $2', [gameModeOverride, queueMatchId]) } catch {}
+    }
+
+    const lobby = await botPool.createQueueLobby(match.poolId, matchRow.id, 1, team1Players, team2Players, { gameModeOverride })
 
     await execute(`UPDATE queue_matches SET status = 'live' WHERE id = $1`, [queueMatchId])
     match.status = 'live'

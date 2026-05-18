@@ -14,6 +14,8 @@ export interface QueuePlayer {
   preferredRoles?: string[]
   /** 0 = none, 1 = soft shadow, 2 = hard shadow */
   shadowPool?: number
+  /** True if this player is in the inhouse captain pool. */
+  captainPool?: boolean
 }
 
 export interface QueuePool {

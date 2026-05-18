@@ -144,6 +144,7 @@ const navGroups: NavGroup[] = [
       { labelKey: 'users', icon: Users, path: '/admin/users', permissions: ['manage_users'] },
       { labelKey: 'permissionGroups', icon: ShieldCheck, path: '/admin/permissions', permissions: ['manage_permissions'] },
       { labelKey: 'adminMmrVerifications', icon: Shield, path: '/admin/mmr-verifications', permissions: ['manage_mmr_verifications'] },
+      { labelKey: 'adminGriefReports', icon: Shield, path: '/admin/grief-reports', permissions: ['review_grief_reports'] },
       { labelKey: 'adminSubscriptionPlans', icon: Crown, path: '/admin/subscription-plans', permissions: ['manage_subscription_plans'] },
     ],
   },

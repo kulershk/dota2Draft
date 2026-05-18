@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { query, queryOne, execute } from '../db.js'
 import { requirePermission } from '../middleware/permissions.js'
 import { adjustPlayerPoints, recomputeSeasonFromHistory, backfillSeasonFromPoolHistory } from '../services/seasonRankingApply.js'
+import { applyFridayBonusForSeason } from '../services/inhouseFridayBonus.js'
 import { withDefaults } from '../services/seasonRating.js'
 
 const ROUTER_TAGS = 'Seasons'
@@ -371,6 +372,29 @@ export default function createSeasonsRouter(io) {
       res.json({ ok: true, claimed, ...result })
     } catch (e) {
       console.error('[seasons backfill]', e)
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  // ── Admin: trigger inhouse Friday top-3 aggregator for a specific Friday ──
+  // Idempotent — re-running for the same date no-ops via the
+  // season_match_log_friday_top_unique partial index. Body: { friday_date:
+  // 'YYYY-MM-DD' }. Useful for testing and for back-filling a day that the
+  // scheduler missed (e.g. server downtime over midnight).
+  router.post('/api/admin/seasons/:id/friday-bonus', async (req, res) => {
+    const admin = await requirePermission(req, res, 'manage_seasons')
+    if (!admin) return
+    try {
+      const seasonId = Number(req.params.id)
+      const fridayDate = String(req.body?.friday_date || '').trim()
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(fridayDate)) return res.status(400).json({ error: 'friday_date required (YYYY-MM-DD)' })
+      const s = await queryOne('SELECT id FROM seasons WHERE id = $1', [seasonId])
+      if (!s) return res.status(404).json({ error: 'Season not found' })
+      const result = await applyFridayBonusForSeason(seasonId, fridayDate)
+      if (io) io.emit('season:rankUpdated', { seasonId, fridayDate })
+      res.json({ ok: true, ...result })
+    } catch (e) {
+      console.error('[seasons friday-bonus]', e)
       res.status(500).json({ error: e.message })
     }
   })

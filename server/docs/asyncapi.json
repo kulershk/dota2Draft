@@ -1404,6 +1404,55 @@
           }
         }
       }
+    },
+    "inhouse:reportFiled": {
+      "subscribe": {
+        "summary": "Confirmation that the caller's toxic or grief report was filed (PRIVATE — sent only to the reporter's `user:${id}` room).",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "kind": { "type": "string", "enum": ["toxic", "grief"] },
+              "queueMatchId": { "type": "integer" },
+              "reportedPlayerId": { "type": "integer" }
+            },
+            "required": ["kind", "queueMatchId", "reportedPlayerId"]
+          }
+        }
+      }
+    },
+    "inhouse:strikeApplied": {
+      "subscribe": {
+        "summary": "A toxic or grief strike was added to the receiving player (PRIVATE — sent only to the reported player's `user:${id}` room). May include a `banUntil` ISO string if a cooldown was applied, and `captainRevoked` when the strike caused loss of captain status.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "kind": { "type": "string", "enum": ["toxic", "grief"] },
+              "newStrikes": { "type": "integer" },
+              "strikeDelta": { "type": "integer" },
+              "banUntil": { "type": "string", "format": "date-time", "nullable": true },
+              "captainRevoked": { "type": "boolean" }
+            },
+            "required": ["kind", "newStrikes", "strikeDelta"]
+          }
+        }
+      }
+    },
+    "inhouse:griefReviewed": {
+      "subscribe": {
+        "summary": "An admin approved or rejected a grief report (PRIVATE — sent to both the reporter's and the reported player's `user:${id}` rooms).",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "reportId": { "type": "integer" },
+              "status": { "type": "string", "enum": ["approved", "rejected"] }
+            },
+            "required": ["reportId", "status"]
+          }
+        }
+      }
     }
   }
 }

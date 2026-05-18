@@ -1134,9 +1134,12 @@ class BotPool {
             const result = await applyMatchToSeason({
               queueMatchId: queueMatchXp.id,
               seasonId: queueMatchXp.season_id,
+              poolId: queueMatchXp.pool_id,
               team1PlayerIds: team1Ids,
               team2PlayerIds: team2Ids,
               winnerTeam: team1Won ? 1 : 2,
+              // leaverByPid: TODO — wire in once the Go bot reports per-player
+              // leaver_status + leave_time_seconds.
             })
             if (this.io && result?.applied) {
               this.io.emit('season:rankUpdated', {
@@ -1636,14 +1639,14 @@ class BotPool {
   }
   // Build the create_lobby payload for the Go bot service. Shared by the
   // initial createQueueLobby call and the retry path.
-  _buildGoLobbyPayload(lobby, pool, team1Name, team2Name, playersExpected) {
+  _buildGoLobbyPayload(lobby, pool, team1Name, team2Name, playersExpected, opts = {}) {
     return {
       lobbyId: String(lobby.id),
       botId: lobby.bot_id ? String(lobby.bot_id) : undefined,
       gameName: lobby.game_name,
       password: lobby.password,
       serverRegion: pool.lobby_server_region || 3,
-      gameMode: pool.lobby_game_mode || 2,
+      gameMode: opts.gameModeOverride ?? pool.lobby_game_mode ?? 2,
       autoAssignTeams: pool.lobby_auto_assign_teams !== false,
       leagueId: pool.lobby_league_id || 0,
       dotaTvDelay: pool.lobby_dotv_delay ?? 1,
@@ -1664,7 +1667,7 @@ class BotPool {
     }
   }
 
-  async createQueueLobby(poolId, matchId, gameNumber, team1Players, team2Players) {
+  async createQueueLobby(poolId, matchId, gameNumber, team1Players, team2Players, opts = {}) {
     // Check for active lobby
     const activeLobby = await queryOne(
       "SELECT * FROM match_lobbies WHERE match_id = $1 AND game_number = $2 AND status NOT IN ('completed', 'cancelled', 'error')",
@@ -1699,7 +1702,7 @@ class BotPool {
     await execute("UPDATE lobby_bots SET status = 'busy', last_used_at = NOW() WHERE id = $1", [availableBot.id])
     await execute("UPDATE matches SET status = 'live' WHERE id = $1 AND status = 'pending'", [matchId])
 
-    this._sendToGo('create_lobby', this._buildGoLobbyPayload(lobby, pool, team1Name, team2Name, playersExpected))
+    this._sendToGo('create_lobby', this._buildGoLobbyPayload(lobby, pool, team1Name, team2Name, playersExpected, opts))
     return lobby
   }
 
@@ -1782,12 +1785,13 @@ class BotPool {
     }
 
     const qm = await queryOne(
-      'SELECT pool_id, team1_players, team2_players FROM queue_matches WHERE match_id = $1',
+      'SELECT pool_id, team1_players, team2_players, game_mode_used FROM queue_matches WHERE match_id = $1',
       [erroredLobby.match_id]
     )
     if (!qm) return false
     const pool = await queryOne('SELECT * FROM queue_pools WHERE id = $1', [qm.pool_id])
     if (!pool) return false
+    const retryOpts = qm.game_mode_used != null ? { gameModeOverride: qm.game_mode_used } : {}
 
     const playersExpected = Array.isArray(erroredLobby.players_expected) ? erroredLobby.players_expected : []
     const team1Name = (qm.team1_players?.[0]?.name) || 'Team 1'
@@ -1807,7 +1811,7 @@ class BotPool {
 
     await execute("UPDATE lobby_bots SET status = 'busy', last_used_at = NOW() WHERE id = $1", [nextBot.id])
 
-    this._sendToGo('create_lobby', this._buildGoLobbyPayload(newLobby, pool, team1Name, team2Name, playersExpected))
+    this._sendToGo('create_lobby', this._buildGoLobbyPayload(newLobby, pool, team1Name, team2Name, playersExpected, retryOpts))
 
     console.log(`[Queue] Retrying lobby for match ${erroredLobby.match_id} on bot ${nextBot.id} (attempt ${prevErrors + 1}/${MAX_ATTEMPTS})`)
 

@@ -1,0 +1,357 @@
+// Inhouse toxic + grief report endpoints.
+//
+// Toxic: any match participant can report any other. Reports accumulate
+// lifetime; configured thresholds promote them into strikes; strike counts
+// at configured tiers insert a row into queue_bans (the existing ban-
+// enforcement at queue:join applies the cooldown for free).
+//
+// Grief: captain-only, requires comment, admin-reviewed. On approval, a
+// grief_strikes increment + cooldown via the parallel grief-cooldowns
+// config. If the reported player was in the captain pool, they lose it.
+//
+// Both flows emit socket notifications via the per-user `user:${id}` room.
+
+import { Router } from 'express'
+import pgPool, { query, queryOne, execute } from '../db.js'
+import { getAuthPlayer } from '../middleware/auth.js'
+import { requirePermission, hasPermission } from '../middleware/permissions.js'
+
+// Returns { qm, pool } where qm is the queue_matches row + parsed roster
+// or { error, status } on validation failure. Centralises the membership
+// check both report endpoints need.
+async function _loadMatchAndPool(queueMatchId) {
+  const qm = await queryOne(`SELECT * FROM queue_matches WHERE id = $1`, [queueMatchId])
+  if (!qm) return { error: 'Queue match not found', status: 404 }
+  const pool = await queryOne('SELECT * FROM queue_pools WHERE id = $1', [qm.pool_id])
+  return { qm, pool }
+}
+
+function _allPlayerIds(qm) {
+  // qm.all_player_ids is JSONB array of player ids
+  if (Array.isArray(qm.all_player_ids)) return qm.all_player_ids.map(n => Number(n))
+  return []
+}
+
+// Returns 1, 2, or null — which team a player ended up on for this match.
+function _teamOf(qm, playerId) {
+  for (const p of (qm.team1_players || [])) if (Number(p.playerId) === Number(playerId)) return 1
+  for (const p of (qm.team2_players || [])) if (Number(p.playerId) === Number(playerId)) return 2
+  return null
+}
+
+// Look up the matching cooldown rule for a given strike count. Rules are
+// `{ strikes, hours? , action? }` — `hours` wins if present (insert a ban
+// with that duration), `action: 'warn'` is a no-op, `action: 'ban'` is a
+// permanent ban.
+function _cooldownFor(strikes, rules) {
+  if (!Array.isArray(rules)) return null
+  return rules.find(r => Number(r.strikes) === Number(strikes)) || null
+}
+
+// Insert a queue_bans row reflecting a strike-driven cooldown. Returns the
+// ISO string of `banned_until` (or null for permanent).
+async function _applyCooldown(client, playerId, poolId, rule, reasonText, banner) {
+  if (!rule || rule.action === 'warn') return null
+  if (rule.action === 'ban') {
+    await client.query(
+      `INSERT INTO queue_bans (player_id, pool_id, banned_until, reason, banned_by)
+       VALUES ($1, NULL, NULL, $2, $3)
+       ON CONFLICT (player_id) WHERE pool_id IS NULL DO UPDATE SET reason = EXCLUDED.reason, banned_until = NULL`,
+      [playerId, reasonText, banner || null]
+    )
+    return null
+  }
+  const hours = Number(rule.hours) || 0
+  if (hours <= 0) return null
+  const r = await client.query(
+    `INSERT INTO queue_bans (player_id, pool_id, banned_until, reason, banned_by)
+     VALUES ($1, $2, NOW() + ($3 || ' hours')::interval, $4, $5)
+     ON CONFLICT (player_id, pool_id) WHERE pool_id IS NOT NULL DO UPDATE
+       SET banned_until = GREATEST(COALESCE(queue_bans.banned_until, NOW()), EXCLUDED.banned_until),
+           reason = EXCLUDED.reason
+     RETURNING banned_until`,
+    [playerId, poolId || null, String(hours), reasonText, banner || null]
+  )
+  return r.rows[0]?.banned_until || null
+}
+
+export default function createInhouseReportsRouter(io) {
+  const router = Router()
+
+  // ── User: file a toxic report against a match participant ──
+  router.post('/api/inhouse/reports/toxic', async (req, res) => {
+    const reporter = await getAuthPlayer(req)
+    if (!reporter) return res.status(401).json({ error: 'Not authenticated' })
+
+    const queueMatchId = Number(req.body?.queue_match_id)
+    const reportedId = Number(req.body?.reported_player_id)
+    const comment = (req.body?.comment || '').toString().slice(0, 500)
+    if (!queueMatchId || !reportedId) return res.status(400).json({ error: 'queue_match_id and reported_player_id required' })
+    if (reportedId === reporter.id) return res.status(400).json({ error: "Can't report yourself" })
+
+    const { qm, pool, error, status } = await _loadMatchAndPool(queueMatchId)
+    if (error) return res.status(status).json({ error })
+    if (!pool?.inhouse_enabled) return res.status(400).json({ error: 'Reports only available on inhouse matches' })
+
+    const allIds = _allPlayerIds(qm)
+    if (!allIds.includes(reporter.id)) return res.status(403).json({ error: 'You were not in this match' })
+    if (!allIds.includes(reportedId))  return res.status(400).json({ error: 'Reported player was not in this match' })
+
+    const client = await pgPool.connect()
+    try {
+      await client.query('BEGIN')
+
+      // Insert (the unique constraint blocks dupes — return 409).
+      let insertedId
+      try {
+        const ins = await client.query(
+          `INSERT INTO inhouse_toxic_reports (reporter_player_id, reported_player_id, queue_match_id, pool_id, comment)
+           VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+          [reporter.id, reportedId, queueMatchId, qm.pool_id, comment || null]
+        )
+        insertedId = ins.rows[0].id
+      } catch (e) {
+        await client.query('ROLLBACK')
+        if (e.code === '23505') return res.status(409).json({ error: 'You already reported this player for this match' })
+        throw e
+      }
+
+      // Atomically bump the lifetime counter on the reported player and
+      // read the fired-thresholds set so we can decide whether new
+      // strikes should fire.
+      const updated = (await client.query(
+        `UPDATE players
+            SET toxic_reports_received = toxic_reports_received + 1
+          WHERE id = $1
+          RETURNING toxic_reports_received, toxic_strikes, toxic_thresholds_fired`,
+        [reportedId]
+      )).rows[0]
+      const newReportCount = updated.toxic_reports_received
+      const firedRaw = Array.isArray(updated.toxic_thresholds_fired) ? updated.toxic_thresholds_fired : []
+      const fired = new Set(firedRaw.map(n => Number(n)))
+      const thresholds = Array.isArray(pool.toxic_report_thresholds) ? pool.toxic_report_thresholds : []
+
+      let strikeDelta = 0
+      const newlyFired = []
+      for (const t of thresholds) {
+        const n = Number(t.reports)
+        if (!Number.isFinite(n)) continue
+        if (fired.has(n)) continue
+        if (newReportCount < n) continue
+        strikeDelta += Number(t.strike_delta) || 0
+        newlyFired.push(n)
+      }
+
+      let strikeApplied = null
+      let banUntil = null
+      if (strikeDelta > 0 || newlyFired.length) {
+        const newStrikes = Number(updated.toxic_strikes) + strikeDelta
+        const mergedFired = [...fired, ...newlyFired]
+        await client.query(
+          `UPDATE players SET toxic_strikes = $1, toxic_thresholds_fired = $2::jsonb, toxic_clean_games_since_last_strike = 0 WHERE id = $3`,
+          [newStrikes, JSON.stringify(mergedFired), reportedId]
+        )
+        await client.query(
+          `INSERT INTO inhouse_strike_log (player_id, kind, delta, reason, source_report_id, source_queue_match_id)
+           VALUES ($1, 'toxic', $2, $3, $4, $5)`,
+          [reportedId, strikeDelta, `Reached toxic-report threshold(s): ${newlyFired.join(',')}`, insertedId, queueMatchId]
+        )
+        const cooldown = _cooldownFor(newStrikes, pool.toxic_strike_cooldowns)
+        if (cooldown) {
+          const reasonText = `Toxic strike ${newStrikes}${cooldown.hours ? ` (${cooldown.hours}h cooldown)` : (cooldown.action === 'ban' ? ' (banned)' : ' (warning)')}`
+          banUntil = await _applyCooldown(client, reportedId, qm.pool_id, cooldown, reasonText, null)
+        }
+        strikeApplied = { newStrikes, strikeDelta, cooldown: cooldown || null, banUntil }
+      }
+
+      await client.query('COMMIT')
+
+      io.to(`user:${reporter.id}`).emit('inhouse:reportFiled', { kind: 'toxic', queueMatchId, reportedPlayerId: reportedId })
+      if (strikeApplied) {
+        io.to(`user:${reportedId}`).emit('inhouse:strikeApplied', {
+          kind: 'toxic',
+          newStrikes: strikeApplied.newStrikes,
+          strikeDelta: strikeApplied.strikeDelta,
+          banUntil: strikeApplied.banUntil ? new Date(strikeApplied.banUntil).toISOString() : null,
+        })
+      }
+      res.status(201).json({ ok: true, reportId: insertedId, strike: strikeApplied })
+    } catch (e) {
+      try { await client.query('ROLLBACK') } catch {}
+      console.error('[inhouse toxic]', e)
+      res.status(500).json({ error: e.message })
+    } finally {
+      client.release()
+    }
+  })
+
+  // ── User (captain only): file a grief report against a TEAMMATE ──
+  router.post('/api/inhouse/reports/grief', async (req, res) => {
+    const reporter = await getAuthPlayer(req)
+    if (!reporter) return res.status(401).json({ error: 'Not authenticated' })
+
+    const queueMatchId = Number(req.body?.queue_match_id)
+    const reportedId = Number(req.body?.reported_player_id)
+    const comment = (req.body?.comment || '').toString().trim()
+    if (!queueMatchId || !reportedId) return res.status(400).json({ error: 'queue_match_id and reported_player_id required' })
+    if (!comment) return res.status(400).json({ error: 'Comment is required for grief reports' })
+    if (reportedId === reporter.id) return res.status(400).json({ error: "Can't report yourself" })
+
+    const { qm, pool, error, status } = await _loadMatchAndPool(queueMatchId)
+    if (error) return res.status(status).json({ error })
+    if (!pool?.inhouse_enabled) return res.status(400).json({ error: 'Reports only available on inhouse matches' })
+
+    if (qm.captain1_player_id !== reporter.id && qm.captain2_player_id !== reporter.id) {
+      return res.status(403).json({ error: 'Only captains can file grief reports' })
+    }
+    const reporterTeam = _teamOf(qm, reporter.id)
+    const reportedTeam = _teamOf(qm, reportedId)
+    if (!reporterTeam || !reportedTeam) return res.status(400).json({ error: 'Player not on a team in this match' })
+    if (reporterTeam !== reportedTeam) return res.status(403).json({ error: 'Captains can only report their own team' })
+
+    try {
+      const inserted = await queryOne(
+        `INSERT INTO inhouse_grief_reports (reporter_player_id, reported_player_id, queue_match_id, pool_id, comment)
+         VALUES ($1, $2, $3, $4, $5) RETURNING id, created_at`,
+        [reporter.id, reportedId, queueMatchId, qm.pool_id, comment]
+      )
+      io.to(`user:${reporter.id}`).emit('inhouse:reportFiled', { kind: 'grief', queueMatchId, reportedPlayerId: reportedId })
+      res.status(201).json({ ok: true, reportId: inserted.id, status: 'pending' })
+    } catch (e) {
+      console.error('[inhouse grief]', e)
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  // ── Admin: list grief reports (default: pending) ──
+  router.get('/api/admin/inhouse/grief-reports', async (req, res) => {
+    const admin = await getAuthPlayer(req)
+    if (!admin) return res.status(401).json({ error: 'Not authenticated' })
+    const allowed = admin.is_admin || await hasPermission(admin, 'review_grief_reports')
+    if (!allowed) return res.status(403).json({ error: 'Permission denied' })
+    const status = (req.query.status || 'pending').toString()
+    try {
+      const rows = await query(`
+        SELECT gr.*,
+               rp.name AS reporter_name, COALESCE(rp.display_name, rp.name) AS reporter_display_name, rp.avatar_url AS reporter_avatar,
+               tp.name AS reported_name, COALESCE(tp.display_name, tp.name) AS reported_display_name, tp.avatar_url AS reported_avatar,
+               tp.captain_pool AS reported_captain_pool, tp.grief_strikes AS reported_grief_strikes,
+               qp.name AS pool_name
+          FROM inhouse_grief_reports gr
+          LEFT JOIN players rp ON rp.id = gr.reporter_player_id
+          LEFT JOIN players tp ON tp.id = gr.reported_player_id
+          LEFT JOIN queue_pools qp ON qp.id = gr.pool_id
+         WHERE gr.status = $1
+         ORDER BY gr.created_at DESC
+      `, [status])
+      res.json(rows)
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  // ── Admin: approve a grief report ──
+  router.post('/api/admin/inhouse/grief-reports/:id/approve', async (req, res) => {
+    const admin = await getAuthPlayer(req)
+    if (!admin) return res.status(401).json({ error: 'Not authenticated' })
+    const allowed = admin.is_admin || await hasPermission(admin, 'review_grief_reports')
+    if (!allowed) return res.status(403).json({ error: 'Permission denied' })
+    const reportId = Number(req.params.id)
+    const note = (req.body?.review_note || '').toString().trim() || null
+
+    const client = await pgPool.connect()
+    try {
+      await client.query('BEGIN')
+      const report = (await client.query(
+        `SELECT * FROM inhouse_grief_reports WHERE id = $1 FOR UPDATE`,
+        [reportId]
+      )).rows[0]
+      if (!report) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Report not found' }) }
+      if (report.status !== 'pending') { await client.query('ROLLBACK'); return res.status(409).json({ error: `Report already ${report.status}` }) }
+
+      const pool = (await client.query('SELECT * FROM queue_pools WHERE id = $1', [report.pool_id])).rows[0]
+
+      await client.query(
+        `UPDATE inhouse_grief_reports SET status = 'approved', reviewed_by = $1, reviewed_at = NOW(), review_note = $2 WHERE id = $3`,
+        [admin.id, note, reportId]
+      )
+
+      const reportedRow = (await client.query(
+        `UPDATE players SET grief_strikes = grief_strikes + 1 WHERE id = $1 RETURNING grief_strikes, captain_pool`,
+        [report.reported_player_id]
+      )).rows[0]
+      const newStrikes = reportedRow.grief_strikes
+      await client.query(
+        `INSERT INTO inhouse_strike_log (player_id, kind, delta, reason, source_report_id, source_queue_match_id, applied_by)
+         VALUES ($1, 'grief', 1, $2, $3, $4, $5)`,
+        [report.reported_player_id, 'Grief report approved', reportId, report.queue_match_id, admin.id]
+      )
+
+      const cooldown = _cooldownFor(newStrikes, pool?.grief_strike_cooldowns)
+      let banUntil = null
+      if (cooldown) {
+        const reasonText = `Grief strike ${newStrikes}${cooldown.hours ? ` (${cooldown.hours}h cooldown)` : (cooldown.action === 'ban' ? ' (banned)' : ' (warning)')}`
+        banUntil = await _applyCooldown(client, report.reported_player_id, report.pool_id, cooldown, reasonText, admin.id)
+      }
+
+      // Captain who griefs loses their captain status per spec.
+      let captainRevoked = false
+      if (reportedRow.captain_pool) {
+        await client.query(`UPDATE players SET captain_pool = FALSE WHERE id = $1`, [report.reported_player_id])
+        await client.query(
+          `INSERT INTO inhouse_strike_log (player_id, kind, delta, reason, source_report_id, applied_by)
+           VALUES ($1, 'captain_revoked', 0, 'Lost captain status due to approved grief report', $2, $3)`,
+          [report.reported_player_id, reportId, admin.id]
+        )
+        captainRevoked = true
+      }
+
+      await client.query('COMMIT')
+
+      io.to(`user:${report.reported_player_id}`).emit('inhouse:strikeApplied', {
+        kind: 'grief',
+        newStrikes,
+        strikeDelta: 1,
+        banUntil: banUntil ? new Date(banUntil).toISOString() : null,
+        captainRevoked,
+      })
+      io.to(`user:${report.reporter_player_id}`).emit('inhouse:griefReviewed', { reportId, status: 'approved' })
+      io.to(`user:${report.reported_player_id}`).emit('inhouse:griefReviewed', { reportId, status: 'approved' })
+      res.json({ ok: true, newStrikes, banUntil, captainRevoked })
+    } catch (e) {
+      try { await client.query('ROLLBACK') } catch {}
+      console.error('[inhouse grief approve]', e)
+      res.status(500).json({ error: e.message })
+    } finally {
+      client.release()
+    }
+  })
+
+  // ── Admin: reject a grief report ──
+  router.post('/api/admin/inhouse/grief-reports/:id/reject', async (req, res) => {
+    const admin = await getAuthPlayer(req)
+    if (!admin) return res.status(401).json({ error: 'Not authenticated' })
+    const allowed = admin.is_admin || await hasPermission(admin, 'review_grief_reports')
+    if (!allowed) return res.status(403).json({ error: 'Permission denied' })
+    const reportId = Number(req.params.id)
+    const note = (req.body?.review_note || '').toString().trim() || null
+    try {
+      const updated = await queryOne(
+        `UPDATE inhouse_grief_reports
+            SET status = 'rejected', reviewed_by = $1, reviewed_at = NOW(), review_note = $2
+          WHERE id = $3 AND status = 'pending'
+          RETURNING reporter_player_id, reported_player_id`,
+        [admin.id, note, reportId]
+      )
+      if (!updated) return res.status(404).json({ error: 'Report not found or already reviewed' })
+      io.to(`user:${updated.reporter_player_id}`).emit('inhouse:griefReviewed', { reportId, status: 'rejected' })
+      io.to(`user:${updated.reported_player_id}`).emit('inhouse:griefReviewed', { reportId, status: 'rejected' })
+      res.json({ ok: true })
+    } catch (e) {
+      console.error('[inhouse grief reject]', e)
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  return router
+}

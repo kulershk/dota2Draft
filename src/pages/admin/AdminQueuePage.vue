@@ -50,6 +50,27 @@ function setTab(tab: QueueTab) {
   try { localStorage.setItem(TAB_STORAGE_KEY, tab) } catch {}
 }
 
+const INHOUSE_DEFAULTS = {
+  inhouse_enabled: false,
+  require_captain_pool: false,
+  pick_order: '1,2,1,2,1,2,2,1',
+  weekday_game_mode: 16,
+  friday_game_mode: 2,
+  friday_win_bonus: 5,
+  friday_top1_bonus: 12,
+  friday_top2_bonus: 6,
+  friday_top3_bonus: 6,
+  leaver_penalty: -50,
+  leaver_grace_minutes: 15,
+  winstreak_tiers: [{ streak: 3, bonus: 1 }, { streak: 5, bonus: 2 }, { streak: 8, bonus: 3 }],
+  mmr_diff_tiers: [{ min: 400, max: 599, bonus: 2 }, { min: 600, max: 1000, bonus: 3 }, { min: 1001, max: 99999, bonus: 5 }],
+  prize_active_pct: 25,
+  toxic_report_thresholds: [{ reports: 3, strike_delta: 1 }, { reports: 4, strike_delta: 2 }],
+  toxic_strike_cooldowns: [{ strikes: 2, action: 'warn' }, { strikes: 3, hours: 12 }, { strikes: 4, hours: 24 }, { strikes: 5, hours: 72 }],
+  grief_strike_cooldowns: [{ strikes: 1, action: 'warn' }, { strikes: 2, hours: 24 }, { strikes: 3, hours: 72 }, { strikes: 4, action: 'ban' }],
+  clean_games_to_decay_strike: 5,
+}
+
 const form = ref<Record<string, any>>({
   name: '',
   enabled: true,
@@ -81,6 +102,7 @@ const form = ref<Record<string, any>>({
   season_id: null,
   rules_title: '',
   rules_content: '',
+  ...INHOUSE_DEFAULTS,
 })
 
 function resetForm() {
@@ -97,6 +119,14 @@ function resetForm() {
     season_id: null,
     rules_title: '',
     rules_content: '',
+    ...INHOUSE_DEFAULTS,
+    // Re-create the array references so the editor doesn't share state with
+    // INHOUSE_DEFAULTS (Vue would otherwise let edits leak across resets).
+    winstreak_tiers: INHOUSE_DEFAULTS.winstreak_tiers.map(t => ({ ...t })),
+    mmr_diff_tiers: INHOUSE_DEFAULTS.mmr_diff_tiers.map(t => ({ ...t })),
+    toxic_report_thresholds: INHOUSE_DEFAULTS.toxic_report_thresholds.map(t => ({ ...t })),
+    toxic_strike_cooldowns: INHOUSE_DEFAULTS.toxic_strike_cooldowns.map(t => ({ ...t })),
+    grief_strike_cooldowns: INHOUSE_DEFAULTS.grief_strike_cooldowns.map(t => ({ ...t })),
   }
 }
 
@@ -106,8 +136,18 @@ async function fetchPools() {
 
 function startEdit(pool: any) {
   editingId.value = pool.id
-  form.value = { ...pool }
+  // Backfill any missing inhouse fields so the form bindings always have
+  // something to render even on pools created before the migration.
+  form.value = { ...INHOUSE_DEFAULTS, ...pool }
   showCreate.value = false
+}
+
+function addTierRow(field: string, blank: any) {
+  if (!Array.isArray(form.value[field])) form.value[field] = []
+  form.value[field].push({ ...blank })
+}
+function removeTierRow(field: string, idx: number) {
+  if (Array.isArray(form.value[field])) form.value[field].splice(idx, 1)
 }
 
 function startCreate() {
@@ -830,6 +870,181 @@ onUnmounted(() => {
         <div class="flex flex-col gap-1.5">
           <label class="text-xs text-muted-foreground">{{ t('queuePoolRulesContent') }}</label>
           <RichTextEditor v-model="form.rules_content" />
+        </div>
+      </div>
+
+      <!-- Inhouse -->
+      <div class="border-t border-border/30 pt-4 mt-4 flex flex-col gap-3">
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" v-model="form.inhouse_enabled" class="w-4 h-4" />
+          <span class="text-sm font-semibold text-muted-foreground">{{ t('queueInhouseEnable') }}</span>
+        </label>
+        <p class="text-[11px] text-muted-foreground -mt-1">{{ t('queueInhouseEnableHint') }}</p>
+
+        <div v-if="form.inhouse_enabled" class="flex flex-col gap-4 pl-2 border-l-2 border-purple-500/20">
+          <!-- Captains subgroup -->
+          <div class="flex flex-col gap-2">
+            <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{{ t('queueInhouseCaptainsSection') }}</span>
+            <label class="flex items-center gap-2 cursor-pointer text-sm">
+              <input type="checkbox" v-model="form.require_captain_pool" class="w-4 h-4" />
+              <span>{{ t('queueInhouseRequireCaptainPool') }}</span>
+            </label>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label class="text-xs text-muted-foreground">{{ t('queueInhousePickOrder') }}</label>
+                <input type="text" class="input-field" v-model="form.pick_order" placeholder="1,2,1,2,1,2,2,1" />
+                <p class="text-[11px] text-muted-foreground mt-1">{{ t('queueInhousePickOrderHint', { n: (form.team_size || 5) - 1 }) }}</p>
+              </div>
+              <div></div>
+              <div>
+                <label class="text-xs text-muted-foreground">{{ t('queueInhouseWeekdayMode') }}</label>
+                <select class="input-field" v-model.number="form.weekday_game_mode">
+                  <option :value="1">AP</option><option :value="2">CM</option><option :value="3">RD</option><option :value="4">SD</option>
+                  <option :value="5">AR</option><option :value="8">Reverse CM</option><option :value="11">MO</option><option :value="12">LP</option>
+                  <option :value="16">CD</option><option :value="18">ABD</option><option :value="20">ARDM</option><option :value="21">1v1</option>
+                  <option :value="22">AD</option><option :value="23">Turbo</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-xs text-muted-foreground">{{ t('queueInhouseFridayMode') }}</label>
+                <select class="input-field" v-model.number="form.friday_game_mode">
+                  <option :value="1">AP</option><option :value="2">CM</option><option :value="3">RD</option><option :value="4">SD</option>
+                  <option :value="5">AR</option><option :value="8">Reverse CM</option><option :value="11">MO</option><option :value="12">LP</option>
+                  <option :value="16">CD</option><option :value="18">ABD</option><option :value="20">ARDM</option><option :value="21">1v1</option>
+                  <option :value="22">AD</option><option :value="23">Turbo</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Points subgroup -->
+          <div class="flex flex-col gap-2">
+            <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{{ t('queueInhousePointsSection') }}</span>
+
+            <div>
+              <label class="text-xs text-muted-foreground">{{ t('queueInhouseMmrDiffTiers') }}</label>
+              <div class="flex flex-col gap-1.5 mt-1">
+                <div v-for="(tier, i) in form.mmr_diff_tiers" :key="i" class="grid grid-cols-12 gap-2 items-center">
+                  <input type="number" class="input-field col-span-3" v-model.number="tier.min" :placeholder="t('queueInhouseMmrDiffMin')" />
+                  <input type="number" class="input-field col-span-3" v-model.number="tier.max" :placeholder="t('queueInhouseMmrDiffMax')" />
+                  <input type="number" class="input-field col-span-4" v-model.number="tier.bonus" :placeholder="t('queueInhouseTierBonus')" />
+                  <button class="col-span-2 btn-outline text-xs" @click="removeTierRow('mmr_diff_tiers', i)">{{ t('remove') }}</button>
+                </div>
+                <button class="btn-outline text-xs self-start" @click="addTierRow('mmr_diff_tiers', { min: 0, max: 0, bonus: 0 })">
+                  + {{ t('queueInhouseAddTier') }}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label class="text-xs text-muted-foreground">{{ t('queueInhouseWinstreakTiers') }}</label>
+              <div class="flex flex-col gap-1.5 mt-1">
+                <div v-for="(tier, i) in form.winstreak_tiers" :key="i" class="grid grid-cols-12 gap-2 items-center">
+                  <input type="number" class="input-field col-span-5" v-model.number="tier.streak" :placeholder="t('queueInhouseWinstreakAt')" />
+                  <input type="number" class="input-field col-span-5" v-model.number="tier.bonus" :placeholder="t('queueInhouseTierBonus')" />
+                  <button class="col-span-2 btn-outline text-xs" @click="removeTierRow('winstreak_tiers', i)">{{ t('remove') }}</button>
+                </div>
+                <button class="btn-outline text-xs self-start" @click="addTierRow('winstreak_tiers', { streak: 0, bonus: 0 })">
+                  + {{ t('queueInhouseAddTier') }}
+                </button>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div>
+                <label class="text-xs text-muted-foreground">{{ t('queueInhouseFridayWinBonus') }}</label>
+                <input type="number" class="input-field" v-model.number="form.friday_win_bonus" />
+              </div>
+              <div>
+                <label class="text-xs text-muted-foreground">{{ t('queueInhouseFridayTop1') }}</label>
+                <input type="number" class="input-field" v-model.number="form.friday_top1_bonus" />
+              </div>
+              <div>
+                <label class="text-xs text-muted-foreground">{{ t('queueInhouseFridayTop2') }}</label>
+                <input type="number" class="input-field" v-model.number="form.friday_top2_bonus" />
+              </div>
+              <div>
+                <label class="text-xs text-muted-foreground">{{ t('queueInhouseFridayTop3') }}</label>
+                <input type="number" class="input-field" v-model.number="form.friday_top3_bonus" />
+              </div>
+              <div>
+                <label class="text-xs text-muted-foreground">{{ t('queueInhouseLeaverPenalty') }}</label>
+                <input type="number" class="input-field" v-model.number="form.leaver_penalty" />
+              </div>
+              <div>
+                <label class="text-xs text-muted-foreground">{{ t('queueInhouseLeaverGrace') }}</label>
+                <input type="number" min="0" class="input-field" v-model.number="form.leaver_grace_minutes" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Discipline subgroup -->
+          <div class="flex flex-col gap-2">
+            <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{{ t('queueInhouseDisciplineSection') }}</span>
+
+            <div>
+              <label class="text-xs text-muted-foreground">{{ t('queueInhouseToxicThresholds') }}</label>
+              <div class="flex flex-col gap-1.5 mt-1">
+                <div v-for="(tier, i) in form.toxic_report_thresholds" :key="i" class="grid grid-cols-12 gap-2 items-center">
+                  <input type="number" class="input-field col-span-5" v-model.number="tier.reports" :placeholder="t('queueInhouseAtReports')" />
+                  <input type="number" class="input-field col-span-5" v-model.number="tier.strike_delta" :placeholder="t('queueInhouseStrikeDelta')" />
+                  <button class="col-span-2 btn-outline text-xs" @click="removeTierRow('toxic_report_thresholds', i)">{{ t('remove') }}</button>
+                </div>
+                <button class="btn-outline text-xs self-start" @click="addTierRow('toxic_report_thresholds', { reports: 0, strike_delta: 0 })">
+                  + {{ t('queueInhouseAddTier') }}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label class="text-xs text-muted-foreground">{{ t('queueInhouseToxicCooldowns') }}</label>
+              <div class="flex flex-col gap-1.5 mt-1">
+                <div v-for="(tier, i) in form.toxic_strike_cooldowns" :key="i" class="grid grid-cols-12 gap-2 items-center">
+                  <input type="number" class="input-field col-span-3" v-model.number="tier.strikes" :placeholder="t('queueInhouseAtStrikes')" />
+                  <input type="number" class="input-field col-span-3" v-model.number="tier.hours" :placeholder="t('queueInhouseHours')" />
+                  <select class="input-field col-span-4" v-model="tier.action">
+                    <option value="">{{ t('queueInhouseCooldownNoAction') }}</option>
+                    <option value="warn">{{ t('queueInhouseCooldownWarn') }}</option>
+                    <option value="ban">{{ t('queueInhouseCooldownBan') }}</option>
+                  </select>
+                  <button class="col-span-2 btn-outline text-xs" @click="removeTierRow('toxic_strike_cooldowns', i)">{{ t('remove') }}</button>
+                </div>
+                <button class="btn-outline text-xs self-start" @click="addTierRow('toxic_strike_cooldowns', { strikes: 0, hours: 0, action: '' })">
+                  + {{ t('queueInhouseAddTier') }}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label class="text-xs text-muted-foreground">{{ t('queueInhouseGriefCooldowns') }}</label>
+              <div class="flex flex-col gap-1.5 mt-1">
+                <div v-for="(tier, i) in form.grief_strike_cooldowns" :key="i" class="grid grid-cols-12 gap-2 items-center">
+                  <input type="number" class="input-field col-span-3" v-model.number="tier.strikes" :placeholder="t('queueInhouseAtStrikes')" />
+                  <input type="number" class="input-field col-span-3" v-model.number="tier.hours" :placeholder="t('queueInhouseHours')" />
+                  <select class="input-field col-span-4" v-model="tier.action">
+                    <option value="">{{ t('queueInhouseCooldownNoAction') }}</option>
+                    <option value="warn">{{ t('queueInhouseCooldownWarn') }}</option>
+                    <option value="ban">{{ t('queueInhouseCooldownBan') }}</option>
+                  </select>
+                  <button class="col-span-2 btn-outline text-xs" @click="removeTierRow('grief_strike_cooldowns', i)">{{ t('remove') }}</button>
+                </div>
+                <button class="btn-outline text-xs self-start" @click="addTierRow('grief_strike_cooldowns', { strikes: 0, hours: 0, action: '' })">
+                  + {{ t('queueInhouseAddTier') }}
+                </button>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="text-xs text-muted-foreground">{{ t('queueInhouseCleanGamesDecay') }}</label>
+                <input type="number" min="1" class="input-field" v-model.number="form.clean_games_to_decay_strike" />
+              </div>
+              <div>
+                <label class="text-xs text-muted-foreground">{{ t('queueInhousePrizePct') }}</label>
+                <input type="number" min="1" max="100" class="input-field" v-model.number="form.prize_active_pct" />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 

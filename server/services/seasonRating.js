@@ -56,3 +56,32 @@ export function teamAvgMmr(playerMmrs) {
   if (!valid.length) return 0
   return Math.round(valid.reduce((s, m) => s + m, 0) / valid.length)
 }
+
+// ─── Inhouse bonuses (pure) ──────────────────────────────────
+// Underdog bonus: when an outmatched team wins they earn a tier-based bump;
+// when a favoured team loses they take a symmetric extra hit. The favoured-
+// side win and underdog-side loss earn nothing extra — base ELO already
+// accounts for the expected outcome. tiers: [{min,max,bonus}].
+export function mmrDiffBonus({ myAvgMmr, oppAvgMmr, won, tiers }) {
+  if (!Array.isArray(tiers) || !tiers.length) return 0
+  const diff = Math.abs(Number(oppAvgMmr) - Number(myAvgMmr))
+  const tier = tiers.find(t => diff >= Number(t.min) && diff <= Number(t.max))
+  if (!tier) return 0
+  const amIUnderdog = Number(myAvgMmr) < Number(oppAvgMmr)
+  const bonus = Math.abs(Number(tier.bonus) || 0)
+  if (amIUnderdog && won) return bonus
+  if (!amIUnderdog && !won) return -bonus
+  return 0
+}
+
+// Winstreak bonus: highest matching tier wins (so 8+ caps at the top tier).
+// `streak` is the streak count AFTER counting this win.
+export function winstreakBonus(streak, tiers) {
+  const s = Number(streak)
+  if (!Array.isArray(tiers) || s <= 0) return 0
+  let best = 0
+  for (const t of tiers) {
+    if (s >= Number(t.streak) && Number(t.bonus) > best) best = Number(t.bonus)
+  }
+  return best
+}
