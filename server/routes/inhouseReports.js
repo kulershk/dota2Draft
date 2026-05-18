@@ -281,6 +281,80 @@ export default function createInhouseReportsRouter(io) {
     }
   })
 
+  // ── Admin: list toxic reports ──
+  // Read-only — toxic reports auto-accumulate into strikes via the report
+  // endpoint, there's no approve/reject step. Optional ?player_id filter
+  // shows only reports against one specific player. Same permission as
+  // grief reports.
+  router.get('/api/admin/inhouse/toxic-reports', async (req, res) => {
+    const admin = await getAuthPlayer(req)
+    if (!admin) return res.status(401).json({ error: 'Not authenticated' })
+    const allowed = admin.is_admin || await hasPermission(admin, 'review_grief_reports')
+    if (!allowed) return res.status(403).json({ error: 'Permission denied' })
+    const playerId = req.query.player_id ? Number(req.query.player_id) : null
+    const limit = Math.min(Number(req.query.limit) || 100, 500)
+    const params = []
+    let where = ''
+    if (playerId) {
+      params.push(playerId)
+      where = `WHERE tr.reported_player_id = $${params.length}`
+    }
+    params.push(limit)
+    try {
+      const rows = await query(`
+        SELECT tr.*,
+               rp.name AS reporter_name, COALESCE(rp.display_name, rp.name) AS reporter_display_name, rp.avatar_url AS reporter_avatar,
+               tp.name AS reported_name, COALESCE(tp.display_name, tp.name) AS reported_display_name, tp.avatar_url AS reported_avatar,
+               tp.toxic_reports_received AS reported_toxic_reports_received,
+               tp.toxic_strikes AS reported_toxic_strikes,
+               qp.name AS pool_name
+          FROM inhouse_toxic_reports tr
+          LEFT JOIN players rp ON rp.id = tr.reporter_player_id
+          LEFT JOIN players tp ON tp.id = tr.reported_player_id
+          LEFT JOIN queue_pools qp ON qp.id = tr.pool_id
+          ${where}
+         ORDER BY tr.created_at DESC
+         LIMIT $${params.length}
+      `, params)
+      res.json(rows)
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  // ── Admin: strike log (toxic + grief, including decays) ──
+  router.get('/api/admin/inhouse/strike-log', async (req, res) => {
+    const admin = await getAuthPlayer(req)
+    if (!admin) return res.status(401).json({ error: 'Not authenticated' })
+    const allowed = admin.is_admin || await hasPermission(admin, 'review_grief_reports')
+    if (!allowed) return res.status(403).json({ error: 'Permission denied' })
+    const playerId = req.query.player_id ? Number(req.query.player_id) : null
+    const limit = Math.min(Number(req.query.limit) || 100, 500)
+    const params = []
+    let where = ''
+    if (playerId) {
+      params.push(playerId)
+      where = `WHERE sl.player_id = $${params.length}`
+    }
+    params.push(limit)
+    try {
+      const rows = await query(`
+        SELECT sl.*,
+               p.name AS player_name, COALESCE(p.display_name, p.name) AS player_display_name, p.avatar_url AS player_avatar,
+               ab.name AS applied_by_name, COALESCE(ab.display_name, ab.name) AS applied_by_display_name
+          FROM inhouse_strike_log sl
+          LEFT JOIN players p  ON p.id  = sl.player_id
+          LEFT JOIN players ab ON ab.id = sl.applied_by
+          ${where}
+         ORDER BY sl.created_at DESC
+         LIMIT $${params.length}
+      `, params)
+      res.json(rows)
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
   // ── Admin: approve a grief report ──
   router.post('/api/admin/inhouse/grief-reports/:id/approve', async (req, res) => {
     const admin = await getAuthPlayer(req)

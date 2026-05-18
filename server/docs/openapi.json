@@ -4000,6 +4000,32 @@
           }
         }
       },
+      "/api/admin/inhouse/toxic-reports": {
+        "get": {
+          "tags": ["Inhouse"],
+          "summary": "List toxic reports (admin)",
+          "description": "Read-only feed of peer reports. Requires `review_grief_reports` permission. Optional `player_id` filters to reports against one player.",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [
+            { "name": "player_id", "in": "query", "schema": { "type": "integer" } },
+            { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 500, "default": 100 } }
+          ],
+          "responses": { "200": { "description": "Array of toxic-report rows with reporter/reported denormalised fields and the reported player's current toxic_reports_received + toxic_strikes." } }
+        }
+      },
+      "/api/admin/inhouse/strike-log": {
+        "get": {
+          "tags": ["Inhouse"],
+          "summary": "Strike audit log (admin)",
+          "description": "Every ±strike across all kinds (toxic, grief, toxic_decay, captain_revoked). Requires `review_grief_reports`. Optional `player_id` filters to one player.",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [
+            { "name": "player_id", "in": "query", "schema": { "type": "integer" } },
+            { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 500, "default": 100 } }
+          ],
+          "responses": { "200": { "description": "Array of strike-log rows with player + applied_by denormalised names." } }
+        }
+      },
       "/api/admin/inhouse/grief-reports": {
         "get": {
           "tags": ["Inhouse"],

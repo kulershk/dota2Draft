@@ -68,7 +68,9 @@ const router = createRouter({
         { path: 'seasons', name: 'admin-seasons', meta: { permissions: ['manage_seasons'] }, component: () => import('@/pages/admin/AdminSeasonsPage.vue') },
         { path: 'seasons/:id', name: 'admin-season-setup', meta: { permissions: ['manage_seasons'] }, component: () => import('@/pages/admin/AdminSeasonSetupPage.vue') },
         { path: 'mmr-verifications', name: 'admin-mmr-verifications', meta: { permissions: ['manage_mmr_verifications'] }, component: () => import('@/pages/admin/AdminMmrVerificationsPage.vue') },
-        { path: 'grief-reports', name: 'admin-grief-reports', meta: { permissions: ['review_grief_reports'] }, component: () => import('@/pages/admin/AdminGriefReportsPage.vue') },
+        { path: 'reports', name: 'admin-reports', meta: { permissions: ['review_grief_reports'] }, component: () => import('@/pages/admin/AdminReportsPage.vue') },
+        // Back-compat: legacy /admin/grief-reports route still renders the new combined page.
+        { path: 'grief-reports', redirect: { name: 'admin-reports' } },
         { path: 'jobs', name: 'admin-jobs', meta: { permissions: ['manage_jobs'] }, component: () => import('@/pages/admin/AdminJobsPage.vue') },
         { path: 'request-stats', name: 'admin-request-stats', meta: { permissions: ['view_request_stats'] }, component: () => import('@/pages/admin/AdminRequestStatsPage.vue') },
         { path: 'menu', name: 'admin-menu', meta: { permissions: ['manage_menu'] }, component: () => import('@/pages/admin/AdminMenuPage.vue') },
