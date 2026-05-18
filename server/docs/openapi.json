@@ -3934,6 +3934,137 @@
             "400": { "description": "Neither userId nor ip provided" }
           }
         }
+      },
+      "/api/admin/queue/players/{id}/captain-pool": {
+        "post": {
+          "tags": ["Queue"],
+          "summary": "Toggle a player's inhouse captain-pool flag",
+          "description": "Global player flag (parallel to shadow_pool). Requires `manage_queue_pools`. When set, the player is eligible to act as a captain in inhouse pools that require_captain_pool.",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+          "requestBody": {
+            "required": true,
+            "content": { "application/json": { "schema": { "type": "object", "required": ["captain_pool"], "properties": { "captain_pool": { "type": "boolean" } } } } }
+          },
+          "responses": { "200": { "description": "{ ok, captain_pool }" } }
+        }
+      },
+      "/api/inhouse/reports/toxic": {
+        "post": {
+          "tags": ["Inhouse"],
+          "summary": "File a toxic-behaviour report against a match participant",
+          "description": "Reporter must be a participant of the queue match. Inhouse-pool only. The match must either still be active (picking/lobby_creating/live) or have completed within `pool.report_window_minutes` (default 15). Cancelled matches are never reportable. The unique-on-(reporter,reported,match) constraint prevents duplicates (409 on retry). When the reported player's lifetime report count crosses a configured threshold, a strike is awarded and may insert a queue_bans row.",
+          "security": [{ "bearerAuth": [] }],
+          "requestBody": {
+            "required": true,
+            "content": { "application/json": { "schema": {
+              "type": "object",
+              "required": ["queue_match_id", "reported_player_id"],
+              "properties": {
+                "queue_match_id": { "type": "integer" },
+                "reported_player_id": { "type": "integer" },
+                "comment": { "type": "string", "maxLength": 500 }
+              }
+            } } }
+          },
+          "responses": {
+            "201": { "description": "{ ok, reportId, strike: { newStrikes, strikeDelta, cooldown, banUntil } | null }" },
+            "400": { "description": "Not an inhouse match / missing field / can't report yourself" },
+            "403": { "description": "Reporter not in match" },
+            "409": { "description": "Already reported this player for this match" }
+          }
+        }
+      },
+      "/api/inhouse/reports/grief": {
+        "post": {
+          "tags": ["Inhouse"],
+          "summary": "Captain-only grief report against a teammate",
+          "description": "Reporter must be the team's captain (captain1 or captain2 of the queue match). The match must either still be active or have completed within `pool.report_window_minutes` (default 15). Reported player must be on the reporter's team. Comment is mandatory. Inserts a pending report — strikes only apply on admin approval.",
+          "security": [{ "bearerAuth": [] }],
+          "requestBody": {
+            "required": true,
+            "content": { "application/json": { "schema": {
+              "type": "object",
+              "required": ["queue_match_id", "reported_player_id", "comment"],
+              "properties": {
+                "queue_match_id": { "type": "integer" },
+                "reported_player_id": { "type": "integer" },
+                "comment": { "type": "string", "minLength": 1 }
+              }
+            } } }
+          },
+          "responses": {
+            "201": { "description": "{ ok, reportId, status: 'pending' }" },
+            "400": { "description": "Comment missing / not inhouse / player not on team" },
+            "403": { "description": "Reporter is not a captain or not on same team" }
+          }
+        }
+      },
+      "/api/admin/inhouse/grief-reports": {
+        "get": {
+          "tags": ["Inhouse"],
+          "summary": "List grief reports (admin)",
+          "description": "Requires `review_grief_reports` permission. Defaults to status='pending'.",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [
+            { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["pending", "approved", "rejected"], "default": "pending" } }
+          ],
+          "responses": { "200": { "description": "Array of grief-report rows with reporter/reported denormalised fields" } }
+        }
+      },
+      "/api/admin/inhouse/grief-reports/{id}/approve": {
+        "post": {
+          "tags": ["Inhouse"],
+          "summary": "Approve a grief report",
+          "description": "Increments `grief_strikes` on the reported player, applies a queue ban per the pool's grief cooldown rules, and revokes captain_pool if the player was a captain.",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+          "requestBody": {
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "review_note": { "type": "string" } } } } }
+          },
+          "responses": {
+            "200": { "description": "{ ok, newStrikes, banUntil, captainRevoked }" },
+            "404": { "description": "Report not found" },
+            "409": { "description": "Report already reviewed" }
+          }
+        }
+      },
+      "/api/admin/inhouse/grief-reports/{id}/reject": {
+        "post": {
+          "tags": ["Inhouse"],
+          "summary": "Reject a grief report",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+          "requestBody": {
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "review_note": { "type": "string" } } } } }
+          },
+          "responses": {
+            "200": { "description": "{ ok }" },
+            "404": { "description": "Report not found or already reviewed" }
+          }
+        }
+      },
+      "/api/admin/seasons/{id}/friday-bonus": {
+        "post": {
+          "tags": ["Seasons"],
+          "summary": "Trigger the Friday top-3 aggregator for a season",
+          "description": "Manual trigger / backfill of the inhouse Friday top-3 bonus for a specific date. Idempotent — re-runs no-op via the season_match_log_friday_top_unique partial index. Requires `manage_seasons`.",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+          "requestBody": {
+            "required": true,
+            "content": { "application/json": { "schema": {
+              "type": "object",
+              "required": ["friday_date"],
+              "properties": { "friday_date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" } }
+            } } }
+          },
+          "responses": {
+            "200": { "description": "{ ok, applied, fridayDate }" },
+            "400": { "description": "friday_date missing or malformed" },
+            "404": { "description": "Season not found" }
+          }
+        }
       }
     }
   }

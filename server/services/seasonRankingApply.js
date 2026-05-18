@@ -9,18 +9,29 @@
 // don't touch rankings.
 
 import pool, { query, queryOne, execute } from '../db.js'
-import { computeDelta, clampPoints, teamAvgMmr, withDefaults } from './seasonRating.js'
+import { computeDelta, clampPoints, teamAvgMmr, withDefaults, mmrDiffBonus, winstreakBonus } from './seasonRating.js'
 
 export async function applyMatchToSeason({
   queueMatchId,
   seasonId,
+  poolId,
   team1PlayerIds,
   team2PlayerIds,
   winnerTeam, // 1 or 2
+  // Optional per-player leaver info. Map/object keyed by playerId, value
+  // { leaveMinute: number }. Until the bot reports leaver state this is
+  // omitted and the formula degrades to no-leaver behaviour.
+  leaverByPid,
 }) {
   if (!seasonId || !queueMatchId) return { skipped: 'no season' }
   if (winnerTeam !== 1 && winnerTeam !== 2) return { skipped: 'no winner' }
   if (!team1PlayerIds?.length || !team2PlayerIds?.length) return { skipped: 'empty teams' }
+
+  const leaverInfo = (() => {
+    if (!leaverByPid) return null
+    if (leaverByPid instanceof Map) return leaverByPid
+    return new Map(Object.entries(leaverByPid).map(([k, v]) => [Number(k), v]))
+  })()
 
   const client = await pool.connect()
   try {
@@ -46,19 +57,48 @@ export async function applyMatchToSeason({
     }
     const settings = withDefaults(season.settings || {})
 
-    // Pull MMR for everyone in both teams + their current ranking row (if any).
+    // Inhouse settings come from the pool; if poolId wasn't passed, look it
+    // up via queue_matches. A NULL pool or inhouse_enabled=false means we
+    // skip the inhouse formula and behave exactly like the legacy path.
+    let inhousePool = null
+    if (poolId) {
+      inhousePool = (await client.query('SELECT * FROM queue_pools WHERE id = $1', [poolId])).rows[0] || null
+    } else {
+      const qm = (await client.query('SELECT pool_id FROM queue_matches WHERE id = $1', [queueMatchId])).rows[0]
+      if (qm?.pool_id) inhousePool = (await client.query('SELECT * FROM queue_pools WHERE id = $1', [qm.pool_id])).rows[0] || null
+    }
+    const inhouse = !!inhousePool?.inhouse_enabled
+    const isFriday = new Date().getDay() === 5
+
+    // Pull MMR + winstreak for everyone in both teams.
     const allIds = [...new Set([...team1PlayerIds, ...team2PlayerIds])]
     const playerRows = (await client.query(
-      'SELECT id, mmr FROM players WHERE id = ANY($1::int[])',
+      'SELECT id, mmr, toxic_strikes, toxic_clean_games_since_last_strike FROM players WHERE id = ANY($1::int[])',
       [allIds]
     )).rows
     const mmrById = Object.fromEntries(playerRows.map(r => [r.id, Number(r.mmr) || 0]))
+    const playerById = Object.fromEntries(playerRows.map(r => [r.id, r]))
 
     const rankingRows = (await client.query(
-      'SELECT player_id, points, peak_points, games_played, wins, losses FROM season_rankings WHERE season_id = $1 AND player_id = ANY($2::int[])',
+      'SELECT player_id, points, peak_points, games_played, wins, losses, current_winstreak, peak_winstreak FROM season_rankings WHERE season_id = $1 AND player_id = ANY($2::int[])',
       [seasonId, allIds]
     )).rows
     const rankById = Object.fromEntries(rankingRows.map(r => [r.player_id, r]))
+
+    // Did either team have a player leave before the grace minute? Drives
+    // the "teammate cushion" — losers on a team with an early leaver get
+    // their loss halved.
+    const graceMin = Number(inhousePool?.leaver_grace_minutes ?? 15)
+    function teamHasEarlyLeaver(pids) {
+      if (!leaverInfo) return false
+      for (const pid of pids) {
+        const info = leaverInfo.get(pid)
+        if (info && Number(info.leaveMinute) < graceMin) return true
+      }
+      return false
+    }
+    const team1EarlyLeaver = teamHasEarlyLeaver(team1PlayerIds)
+    const team2EarlyLeaver = teamHasEarlyLeaver(team2PlayerIds)
 
     // Team strength input — either real Dota MMR or season points. Using points
     // makes the season fully self-contained; using MMR keeps the calc anchored
@@ -75,23 +115,68 @@ export async function applyMatchToSeason({
     function buildSide(playerIds, ownTeam, won) {
       const teamAvg = ownTeam === 1 ? team1Avg : team2Avg
       const oppAvg  = ownTeam === 1 ? team2Avg : team1Avg
+      const teamHadEarlyLeaver = ownTeam === 1 ? team1EarlyLeaver : team2EarlyLeaver
       for (const pid of playerIds) {
         const row = rankById[pid]
         const before = row ? Number(row.points) : settings.starting_points
-        const { delta, expected, kUsed } = computeDelta({
-          teamAvgMmr: teamAvg,
-          oppAvgMmr:  oppAvg,
-          won,
-          settings,
-        })
-        const after = clampPoints(before + delta, settings)
+        const streakBefore = row ? Number(row.current_winstreak || 0) : 0
+        const peakStreakBefore = row ? Number(row.peak_winstreak || 0) : 0
+
+        const isLeaver = !!(leaverInfo && leaverInfo.get(pid))
+        const leaveMinute = isLeaver ? Number(leaverInfo.get(pid).leaveMinute) : null
+
+        let rawDelta
+        let expected = null, kUsed = null
+        let fridayBonusAccrued = 0
+        if (inhouse && isLeaver) {
+          // Leaver penalty overrides the entire delta per spec.
+          rawDelta = Number(inhousePool.leaver_penalty ?? -50)
+        } else {
+          const base = computeDelta({
+            teamAvgMmr: teamAvg,
+            oppAvgMmr:  oppAvg,
+            won,
+            settings,
+          })
+          expected = base.expected
+          kUsed = base.kUsed
+          rawDelta = base.delta
+          if (inhouse) {
+            rawDelta += mmrDiffBonus({
+              myAvgMmr: teamAvg,
+              oppAvgMmr: oppAvg,
+              won,
+              tiers: inhousePool.mmr_diff_tiers || [],
+            })
+            if (won) {
+              rawDelta += winstreakBonus(streakBefore + 1, inhousePool.winstreak_tiers || [])
+              if (isFriday) {
+                const fwb = Number(inhousePool.friday_win_bonus ?? 5)
+                rawDelta += fwb
+                fridayBonusAccrued += fwb
+              }
+            } else if (teamHadEarlyLeaver) {
+              // Teammate cushion: a survivor on a losing team with an early
+              // leaver only takes half the hit. Wins or leavers themselves
+              // are unaffected.
+              rawDelta = Math.round(rawDelta * 0.5)
+            }
+          }
+        }
+
+        const after = clampPoints(before + rawDelta, settings)
         const realDelta = after - before
+        const newStreak = isLeaver ? 0 : (won ? streakBefore + 1 : 0)
+        const newPeakStreak = Math.max(peakStreakBefore, newStreak)
         updates.push({
           pid,
           before,
           after,
           delta: realDelta,
           won,
+          isLeaver,
+          newStreak,
+          newPeakStreak,
           isNew: !row,
           peakBefore: row ? Number(row.peak_points) : settings.starting_points,
           gamesBefore: row ? row.games_played : 0,
@@ -109,6 +194,9 @@ export async function applyMatchToSeason({
           oppAvg,
           expected,
           kUsed,
+          wasLeaver: isLeaver,
+          leaveMinute,
+          fridayBonusApplied: fridayBonusAccrued,
         })
       }
     }
@@ -124,19 +212,23 @@ export async function applyMatchToSeason({
       await client.query(`
         INSERT INTO season_rankings (
           season_id, player_id, points, peak_points,
-          games_played, wins, losses, last_match_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+          games_played, wins, losses, last_match_at,
+          current_winstreak, peak_winstreak
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $10, $11)
         ON CONFLICT (season_id, player_id) DO UPDATE
-          SET points        = EXCLUDED.points,
-              peak_points   = GREATEST(season_rankings.peak_points, EXCLUDED.points),
-              games_played  = season_rankings.games_played + 1,
-              wins          = season_rankings.wins   + ($8::int),
-              losses        = season_rankings.losses + ($9::int),
-              last_match_at = NOW()
+          SET points            = EXCLUDED.points,
+              peak_points       = GREATEST(season_rankings.peak_points, EXCLUDED.points),
+              games_played      = season_rankings.games_played + 1,
+              wins              = season_rankings.wins   + ($8::int),
+              losses            = season_rankings.losses + ($9::int),
+              last_match_at     = NOW(),
+              current_winstreak = $10,
+              peak_winstreak    = GREATEST(season_rankings.peak_winstreak, $10)
       `, [
         seasonId, u.pid, u.after, newPeak,
         newGames, newWins, newLosses,
         u.won ? 1 : 0, u.won ? 0 : 1,
+        u.newStreak, u.newPeakStreak,
       ])
     }
 
@@ -146,13 +238,45 @@ export async function applyMatchToSeason({
         INSERT INTO season_match_log (
           season_id, queue_match_id, player_id, team, won,
           points_before, points_after, delta,
-          team_avg_mmr, opponent_avg_mmr, expected_win, k_used
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          team_avg_mmr, opponent_avg_mmr, expected_win, k_used,
+          was_leaver, leave_minute, friday_bonus_applied
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
       `, [
         seasonId, queueMatchId, l.pid, l.team, l.won,
         l.before, l.after, l.delta,
         l.teamAvg, l.oppAvg, l.expected, l.kUsed,
+        !!l.wasLeaver, l.leaveMinute, l.fridayBonusApplied || 0,
       ])
+    }
+
+    // Inhouse clean-games decay: a player serving toxic strikes shaves one
+    // off after `clean_games_to_decay_strike` strike-free matches in a row.
+    // Leavers don't count as "clean". The counter lives on players (not
+    // season-scoped) since strikes themselves are global.
+    if (inhouse) {
+      const decayN = Math.max(1, Number(inhousePool.clean_games_to_decay_strike ?? 5))
+      for (const u of updates) {
+        const pr = playerById[u.pid]
+        if (!pr || (pr.toxic_strikes | 0) <= 0) continue
+        if (u.isLeaver) continue
+        const prevCount = pr.toxic_clean_games_since_last_strike | 0
+        const nextCount = prevCount + 1
+        if (nextCount >= decayN) {
+          await client.query(
+            `UPDATE players SET toxic_strikes = GREATEST(0, toxic_strikes - 1), toxic_clean_games_since_last_strike = 0 WHERE id = $1`,
+            [u.pid]
+          )
+          await client.query(
+            `INSERT INTO inhouse_strike_log (player_id, kind, delta, reason, source_queue_match_id) VALUES ($1, 'toxic_decay', -1, $2, $3)`,
+            [u.pid, `Decayed after ${decayN} clean games`, queueMatchId]
+          )
+        } else {
+          await client.query(
+            `UPDATE players SET toxic_clean_games_since_last_strike = $1 WHERE id = $2`,
+            [nextCount, u.pid]
+          )
+        }
+      }
     }
 
     await client.query('COMMIT')
@@ -178,12 +302,14 @@ export async function recomputeSeasonFromHistory(seasonId) {
   await execute('DELETE FROM season_rankings WHERE season_id = $1', [seasonId])
 
   const matches = await query(`
-    SELECT id, team1_players, team2_players,
-           (SELECT winner_captain_id FROM matches WHERE id = queue_matches.match_id) AS winner_captain_id,
-           captain1_player_id, captain2_player_id, completed_at
-    FROM queue_matches
-    WHERE season_id = $1 AND status = 'completed'
-    ORDER BY completed_at ASC NULLS LAST, id ASC
+    SELECT qm.id, qm.team1_players, qm.team2_players, qm.pool_id,
+           (SELECT winner_captain_id FROM matches WHERE id = qm.match_id) AS winner_captain_id,
+           qm.captain1_player_id, qm.captain2_player_id, qm.completed_at,
+           qp.inhouse_enabled, qp.mmr_diff_tiers, qp.winstreak_tiers, qp.friday_win_bonus
+    FROM queue_matches qm
+    LEFT JOIN queue_pools qp ON qp.id = qm.pool_id
+    WHERE qm.season_id = $1 AND qm.status = 'completed'
+    ORDER BY qm.completed_at ASC NULLS LAST, qm.id ASC
   `, [seasonId])
 
   // Wipe match-derived audit rows; preserve manual adjusts and re-insert in order.
@@ -197,12 +323,18 @@ export async function recomputeSeasonFromHistory(seasonId) {
 
   const points = new Map()
   const stats  = new Map()
+  const streaks = new Map()       // pid -> current_winstreak
+  const peakStreaks = new Map()   // pid -> peak_winstreak
   const getPts = (pid) => points.has(pid) ? points.get(pid) : cfg.starting_points
+  const getStreak = (pid) => streaks.get(pid) || 0
   const bumpStats = (pid, won, newPts) => {
     const cur = stats.get(pid) || { games: 0, wins: 0, losses: 0, peak: cfg.starting_points }
     cur.games++; if (won) cur.wins++; else cur.losses++
     if (newPts > cur.peak) cur.peak = newPts
     stats.set(pid, cur)
+    const newStreak = won ? getStreak(pid) + 1 : 0
+    streaks.set(pid, newStreak)
+    peakStreaks.set(pid, Math.max(peakStreaks.get(pid) || 0, newStreak))
   }
 
   // Pull MMR for every player we'll touch.
@@ -235,10 +367,26 @@ export async function recomputeSeasonFromHistory(seasonId) {
       const strengthFor = (pid) => cfg.strength_basis === 'points' ? getPts(pid) : (mmrById[pid] || 0)
       const t1Avg = teamAvgMmr(t1.map(strengthFor))
       const t2Avg = teamAvgMmr(t2.map(strengthFor))
+      // Inhouse bonuses on replay: MMR-diff, winstreak, Friday win bonus.
+      // Leaver penalty + teammate cushion CANNOT be replayed (the bot's
+      // leaver state isn't snapshotted on queue_matches), so recompute
+      // diverges from the live path by that amount when an inhouse match
+      // had a leaver. Acceptable for an admin diagnostic — re-apply via a
+      // future manual adjust if absolute parity is needed.
+      const inhouseHere = !!m.inhouse_enabled
+      const matchIsFriday = m.completed_at ? new Date(m.completed_at).getDay() === 5 : false
       for (const pid of t1) {
         const before = getPts(pid)
         const { delta, expected, kUsed } = computeDelta({ teamAvgMmr: t1Avg, oppAvgMmr: t2Avg, won: team1Won, settings: cfg })
-        const after = clampPoints(before + delta, cfg)
+        let bonus = 0
+        if (inhouseHere) {
+          bonus += mmrDiffBonus({ myAvgMmr: t1Avg, oppAvgMmr: t2Avg, won: team1Won, tiers: m.mmr_diff_tiers || [] })
+          if (team1Won) {
+            bonus += winstreakBonus(getStreak(pid) + 1, m.winstreak_tiers || [])
+            if (matchIsFriday) bonus += Number(m.friday_win_bonus ?? 5)
+          }
+        }
+        const after = clampPoints(before + delta + bonus, cfg)
         points.set(pid, after); bumpStats(pid, team1Won, after)
         await execute(`
           INSERT INTO season_match_log (season_id, queue_match_id, player_id, team, won,
@@ -249,7 +397,15 @@ export async function recomputeSeasonFromHistory(seasonId) {
       for (const pid of t2) {
         const before = getPts(pid)
         const { delta, expected, kUsed } = computeDelta({ teamAvgMmr: t2Avg, oppAvgMmr: t1Avg, won: team2Won, settings: cfg })
-        const after = clampPoints(before + delta, cfg)
+        let bonus = 0
+        if (inhouseHere) {
+          bonus += mmrDiffBonus({ myAvgMmr: t2Avg, oppAvgMmr: t1Avg, won: team2Won, tiers: m.mmr_diff_tiers || [] })
+          if (team2Won) {
+            bonus += winstreakBonus(getStreak(pid) + 1, m.winstreak_tiers || [])
+            if (matchIsFriday) bonus += Number(m.friday_win_bonus ?? 5)
+          }
+        }
+        const after = clampPoints(before + delta + bonus, cfg)
         points.set(pid, after); bumpStats(pid, team2Won, after)
         await execute(`
           INSERT INTO season_match_log (season_id, queue_match_id, player_id, team, won,
@@ -277,13 +433,15 @@ export async function recomputeSeasonFromHistory(seasonId) {
   for (const [pid, pts] of points.entries()) {
     const st = stats.get(pid) || { games: 0, wins: 0, losses: 0, peak: cfg.starting_points }
     await execute(`
-      INSERT INTO season_rankings (season_id, player_id, points, peak_points, games_played, wins, losses, last_match_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+      INSERT INTO season_rankings (season_id, player_id, points, peak_points, games_played, wins, losses, last_match_at, current_winstreak, peak_winstreak)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8, $9)
       ON CONFLICT (season_id, player_id) DO UPDATE SET
         points = EXCLUDED.points, peak_points = EXCLUDED.peak_points,
         games_played = EXCLUDED.games_played, wins = EXCLUDED.wins, losses = EXCLUDED.losses,
-        last_match_at = EXCLUDED.last_match_at
-    `, [seasonId, pid, pts, st.peak, st.games, st.wins, st.losses])
+        last_match_at = EXCLUDED.last_match_at,
+        current_winstreak = EXCLUDED.current_winstreak,
+        peak_winstreak = EXCLUDED.peak_winstreak
+    `, [seasonId, pid, pts, st.peak, st.games, st.wins, st.losses, getStreak(pid), peakStreaks.get(pid) || 0])
   }
 
   return { players: points.size, events: events.length }

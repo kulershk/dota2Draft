@@ -48,6 +48,9 @@ interface User {
   discord_id: string | null
   discord_username: string | null
   shadow_pool: number
+  captain_pool: boolean
+  toxic_strikes: number
+  grief_strikes: number
   dotacoins: number
 }
 
@@ -92,6 +95,8 @@ const editUserMmr = ref(0)
 const editUserRoles = ref<string[]>([])
 const editUserShadowPool = ref<0 | 1 | 2>(0)
 const editUserShadowPoolOriginal = ref<0 | 1 | 2>(0)
+const editUserCaptainPool = ref(false)
+const editUserCaptainPoolOriginal = ref(false)
 const savingUser = ref(false)
 const ALL_ROLES = ['Carry', 'Mid', 'Offlane', 'Pos4', 'Pos5']
 const onlinePlayerIds = ref<number[]>([])
@@ -200,6 +205,8 @@ async function openEditUser(user: User) {
   const sp = (user.shadow_pool === 1 || user.shadow_pool === 2) ? user.shadow_pool : 0
   editUserShadowPool.value = sp
   editUserShadowPoolOriginal.value = sp
+  editUserCaptainPool.value = !!user.captain_pool
+  editUserCaptainPoolOriginal.value = !!user.captain_pool
   const groups = await api.getPlayerGroups(user.id)
   editUserGroupIds.value = groups.map((g: PermGroup) => g.id)
 }
@@ -242,6 +249,9 @@ async function saveEditUser() {
     // we'd 403 noisily on every save.
     if (editUserShadowPool.value !== editUserShadowPoolOriginal.value && store.hasPerm('manage_queue_pools')) {
       calls.push(api.adminSetQueuePlayerShadow(editUser.value.id, editUserShadowPool.value))
+    }
+    if (editUserCaptainPool.value !== editUserCaptainPoolOriginal.value && store.hasPerm('manage_queue_pools')) {
+      calls.push(api.adminSetQueuePlayerCaptainPool(editUser.value.id, editUserCaptainPool.value))
     }
     await Promise.all(calls)
     editUser.value = null
@@ -948,6 +958,39 @@ function formatRelativeTime(dateStr: string | null) {
             </button>
           </div>
           <p class="text-xs text-muted-foreground">{{ t('queueAdminShadowHint') }}</p>
+        </div>
+
+        <!-- Captain Pool (inhouse — only shown to admins with manage_queue_pools) -->
+        <div v-if="store.hasPerm('manage_queue_pools')" class="flex flex-col gap-1.5">
+          <label class="block text-xs font-medium text-muted-foreground">{{ t('queueAdminCaptainPoolLabel') }}</label>
+          <div class="flex items-center rounded-lg border border-border overflow-hidden w-fit">
+            <button
+              type="button"
+              class="px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors"
+              :class="!editUserCaptainPool ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent/60'"
+              @click="editUserCaptainPool = false"
+            >{{ t('queueAdminCaptainPool_off') }}</button>
+            <button
+              type="button"
+              class="px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors"
+              :class="editUserCaptainPool ? 'bg-purple-500/20 text-purple-300' : 'text-muted-foreground hover:bg-accent/60'"
+              @click="editUserCaptainPool = true"
+            >{{ t('queueAdminCaptainPool_on') }}</button>
+          </div>
+          <p class="text-xs text-muted-foreground">{{ t('queueAdminCaptainPoolHint') }}</p>
+        </div>
+
+        <!-- Inhouse strikes (read-only) -->
+        <div v-if="store.hasPerm('manage_queue_pools') && editUser && (editUser.toxic_strikes > 0 || editUser.grief_strikes > 0)" class="flex flex-col gap-1.5">
+          <label class="block text-xs font-medium text-muted-foreground">{{ t('inhouseStrikesLabel') }}</label>
+          <div class="flex gap-2">
+            <span v-if="editUser.toxic_strikes > 0" class="px-2 py-0.5 rounded-md text-xs font-medium bg-amber-500/15 text-amber-300">
+              {{ t('inhouseToxicStrikes', { n: editUser.toxic_strikes }) }}
+            </span>
+            <span v-if="editUser.grief_strikes > 0" class="px-2 py-0.5 rounded-md text-xs font-medium bg-rose-500/15 text-rose-300">
+              {{ t('inhouseGriefStrikes', { n: editUser.grief_strikes }) }}
+            </span>
+          </div>
         </div>
 
         <!-- Permission Groups (only shown to admins with manage_permissions) -->

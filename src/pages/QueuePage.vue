@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import { Clock, Users, Swords, X, Check, Loader2, Shield, ShieldCheck, ChevronRight, ChevronDown, Timer, Send, MessageCircle, Ban, Target, Copy, Eye, EyeOff, Hourglass, ListOrdered, UserPlus, Plus, Info, Crown, Medal, BadgeCheck } from 'lucide-vue-next'
 import { useQueueStore, type QueuePlayer, QUEUE_ROLES } from '@/composables/useQueueStore'
 import { useDraftStore } from '@/composables/useDraftStore'
+import { useApi } from '@/composables/useApi'
 import { getServerNow, getSocket } from '@/composables/useSocket'
 import { formatRelativeTime } from '@/utils/format'
 
@@ -71,6 +72,53 @@ const hasShadowPlayersInQueue = computed(() => queue.queuePlayers.value.some(p =
 const iAmCaptain1 = computed(() => queue.activeMatch.value?.captain1.playerId === currentUserId.value)
 const iAmCaptain2 = computed(() => queue.activeMatch.value?.captain2.playerId === currentUserId.value)
 const iAmCaptain = computed(() => iAmCaptain1.value || iAmCaptain2.value)
+const iAmTeam1 = computed(() => {
+  const uid = currentUserId.value
+  return !!(uid && (queue.teamsFormed.value?.team1 || []).some(p => p.playerId === uid))
+})
+
+const api = useApi()
+const reporting = ref(false)
+async function reportToxic(p: QueuePlayer) {
+  const qmId = queue.activeMatch.value?.queueMatchId
+  if (!qmId || !p.playerId || p.playerId === currentUserId.value || reporting.value) return
+  const comment = prompt(t('inhouseReportToxicPrompt', { name: p.name })) ?? ''
+  if (comment === null) return
+  reporting.value = true
+  try {
+    await api.reportToxic({ queue_match_id: qmId, reported_player_id: p.playerId, comment })
+    alert(t('inhouseReportFiled'))
+  } catch (e: any) {
+    alert(e?.message || 'Report failed')
+  } finally {
+    reporting.value = false
+  }
+}
+async function reportGrief(p: QueuePlayer) {
+  const qmId = queue.activeMatch.value?.queueMatchId
+  if (!qmId || !p.playerId || p.playerId === currentUserId.value || reporting.value) return
+  const comment = prompt(t('inhouseReportGriefPrompt', { name: p.name }))
+  if (comment == null) return
+  if (!comment.trim()) { alert(t('inhouseReportGriefCommentRequired')); return }
+  reporting.value = true
+  try {
+    await api.reportGrief({ queue_match_id: qmId, reported_player_id: p.playerId, comment })
+    alert(t('inhouseReportFiled'))
+  } catch (e: any) {
+    alert(e?.message || 'Report failed')
+  } finally {
+    reporting.value = false
+  }
+}
+function canReportToxic(p: QueuePlayer): boolean {
+  return !!(queue.activeMatch.value && p.playerId !== currentUserId.value)
+}
+function canReportGrief(p: QueuePlayer, side: 1 | 2): boolean {
+  if (!iAmCaptain.value) return false
+  if (p.playerId === currentUserId.value) return false
+  const myTeam = iAmTeam1.value ? 1 : 2
+  return side === myTeam
+}
 const iAmParticipant = computed(() => {
   const uid = currentUserId.value
   if (!uid || !queue.activeMatch.value) return false
@@ -667,7 +715,8 @@ onUnmounted(() => {
                     :class="[
                       isInLobby(p.steamId) ? '' : 'opacity-80',
                       p.shadowPool === 2 ? 'border-l-4 border-l-red-500/80' : '',
-                      p.shadowPool === 1 ? 'border-l-4 border-l-yellow-500/80' : ''
+                      p.shadowPool === 1 ? 'border-l-4 border-l-yellow-500/80' : '',
+                      p.captainPool ? 'border-l-4 border-l-purple-500/80' : '',
                     ]">
                     <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-8 h-8 rounded-full" :class="idx === 0 ? 'ring-2 ring-cyan-500/40' : ''" />
                     <div class="flex-1 min-w-0">
@@ -686,6 +735,8 @@ onUnmounted(() => {
                     <span v-else class="text-[10px] font-semibold text-muted-foreground bg-accent/60 px-2 py-1 rounded-full flex items-center gap-1">
                       <Loader2 class="w-3 h-3 animate-spin" /> {{ t('queueLobbyNotReady') }}
                     </span>
+                    <button v-if="canReportToxic(p)" class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 hover:bg-amber-500/20" :disabled="reporting" :title="t('inhouseReportToxic')" @click="reportToxic(p)">!</button>
+                    <button v-if="canReportGrief(p, 1)" class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" :disabled="reporting" :title="t('inhouseReportGrief')" @click="reportGrief(p)">G</button>
                   </div>
                 </div>
               </div>
@@ -713,7 +764,8 @@ onUnmounted(() => {
                     :class="[
                       isInLobby(p.steamId) ? '' : 'opacity-80',
                       p.shadowPool === 2 ? 'border-l-4 border-l-red-500/80' : '',
-                      p.shadowPool === 1 ? 'border-l-4 border-l-yellow-500/80' : ''
+                      p.shadowPool === 1 ? 'border-l-4 border-l-yellow-500/80' : '',
+                      p.captainPool ? 'border-l-4 border-l-purple-500/80' : '',
                     ]">
                     <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-8 h-8 rounded-full" :class="idx === 0 ? 'ring-2 ring-red-500/40' : ''" />
                     <div class="flex-1 min-w-0">
@@ -732,6 +784,8 @@ onUnmounted(() => {
                     <span v-else class="text-[10px] font-semibold text-muted-foreground bg-accent/60 px-2 py-1 rounded-full flex items-center gap-1">
                       <Loader2 class="w-3 h-3 animate-spin" /> {{ t('queueLobbyNotReady') }}
                     </span>
+                    <button v-if="canReportToxic(p)" class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 hover:bg-amber-500/20" :disabled="reporting" :title="t('inhouseReportToxic')" @click="reportToxic(p)">!</button>
+                    <button v-if="canReportGrief(p, 2)" class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" :disabled="reporting" :title="t('inhouseReportGrief')" @click="reportGrief(p)">G</button>
                   </div>
                 </div>
               </div>
@@ -1045,7 +1099,8 @@ onUnmounted(() => {
                   <div v-for="(p, i) in queue.pickState.value.availablePlayers" :key="p.playerId"
                     class="rounded-xl bg-background border-2 flex items-center gap-3 px-3.5 py-2.5 transition-all"
                     :class="[
-                      p.shadowPool === 2 ? 'border-red-500/80'
+                      p.captainPool ? 'border-purple-500/80'
+                        : p.shadowPool === 2 ? 'border-red-500/80'
                         : p.shadowPool === 1 ? 'border-yellow-500/80'
                         : (isMyTurn && i === 0 ? 'border-cyan-500/30' : 'border-border'),
                       isMyTurn && i === 0 ? 'pool-card--highlight' : ''
@@ -1345,11 +1400,13 @@ onUnmounted(() => {
                     v-for="p in queue.queuePlayers.value" :key="p.playerId"
                     :to="{ name: 'player-profile', params: { id: p.playerId } }"
                     class="flex flex-col items-center gap-2.5 min-w-0 px-2.5 py-3.5 rounded-[10px] bg-[#0F172A] border-2 hover:bg-[#111d33] transition-colors"
-                    :class="p.shadowPool === 2
-                      ? 'border-red-500/80'
-                      : p.shadowPool === 1
-                        ? 'border-yellow-500/80'
-                        : 'border-border/40 hover:border-primary/40'"
+                    :class="p.captainPool
+                      ? 'border-purple-500/80'
+                      : p.shadowPool === 2
+                        ? 'border-red-500/80'
+                        : p.shadowPool === 1
+                          ? 'border-yellow-500/80'
+                          : 'border-border/40 hover:border-primary/40'"
                     :title="t('queuePlayerCardOpenProfile')"
                   >
                     <img

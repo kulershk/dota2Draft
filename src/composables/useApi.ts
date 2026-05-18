@@ -689,6 +689,8 @@ export function useApi() {
       request(`/api/admin/queue/kick/${playerId}`, { method: 'POST', body: JSON.stringify({ reason }) }),
     adminSetQueuePlayerShadow: (playerId: number, shadowPool: 0 | 1 | 2) =>
       request(`/api/admin/queue/players/${playerId}/shadow`, { method: 'POST', body: JSON.stringify({ shadow_pool: shadowPool }) }),
+    adminSetQueuePlayerCaptainPool: (playerId: number, captainPool: boolean) =>
+      request(`/api/admin/queue/players/${playerId}/captain-pool`, { method: 'POST', body: JSON.stringify({ captain_pool: captainPool }) }),
     getAdminQueueBans: (poolId?: number | 'global') => {
       const qs = poolId == null ? '' : `?pool_id=${poolId}`
       return request(`/api/admin/queue/bans${qs}`)
@@ -697,6 +699,20 @@ export function useApi() {
       request('/api/admin/queue/bans', { method: 'POST', body: JSON.stringify(data) }),
     removeAdminQueueBan: (banId: number) =>
       request(`/api/admin/queue/bans/${banId}`, { method: 'DELETE' }),
+
+    // Inhouse reports
+    reportToxic: (data: { queue_match_id: number; reported_player_id: number; comment?: string }) =>
+      request('/api/inhouse/reports/toxic', { method: 'POST', body: JSON.stringify(data) }),
+    reportGrief: (data: { queue_match_id: number; reported_player_id: number; comment: string }) =>
+      request('/api/inhouse/reports/grief', { method: 'POST', body: JSON.stringify(data) }),
+    getAdminGriefReports: (status: 'pending' | 'approved' | 'rejected' = 'pending') =>
+      request(`/api/admin/inhouse/grief-reports?status=${status}`),
+    approveGriefReport: (id: number, review_note?: string) =>
+      request(`/api/admin/inhouse/grief-reports/${id}/approve`, { method: 'POST', body: JSON.stringify({ review_note }) }),
+    rejectGriefReport: (id: number, review_note?: string) =>
+      request(`/api/admin/inhouse/grief-reports/${id}/reject`, { method: 'POST', body: JSON.stringify({ review_note }) }),
+    triggerFridayBonus: (seasonId: number, friday_date: string) =>
+      request(`/api/admin/seasons/${seasonId}/friday-bonus`, { method: 'POST', body: JSON.stringify({ friday_date }) }),
 
     // Seasons (public)
     getPublicSeasons: () => request('/api/seasons'),

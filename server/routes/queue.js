@@ -27,6 +27,21 @@ import { botPool } from '../services/botPool.js'
 import { kickPlayerFromQueue, broadcastQueueUpdate, autoRequeueEligible } from '../socket/queue.js'
 import { discordBot } from '../services/discordBotClient.js'
 
+// CSV of "1" or "2" — captains alternate picks. Each captain must end up with
+// (team_size - 1) picks (the captain itself fills the remaining slot).
+function validatePickOrder(csv, teamSize) {
+  if (typeof csv !== 'string' || !csv.trim()) return 'pick_order must be a non-empty CSV like "1,2,1,2,1,2,2,1"'
+  const parts = csv.split(',').map(s => s.trim())
+  if (parts.some(p => p !== '1' && p !== '2')) return 'pick_order entries must each be "1" or "2"'
+  const expectedPerCap = Math.max(0, Number(teamSize || 0) - 1)
+  const cap1 = parts.filter(p => p === '1').length
+  const cap2 = parts.filter(p => p === '2').length
+  if (cap1 !== expectedPerCap || cap2 !== expectedPerCap) {
+    return `pick_order must give each captain exactly ${expectedPerCap} picks for team_size=${teamSize} (got cap1=${cap1}, cap2=${cap2})`
+  }
+  return null
+}
+
 export default function createQueueRouter(io) {
   const router = Router()
 
@@ -391,9 +406,24 @@ export default function createQueueRouter(io) {
       captain_eligibility_threshold,
       season_id,
       rules_title, rules_content,
+      // Inhouse — every field optional; omitted ones fall back to DB default.
+      inhouse_enabled, require_captain_pool, pick_order,
+      weekday_game_mode, friday_game_mode,
+      friday_win_bonus, friday_top1_bonus, friday_top2_bonus, friday_top3_bonus,
+      leaver_penalty, leaver_grace_minutes,
+      winstreak_tiers, mmr_diff_tiers,
+      prize_active_pct,
+      toxic_report_thresholds, toxic_strike_cooldowns, grief_strike_cooldowns,
+      clean_games_to_decay_strike,
+      report_window_minutes,
     } = req.body
 
     if (!name) return res.status(400).json({ error: 'Name is required' })
+
+    const ts = team_size || 5
+    const po = pick_order ?? '1,2,1,2,1,2,2,1'
+    const pickOrderError = validatePickOrder(po, ts)
+    if (pickOrderError) return res.status(400).json({ error: pickOrderError })
 
     try {
       const pool = await queryOne(`
@@ -407,12 +437,22 @@ export default function createQueueRouter(io) {
           xp_win, xp_participate,
           accept_timer, decline_ban_minutes,
           captain_eligibility_threshold,
-          season_id, rules_title, rules_content, created_by
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30)
+          season_id, rules_title, rules_content, created_by,
+          inhouse_enabled, require_captain_pool, pick_order,
+          weekday_game_mode, friday_game_mode,
+          friday_win_bonus, friday_top1_bonus, friday_top2_bonus, friday_top3_bonus,
+          leaver_penalty, leaver_grace_minutes,
+          winstreak_tiers, mmr_diff_tiers,
+          prize_active_pct,
+          toxic_report_thresholds, toxic_strike_cooldowns, grief_strike_cooldowns,
+          clean_games_to_decay_strike,
+          report_window_minutes
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,
+                  $31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49)
         RETURNING *
       `, [
         name, enabled !== false, min_mmr || 0, max_mmr || 0,
-        pick_timer || 30, best_of || 1, team_size || 5,
+        pick_timer || 30, best_of || 1, ts,
         lobby_server_region || 3, lobby_game_mode || 2, lobby_league_id || 0,
         lobby_dotv_delay ?? 1, !!lobby_cheats, lobby_allow_spectating !== false,
         lobby_pause_setting || 0, lobby_selection_priority || 0, lobby_cm_pick || 0,
@@ -422,6 +462,18 @@ export default function createQueueRouter(io) {
         accept_timer ?? 20, decline_ban_minutes ?? 5,
         captain_eligibility_threshold ?? 1500,
         season_id || null, rules_title || '', rules_content || '', admin.id,
+        !!inhouse_enabled, !!require_captain_pool, po,
+        weekday_game_mode ?? 16, friday_game_mode ?? 2,
+        friday_win_bonus ?? 5, friday_top1_bonus ?? 12, friday_top2_bonus ?? 6, friday_top3_bonus ?? 6,
+        leaver_penalty ?? -50, leaver_grace_minutes ?? 15,
+        JSON.stringify(winstreak_tiers ?? [{ streak: 3, bonus: 1 }, { streak: 5, bonus: 2 }, { streak: 8, bonus: 3 }]),
+        JSON.stringify(mmr_diff_tiers ?? [{ min: 400, max: 599, bonus: 2 }, { min: 600, max: 1000, bonus: 3 }, { min: 1001, max: 99999, bonus: 5 }]),
+        prize_active_pct ?? 25,
+        JSON.stringify(toxic_report_thresholds ?? [{ reports: 3, strike_delta: 1 }, { reports: 4, strike_delta: 2 }]),
+        JSON.stringify(toxic_strike_cooldowns ?? [{ strikes: 2, action: 'warn' }, { strikes: 3, hours: 12 }, { strikes: 4, hours: 24 }, { strikes: 5, hours: 72 }]),
+        JSON.stringify(grief_strike_cooldowns ?? [{ strikes: 1, action: 'warn' }, { strikes: 2, hours: 24 }, { strikes: 3, hours: 72 }, { strikes: 4, action: 'ban' }]),
+        clean_games_to_decay_strike ?? 5,
+        report_window_minutes ?? 15,
       ])
       res.status(201).json(pool)
     } catch (e) {
@@ -454,12 +506,33 @@ export default function createQueueRouter(io) {
         'captain_eligibility_threshold',
         'season_id',
         'rules_title', 'rules_content', 'is_featured',
+        // Inhouse — same shape as create.
+        'inhouse_enabled', 'require_captain_pool', 'pick_order',
+        'weekday_game_mode', 'friday_game_mode',
+        'friday_win_bonus', 'friday_top1_bonus', 'friday_top2_bonus', 'friday_top3_bonus',
+        'leaver_penalty', 'leaver_grace_minutes',
+        'winstreak_tiers', 'mmr_diff_tiers',
+        'prize_active_pct',
+        'toxic_report_thresholds', 'toxic_strike_cooldowns', 'grief_strike_cooldowns',
+        'clean_games_to_decay_strike',
+        'report_window_minutes',
       ]
+      const jsonbFields = new Set([
+        'winstreak_tiers', 'mmr_diff_tiers',
+        'toxic_report_thresholds', 'toxic_strike_cooldowns', 'grief_strike_cooldowns',
+      ])
+      // Validate pick_order against the effective team_size (post-change).
+      if (req.body.pick_order !== undefined) {
+        const ts = req.body.team_size !== undefined ? Number(req.body.team_size) : existing.team_size
+        const err = validatePickOrder(String(req.body.pick_order), ts)
+        if (err) return res.status(400).json({ error: err })
+      }
       const setClauses = []
       const values = []
       for (const f of fields) {
         if (req.body[f] !== undefined) {
-          values.push(req.body[f])
+          const raw = req.body[f]
+          values.push(jsonbFields.has(f) ? JSON.stringify(raw) : raw)
           setClauses.push(`${f} = $${values.length}`)
         }
       }
@@ -797,6 +870,32 @@ export default function createQueueRouter(io) {
       const poolId = playerInQueue.get(playerId)
       if (poolId) broadcastQueueUpdate(io, poolId)
       res.json({ ok: true, shadow_pool: next })
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  // ── Admin: set a player's captain-pool flag (inhouse captain) ──
+  // Mirrors the shadow-pool toggle: global flag, gated on canManageAll. The
+  // in-memory queue entry is mutated so the next startReadyCheck and the
+  // pool sidebar render see the new value without re-queueing.
+  router.post('/api/admin/queue/players/:id/captain-pool', async (req, res) => {
+    const scope = await getQueueAdminScope(req, res)
+    if (!scope) return
+    if (!scope.canManageAll) return res.status(403).json({ error: 'Global player flag requires manage_queue_pools' })
+    const playerId = Number(req.params.id)
+    if (!playerId) return res.status(400).json({ error: 'Invalid player id' })
+    const next = !!req.body?.captain_pool
+    try {
+      const result = await execute('UPDATE players SET captain_pool = $1 WHERE id = $2', [next, playerId])
+      if (result.rowCount === 0) return res.status(404).json({ error: 'Player not found' })
+      for (const q of poolQueues.values()) {
+        const e = q.get(playerId)
+        if (e) e.captainPool = next
+      }
+      const poolId = playerInQueue.get(playerId)
+      if (poolId) broadcastQueueUpdate(io, poolId)
+      res.json({ ok: true, captain_pool: next })
     } catch (e) {
       res.status(500).json({ error: e.message })
     }

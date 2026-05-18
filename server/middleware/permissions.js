@@ -29,6 +29,7 @@ export const ALL_PERMISSIONS = [
   'manage_own_leagues',
   'manage_subscription_plans',
   'manage_discord_settings',
+  'review_grief_reports',
 ]
 
 export async function getPlayerPermissions(playerId) {

@@ -37,6 +37,7 @@ import templateRoutes from './routes/templates.js'
 import createQueueRouter from './routes/queue.js'
 import createSeasonsRouter from './routes/seasons.js'
 import createMmrVerificationsRouter from './routes/mmrVerifications.js'
+import createInhouseReportsRouter from './routes/inhouseReports.js'
 import homeRoutes from './routes/home.js'
 import jobRoutes from './routes/jobs.js'
 import adminStatsRoutes from './routes/adminStats.js'
@@ -52,6 +53,7 @@ import { queryOne } from './db.js'
 // Socket
 import { initSocket, setSocketsEnabled } from './socket/index.js'
 import { setLivePollerIo, resumeActiveMatches as resumeLivePolling } from './services/liveMatchPoller.js'
+import { startFridayBonusScheduler } from './services/inhouseFridayBonus.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -157,6 +159,7 @@ app.use(templateRoutes)
 app.use(createQueueRouter(io))
 app.use(createSeasonsRouter(io))
 app.use(createMmrVerificationsRouter(io))
+app.use(createInhouseReportsRouter(io))
 app.use(homeRoutes)
 app.use(jobRoutes)
 app.use(adminStatsRoutes)
@@ -362,6 +365,7 @@ initDb().then(async () => {
   })
 
   await startJobWorker()
+  startFridayBonusScheduler()
   server.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`)
   })

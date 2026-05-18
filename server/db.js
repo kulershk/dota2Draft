@@ -1008,6 +1008,140 @@ export async function initDb() {
     WHERE p.id = sub.player_id AND p.mmr_verified_at IS NULL
   `)
 
+  // ─── Inhouse system ───────────────────────────────────────
+  // Inhouse competitions live on top of queue_pools. When inhouse_enabled is
+  // true, the pool follows the inhouse rules: captain-pool draft, day-aware
+  // game mode (CD weekdays / CM Friday), MMR-diff & winstreak & Friday
+  // point bonuses, leaver penalty + teammate cushion, toxic + grief reports
+  // with strike-based cooldowns (written to queue_bans), and a top-X%-by-
+  // games-played prize qualifier.
+  for (const [col, def] of [
+    ['captain_pool',                        'BOOLEAN NOT NULL DEFAULT FALSE'],
+    ['toxic_reports_received',              'INTEGER NOT NULL DEFAULT 0'],
+    ['toxic_strikes',                       'INTEGER NOT NULL DEFAULT 0'],
+    ['toxic_clean_games_since_last_strike', 'INTEGER NOT NULL DEFAULT 0'],
+    ['grief_strikes',                       'INTEGER NOT NULL DEFAULT 0'],
+    ['toxic_thresholds_fired',              `JSONB NOT NULL DEFAULT '[]'::jsonb`],
+  ]) {
+    const has = await queryOne(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'players' AND column_name = $1`, [col]
+    )
+    if (!has) await execute(`ALTER TABLE players ADD COLUMN ${col} ${def}`)
+  }
+
+  for (const [col, def] of [
+    ['inhouse_enabled',             'BOOLEAN NOT NULL DEFAULT FALSE'],
+    ['require_captain_pool',        'BOOLEAN NOT NULL DEFAULT FALSE'],
+    ['pick_order',                  `TEXT NOT NULL DEFAULT '1,2,1,2,1,2,2,1'`],
+    ['weekday_game_mode',           'INTEGER NOT NULL DEFAULT 16'],
+    ['friday_game_mode',            'INTEGER NOT NULL DEFAULT 2'],
+    ['friday_win_bonus',            'INTEGER NOT NULL DEFAULT 5'],
+    ['friday_top1_bonus',           'INTEGER NOT NULL DEFAULT 12'],
+    ['friday_top2_bonus',           'INTEGER NOT NULL DEFAULT 6'],
+    ['friday_top3_bonus',           'INTEGER NOT NULL DEFAULT 6'],
+    ['leaver_penalty',              'INTEGER NOT NULL DEFAULT -50'],
+    ['leaver_grace_minutes',        'INTEGER NOT NULL DEFAULT 15'],
+    ['winstreak_tiers',             `JSONB NOT NULL DEFAULT '[{"streak":3,"bonus":1},{"streak":5,"bonus":2},{"streak":8,"bonus":3}]'::jsonb`],
+    ['mmr_diff_tiers',              `JSONB NOT NULL DEFAULT '[{"min":400,"max":599,"bonus":2},{"min":600,"max":1000,"bonus":3},{"min":1001,"max":99999,"bonus":5}]'::jsonb`],
+    ['prize_active_pct',            'INTEGER NOT NULL DEFAULT 25'],
+    ['toxic_report_thresholds',     `JSONB NOT NULL DEFAULT '[{"reports":3,"strike_delta":1},{"reports":4,"strike_delta":2}]'::jsonb`],
+    ['toxic_strike_cooldowns',      `JSONB NOT NULL DEFAULT '[{"strikes":2,"action":"warn"},{"strikes":3,"hours":12},{"strikes":4,"hours":24},{"strikes":5,"hours":72}]'::jsonb`],
+    ['grief_strike_cooldowns',      `JSONB NOT NULL DEFAULT '[{"strikes":1,"action":"warn"},{"strikes":2,"hours":24},{"strikes":3,"hours":72},{"strikes":4,"action":"ban"}]'::jsonb`],
+    ['clean_games_to_decay_strike', 'INTEGER NOT NULL DEFAULT 5'],
+    ['report_window_minutes',       'INTEGER NOT NULL DEFAULT 15'],
+  ]) {
+    const has = await queryOne(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'queue_pools' AND column_name = $1`, [col]
+    )
+    if (!has) await execute(`ALTER TABLE queue_pools ADD COLUMN ${col} ${def}`)
+  }
+
+  for (const [col, def] of [
+    ['current_winstreak', 'INTEGER NOT NULL DEFAULT 0'],
+    ['peak_winstreak',    'INTEGER NOT NULL DEFAULT 0'],
+  ]) {
+    const has = await queryOne(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'season_rankings' AND column_name = $1`, [col]
+    )
+    if (!has) await execute(`ALTER TABLE season_rankings ADD COLUMN ${col} ${def}`)
+  }
+
+  for (const [col, def] of [
+    ['was_leaver',           'BOOLEAN NOT NULL DEFAULT FALSE'],
+    ['leave_minute',         'INTEGER NULL'],
+    ['friday_bonus_applied', 'INTEGER NOT NULL DEFAULT 0'],
+  ]) {
+    const has = await queryOne(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'season_match_log' AND column_name = $1`, [col]
+    )
+    if (!has) await execute(`ALTER TABLE season_match_log ADD COLUMN ${col} ${def}`)
+  }
+  // Idempotency for Friday top-3 aggregator — at most one row per
+  // (season, player, friday date) for the synthetic top-bonus rows.
+  try {
+    await execute(`
+      CREATE UNIQUE INDEX IF NOT EXISTS season_match_log_friday_top_unique
+        ON season_match_log (season_id, player_id, (DATE(created_at)))
+        WHERE reason = 'friday_top_bonus'
+    `)
+  } catch (e) {
+    console.warn('[db] friday_top idempotency index:', e.message)
+  }
+
+  try { await execute(`ALTER TABLE queue_matches ADD COLUMN game_mode_used INTEGER NULL`) } catch {}
+
+  // Toxic reports: any match participant can report any other for one match.
+  // The unique constraint blocks double-reporting in the same match.
+  await execute(`
+    CREATE TABLE IF NOT EXISTS inhouse_toxic_reports (
+      id                   SERIAL PRIMARY KEY,
+      reporter_player_id   INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      reported_player_id   INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      queue_match_id       INTEGER NULL REFERENCES queue_matches(id) ON DELETE SET NULL,
+      pool_id              INTEGER NULL REFERENCES queue_pools(id) ON DELETE SET NULL,
+      comment              TEXT NULL,
+      created_at           TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `)
+  try { await execute(`CREATE UNIQUE INDEX IF NOT EXISTS inhouse_toxic_reports_unique ON inhouse_toxic_reports (reporter_player_id, reported_player_id, queue_match_id)`) } catch {}
+  try { await execute(`CREATE INDEX IF NOT EXISTS inhouse_toxic_reports_target_idx ON inhouse_toxic_reports (reported_player_id, created_at DESC)`) } catch {}
+
+  // Grief reports: captain-only at the route level. Pending until an admin
+  // approves or rejects.
+  await execute(`
+    CREATE TABLE IF NOT EXISTS inhouse_grief_reports (
+      id                   SERIAL PRIMARY KEY,
+      reporter_player_id   INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      reported_player_id   INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      queue_match_id       INTEGER NULL REFERENCES queue_matches(id) ON DELETE SET NULL,
+      pool_id              INTEGER NULL REFERENCES queue_pools(id) ON DELETE SET NULL,
+      comment              TEXT NOT NULL,
+      status               TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+      reviewed_by          INTEGER NULL REFERENCES players(id) ON DELETE SET NULL,
+      reviewed_at          TIMESTAMP NULL,
+      review_note          TEXT NULL,
+      created_at           TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `)
+  try { await execute(`CREATE INDEX IF NOT EXISTS inhouse_grief_reports_status_idx ON inhouse_grief_reports (status, created_at DESC)`) } catch {}
+  try { await execute(`CREATE INDEX IF NOT EXISTS inhouse_grief_reports_target_idx ON inhouse_grief_reports (reported_player_id, created_at DESC)`) } catch {}
+
+  // Strike audit log — every ±strike, from any source.
+  await execute(`
+    CREATE TABLE IF NOT EXISTS inhouse_strike_log (
+      id                      SERIAL PRIMARY KEY,
+      player_id               INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      kind                    TEXT NOT NULL CHECK (kind IN ('toxic','grief','toxic_decay','captain_revoked')),
+      delta                   INTEGER NOT NULL,
+      reason                  TEXT NULL,
+      source_report_id        INTEGER NULL,
+      source_queue_match_id   INTEGER NULL REFERENCES queue_matches(id) ON DELETE SET NULL,
+      applied_by              INTEGER NULL REFERENCES players(id) ON DELETE SET NULL,
+      created_at              TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `)
+  try { await execute(`CREATE INDEX IF NOT EXISTS inhouse_strike_log_player_idx ON inhouse_strike_log (player_id, created_at DESC)`) } catch {}
+
   // ─── Request logs (admin observability) ──────────────────
   await execute(`
     CREATE TABLE IF NOT EXISTS request_logs (
