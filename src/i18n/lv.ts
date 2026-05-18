@@ -1983,6 +1983,8 @@ export default {
   inhouseReportGriefPrompt: 'Apraksti {name} griefu (obligāti):',
   inhouseReportGriefCommentRequired: 'Grief ziņojumam nepieciešams komentārs.',
   inhouseReportFiled: 'Ziņojums iesniegts.',
+  queuePostMatchTitle: 'Pēdējā spēle',
+  queuePostMatchHint: 'Ziņo par toksiskumu / griefu, kamēr ziņojumu logs ir atvērts.',
   adminGriefReports: 'Grief ziņojumi',
   adminGriefReportsDesc: 'Kapteiņu iesniegtie grief ziņojumi, kas gaida admin pārskatīšanu.',
   griefTab_pending: 'Gaidām',

@@ -1338,6 +1338,7 @@ async function cancelQueueMatch(queueMatchId, reason, io) {
 function buildMatchFoundPayload(match) {
   return {
     queueMatchId: match.id,
+    poolId: match.poolId,
     players: match.allPlayers,
     captain1: match.captain1,
     captain2: match.captain2,

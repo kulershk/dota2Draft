@@ -77,16 +77,64 @@ const iAmTeam1 = computed(() => {
   return !!(uid && (queue.teamsFormed.value?.team1 || []).some(p => p.playerId === uid))
 })
 
+// Either the active match (during pick/lobby) or the post-match snapshot
+// (during/after Dota game, until report window expires or a new match
+// starts) is the current reportable match. activeMatch wins when both
+// exist — postMatch is cleared on queue:matchFound anyway, so the
+// fallback only kicks in once the game has actually started.
+interface ReportContext {
+  queueMatchId: number
+  poolId: number
+  team1: QueuePlayer[]
+  team2: QueuePlayer[]
+  captain1Id: number
+  captain2Id: number
+}
+const reportContext = computed<ReportContext | null>(() => {
+  const am = queue.activeMatch.value
+  const tf = queue.teamsFormed.value
+  if (am && tf) return {
+    queueMatchId: am.queueMatchId,
+    poolId: am.poolId,
+    team1: tf.team1,
+    team2: tf.team2,
+    captain1Id: am.captain1.playerId,
+    captain2Id: am.captain2.playerId,
+  }
+  const pm = queue.postMatch.value
+  if (pm) return {
+    queueMatchId: pm.queueMatchId,
+    poolId: pm.poolId,
+    team1: pm.team1,
+    team2: pm.team2,
+    captain1Id: pm.captain1Id,
+    captain2Id: pm.captain2Id,
+  }
+  return null
+})
+const myReportTeam = computed<1 | 2 | null>(() => {
+  const ctx = reportContext.value, uid = currentUserId.value
+  if (!ctx || !uid) return null
+  if (ctx.team1.some(p => p.playerId === uid)) return 1
+  if (ctx.team2.some(p => p.playerId === uid)) return 2
+  return null
+})
+const iAmReportCaptain = computed(() => {
+  const ctx = reportContext.value, uid = currentUserId.value
+  if (!ctx || !uid) return false
+  return ctx.captain1Id === uid || ctx.captain2Id === uid
+})
+
 const api = useApi()
 const reporting = ref(false)
 async function reportToxic(p: QueuePlayer) {
-  const qmId = queue.activeMatch.value?.queueMatchId
-  if (!qmId || !p.playerId || p.playerId === currentUserId.value || reporting.value) return
+  const ctx = reportContext.value
+  if (!ctx || !p.playerId || p.playerId === currentUserId.value || reporting.value) return
   const comment = prompt(t('inhouseReportToxicPrompt', { name: p.name })) ?? ''
   if (comment === null) return
   reporting.value = true
   try {
-    await api.reportToxic({ queue_match_id: qmId, reported_player_id: p.playerId, comment })
+    await api.reportToxic({ queue_match_id: ctx.queueMatchId, reported_player_id: p.playerId, comment })
     alert(t('inhouseReportFiled'))
   } catch (e: any) {
     alert(e?.message || 'Report failed')
@@ -95,14 +143,14 @@ async function reportToxic(p: QueuePlayer) {
   }
 }
 async function reportGrief(p: QueuePlayer) {
-  const qmId = queue.activeMatch.value?.queueMatchId
-  if (!qmId || !p.playerId || p.playerId === currentUserId.value || reporting.value) return
+  const ctx = reportContext.value
+  if (!ctx || !p.playerId || p.playerId === currentUserId.value || reporting.value) return
   const comment = prompt(t('inhouseReportGriefPrompt', { name: p.name }))
   if (comment == null) return
   if (!comment.trim()) { alert(t('inhouseReportGriefCommentRequired')); return }
   reporting.value = true
   try {
-    await api.reportGrief({ queue_match_id: qmId, reported_player_id: p.playerId, comment })
+    await api.reportGrief({ queue_match_id: ctx.queueMatchId, reported_player_id: p.playerId, comment })
     alert(t('inhouseReportFiled'))
   } catch (e: any) {
     alert(e?.message || 'Report failed')
@@ -111,13 +159,12 @@ async function reportGrief(p: QueuePlayer) {
   }
 }
 function canReportToxic(p: QueuePlayer): boolean {
-  return !!(queue.activeMatch.value && p.playerId !== currentUserId.value)
+  return !!(reportContext.value && p.playerId !== currentUserId.value)
 }
 function canReportGrief(p: QueuePlayer, side: 1 | 2): boolean {
-  if (!iAmCaptain.value) return false
+  if (!iAmReportCaptain.value) return false
   if (p.playerId === currentUserId.value) return false
-  const myTeam = iAmTeam1.value ? 1 : 2
-  return side === myTeam
+  return side === myReportTeam.value
 }
 const iAmParticipant = computed(() => {
   const uid = currentUserId.value
@@ -486,6 +533,75 @@ onUnmounted(() => {
     <div class="max-w-[1200px] mx-auto w-full px-4 md:px-8 pt-6 pb-4">
       <h1 class="text-2xl font-bold">{{ t('queue') }}</h1>
       <p class="text-muted-foreground text-sm mt-0.5">{{ t('queueDesc') }}</p>
+    </div>
+
+    <!-- Post-match panel: visible after queue:gameStarted clears the active
+         match so the player can still file toxic/grief reports during the
+         pool's report window. Cleared on next queue:matchFound. -->
+    <div v-if="queue.postMatch.value && !queue.activeMatch.value"
+         class="max-w-[1200px] mx-auto w-full px-4 md:px-8 pb-4">
+      <div class="card overflow-hidden border border-amber-500/30">
+        <div class="px-5 py-3 border-b border-border/40 flex items-center justify-between bg-amber-500/5">
+          <div class="flex items-center gap-2">
+            <Shield class="w-4 h-4 text-amber-400" />
+            <span class="text-sm font-semibold">{{ t('queuePostMatchTitle') }}</span>
+            <span class="text-[11px] text-muted-foreground">{{ t('queuePostMatchHint') }}</span>
+          </div>
+          <button type="button" class="text-xs text-muted-foreground hover:text-foreground" @click="queue.dismissPostMatch()">
+            {{ t('dismiss') }}
+          </button>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-px bg-border/30">
+          <!-- Team 1 -->
+          <div class="bg-card">
+            <div class="px-4 py-2 border-b border-border/30 flex items-center gap-2">
+              <ShieldCheck class="w-3.5 h-3.5 text-cyan-400" />
+              <span class="text-[10px] font-bold tracking-wider text-cyan-400">{{ t('queueRadiant') }}</span>
+              <span class="text-xs font-semibold truncate">{{ queue.postMatch.value.team1?.[0]?.name || '—' }}</span>
+            </div>
+            <div class="flex flex-col">
+              <div v-for="(p, idx) in queue.postMatch.value.team1" :key="p.playerId"
+                class="px-4 py-2 flex items-center gap-2 border-b border-border/20 last:border-b-0">
+                <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-7 h-7 rounded-full" :class="idx === 0 ? 'ring-2 ring-cyan-500/40' : ''" />
+                <div v-else class="w-7 h-7 rounded-full bg-accent" />
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium truncate">{{ p.name }}</span>
+                    <span v-if="idx === 0" class="text-[9px] font-bold text-cyan-400 bg-cyan-500/15 px-1 py-0.5 rounded">CPT</span>
+                  </div>
+                  <div class="text-[10px] text-muted-foreground">{{ p.mmr }} MMR</div>
+                </div>
+                <button v-if="canReportToxic(p)" class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 hover:bg-amber-500/20" :disabled="reporting" :title="t('inhouseReportToxic')" @click="reportToxic(p)">!</button>
+                <button v-if="canReportGrief(p, 1)" class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" :disabled="reporting" :title="t('inhouseReportGrief')" @click="reportGrief(p)">G</button>
+              </div>
+            </div>
+          </div>
+          <!-- Team 2 -->
+          <div class="bg-card">
+            <div class="px-4 py-2 border-b border-border/30 flex items-center gap-2">
+              <Shield class="w-3.5 h-3.5 text-red-400" />
+              <span class="text-[10px] font-bold tracking-wider text-red-400">{{ t('queueDire') }}</span>
+              <span class="text-xs font-semibold truncate">{{ queue.postMatch.value.team2?.[0]?.name || '—' }}</span>
+            </div>
+            <div class="flex flex-col">
+              <div v-for="(p, idx) in queue.postMatch.value.team2" :key="p.playerId"
+                class="px-4 py-2 flex items-center gap-2 border-b border-border/20 last:border-b-0">
+                <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-7 h-7 rounded-full" :class="idx === 0 ? 'ring-2 ring-red-500/40' : ''" />
+                <div v-else class="w-7 h-7 rounded-full bg-accent" />
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium truncate">{{ p.name }}</span>
+                    <span v-if="idx === 0" class="text-[9px] font-bold text-red-400 bg-red-500/15 px-1 py-0.5 rounded">CPT</span>
+                  </div>
+                  <div class="text-[10px] text-muted-foreground">{{ p.mmr }} MMR</div>
+                </div>
+                <button v-if="canReportToxic(p)" class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 hover:bg-amber-500/20" :disabled="reporting" :title="t('inhouseReportToxic')" @click="reportToxic(p)">!</button>
+                <button v-if="canReportGrief(p, 2)" class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" :disabled="reporting" :title="t('inhouseReportGrief')" @click="reportGrief(p)">G</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Pool submenu (tab bar, full-width, only when there are pools and not in pick phase) -->
