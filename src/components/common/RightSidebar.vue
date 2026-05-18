@@ -109,11 +109,29 @@ function openProfilePanel() {
       >{{ notifStore.unreadCount.value }}</span>
     </button>
 
-    <!-- Friends — opens Friends panel -->
-    <button class="rail-btn relative" :title="t('friends')" @click="panels.openFriends()">
-      <Users class="w-4 h-4" style="color:#CBD5E1" />
+    <!-- Friends — opens Friends panel.
+         Pending incoming requests take priority over the friend-count
+         badge: red icon outline + red badge with the request count, so
+         the user can see at a glance that someone is waiting for them. -->
+    <button
+      class="rail-btn relative"
+      :class="{ 'rail-btn-alert': friendStore.pendingCount.value > 0 }"
+      :title="friendStore.pendingCount.value > 0
+        ? t('friendsPendingTooltip', { n: friendStore.pendingCount.value })
+        : t('friends')"
+      @click="panels.openFriends()"
+    >
+      <Users
+        class="w-4 h-4"
+        :style="{ color: friendStore.pendingCount.value > 0 ? '#EF4444' : '#CBD5E1' }"
+      />
       <span
-        v-if="friendStore.friends.value.length > 0"
+        v-if="friendStore.pendingCount.value > 0"
+        class="absolute inline-flex items-center justify-center text-[9px] font-black px-[3px] rounded text-white"
+        style="top:6px;right:2px;min-width:14px;height:12px;background:#EF4444"
+      >{{ friendStore.pendingCount.value }}</span>
+      <span
+        v-else-if="friendStore.friends.value.length > 0"
         class="absolute inline-flex items-center justify-center text-[9px] font-black px-[3px] rounded"
         style="top:6px;right:2px;min-width:14px;height:12px;background:#22D3EE;color:#0A0F1C"
       >{{ friendStore.friends.value.length }}</span>
@@ -169,5 +187,11 @@ function openProfilePanel() {
 .rail-btn-active {
   background: #0B1A2E;
   box-shadow: inset 0 0 0 1px #1E3A5F;
+}
+.rail-btn-alert {
+  box-shadow: inset 0 0 0 1px #EF4444;
+}
+.rail-btn-alert:hover {
+  background: rgba(239, 68, 68, 0.08);
 }
 </style>
