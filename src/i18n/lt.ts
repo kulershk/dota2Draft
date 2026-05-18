@@ -64,6 +64,8 @@ export default {
   outgoingRequests: 'Išsiųstos užklausos',
   blockedUsers: 'Užblokuoti vartotojai',
   noFriendsYet: 'Dar nėra draugų — ieškok aukščiau.',
+  requests: 'Užklausos',
+  addFriendHint: 'Įveskite žaidėjo vardą, kad rastumėte.',
   noIncomingRequests: 'Nėra gaunamų užklausų',
   noOutgoingRequests: 'Nėra išsiųstų užklausų',
   noBlockedUsers: 'Nėra užblokuotų vartotojų',

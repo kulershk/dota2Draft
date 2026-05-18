@@ -63,6 +63,8 @@ export default {
   incomingRequests: 'Incoming requests',
   outgoingRequests: 'Outgoing requests',
   blockedUsers: 'Blocked users',
+  requests: 'Requests',
+  addFriendHint: 'Type a player name to find them.',
   noFriendsYet: 'No friends yet — search above to add some.',
   noIncomingRequests: 'No incoming requests',
   noOutgoingRequests: 'No outgoing requests',

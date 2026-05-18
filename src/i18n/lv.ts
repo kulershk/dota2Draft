@@ -64,6 +64,8 @@ export default {
   outgoingRequests: 'Izejošie pieprasījumi',
   blockedUsers: 'Bloķētie lietotāji',
   noFriendsYet: 'Vēl nav draugu — meklē augstāk.',
+  requests: 'Pieprasījumi',
+  addFriendHint: 'Ievadi spēlētāja vārdu, lai atrastu.',
   noIncomingRequests: 'Nav ienākošu pieprasījumu',
   noOutgoingRequests: 'Nav izejošu pieprasījumu',
   noBlockedUsers: 'Nav bloķētu lietotāju',

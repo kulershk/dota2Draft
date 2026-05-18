@@ -64,6 +64,8 @@ export default {
   outgoingRequests: 'Исходящие запросы',
   blockedUsers: 'Заблокированные',
   noFriendsYet: 'Друзей пока нет — найдите выше.',
+  requests: 'Заявки',
+  addFriendHint: 'Введите имя игрока, чтобы найти.',
   noIncomingRequests: 'Нет входящих запросов',
   noOutgoingRequests: 'Нет исходящих запросов',
   noBlockedUsers: 'Нет заблокированных',
