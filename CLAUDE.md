@@ -50,6 +50,14 @@ When adding UI text, always add translations to all three locale files:
 - `src/i18n/lv.ts` (Latvian)
 - `src/i18n/lt.ts` (Lithuanian)
 
+## UI Dialogs
+
+**Never use `window.prompt()`, `window.alert()`, or `window.confirm()` for any user-facing flow.** They look like browser chrome, can't be styled, don't translate, can't be tested cleanly, and feel out-of-place against the rest of the app.
+
+Use the shared `<ModalOverlay>` component (`src/components/common/ModalOverlay.vue`) plus a `<card>` body. Examples to copy from: the Edit User modal in `AdminUsersPage.vue`, the Ban modal in `AdminQueuePage.vue`, the Link Discord modal in `AdminUsersPage.vue`.
+
+For inline confirmations (e.g. "Are you sure you want to delete X?") still build a proper modal — `confirm()` is a `prompt()` in disguise and the same rule applies.
+
 ## Admin Page Layout
 
 **Every page under `src/pages/admin/*.vue` MUST use the same root wrapper and header structure.** This avoids the slightly-different padding / max-width / heading sizes that are visible when navigating between admin sections.

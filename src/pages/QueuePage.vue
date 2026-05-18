@@ -5,7 +5,7 @@ import { useRouter } from 'vue-router'
 import { Clock, Users, Swords, X, Check, Loader2, Shield, ShieldCheck, ChevronRight, ChevronDown, Timer, Send, MessageCircle, Ban, Target, Copy, Eye, EyeOff, Hourglass, ListOrdered, UserPlus, Plus, Info, Crown, Medal, BadgeCheck } from 'lucide-vue-next'
 import { useQueueStore, type QueuePlayer, QUEUE_ROLES } from '@/composables/useQueueStore'
 import { useDraftStore } from '@/composables/useDraftStore'
-import { useApi } from '@/composables/useApi'
+import ReportPlayerDialog from '@/components/inhouse/ReportPlayerDialog.vue'
 import { getServerNow, getSocket } from '@/composables/useSocket'
 import { formatRelativeTime } from '@/utils/format'
 
@@ -125,39 +125,6 @@ const iAmReportCaptain = computed(() => {
   return ctx.captain1Id === uid || ctx.captain2Id === uid
 })
 
-const api = useApi()
-const reporting = ref(false)
-async function reportToxic(p: QueuePlayer) {
-  const ctx = reportContext.value
-  if (!ctx || !p.playerId || p.playerId === currentUserId.value || reporting.value) return
-  const comment = prompt(t('inhouseReportToxicPrompt', { name: p.name })) ?? ''
-  if (comment === null) return
-  reporting.value = true
-  try {
-    await api.reportToxic({ queue_match_id: ctx.queueMatchId, reported_player_id: p.playerId, comment })
-    alert(t('inhouseReportFiled'))
-  } catch (e: any) {
-    alert(e?.message || 'Report failed')
-  } finally {
-    reporting.value = false
-  }
-}
-async function reportGrief(p: QueuePlayer) {
-  const ctx = reportContext.value
-  if (!ctx || !p.playerId || p.playerId === currentUserId.value || reporting.value) return
-  const comment = prompt(t('inhouseReportGriefPrompt', { name: p.name }))
-  if (comment == null) return
-  if (!comment.trim()) { alert(t('inhouseReportGriefCommentRequired')); return }
-  reporting.value = true
-  try {
-    await api.reportGrief({ queue_match_id: ctx.queueMatchId, reported_player_id: p.playerId, comment })
-    alert(t('inhouseReportFiled'))
-  } catch (e: any) {
-    alert(e?.message || 'Report failed')
-  } finally {
-    reporting.value = false
-  }
-}
 function canReportToxic(p: QueuePlayer): boolean {
   return !!(reportContext.value && p.playerId !== currentUserId.value)
 }
@@ -165,6 +132,16 @@ function canReportGrief(p: QueuePlayer, side: 1 | 2): boolean {
   if (!iAmReportCaptain.value) return false
   if (p.playerId === currentUserId.value) return false
   return side === myReportTeam.value
+}
+
+const reportDialog = ref<{ open: boolean; kind: 'toxic' | 'grief'; player: { id: number; name: string } | null }>({
+  open: false, kind: 'toxic', player: null,
+})
+function openReport(kind: 'toxic' | 'grief', p: QueuePlayer) {
+  reportDialog.value = { open: true, kind, player: { id: p.playerId, name: p.name } }
+}
+function closeReport() {
+  reportDialog.value = { ...reportDialog.value, open: false }
 }
 const iAmParticipant = computed(() => {
   const uid = currentUserId.value
@@ -577,8 +554,8 @@ onUnmounted(() => {
                   </div>
                   <div class="text-[10px] text-muted-foreground">{{ p.mmr }} MMR</div>
                 </div>
-                <button v-if="canReportToxic(p)" class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 hover:bg-amber-500/20" :disabled="reporting" :title="t('inhouseReportToxic')" @click="reportToxic(p)">!</button>
-                <button v-if="canReportGrief(p, 1)" class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" :disabled="reporting" :title="t('inhouseReportGrief')" @click="reportGrief(p)">G</button>
+                <button v-if="canReportToxic(p)" class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 hover:bg-amber-500/20" :title="t('inhouseReportToxic')" @click="openReport('toxic', p)">!</button>
+                <button v-if="canReportGrief(p, 1)" class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" :title="t('inhouseReportGrief')" @click="openReport('grief', p)">G</button>
               </div>
             </div>
           </div>
@@ -601,8 +578,8 @@ onUnmounted(() => {
                   </div>
                   <div class="text-[10px] text-muted-foreground">{{ p.mmr }} MMR</div>
                 </div>
-                <button v-if="canReportToxic(p)" class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 hover:bg-amber-500/20" :disabled="reporting" :title="t('inhouseReportToxic')" @click="reportToxic(p)">!</button>
-                <button v-if="canReportGrief(p, 2)" class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" :disabled="reporting" :title="t('inhouseReportGrief')" @click="reportGrief(p)">G</button>
+                <button v-if="canReportToxic(p)" class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 hover:bg-amber-500/20" :title="t('inhouseReportToxic')" @click="openReport('toxic', p)">!</button>
+                <button v-if="canReportGrief(p, 2)" class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" :title="t('inhouseReportGrief')" @click="openReport('grief', p)">G</button>
               </div>
             </div>
           </div>
@@ -857,8 +834,8 @@ onUnmounted(() => {
                     <span v-else class="text-[10px] font-semibold text-muted-foreground bg-accent/60 px-2 py-1 rounded-full flex items-center gap-1">
                       <Loader2 class="w-3 h-3 animate-spin" /> {{ t('queueLobbyNotReady') }}
                     </span>
-                    <button v-if="canReportToxic(p)" class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 hover:bg-amber-500/20" :disabled="reporting" :title="t('inhouseReportToxic')" @click="reportToxic(p)">!</button>
-                    <button v-if="canReportGrief(p, 1)" class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" :disabled="reporting" :title="t('inhouseReportGrief')" @click="reportGrief(p)">G</button>
+                    <button v-if="canReportToxic(p)" class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 hover:bg-amber-500/20" :title="t('inhouseReportToxic')" @click="openReport('toxic', p)">!</button>
+                    <button v-if="canReportGrief(p, 1)" class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" :title="t('inhouseReportGrief')" @click="openReport('grief', p)">G</button>
                   </div>
                 </div>
               </div>
@@ -906,8 +883,8 @@ onUnmounted(() => {
                     <span v-else class="text-[10px] font-semibold text-muted-foreground bg-accent/60 px-2 py-1 rounded-full flex items-center gap-1">
                       <Loader2 class="w-3 h-3 animate-spin" /> {{ t('queueLobbyNotReady') }}
                     </span>
-                    <button v-if="canReportToxic(p)" class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 hover:bg-amber-500/20" :disabled="reporting" :title="t('inhouseReportToxic')" @click="reportToxic(p)">!</button>
-                    <button v-if="canReportGrief(p, 2)" class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" :disabled="reporting" :title="t('inhouseReportGrief')" @click="reportGrief(p)">G</button>
+                    <button v-if="canReportToxic(p)" class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 hover:bg-amber-500/20" :title="t('inhouseReportToxic')" @click="openReport('toxic', p)">!</button>
+                    <button v-if="canReportGrief(p, 2)" class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" :title="t('inhouseReportGrief')" @click="openReport('grief', p)">G</button>
                   </div>
                 </div>
               </div>
@@ -1750,6 +1727,14 @@ onUnmounted(() => {
         </template>
       </template>
     </div>
+
+    <ReportPlayerDialog
+      :show="reportDialog.open"
+      :kind="reportDialog.kind"
+      :player="reportDialog.player"
+      :queue-match-id="reportContext?.queueMatchId || null"
+      @close="closeReport"
+    />
   </div>
 </template>
 

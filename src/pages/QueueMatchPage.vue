@@ -11,6 +11,7 @@ import GameStatsTable from '@/components/match/GameStatsTable.vue'
 import DraftPhaseViewer from '@/components/match/DraftPhaseViewer.vue'
 import MatchHeaderCard from '@/components/match/MatchHeaderCard.vue'
 import TeamRosterTable from '@/components/match/TeamRosterTable.vue'
+import ReportPlayerDialog from '@/components/inhouse/ReportPlayerDialog.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -204,7 +205,6 @@ const iAmCaptain = computed(() => {
   return match.value.captain1_player_id === uid || match.value.captain2_player_id === uid
 })
 
-const reporting = ref(false)
 function canReportToxic(playerId: number): boolean {
   if (!isInhouseMatch.value || !iAmInMatch.value) return false
   return playerId !== currentUserId.value
@@ -214,34 +214,15 @@ function canReportGrief(playerId: number, side: 1 | 2): boolean {
   if (playerId === currentUserId.value) return false
   return side === myTeam.value
 }
-async function reportToxic(playerId: number, name: string) {
-  if (!match.value || reporting.value) return
-  const comment = prompt(t('inhouseReportToxicPrompt', { name })) ?? ''
-  if (comment === null) return
-  reporting.value = true
-  try {
-    await api.reportToxic({ queue_match_id: match.value.id, reported_player_id: playerId, comment })
-    alert(t('inhouseReportFiled'))
-  } catch (e: any) {
-    alert(e?.message || 'Report failed')
-  } finally {
-    reporting.value = false
-  }
+
+const reportDialog = ref<{ open: boolean; kind: 'toxic' | 'grief'; player: { id: number; name: string } | null }>({
+  open: false, kind: 'toxic', player: null,
+})
+function openReport(kind: 'toxic' | 'grief', playerId: number, name: string) {
+  reportDialog.value = { open: true, kind, player: { id: playerId, name } }
 }
-async function reportGrief(playerId: number, name: string) {
-  if (!match.value || reporting.value) return
-  const comment = prompt(t('inhouseReportGriefPrompt', { name }))
-  if (comment == null) return
-  if (!comment.trim()) { alert(t('inhouseReportGriefCommentRequired')); return }
-  reporting.value = true
-  try {
-    await api.reportGrief({ queue_match_id: match.value.id, reported_player_id: playerId, comment })
-    alert(t('inhouseReportFiled'))
-  } catch (e: any) {
-    alert(e?.message || 'Report failed')
-  } finally {
-    reporting.value = false
-  }
+function closeReport() {
+  reportDialog.value = { ...reportDialog.value, open: false }
 }
 </script>
 
@@ -326,12 +307,12 @@ async function reportGrief(playerId: number, name: string) {
             <template #row-action="{ player }">
               <button v-if="canReportToxic(player.id)"
                 class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 shrink-0"
-                :disabled="reporting" :title="t('inhouseReportToxic')"
-                @click="reportToxic(player.id, player.name)">!</button>
+                :title="t('inhouseReportToxic')"
+                @click="openReport('toxic', player.id, player.name)">!</button>
               <button v-if="canReportGrief(player.id, 1)"
                 class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 shrink-0"
-                :disabled="reporting" :title="t('inhouseReportGrief')"
-                @click="reportGrief(player.id, player.name)">G</button>
+                :title="t('inhouseReportGrief')"
+                @click="openReport('grief', player.id, player.name)">G</button>
             </template>
           </TeamRosterTable>
           <TeamRosterTable
@@ -353,12 +334,12 @@ async function reportGrief(playerId: number, name: string) {
             <template #row-action="{ player }">
               <button v-if="canReportToxic(player.id)"
                 class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 shrink-0"
-                :disabled="reporting" :title="t('inhouseReportToxic')"
-                @click="reportToxic(player.id, player.name)">!</button>
+                :title="t('inhouseReportToxic')"
+                @click="openReport('toxic', player.id, player.name)">!</button>
               <button v-if="canReportGrief(player.id, 2)"
                 class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 shrink-0"
-                :disabled="reporting" :title="t('inhouseReportGrief')"
-                @click="reportGrief(player.id, player.name)">G</button>
+                :title="t('inhouseReportGrief')"
+                @click="openReport('grief', player.id, player.name)">G</button>
             </template>
           </TeamRosterTable>
         </div>
@@ -434,5 +415,13 @@ async function reportGrief(playerId: number, name: string) {
 
       </template>
     </div>
+
+    <ReportPlayerDialog
+      :show="reportDialog.open"
+      :kind="reportDialog.kind"
+      :player="reportDialog.player"
+      :queue-match-id="match?.id || null"
+      @close="closeReport"
+    />
   </div>
 </template>
