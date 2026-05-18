@@ -282,7 +282,7 @@ onUnmounted(() => {
   <div class="bg-[#0A0F1C] text-foreground">
     <!-- ─── Hero (decorative banner, matches Pencil Ux64u; grows when settings text is set) ─── -->
     <section
-      class="relative overflow-hidden border-b border-[#1E293B] min-h-[220px]"
+      class="relative overflow-hidden border-b border-[#1E293B] min-h-[330px]"
       style="background:
         radial-gradient(circle at 25% 60%, #A21CAF55 0%, transparent 45%),
         radial-gradient(circle at 75% 55%, #22D3EE55 0%, transparent 45%),

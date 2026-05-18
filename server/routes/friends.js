@@ -17,6 +17,20 @@ export default function createFriendsRouter(io) {
     }
   }
 
+  // Drops a "X accepted your friend request" notification into the requester's
+  // bell. Mirrors the targeted-notification shape used by admin announcements
+  // (only the recipient room receives the socket event so we don't fan out).
+  async function notifyFriendAccepted(requesterId, acceptor) {
+    const acceptorName = acceptor.display_name || acceptor.name
+    const row = await queryOne(
+      `INSERT INTO notifications (recipient_id, type, title, body, link, created_by)
+       VALUES ($1, 'friend_accepted', $2, NULL, $3, $4)
+       RETURNING id`,
+      [requesterId, `${acceptorName} accepted your friend request`, `/player/${acceptor.id}`, acceptor.id],
+    )
+    io?.to(`user:${requesterId}`).emit('notification:new', { id: row.id })
+  }
+
   router.get('/api/friends', async (req, res) => {
     const me = await getAuthPlayer(req)
     if (!me) return res.status(401).json({ error: 'Not authenticated' })
@@ -127,6 +141,8 @@ export default function createFriendsRouter(io) {
       )
       io?.to(`user:${addresseeId}`).emit('friend:accepted', { id: reverse.id })
       io?.to(`user:${me.id}`).emit('friend:accepted', { id: reverse.id })
+      // The original requester here is `addresseeId` (they asked first); `me` accepted by sending back.
+      await notifyFriendAccepted(addresseeId, me)
       return res.json({ id: reverse.id, status: 'accepted' })
     }
 
@@ -165,6 +181,7 @@ export default function createFriendsRouter(io) {
     )
     io?.to(`user:${row.requester_id}`).emit('friend:accepted', { id })
     io?.to(`user:${row.addressee_id}`).emit('friend:accepted', { id })
+    await notifyFriendAccepted(row.requester_id, me)
     res.json({ id, status: 'accepted' })
   })
 
