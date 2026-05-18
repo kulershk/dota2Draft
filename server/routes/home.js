@@ -43,7 +43,7 @@ router.get('/api/home/featured-tournament', async (req, res) => {
   try {
     const comp = await queryOne(`
       SELECT c.id, c.name, c.description, c.starts_at, c.registration_start, c.registration_end,
-        c.status, c.is_public, c.tournament_state, c.competition_type,
+        c.status, c.is_public, c.tournament_state, c.competition_type, c.image_url,
         (SELECT COUNT(*)::int FROM captains WHERE competition_id = c.id) AS captain_count
       FROM competitions c
       WHERE c.is_featured = TRUE AND c.is_public = TRUE AND c.deleted_at IS NULL

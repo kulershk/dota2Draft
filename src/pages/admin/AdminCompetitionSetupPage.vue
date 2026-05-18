@@ -50,6 +50,8 @@ const compIsFeatured = ref(false)
 const compStartsAt = ref('')
 const compRegStart = ref('')
 const compRegEnd = ref('')
+const compImageUrl = ref<string>('')
+const uploadingCompImage = ref(false)
 
 const localSettings = reactive({
   playersPerTeam: 5,
@@ -190,6 +192,7 @@ onMounted(async () => {
   compStartsAt.value = comp.starts_at ? toLocalDatetime(comp.starts_at) : ''
   compRegStart.value = comp.registration_start ? toLocalDatetime(comp.registration_start) : ''
   compRegEnd.value = comp.registration_end ? toLocalDatetime(comp.registration_end) : ''
+  compImageUrl.value = comp.image_url || ''
   Object.assign(localSettings, comp.settings)
   // Load leagues for the dropdown (public endpoint)
   try { leagues.value = await api.getLeagues() } catch { /* non-blocking */ }
@@ -352,6 +355,24 @@ async function saveAll() {
 function startDraft() {
   store.startDraft()
   router.push(`/c/${compId.value}/auction`)
+}
+
+async function uploadCompImage(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  uploadingCompImage.value = true
+  try {
+    const result = await api.uploadCompetitionImage(compId.value, file)
+    compImageUrl.value = result.image_url
+  } finally {
+    uploadingCompImage.value = false
+    ;(e.target as HTMLInputElement).value = ''
+  }
+}
+
+async function removeCompImage() {
+  await api.deleteCompetitionImage(compId.value)
+  compImageUrl.value = ''
 }
 
 function openEditCaptain(captain: any) {
@@ -623,6 +644,26 @@ watch(activeTab, (tab) => {
           <span class="text-sm text-foreground">{{ t('featuredCompetition') }}</span>
           <span class="text-xs text-muted-foreground">{{ t('featuredCompetitionHint') }}</span>
         </label>
+        <div class="flex flex-col gap-1.5">
+          <label class="label-text">{{ t('competitionImage') }}</label>
+          <div class="flex items-start gap-3">
+            <div v-if="compImageUrl" class="relative">
+              <img :src="compImageUrl" class="w-32 h-20 rounded-md object-cover border border-border bg-accent/30" />
+              <button type="button" class="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-destructive text-white flex items-center justify-center" @click="removeCompImage">
+                <Trash2 class="w-3 h-3" />
+              </button>
+            </div>
+            <div v-else class="w-32 h-20 rounded-md border border-dashed border-border bg-accent/20 flex items-center justify-center text-muted-foreground">
+              <Upload class="w-4 h-4" />
+            </div>
+            <label class="btn-secondary cursor-pointer text-xs self-start">
+              <Upload class="w-3.5 h-3.5" />
+              {{ uploadingCompImage ? t('loading') : t('uploadImage') }}
+              <input type="file" accept="image/*" class="hidden" @change="uploadCompImage" />
+            </label>
+          </div>
+          <p class="text-[11px] text-muted-foreground">{{ t('competitionImageHint') }}</p>
+        </div>
         <div class="flex flex-col gap-1.5">
           <label class="label-text">{{ t('description') }}</label>
           <RichTextEditor v-model="compDescription" />

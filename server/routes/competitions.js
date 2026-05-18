@@ -1,9 +1,15 @@
 import { Router } from 'express'
+import fs from 'fs'
+import { dirname, join } from 'path'
+import { fileURLToPath } from 'url'
 import { query, queryOne, execute } from '../db.js'
 import { getAuthPlayer } from '../middleware/auth.js'
 import { hasPermission, requireCompPermission, isCompetitionHelper } from '../middleware/permissions.js'
+import { upload } from '../middleware/upload.js'
 import { getCompetition, parseCompSettings, parseAuctionState, computeAndSyncCompStatus } from '../helpers/competition.js'
 import { discordBot } from '../services/discordBotClient.js'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || ''
 
@@ -295,6 +301,40 @@ router.put('/api/competitions/:id', async (req, res) => {
   `, [comp.id])
   req.app.get('io').to(`comp:${comp.id}`).emit('settings:updated', parseCompSettings(updated))
   res.json({ ...updated, settings: parseCompSettings(updated) })
+})
+
+// Upload (or replace) the competition's hero image. Used on the home page's
+// featured-tournament card and anywhere else a comp visual is shown.
+router.post('/api/competitions/:id/image', upload.single('image'), async (req, res) => {
+  const admin = await requireCompPermission(req, res, Number(req.params.id))
+  if (!admin) return
+  const comp = await getCompetition(req.params.id)
+  if (!comp) return res.status(404).json({ error: 'Competition not found' })
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
+
+  // Delete the previous file so we don't leak disk space.
+  if (comp.image_url) {
+    const prev = join(__dirname, '..', '..', comp.image_url)
+    if (fs.existsSync(prev)) { try { fs.unlinkSync(prev) } catch {} }
+  }
+
+  const imageUrl = `/uploads/${req.file.filename}`
+  await execute('UPDATE competitions SET image_url = $1 WHERE id = $2', [imageUrl, comp.id])
+  res.json({ image_url: imageUrl })
+})
+
+router.delete('/api/competitions/:id/image', async (req, res) => {
+  const admin = await requireCompPermission(req, res, Number(req.params.id))
+  if (!admin) return
+  const comp = await getCompetition(req.params.id)
+  if (!comp) return res.status(404).json({ error: 'Competition not found' })
+
+  if (comp.image_url) {
+    const prev = join(__dirname, '..', '..', comp.image_url)
+    if (fs.existsSync(prev)) { try { fs.unlinkSync(prev) } catch {} }
+  }
+  await execute('UPDATE competitions SET image_url = NULL WHERE id = $1', [comp.id])
+  res.json({ ok: true })
 })
 
 router.delete('/api/competitions/:id', async (req, res) => {

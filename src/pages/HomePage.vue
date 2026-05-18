@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Trophy, Play, Users, Radio, Eye, Flame, ChevronRight, Calendar, Snowflake, BadgeCheck, UserPlus, Swords, Tv, Gift, Check } from 'lucide-vue-next'
+import { Trophy, Play, Users, Radio, Eye, Flame, ChevronRight, Calendar, Snowflake, BadgeCheck, UserPlus, Swords, Shield, Tv, Gift, Check, BarChart3, Timer, MessageCircle, Newspaper, Twitch, ExternalLink, ArrowRight, Crown, ChevronDown } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { useDotaConstants } from '@/composables/useDotaConstants'
@@ -75,6 +75,7 @@ const sponsors = ref<Sponsor[]>(_cachedSettings.site_sponsors || [])
 const heroTitle = ref(_cachedSettings.site_title || 'Latvian Dota 2 League')
 const heroSubtitle = ref(_cachedSettings.site_subtitle || '')
 const heroParagraph = ref(_cachedSettings.site_hero_paragraph || '')
+const heroBannerUrl = ref<string>(_cachedSettings.site_hero_banner_url || '')
 
 // Daily check-in
 const daily = ref<{ claimed_today: boolean; streak: number; next_xp: number } | null>(null)
@@ -96,8 +97,22 @@ async function claimDaily() {
   }
 }
 
-const liveCards = computed(() => liveMatches.value.slice(0, 3))
+const liveCards = computed(() => liveMatches.value.slice(0, 4))
 const newsCards = computed(() => news.value.slice(0, 3))
+// Pencil newsLayout: one large hero news + up to 4 in the side list
+const bigNews = computed(() => news.value[0] || null)
+const newsList = computed(() => news.value.slice(1, 5))
+
+// Deterministic gradient for news/stream card thumbnails (matches Pencil palette).
+const NEWS_GRADIENTS = [
+  'linear-gradient(135deg, #3F0808 0%, #EF4444 50%, #FACC15 100%)',
+  'linear-gradient(135deg, #0F2D1F 0%, #22C55E 100%)',
+  'linear-gradient(135deg, #1B0036 0%, #A78BFA 100%)',
+  'linear-gradient(135deg, #0F2D3A 0%, #22D3EE 100%)',
+]
+function newsGradient(idx: number): string {
+  return NEWS_GRADIENTS[idx % NEWS_GRADIENTS.length]
+}
 
 let pollInterval: ReturnType<typeof setInterval> | null = null
 
@@ -106,7 +121,7 @@ async function loadAll() {
     api.getHomeStats().catch(() => null),
     api.getQueueHistory({ limit: 6 }).catch(() => []),
     api.getFeaturedTournament().catch(() => null),
-    api.getNews({ limit: 3 }).catch(() => []),
+    api.getNews({ limit: 5 }).catch(() => []),
     api.getHomeTopPlayers(5).catch(() => ({ players: [], season: null })),
     api.getHomeHeroPickRate(7, 3).catch(() => ({ days: 7, heroes: [] })),
     api.getUpcomingMatches().catch(() => []),
@@ -157,7 +172,7 @@ async function loadAll() {
     .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())
 
   featured.value = feat
-  news.value = (n as any[]).slice(0, 3)
+  news.value = (n as any[]).slice(0, 5)
   topPlayers.value = top
   heroPickRate.value = pickRate
   upcomingNext.value = (upcoming as any[])[0] || null
@@ -166,6 +181,7 @@ async function loadAll() {
     if (settings.site_title) heroTitle.value = settings.site_title
     if (settings.site_subtitle) heroSubtitle.value = settings.site_subtitle
     if (settings.site_hero_paragraph) heroParagraph.value = settings.site_hero_paragraph
+    heroBannerUrl.value = settings.site_hero_banner_url || ''
   }
   loadDaily()
 }
@@ -264,191 +280,460 @@ onUnmounted(() => {
 
 <template>
   <div class="bg-[#0A0F1C] text-foreground">
-    <!-- ─── Hero ─── -->
+    <!-- ─── Hero (decorative banner, matches Pencil Ux64u; grows when settings text is set) ─── -->
     <section
-      class="relative overflow-hidden"
-      style="background: linear-gradient(160deg, #0A0F1C 0%, #0E1A33 50%, #1A0E1F 100%);"
+      class="relative overflow-hidden border-b border-[#1E293B] min-h-[220px]"
+      style="background:
+        radial-gradient(circle at 25% 60%, #A21CAF55 0%, transparent 45%),
+        radial-gradient(circle at 75% 55%, #22D3EE55 0%, transparent 45%),
+        radial-gradient(circle at 50% 0%, #1E0B3A 0%, transparent 60%),
+        linear-gradient(180deg, #0A0F1C 0%, #0F172A 50%, #0A0F1C 100%);"
     >
-      <div class="max-w-[1200px] mx-auto px-4 md:px-8 lg:px-20 py-12 lg:py-16 grid lg:grid-cols-[1fr_auto] gap-12 items-center">
-        <!-- Hero left -->
-        <div class="flex flex-col gap-6 max-w-[680px]">
-          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#1A2B4A] border border-[#22D3EE] text-[11px] font-bold font-mono tracking-widest text-cyan-400 self-start">
-            <span class="w-2 h-2 rounded-full bg-cyan-400" />
-            {{ t('homeHeroSeasonTag') }}
-          </div>
-          <h1 class="text-4xl md:text-5xl lg:text-6xl font-extrabold text-foreground tracking-tight leading-[1.05]">
-            {{ heroTitle }}
-          </h1>
-          <p class="text-xl md:text-2xl font-semibold text-amber-500 leading-tight">
-            {{ heroSubtitle || t('homeHeroSubtitle') }}
-          </p>
-          <p class="text-base text-muted-foreground leading-relaxed whitespace-pre-line">
-            {{ heroParagraph || t('homeHeroParagraph') }}
-          </p>
-          <div class="flex flex-wrap items-center gap-3 mt-2">
-            <router-link
-              to="/competitions"
-              class="inline-flex items-center gap-2 h-12 px-7 rounded-[10px] font-bold text-[#0A0F1C] text-sm transition-all hover:brightness-110"
-              style="background: linear-gradient(135deg, #22D3EE 0%, #0891B2 100%); box-shadow: 0 8px 24px #22D3EE40;"
-            >
-              <Trophy class="w-4 h-4" />
-              {{ t('homeHeroCtaPrimary') }}
-            </router-link>
-            <router-link
-              v-if="liveMatches.length > 0"
-              :to="liveMatches[0].to"
-              class="inline-flex items-center gap-2 h-12 px-6 rounded-[10px] font-semibold text-foreground text-sm border border-[#334155] hover:bg-white/5 transition-colors"
-            >
-              <Play class="w-4 h-4" />
-              {{ t('homeHeroCtaSecondary') }}
-            </router-link>
-          </div>
-        </div>
+      <!-- Optional admin-uploaded banner image sits behind decoration. -->
+      <img v-if="heroBannerUrl" :src="heroBannerUrl" class="absolute inset-0 w-full h-full object-cover opacity-60" alt="" />
 
-        <!-- Hero visual (480×420 to match Pencil ratios) -->
-        <div class="relative w-[480px] h-[420px] hidden lg:block shrink-0">
-          <!-- Background glows: cyan top-left + amber lower-mid -->
-          <div class="absolute blur-3xl rounded-full"
-               style="left: 80px; top: 40px; width: 340px; height: 340px;
-                      background: radial-gradient(circle, #22D3EE66 0%, transparent 70%);" />
-          <div class="absolute blur-3xl rounded-full"
-               style="left: 140px; top: 120px; width: 300px; height: 300px;
-                      background: radial-gradient(circle, #F59E0B40 0%, transparent 70%);" />
+      <!-- Grid pattern overlay -->
+      <div class="absolute inset-0 opacity-30"
+           style="background-image:
+             linear-gradient(to right, #FFFFFF0A 1px, transparent 1px),
+             linear-gradient(to bottom, #FFFFFF0A 1px, transparent 1px);
+             background-size: 40px 40px;" />
 
-          <!-- Rings + shield drawn as one SVG so proportions stay perfect -->
-          <svg viewBox="0 0 480 420" class="absolute inset-0 w-full h-full">
-            <defs>
-              <linearGradient id="shieldGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="#1E293B" />
-                <stop offset="100%" stop-color="#0F172A" />
-              </linearGradient>
-            </defs>
-            <!-- Outer cyan ring (full) — radius 156, thin stroke -->
-            <circle cx="250" cy="210" r="156" fill="none" stroke="#22D3EE" stroke-opacity="0.4" stroke-width="13" />
-            <!-- Inner amber arc (partial 240° sweep) — radius 124, thin stroke
-                 SVG circle starts at 3 o'clock; rotate so the gap sits top-right. -->
-            <circle cx="250" cy="210" r="124" fill="none" stroke="#F59E0B" stroke-opacity="0.6" stroke-width="6"
-                    stroke-dasharray="519 260" transform="rotate(140 250 210)" stroke-linecap="round" />
-            <!-- Shield silhouette: pentagonal badge with banner cuts -->
-            <path
-              d="M170 100
-                 L330 100
-                 L330 240
-                 L300 270
-                 L330 290
-                 L300 320
-                 L250 340
-                 L200 320
-                 L170 290
-                 L200 270
-                 L170 240
-                 Z"
-              fill="url(#shieldGradient)" stroke="#22D3EE" stroke-width="2" stroke-linejoin="round" />
-          </svg>
+      <!-- Glow left (cyan) -->
+      <div class="absolute rounded-full pointer-events-none"
+           style="left: -200px; top: -180px; width: 520px; height: 520px;
+                  background: radial-gradient(circle, #22D3EE60 0%, transparent 70%);" />
+      <!-- Glow right (magenta) -->
+      <div class="absolute rounded-full pointer-events-none"
+           style="right: -200px; top: -160px; width: 560px; height: 560px;
+                  background: radial-gradient(circle, #A21CAF60 0%, transparent 70%);" />
 
-          <!-- Crossed swords icon centered in the shield -->
-          <Swords class="absolute text-cyan-400/90"
-                  style="left: 200px; top: 170px; width: 100px; height: 100px;" />
+      <!-- Faint decorative icons (swords left/right, shield centered) -->
+      <Swords class="absolute pointer-events-none" style="left: 80px; top: 50px; width: 120px; height: 120px; color: #22D3EE15;" />
+      <Shield class="absolute left-1/2 -translate-x-1/2 pointer-events-none" style="top: 30px; width: 160px; height: 160px; color: #FFFFFF08;" />
+      <Swords class="absolute pointer-events-none" style="right: 80px; top: 30px; width: 160px; height: 160px; color: #A21CAF15; transform: rotate(180deg);" />
 
-          <!-- Floating chips -->
-          <div class="absolute flex items-center gap-3 h-16 px-4 rounded-xl bg-[#0F1A2E]/85 border border-[#1F2937] shadow-2xl"
-               style="left: 0px; top: 60px;">
-            <div class="w-9 h-9 rounded-lg bg-cyan-500/20 flex items-center justify-center">
-              <Users class="w-4 h-4 text-cyan-400" />
-            </div>
-            <div class="flex flex-col">
-              <span class="text-base font-bold font-mono text-foreground tabular-nums">{{ stats?.active_players?.toLocaleString() ?? '—' }}</span>
-              <span class="text-[11px] text-muted-foreground">{{ t('homeStatActivePlayers') }}</span>
-            </div>
-          </div>
+      <!-- Bottom fade into page bg -->
+      <div class="absolute left-0 right-0 bottom-0 h-20 pointer-events-none"
+           style="background: linear-gradient(180deg, transparent 0%, #0A0F1C 100%);" />
 
-          <div class="absolute flex items-center gap-3 h-16 px-4 rounded-xl bg-[#0F1A2E]/85 border border-red-500/40 shadow-2xl"
-               style="left: 280px; top: 0px;">
-            <div class="w-9 h-9 rounded-lg bg-red-500/20 flex items-center justify-center">
-              <Radio class="w-4 h-4 text-red-500" />
-            </div>
-            <div class="flex flex-col">
-              <span class="text-base font-bold font-mono text-foreground tabular-nums">{{ stats?.live_matches ?? 0 }} {{ t('homeStatLiveSuffix') }}</span>
-              <span class="text-[11px] text-muted-foreground">{{ t('homeStatLiveMatches') }}</span>
-            </div>
-          </div>
-
-          <div class="absolute flex items-center gap-3 h-16 px-4 rounded-xl bg-[#0F1A2E]/85 border border-amber-500/40 shadow-2xl"
-               style="left: 140px; top: 340px;">
-            <div class="w-9 h-9 rounded-lg bg-amber-500/20 flex items-center justify-center">
-              <Trophy class="w-4 h-4 text-amber-500" />
-            </div>
-            <div class="flex flex-col">
-              <span class="text-base font-bold font-mono text-amber-500 tabular-nums">{{ stats?.active_tournaments ?? 0 }}</span>
-              <span class="text-[11px] text-muted-foreground">{{ t('homeStatActiveTournaments') }}</span>
-            </div>
-          </div>
-        </div>
+      <!-- Settings-driven text overlay. Each line is independent: delete a field in admin → it disappears. Section keeps its 220px min when all are empty. -->
+      <div v-if="heroTitle || heroSubtitle || heroParagraph"
+           class="relative max-w-[1200px] mx-auto px-4 md:px-8 lg:px-10 py-12 flex flex-col items-center text-center gap-3">
+        <h1 v-if="heroTitle" class="text-3xl md:text-5xl lg:text-6xl font-extrabold text-foreground tracking-tight leading-[1.05]">
+          {{ heroTitle }}
+        </h1>
+        <p v-if="heroSubtitle" class="text-lg md:text-2xl font-semibold text-amber-500 leading-tight">
+          {{ heroSubtitle }}
+        </p>
+        <p v-if="heroParagraph" class="text-sm md:text-base text-muted-foreground leading-relaxed whitespace-pre-line max-w-[680px]">
+          {{ heroParagraph }}
+        </p>
       </div>
     </section>
 
-    <!-- ─── Live Now ─── -->
+    <!-- ─── Live Now (Pencil featSection / aIew3 — 4-up card grid) ─── -->
     <section v-if="liveCards.length > 0" class="bg-[#0A0F1C]">
-      <div class="max-w-[1200px] mx-auto px-4 md:px-8 lg:px-20 py-12">
-        <div class="flex items-center justify-between mb-6">
+      <div class="max-w-[1300px] mx-auto px-4 md:px-8 lg:px-10 py-7">
+        <!-- Section header: trophy icon + title + LIVE count pill | View all → -->
+        <div class="flex items-center justify-between mb-4">
           <div class="flex items-center gap-3">
-            <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-            <h2 class="text-xl font-bold">{{ t('homeLiveTitle') }}</h2>
+            <Trophy class="w-[18px] h-[18px] text-cyan-400 shrink-0" />
+            <span class="text-[18px] font-bold text-[#F1F5F9]">{{ t('homeLiveTitle') }}</span>
+            <span class="inline-flex items-center gap-1.5 px-2 py-[3px] rounded bg-[#7F1D1D]">
+              <span class="w-1.5 h-1.5 rounded-[3px] bg-red-500" />
+              <span class="text-[10px] font-bold tracking-[0.5px] text-[#F1F5F9]">{{ liveCards.length }} {{ t('matchLive').toUpperCase() }}</span>
+            </span>
           </div>
-          <router-link to="/matches" class="inline-flex items-center gap-1 text-sm text-cyan-400 hover:underline font-semibold">
-            {{ t('viewAll') }} <ChevronRight class="w-4 h-4" />
+          <router-link to="/matches" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] font-medium text-cyan-400 hover:underline">
+            {{ t('viewAll') }}
+            <ChevronRight class="w-3 h-3" />
           </router-link>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+
+        <!-- 4-up card grid -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <router-link
             v-for="m in liveCards" :key="m.kind + '-' + m.id"
             :to="m.to"
-            class="rounded-[14px] bg-[#0F1A2E] border border-[#1F2937] hover:border-cyan-500/50 transition-colors overflow-hidden"
+            class="flex flex-col rounded-[10px] bg-[#0F172A] border border-[#1E293B] overflow-hidden hover:border-cyan-500/40 transition-colors"
           >
-            <div class="flex items-center justify-between h-10 px-4 bg-[#0B1220]">
-              <div class="flex items-center gap-2">
-                <span class="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                <span class="text-[10px] font-bold font-mono tracking-widest text-red-500">
-                  {{ t('matchLive').toUpperCase() }}<span v-if="m.best_of && m.best_of > 1"> · BO{{ m.best_of }}</span>
+            <!-- Card header: league/context name + LIVE pill -->
+            <div class="flex items-center justify-between gap-2 px-3.5 py-2.5 bg-[#0B1220] border-b border-[#1E293B]">
+              <div class="flex items-center gap-2 min-w-0">
+                <div class="w-[18px] h-[18px] rounded bg-[#1E3A5F] shrink-0" />
+                <span class="text-[11px] font-semibold text-[#94A3B8] truncate">{{ m.context || '—' }}</span>
+              </div>
+              <span class="inline-flex items-center gap-1.5 px-1.5 py-[3px] rounded bg-[#7F1D1D] shrink-0">
+                <span class="w-1.5 h-1.5 rounded-[3px] bg-red-500 animate-pulse" />
+                <span class="text-[9px] font-bold tracking-[0.5px] text-[#F1F5F9]">{{ t('matchLive').toUpperCase() }}</span>
+              </span>
+            </div>
+
+            <!-- Card body: teams row + meta row -->
+            <div class="flex flex-col gap-2.5 p-3.5 flex-1">
+              <!-- Teams + score -->
+              <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2.5 min-w-0 flex-1">
+                  <img v-if="m.team1_avatar" :src="m.team1_avatar" class="w-7 h-7 rounded object-cover bg-[#1E293B] shrink-0" />
+                  <div v-else class="w-7 h-7 rounded bg-[#1E293B] shrink-0" />
+                  <span class="text-[13px] font-medium text-white truncate">{{ m.team1_name || '?' }}</span>
+                </div>
+                <div class="flex items-center gap-1.5 font-mono font-bold text-[15px] shrink-0">
+                  <span class="text-emerald-500 tabular-nums">{{ m.team1_score ?? '–' }}</span>
+                  <span class="text-[#64748B] font-normal">:</span>
+                  <span class="text-red-500 tabular-nums">{{ m.team2_score ?? '–' }}</span>
+                </div>
+                <div class="flex items-center gap-2.5 min-w-0 flex-1 justify-end">
+                  <span class="text-[13px] font-medium text-white truncate text-right">{{ m.team2_name || '?' }}</span>
+                  <img v-if="m.team2_avatar" :src="m.team2_avatar" class="w-7 h-7 rounded object-cover bg-[#1E293B] shrink-0" />
+                  <div v-else class="w-7 h-7 rounded bg-[#1E293B] shrink-0" />
+                </div>
+              </div>
+              <!-- Meta: best-of on left, game time on right -->
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-[11px] font-medium text-[#64748B]">
+                  {{ m.best_of ? `BO${m.best_of}` : '—' }}
+                </span>
+                <span class="text-[11px] font-medium font-mono text-[#94A3B8] tabular-nums">
+                  <template v-if="m.live_game_time != null">{{ fmtGameTime(m.live_game_time) }}</template>
+                  <template v-else>{{ formatRelativeTime(m.started_at) }}</template>
                 </span>
               </div>
-              <div v-if="m.context" class="text-[11px] text-muted-foreground font-mono truncate max-w-[180px]" :title="m.context">
-                {{ m.context }}
-              </div>
             </div>
-            <div class="p-5 flex flex-col gap-3">
-              <div class="flex items-center justify-between gap-3">
-                <div class="flex items-center gap-2 min-w-0 flex-1">
-                  <img v-if="m.team1_avatar" :src="m.team1_avatar" class="w-8 h-8 rounded-full object-cover ring-2 ring-emerald-500/30" />
-                  <div v-else class="w-8 h-8 rounded-full bg-emerald-500/15" />
-                  <span class="text-sm font-semibold truncate">{{ m.team1_name || '?' }}</span>
-                </div>
-                <div class="flex items-center gap-2 font-mono font-bold text-base shrink-0">
-                  <span class="text-emerald-400">{{ m.team1_score ?? '–' }}</span>
-                  <span class="text-muted-foreground/40">·</span>
-                  <span class="text-red-400">{{ m.team2_score ?? '–' }}</span>
-                </div>
-                <div class="flex items-center gap-2 min-w-0 flex-1 justify-end">
-                  <span class="text-sm font-semibold truncate text-right">{{ m.team2_name || '?' }}</span>
-                  <img v-if="m.team2_avatar" :src="m.team2_avatar" class="w-8 h-8 rounded-full object-cover ring-2 ring-red-500/30" />
-                  <div v-else class="w-8 h-8 rounded-full bg-red-500/15" />
-                </div>
-              </div>
-              <div class="flex items-center justify-center gap-1.5 text-[10px] font-mono uppercase tracking-wider"
-                   :class="m.live_game_time != null ? 'text-cyan-400' : 'text-muted-foreground'">
-                <Eye class="w-3 h-3" />
-                <template v-if="m.live_game_time != null">
-                  <span class="font-bold">{{ t('homeLiveGameTime') }} {{ fmtGameTime(m.live_game_time) }}</span>
-                </template>
-                <template v-else>
-                  <span>{{ formatRelativeTime(m.started_at) }}</span>
-                </template>
-              </div>
+
+            <!-- Card footer: watch button strip -->
+            <div class="flex items-center justify-center gap-2 px-3.5 py-2.5 bg-[#0B1A2E] border-t border-[#1E293B]">
+              <Play class="w-3.5 h-3.5 text-cyan-400" />
+              <span class="text-[12px] font-semibold text-cyan-400">{{ t('homeHeroCtaSecondary') }}</span>
             </div>
           </router-link>
         </div>
       </div>
     </section>
+
+    <!-- ─── News Layout (Pencil G4cD8B): Featured Tournament + Big News (left) | Latest News (center) | Live Streams (right) ─── -->
+    <section class="bg-[#0A0F1C]">
+      <div class="max-w-[1300px] mx-auto px-4 md:px-8 lg:px-10 py-7 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_295px_295px] gap-5">
+        <!-- ── Left column: Featured Tournament + Big News ── -->
+        <div class="flex flex-col gap-5 min-w-0">
+          <!-- Featured Tournament card -->
+          <router-link
+            v-if="featured"
+            :to="{ name: 'comp-info', params: { compId: featured.id } }"
+            class="rounded-[14px] overflow-hidden bg-[#0F172A] border border-[#FB923C] block"
+          >
+            <!-- Header image with gradient bg, badge + title + description. Falls back to the design's amber→dark gradient if no image uploaded. -->
+            <div class="flex flex-col justify-end gap-3.5 h-[240px] p-7"
+                 :style="featured.image_url
+                   ? `background: linear-gradient(180deg, rgba(15,23,42,0.15) 0%, rgba(15,23,42,0.75) 80%, rgba(15,23,42,0.9) 100%), url(${featured.image_url}) center/cover;`
+                   : 'background: linear-gradient(135deg, #3A1F00 0%, #7C2D12 50%, #0F172A 100%);'">
+              <span class="inline-flex items-center gap-1.5 self-start px-2.5 py-1 rounded-[5px] bg-[#FB923C]">
+                <Trophy class="w-[11px] h-[11px] text-[#0A0F1C]" />
+                <span class="text-[10px] font-black tracking-[1.2px] text-[#0A0F1C]">{{ t('homeFeaturedBadge').toUpperCase() }}</span>
+              </span>
+              <h3 class="text-[32px] font-black text-[#F1F5F9] leading-[1.1]">{{ featured.name }}</h3>
+              <p v-if="featured.description" class="text-[14px] text-[#CBD5E1] leading-[1.4] line-clamp-2">
+                {{ featured.description.replace(/<[^>]+>/g, '') }}
+              </p>
+            </div>
+            <!-- Body: stats | buttons -->
+            <div class="flex items-center justify-between gap-4 px-7 py-5">
+              <div class="flex items-center gap-6">
+                <div class="flex flex-col gap-0.5">
+                  <span class="text-[28px] font-black font-mono text-[#F1F5F9] leading-none">{{ featured.captain_count || 0 }}</span>
+                  <span class="text-[11px] font-bold tracking-[0.8px] text-[#64748B]">{{ t('homeFeaturedTeams') }}</span>
+                </div>
+                <div v-if="featured.competition_type" class="w-px h-10 bg-[#1E293B]" />
+                <div v-if="featured.competition_type" class="flex flex-col gap-0.5">
+                  <span class="text-[18px] font-black tracking-[0.5px] text-[#FB923C] uppercase">{{ featured.competition_type }}</span>
+                  <span class="text-[11px] font-bold tracking-[0.8px] text-[#64748B]">{{ t('homeFeaturedFormat') }}</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-2.5">
+                <span class="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#FB923C]">
+                  <BarChart3 class="w-[13px] h-[13px] text-[#0A0F1C]" />
+                  <span class="text-[13px] font-extrabold text-[#0A0F1C]">{{ t(featuredCta(featured.status).key) }}</span>
+                </span>
+                <span class="inline-flex items-center px-4 py-2.5 rounded-lg border border-[#1E293B] text-[13px] font-bold text-[#CBD5E1]">
+                  {{ t('homeFeaturedCtaSecondary') }}
+                </span>
+              </div>
+            </div>
+          </router-link>
+
+          <!-- Big News card (latest news) -->
+          <router-link
+            v-if="bigNews"
+            :to="{ name: 'news-post', params: { id: bigNews.id } }"
+            class="rounded-[14px] overflow-hidden bg-[#0F172A] border border-[#1E293B] flex"
+          >
+            <!-- Left: gradient/image panel 240w with badges -->
+            <div class="relative flex flex-col justify-between p-4 w-[240px] h-[200px] shrink-0"
+                 :style="bigNews.image_url
+                   ? `background: linear-gradient(135deg, rgba(15,45,58,0.6) 0%, rgba(34,211,238,0.4) 50%, rgba(162,28,175,0.5) 100%), url(${bigNews.image_url}) center/cover;`
+                   : 'background: linear-gradient(135deg, #0F2D3A 0%, #22D3EE 50%, #A21CAF 100%);'">
+              <span class="inline-flex items-center gap-1.5 self-start px-2.5 py-[3px] rounded-[5px] bg-[#22D3EE]">
+                <span class="w-[5px] h-[5px] rounded-full bg-[#0A0F1C]" />
+                <span class="text-[9px] font-black tracking-[1px] text-[#0A0F1C]">{{ t('homeNewsJustPosted').toUpperCase() }}</span>
+              </span>
+              <span class="inline-flex items-center gap-1.5 self-start px-2 py-[3px] rounded-[5px]" style="background: rgba(10,15,28,0.67);">
+                <Timer class="w-2.5 h-2.5 text-cyan-400" />
+                <span class="text-[10px] font-bold text-cyan-400">{{ formatRelativeTime(bigNews.created_at) }}</span>
+              </span>
+            </div>
+            <!-- Right: meta + title + footer (author placeholder + Read article CTA) -->
+            <div class="flex flex-col justify-between gap-3.5 p-[22px] flex-1 min-w-0 h-[200px]">
+              <div class="flex flex-col gap-2 min-w-0">
+                <div class="flex items-center gap-2.5">
+                  <span v-if="bigNews.tag" class="px-2 py-[2px] rounded bg-[#1B0036] text-[9px] font-extrabold tracking-[0.8px] text-[#A78BFA] uppercase">
+                    {{ bigNews.tag }}
+                  </span>
+                </div>
+                <h3 class="text-[18px] font-extrabold text-[#F1F5F9] leading-[1.2] line-clamp-2">{{ bigNews.title }}</h3>
+              </div>
+              <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                  <Calendar class="w-2.5 h-2.5 text-[#64748B]" />
+                  <span class="text-[11px] text-[#64748B]">{{ fmtDateOnly(new Date(bigNews.created_at)) }}</span>
+                </div>
+                <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[7px] bg-[#22D3EE]">
+                  <span class="text-[11px] font-extrabold text-[#0A0F1C]">{{ t('homeNewsReadArticle') }}</span>
+                  <ArrowRight class="w-2.5 h-2.5 text-[#0A0F1C]" />
+                </span>
+              </div>
+            </div>
+          </router-link>
+        </div>
+
+        <!-- ── Center column: Latest News list ── -->
+        <div class="flex flex-col gap-3.5 min-w-0">
+          <!-- Header: NEWSPAPER icon + LATEST NEWS | View all -->
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-1.5">
+              <Newspaper class="w-[13px] h-[13px] text-cyan-400" />
+              <span class="text-[10px] font-extrabold tracking-[1.2px] text-[#475569]">{{ t('homeNewsTitle').toUpperCase() }}</span>
+            </div>
+            <router-link to="/news" class="text-[11px] font-bold text-cyan-400 hover:underline">{{ t('viewAll') }} →</router-link>
+          </div>
+          <!-- News cards (4 items) -->
+          <router-link
+            v-for="(n, i) in newsList" :key="n.id"
+            :to="{ name: 'news-post', params: { id: n.id } }"
+            class="flex items-center gap-3 p-3 rounded-[10px] bg-[#0F172A] border border-[#1E293B] hover:border-cyan-500/40 transition-colors"
+          >
+            <!-- Thumbnail (84×84) with category badge overlay -->
+            <div class="relative w-[84px] h-[84px] rounded-lg overflow-hidden shrink-0"
+                 :style="n.image_url
+                   ? `background: url(${n.image_url}) center/cover;`
+                   : `background: ${newsGradient(i)};`">
+              <span v-if="n.tag" class="absolute top-1.5 left-1.5 px-1.5 py-[1px] rounded text-[8px] font-extrabold tracking-[0.5px] text-[#FACC15]" style="background: rgba(10,15,28,0.67);">
+                {{ n.tag.toUpperCase() }}
+              </span>
+            </div>
+            <div class="flex flex-col justify-between gap-1 flex-1 min-w-0 h-[84px]">
+              <h4 class="text-[13px] font-bold text-[#F1F5F9] leading-[1.3] line-clamp-3">{{ n.title }}</h4>
+              <div class="flex items-center gap-1.5">
+                <Calendar class="w-2.5 h-2.5 text-[#64748B] shrink-0" />
+                <span class="text-[10px] text-[#64748B] truncate">{{ fmtDateOnly(new Date(n.created_at)) }}</span>
+              </div>
+            </div>
+          </router-link>
+          <!-- View all news button -->
+          <router-link to="/news" class="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-lg border border-[#1E293B] hover:bg-[#0F172A] transition-colors">
+            <span class="text-[12px] font-bold text-[#CBD5E1]">{{ t('homeNewsViewAll') }}</span>
+            <ArrowRight class="w-3 h-3 text-cyan-400" />
+          </router-link>
+        </div>
+
+        <!-- ── Right column: Live Streams (Twitch) ── -->
+        <div class="flex flex-col gap-3.5 min-w-0">
+          <!-- Header: Twitch chip + LIVE STREAMS + count pill -->
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="inline-flex items-center justify-center w-[22px] h-[22px] rounded-[5px] bg-[#9146FF]">
+                <Twitch class="w-3 h-3 text-white" />
+              </span>
+              <span class="text-[10px] font-extrabold tracking-[1.2px] text-[#475569]">{{ t('homeStreamsTitle').toUpperCase() }}</span>
+              <span class="inline-flex items-center gap-1 px-1.5 py-[2px] rounded bg-[#3F1D1D]">
+                <span class="w-[5px] h-[5px] rounded-full bg-red-500" />
+                <span class="text-[10px] font-extrabold text-[#FCA5A5]">0</span>
+              </span>
+            </div>
+          </div>
+          <!-- Empty state — no Twitch stream API wired yet, structure preserved -->
+          <div class="flex flex-col items-center justify-center gap-2 p-8 rounded-[10px] bg-[#0F172A] border border-[#9146FF]/60 text-center">
+            <Twitch class="w-6 h-6 text-[#9146FF]" />
+            <p class="text-[12px] text-[#64748B] leading-relaxed">{{ t('homeStreamsEmpty') }}</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── Community Section (Pencil nwteQ): Top Players leaderboard | Daily Bonus + Hero Pick Rate sidebar ─── -->
+    <section class="bg-[#0A0F1C] border-b border-[#1E293B]">
+      <div class="max-w-[1300px] mx-auto px-4 md:px-8 lg:px-10 py-7 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-5">
+        <!-- ── Left: Top Players Card ── -->
+        <div class="rounded-[14px] bg-[#0F172A] border border-[#1E293B] p-6 flex flex-col gap-3.5 min-w-0">
+          <!-- Header -->
+          <div class="flex items-center justify-between gap-3">
+            <div class="flex items-center gap-2.5">
+              <div class="w-8 h-8 rounded-lg bg-[#1B1F3A] flex items-center justify-center">
+                <Crown class="w-4 h-4 text-[#FACC15]" />
+              </div>
+              <div class="flex flex-col gap-0.5">
+                <span class="text-[16px] font-extrabold text-[#F1F5F9] leading-none">
+                  {{ topPlayers.season ? t('homeTopPlayersWithSeason', { name: topPlayers.season.name }) : t('homeTopPlayersTitle') }}
+                </span>
+                <span class="text-[11px] text-[#64748B]">{{ t('homeTopPlayersSubtitle') }}</span>
+              </div>
+            </div>
+            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[7px] bg-[#0B1A2E] border border-[#1E3A5F]">
+              <span class="text-[12px] font-bold text-cyan-400">{{ topPlayers.season ? t('homeTopPlayersByPoints') : t('homeTopPlayersByMmr') }}</span>
+              <ChevronDown class="w-[11px] h-[11px] text-cyan-400" />
+            </span>
+          </div>
+
+          <!-- Column headers -->
+          <div class="grid grid-cols-[32px_minmax(0,1fr)_80px_140px_70px] items-center gap-3 px-3 py-2 rounded-lg bg-[#0B1220]">
+            <span class="text-[10px] font-extrabold tracking-[1px] text-[#475569]">#</span>
+            <span class="text-[10px] font-extrabold tracking-[1px] text-[#475569]">{{ t('player').toUpperCase() }}</span>
+            <span class="text-[10px] font-extrabold tracking-[1px] text-[#475569] text-right">
+              {{ topPlayers.season ? t('seasonPoints').toUpperCase() : 'MMR' }}
+            </span>
+            <span class="text-[10px] font-extrabold tracking-[1px] text-[#475569] text-center">{{ t('homeTopPlayersWinRate') }}</span>
+            <span class="text-[10px] font-extrabold tracking-[1px] text-[#475569] text-right">{{ t('homeTopPlayersStreak') }}</span>
+          </div>
+
+          <!-- Empty state -->
+          <div v-if="topPlayers.players.length === 0" class="text-sm text-muted-foreground text-center py-10">
+            {{ t('homeTopPlayersEmpty') }}
+          </div>
+
+          <!-- Rows -->
+          <div class="flex flex-col">
+            <router-link
+              v-for="(p, idx) in topPlayers.players" :key="p.id"
+              :to="{ name: 'player-profile', params: { id: p.id } }"
+              class="grid grid-cols-[32px_minmax(0,1fr)_80px_140px_70px] items-center gap-3 px-3 py-3.5 border-b border-[#1E293B] hover:bg-white/[0.02] transition-colors last:border-b-0"
+            >
+              <span class="font-mono font-extrabold text-[18px] tabular-nums text-center"
+                    :class="idx === 0 ? 'text-[#FACC15]' : idx === 1 ? 'text-[#CBD5E1]' : idx === 2 ? 'text-[#92400E]' : 'text-[#64748B]'">
+                {{ idx + 1 }}
+              </span>
+              <div class="flex items-center gap-3 min-w-0">
+                <img v-if="p.avatar_url" :src="p.avatar_url" class="w-9 h-9 rounded-lg object-cover bg-[#1E293B]" />
+                <div v-else class="w-9 h-9 rounded-lg bg-[#1E293B]" />
+                <div class="flex items-center gap-1.5 min-w-0">
+                  <span class="text-[13px] font-semibold text-[#F1F5F9] truncate">{{ p.name }}</span>
+                  <BadgeCheck v-if="p.mmr_verified_at" class="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                </div>
+              </div>
+              <span class="text-right font-mono font-extrabold text-[14px] text-cyan-400 tabular-nums">
+                {{ topPlayers.season ? (p.points != null ? p.points.toLocaleString() : '—') : p.mmr.toLocaleString() }}
+              </span>
+              <div class="flex items-center justify-end gap-2">
+                <div class="w-[90px] h-[5px] rounded-[2px] bg-[#1E293B] overflow-hidden">
+                  <div class="h-full rounded-[2px] bg-emerald-500" :style="{ width: (p.win_rate ?? 0) + '%' }" />
+                </div>
+                <span class="font-mono font-bold text-[12px] tabular-nums w-9 text-right" :class="winrateColor(p.win_rate)">
+                  {{ p.win_rate != null ? p.win_rate + '%' : '—' }}
+                </span>
+              </div>
+              <div class="flex items-center justify-end gap-1.5">
+                <component :is="p.streak?.won ? Flame : (p.streak ? Snowflake : Flame)"
+                  class="w-3 h-3"
+                  :class="p.streak?.won ? 'text-[#FB923C]' : (p.streak ? 'text-[#3B82F6]' : 'text-[#475569]')" />
+                <span class="text-[12px] font-extrabold" :class="p.streak?.won ? 'text-[#FB923C]' : (p.streak ? 'text-[#3B82F6]' : 'text-[#475569]')">
+                  {{ streakLabel(p.streak) }}
+                </span>
+              </div>
+            </router-link>
+          </div>
+
+          <!-- View full ladder -->
+          <router-link
+            :to="topPlayers.season ? { name: 'season-leaderboard', params: { slug: topPlayers.season.slug } } : { name: 'seasons' }"
+            class="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-lg border border-[#1E293B] hover:bg-white/[0.02] transition-colors"
+          >
+            <span class="text-[12px] font-bold text-[#CBD5E1]">{{ t('homeTopPlayersViewFull') }}</span>
+            <ArrowRight class="w-3 h-3 text-cyan-400" />
+          </router-link>
+        </div>
+
+        <!-- ── Right: Side cards (Daily Bonus + Hero Pick Rate) ── -->
+        <div class="flex flex-col gap-5">
+          <!-- Daily Bonus (logged-in only) -->
+          <div v-if="isLoggedIn && daily" class="rounded-[14px] bg-[#0F172A] border border-[#1E293B] p-5 flex flex-col gap-3">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <div class="w-7 h-7 rounded-[7px] bg-[#3A2A00] flex items-center justify-center">
+                  <Gift class="w-3.5 h-3.5 text-amber-400" />
+                </div>
+                <span class="text-[14px] font-extrabold text-[#F1F5F9]">{{ t('homeDailyTitle') }}</span>
+              </div>
+              <span v-if="daily.streak > 0" class="inline-flex items-center gap-1 px-2 py-[2px] rounded-[5px] bg-[#3A1F00]">
+                <Flame class="w-2.5 h-2.5 text-[#FB923C]" />
+                <span class="text-[10px] font-extrabold text-[#FB923C]">{{ daily.streak }}</span>
+              </span>
+            </div>
+            <p class="text-[12px] text-[#94A3B8] leading-[1.5]">
+              <template v-if="daily.claimed_today">{{ t('homeDailyClaimed', { xp: daily.next_xp }) }}</template>
+              <template v-else>{{ t('homeDailyAvailable', { xp: daily.next_xp }) }}</template>
+            </p>
+            <button
+              v-if="!daily.claimed_today"
+              type="button"
+              :disabled="dailyClaiming"
+              class="h-10 rounded-lg flex items-center justify-center gap-2 text-[12px] font-extrabold transition-all disabled:opacity-40"
+              style="background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%); color: #0A0F1C;"
+              @click="claimDaily"
+            >
+              <Gift class="w-3.5 h-3.5" />
+              {{ dailyClaiming ? `${t('saving')}…` : t('homeDailyClaim', { xp: daily.next_xp }) }}
+            </button>
+            <div v-else class="h-10 rounded-lg flex items-center justify-center gap-2 bg-[#052E1B] border border-[#22C55E]">
+              <Check class="w-3 h-3 text-[#22C55E]" />
+              <span class="text-[12px] font-extrabold text-[#22C55E]">{{ t('homeDailyDone') }}</span>
+            </div>
+          </div>
+
+          <!-- Hero Pick Rate -->
+          <div class="rounded-[14px] bg-[#0F172A] border border-[#1E293B] p-5 flex flex-col gap-3">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <div class="w-7 h-7 rounded-[7px] bg-[#1B1F3A] flex items-center justify-center">
+                  <BarChart3 class="w-3.5 h-3.5 text-cyan-400" />
+                </div>
+                <span class="text-[14px] font-extrabold text-[#F1F5F9]">{{ t('homeHeroPickRateTitle') }}</span>
+              </div>
+              <span class="text-[11px] text-[#64748B]">{{ t('homeHeroPickRateRange') }}</span>
+            </div>
+            <div v-if="heroPickRate.heroes.length === 0" class="text-[12px] text-[#64748B]">
+              {{ t('homeHeroPickRateEmpty') }}
+            </div>
+            <div v-for="(h, i) in heroPickRate.heroes" :key="h.hero_id" class="flex items-center gap-2.5 p-2 rounded-[7px]">
+              <div class="w-9 h-9 rounded-[7px] overflow-hidden flex items-center justify-center shrink-0"
+                   :style="`background: ${i === 0 ? 'linear-gradient(135deg, #1B0036 0%, #A78BFA 100%)' : i === 1 ? 'linear-gradient(135deg, #0F2D3A 0%, #22D3EE 100%)' : 'linear-gradient(135deg, #3F0808 0%, #FB923C 100%)'}`">
+                <img v-if="dota.heroImg(h.hero_id)" :src="dota.heroImg(h.hero_id)" class="w-full h-full object-cover" />
+                <span v-else class="text-[14px] font-extrabold text-white">{{ (dota.heroName(h.hero_id) || '?').charAt(0) }}</span>
+              </div>
+              <div class="flex flex-col gap-0.5 flex-1 min-w-0">
+                <span class="text-[13px] font-bold text-[#F1F5F9] truncate">{{ dota.heroName(h.hero_id) || '#' + h.hero_id }}</span>
+                <span class="text-[11px] text-[#64748B]">{{ h.picks }} {{ t('homeHeroPickRatePicks') }}</span>
+              </div>
+              <span class="font-mono font-extrabold text-[13px] text-[#EF4444] tabular-nums">{{ h.pick_rate }}%</span>
+            </div>
+            <router-link :to="{ name: 'seasons' }" class="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-lg border border-[#1E293B] hover:bg-white/[0.02] transition-colors">
+              <span class="text-[12px] font-bold text-[#CBD5E1]">{{ t('homeHeroPickRateViewAll') }}</span>
+              <ArrowRight class="w-3 h-3 text-cyan-400" />
+            </router-link>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <template v-if="false">
 
     <!-- ─── Featured Tournament ─── -->
     <section v-if="featured" class="bg-[#0A0F1C]">
@@ -764,5 +1049,6 @@ onUnmounted(() => {
         </div>
       </div>
     </section>
+    </template>
   </div>
 </template>

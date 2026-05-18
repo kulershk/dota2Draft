@@ -171,6 +171,7 @@
           "created_by": { "type": "integer", "nullable": true },
           "created_by_name": { "type": "string", "nullable": true },
           "created_by_avatar": { "type": "string", "nullable": true },
+          "image_url": { "type": "string", "nullable": true, "description": "Uploaded tournament hero image. Used as the background of the featured-tournament card on the home page." },
           "created_at": { "type": "string", "format": "date-time" }
         }
       },
@@ -703,6 +704,31 @@
         "security": [{ "bearerAuth": [] }],
         "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
         "responses": { "200": { "description": "Deleted" } }
+      }
+    },
+    "/api/competitions/{id}/image": {
+      "post": {
+        "tags": ["Competitions"],
+        "summary": "Upload competition hero image",
+        "description": "Multipart form upload. Field name: `image`. Replaces the previous image and deletes the prior file. Used as the background of the Featured Tournament card on the home page.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": { "required": true, "content": { "multipart/form-data": { "schema": { "type": "object", "properties": { "image": { "type": "string", "format": "binary" } }, "required": ["image"] } } } },
+        "responses": {
+          "200": { "description": "{ image_url }", "content": { "application/json": { "schema": { "type": "object", "properties": { "image_url": { "type": "string" } } } } } },
+          "400": { "description": "No file uploaded" },
+          "404": { "description": "Competition not found" }
+        }
+      },
+      "delete": {
+        "tags": ["Competitions"],
+        "summary": "Remove competition hero image",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": { "description": "{ ok: true }" },
+          "404": { "description": "Competition not found" }
+        }
       }
     },
     "/api/competitions/{id}/discord-announce": {

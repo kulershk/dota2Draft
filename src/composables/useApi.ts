@@ -67,6 +67,23 @@ export function useApi() {
       request(`/api/competitions/${id}`, { method: 'PUT', body: JSON.stringify({ is_public: isPublic }) }),
     deleteCompetition: (id: number) =>
       request(`/api/competitions/${id}`, { method: 'DELETE' }),
+    uploadCompetitionImage: async (id: number, file: File) => {
+      const form = new FormData()
+      form.append('image', file)
+      const token = localStorage.getItem('draft_auth_token')
+      const res = await fetch(`/api/competitions/${id}/image`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }))
+        throw new Error(err.error || 'Upload failed')
+      }
+      return res.json() as Promise<{ image_url: string }>
+    },
+    deleteCompetitionImage: (id: number) =>
+      request(`/api/competitions/${id}/image`, { method: 'DELETE' }),
 
     // Competition-specific user info
     getCompMe: (compId: number) => request(`/api/competitions/${compId}/me`),
