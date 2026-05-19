@@ -804,9 +804,15 @@ async function startReadyCheck(poolId, io) {
   // demands at least that many of its members in the 10-player group.
   // Swap non-members out for members still waiting in the queue; if we
   // can't reach the threshold, abort so the group keeps waiting.
+  //
+  // When `require_peer_when_present` is set, the rule only fires once
+  // at least one member is already in the picked 10 (the "hard shadow"
+  // semantics) — a group with zero members in the picked 10 is left
+  // alone so the lobby isn't blocked by the rule's mere existence.
   if (pool?.season_id) {
     const groupRules = await query(
-      `SELECT id, name, min_per_match FROM season_player_groups
+      `SELECT id, name, min_per_match, require_peer_when_present
+         FROM season_player_groups
         WHERE season_id = $1 AND min_per_match > 0 AND display_only = FALSE`,
       [pool.season_id]
     )
@@ -814,6 +820,7 @@ async function startReadyCheck(poolId, io) {
       const min = Number(rule.min_per_match) || 0
       if (min <= 0) continue
       let count = players.filter(p => (p.groupIds || []).includes(rule.id)).length
+      if (rule.require_peer_when_present && count === 0) continue
       if (count >= min) continue
       const reservoir = []
       let seen = 0
@@ -1052,20 +1059,33 @@ async function startQueueMatch(poolId, io, preselectedPlayers = null, preselecte
   // Captain 1 picks first; assign captain 1 = LOWER MMR of the two so the
   // weaker captain gets first pick. If MMRs are equal, pick randomly.
   players.sort((a, b) => b.mmr - a.mmr)
-  // Captain selection has two modes:
-  //   * Inhouse + require_captain_pool: captains MUST come from the captain
-  //     pool. Take the two LOWEST-MMR captain-pool players in the group.
-  //     (Lowest picks first per spec; second-lowest is captain 2.) If only
-  //     one captain is in the group we fall through to the legacy path —
-  //     the group-swap rule should have prevented this, but never throw.
-  //   * Otherwise: an eligibility window. Anyone within `threshold` MMR of
-  //     the lobby's top MMR is a captain candidate; two are drawn at random.
-  //     Lower-MMR captain still picks first as a balance handicap. Threshold
-  //     is configurable per pool (queue_pools.captain_eligibility_threshold,
-  //     default 1500). Setting threshold to 0 reduces to top-2-by-MMR.
+  // Captain selection has three modes (checked in order):
+  //   1. Any custom group on this season has `captains_drawn_from = TRUE`:
+  //      take the two LOWEST-MMR group members in the picked 10. This is
+  //      the generic-groups replacement for the built-in captain pool.
+  //   2. Inhouse + require_captain_pool: legacy built-in captain pool.
+  //   3. Otherwise: an eligibility window. Anyone within `threshold` MMR
+  //      of the lobby's top MMR is a captain candidate; two are drawn at
+  //      random. Lower-MMR still picks first as a balance handicap.
   let pickA, pickB
+  let captainGroupMembers = []
+  if (pool?.season_id) {
+    const captainGroup = await queryOne(
+      `SELECT id FROM season_player_groups
+        WHERE season_id = $1 AND captains_drawn_from = TRUE
+        ORDER BY id ASC LIMIT 1`,
+      [pool.season_id]
+    )
+    if (captainGroup) {
+      captainGroupMembers = players.filter(p => (p.groupIds || []).includes(captainGroup.id))
+    }
+  }
   const captainPoolPlayers = players.filter(p => p.captainPool)
-  if (pool?.inhouse_enabled && pool?.require_captain_pool && captainPoolPlayers.length >= 2) {
+  if (captainGroupMembers.length >= 2) {
+    const sortedAsc = [...captainGroupMembers].sort((a, b) => a.mmr - b.mmr)
+    pickA = sortedAsc[0]
+    pickB = sortedAsc[1]
+  } else if (pool?.inhouse_enabled && pool?.require_captain_pool && captainPoolPlayers.length >= 2) {
     const sortedAsc = [...captainPoolPlayers].sort((a, b) => a.mmr - b.mmr)
     pickA = sortedAsc[0]
     pickB = sortedAsc[1]

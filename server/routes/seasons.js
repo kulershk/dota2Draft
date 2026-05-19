@@ -553,12 +553,14 @@ export default function createSeasonsRouter(io) {
     const borderColor = String(req.body?.border_color || '#FFD700').trim()
     const minPerMatch = Math.max(0, Math.min(10, Number(req.body?.min_per_match) || 0))
     const displayOnly = !!req.body?.display_only
+    const requirePeerWhenPresent = !!req.body?.require_peer_when_present
+    const captainsDrawnFrom = !!req.body?.captains_drawn_from
     try {
       const row = await queryOne(`
-        INSERT INTO season_player_groups (season_id, name, description, border_color, min_per_match, display_only)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO season_player_groups (season_id, name, description, border_color, min_per_match, display_only, require_peer_when_present, captains_drawn_from)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING *
-      `, [seasonId, name, description, borderColor, minPerMatch, displayOnly])
+      `, [seasonId, name, description, borderColor, minPerMatch, displayOnly, requirePeerWhenPresent, captainsDrawnFrom])
       res.status(201).json(row)
     } catch (e) {
       if (e.code === '23505') return res.status(409).json({ error: 'A group with that name already exists in this season' })
@@ -571,7 +573,7 @@ export default function createSeasonsRouter(io) {
     if (!admin) return
     const seasonId = Number(req.params.id)
     const groupId = Number(req.params.groupId)
-    const fields = ['name', 'description', 'border_color', 'min_per_match', 'display_only']
+    const fields = ['name', 'description', 'border_color', 'min_per_match', 'display_only', 'require_peer_when_present', 'captains_drawn_from']
     const updates = []
     const values = []
     for (const f of fields) {
@@ -581,7 +583,7 @@ export default function createSeasonsRouter(io) {
         else if (f === 'description') v = v ? String(v).trim() : null
         else if (f === 'border_color') v = String(v || '#FFD700').trim()
         else if (f === 'min_per_match') v = Math.max(0, Math.min(10, Number(v) || 0))
-        else if (f === 'display_only') v = !!v
+        else if (f === 'display_only' || f === 'require_peer_when_present' || f === 'captains_drawn_from') v = !!v
         values.push(v)
         updates.push(`${f} = $${values.length}`)
       }

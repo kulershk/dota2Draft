@@ -168,6 +168,8 @@ interface GroupRow {
   border_color: string
   min_per_match: number
   display_only: boolean
+  require_peer_when_present: boolean
+  captains_drawn_from: boolean
   member_count: number
   members: Array<{
     player_id: number
@@ -185,6 +187,8 @@ const newGroup = ref({
   border_color: '#FFD700',
   min_per_match: 0,
   display_only: false,
+  require_peer_when_present: false,
+  captains_drawn_from: false,
 })
 const creatingGroup = ref(false)
 
@@ -214,6 +218,8 @@ async function createGroup() {
     newGroup.value.border_color = '#FFD700'
     newGroup.value.min_per_match = 0
     newGroup.value.display_only = false
+    newGroup.value.require_peer_when_present = false
+    newGroup.value.captains_drawn_from = false
     await loadGroups()
   } catch (e: any) {
     alert(e?.message || 'Failed to create group')
@@ -798,16 +804,24 @@ onMounted(load)
             <label class="block text-[11px] uppercase tracking-wide text-muted-foreground">{{ t('seasonGroupMinPerMatch') }}</label>
             <input v-model.number="newGroup.min_per_match" type="number" min="0" max="10" class="mt-1 w-full bg-accent/40 border border-border/40 rounded-lg px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-primary/40" />
           </div>
-          <div class="col-span-4 md:col-span-2 flex items-center pt-5">
-            <label class="flex items-center gap-1.5 text-xs cursor-pointer">
-              <input v-model="newGroup.display_only" type="checkbox" />
-              <span>{{ t('seasonGroupDisplayOnly') }}</span>
-            </label>
-          </div>
           <div class="col-span-12 md:col-span-2 flex items-end">
             <button type="button" class="btn-primary w-full px-3 py-1.5 text-xs disabled:opacity-40" :disabled="creatingGroup || !newGroup.name.trim()" @click="createGroup">
               {{ creatingGroup ? `${t('saving')}…` : t('seasonGroupCreate') }}
             </button>
+          </div>
+          <div class="col-span-12 flex flex-wrap items-center gap-4 pt-1">
+            <label class="flex items-center gap-1.5 text-xs cursor-pointer" :title="t('seasonGroupDisplayOnlyHint')">
+              <input v-model="newGroup.display_only" type="checkbox" />
+              <span>{{ t('seasonGroupDisplayOnly') }}</span>
+            </label>
+            <label class="flex items-center gap-1.5 text-xs cursor-pointer" :title="t('seasonGroupRequirePeerHint')">
+              <input v-model="newGroup.require_peer_when_present" type="checkbox" />
+              <span>{{ t('seasonGroupRequirePeer') }}</span>
+            </label>
+            <label class="flex items-center gap-1.5 text-xs cursor-pointer" :title="t('seasonGroupCaptainsFromHint')">
+              <input v-model="newGroup.captains_drawn_from" type="checkbox" />
+              <span>{{ t('seasonGroupCaptainsFrom') }}</span>
+            </label>
           </div>
         </div>
 
@@ -837,13 +851,29 @@ onMounted(load)
                 @change="(e: any) => patchGroup(g.id, { min_per_match: Number((e.target as HTMLInputElement).value) || 0 })"
               />
             </label>
-            <label class="text-[11px] text-muted-foreground flex items-center gap-1">
+            <label class="text-[11px] text-muted-foreground flex items-center gap-1" :title="t('seasonGroupDisplayOnlyHint')">
               <input
                 type="checkbox"
                 :checked="g.display_only"
                 @change="(e: any) => patchGroup(g.id, { display_only: (e.target as HTMLInputElement).checked })"
               />
               {{ t('seasonGroupDisplayOnly') }}
+            </label>
+            <label class="text-[11px] text-muted-foreground flex items-center gap-1" :title="t('seasonGroupRequirePeerHint')">
+              <input
+                type="checkbox"
+                :checked="g.require_peer_when_present"
+                @change="(e: any) => patchGroup(g.id, { require_peer_when_present: (e.target as HTMLInputElement).checked })"
+              />
+              {{ t('seasonGroupRequirePeer') }}
+            </label>
+            <label class="text-[11px] text-muted-foreground flex items-center gap-1" :title="t('seasonGroupCaptainsFromHint')">
+              <input
+                type="checkbox"
+                :checked="g.captains_drawn_from"
+                @change="(e: any) => patchGroup(g.id, { captains_drawn_from: (e.target as HTMLInputElement).checked })"
+              />
+              {{ t('seasonGroupCaptainsFrom') }}
             </label>
             <button type="button" class="text-[11px] px-2 py-1 rounded bg-red-500/10 text-red-400 hover:bg-red-500/20" @click="deleteGroup(g.id)">
               {{ t('seasonGroupDelete') }}

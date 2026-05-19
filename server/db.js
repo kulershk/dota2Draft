@@ -1205,6 +1205,25 @@ export async function initDb() {
     )
   `)
   try { await execute(`CREATE INDEX IF NOT EXISTS season_player_groups_season_idx ON season_player_groups (season_id)`) } catch {}
+  // Extra rule columns added after the initial table — keep these as
+  // ALTERs so existing DBs upgrade cleanly. Both flags are off by
+  // default (no behavioural change for existing groups).
+  for (const [col, def] of [
+    // Hard-shadow shape: only enforce min_per_match when at least one
+    // group member is already in the picked 10. Without this flag, the
+    // min runs unconditionally (treat as "always need ≥N").
+    ['require_peer_when_present', 'BOOLEAN NOT NULL DEFAULT FALSE'],
+    // Captain selection source: when set, the two lowest-MMR group
+    // members in the picked 10 become captain1 / captain2. Mirrors the
+    // legacy queue_pools.require_captain_pool branch but at the group
+    // level so admins can target any custom group.
+    ['captains_drawn_from',       'BOOLEAN NOT NULL DEFAULT FALSE'],
+  ]) {
+    const has = await queryOne(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'season_player_groups' AND column_name = $1`, [col]
+    )
+    if (!has) await execute(`ALTER TABLE season_player_groups ADD COLUMN ${col} ${def}`)
+  }
 
   await execute(`
     CREATE TABLE IF NOT EXISTS season_player_group_members (
