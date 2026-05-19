@@ -1184,6 +1184,38 @@ export async function initDb() {
   try { await execute(`CREATE INDEX IF NOT EXISTS season_player_flags_captain_idx ON season_player_flags (season_id) WHERE captain_pool = TRUE`) } catch {}
   try { await execute(`CREATE INDEX IF NOT EXISTS season_player_flags_shadow_idx ON season_player_flags (season_id) WHERE shadow_pool > 0`) } catch {}
 
+  // Custom per-season player groups with simple matchmaking rules. Each
+  // group is opt-in (admin creates + adds members on Season Setup →
+  // Flags). The match-formation step honors rules; the leaderboard /
+  // queue UI renders the configured border_color on member avatars.
+  // Built-in captain_pool / shadow_pool stay in season_player_flags
+  // because they carry specialised matchmaking logic that doesn't fit
+  // the generic rule shape (captain selection, level-based swap).
+  await execute(`
+    CREATE TABLE IF NOT EXISTS season_player_groups (
+      id              SERIAL PRIMARY KEY,
+      season_id       INTEGER NOT NULL REFERENCES seasons(id) ON DELETE CASCADE,
+      name            TEXT NOT NULL,
+      description     TEXT NULL,
+      border_color    TEXT NOT NULL DEFAULT '#FFD700',
+      min_per_match   INTEGER NOT NULL DEFAULT 0,
+      display_only    BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at      TIMESTAMP NOT NULL DEFAULT NOW(),
+      UNIQUE (season_id, name)
+    )
+  `)
+  try { await execute(`CREATE INDEX IF NOT EXISTS season_player_groups_season_idx ON season_player_groups (season_id)`) } catch {}
+
+  await execute(`
+    CREATE TABLE IF NOT EXISTS season_player_group_members (
+      group_id   INTEGER NOT NULL REFERENCES season_player_groups(id) ON DELETE CASCADE,
+      player_id  INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      added_at   TIMESTAMP NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (group_id, player_id)
+    )
+  `)
+  try { await execute(`CREATE INDEX IF NOT EXISTS season_player_group_members_player_idx ON season_player_group_members (player_id)`) } catch {}
+
   // Drop the now-obsolete global flags. IF EXISTS so fresh DBs (which
   // never had them) and re-runs (which already dropped them) are no-ops.
   try { await execute(`ALTER TABLE players DROP COLUMN IF EXISTS captain_pool`) } catch (e) { console.warn('[db] drop players.captain_pool:', e.message) }

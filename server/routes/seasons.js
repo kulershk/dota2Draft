@@ -497,6 +497,188 @@ export default function createSeasonsRouter(io) {
     }
   })
 
+  // ── Custom per-season player groups ──
+  // Generic admin-defined groups (in addition to the built-in captain /
+  // shadow flags). Each group can carry simple matchmaking rules:
+  //   * min_per_match: when > 0, ready-check requires at least N members
+  //     in the 10-player group; otherwise it tries to swap others out
+  //     for members still queued (mirrors hard-shadow behaviour).
+  //   * display_only: badge/colour only, no matchmaking effect.
+  // border_color is a CSS colour string used by the avatar ring helper.
+
+  router.get('/api/admin/seasons/:id/groups', async (req, res) => {
+    const admin = await requirePermission(req, res, 'manage_seasons')
+    if (!admin) return
+    const seasonId = Number(req.params.id)
+    try {
+      const groups = await query(`
+        SELECT g.*, COUNT(m.player_id)::int AS member_count
+          FROM season_player_groups g
+          LEFT JOIN season_player_group_members m ON m.group_id = g.id
+         WHERE g.season_id = $1
+         GROUP BY g.id
+         ORDER BY g.created_at ASC
+      `, [seasonId])
+      // Pull member rosters in a second query — avoids row explosion on
+      // groups with many members.
+      const groupIds = groups.map(g => g.id)
+      const members = groupIds.length
+        ? await query(`
+            SELECT m.group_id, m.player_id, m.added_at,
+                   p.name, COALESCE(p.display_name, p.name) AS display_name, p.avatar_url, p.mmr
+              FROM season_player_group_members m
+              JOIN players p ON p.id = m.player_id
+             WHERE m.group_id = ANY($1::int[])
+             ORDER BY display_name ASC
+          `, [groupIds])
+        : []
+      const membersByGroup = {}
+      for (const m of members) {
+        ;(membersByGroup[m.group_id] ||= []).push(m)
+      }
+      for (const g of groups) g.members = membersByGroup[g.id] || []
+      res.json(groups)
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  router.post('/api/admin/seasons/:id/groups', async (req, res) => {
+    const admin = await requirePermission(req, res, 'manage_seasons')
+    if (!admin) return
+    const seasonId = Number(req.params.id)
+    const name = String(req.body?.name || '').trim()
+    if (!name) return res.status(400).json({ error: 'name is required' })
+    const description = req.body?.description ? String(req.body.description).trim() : null
+    const borderColor = String(req.body?.border_color || '#FFD700').trim()
+    const minPerMatch = Math.max(0, Math.min(10, Number(req.body?.min_per_match) || 0))
+    const displayOnly = !!req.body?.display_only
+    try {
+      const row = await queryOne(`
+        INSERT INTO season_player_groups (season_id, name, description, border_color, min_per_match, display_only)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING *
+      `, [seasonId, name, description, borderColor, minPerMatch, displayOnly])
+      res.status(201).json(row)
+    } catch (e) {
+      if (e.code === '23505') return res.status(409).json({ error: 'A group with that name already exists in this season' })
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  router.patch('/api/admin/seasons/:id/groups/:groupId', async (req, res) => {
+    const admin = await requirePermission(req, res, 'manage_seasons')
+    if (!admin) return
+    const seasonId = Number(req.params.id)
+    const groupId = Number(req.params.groupId)
+    const fields = ['name', 'description', 'border_color', 'min_per_match', 'display_only']
+    const updates = []
+    const values = []
+    for (const f of fields) {
+      if (Object.prototype.hasOwnProperty.call(req.body, f)) {
+        let v = req.body[f]
+        if (f === 'name') v = String(v || '').trim()
+        else if (f === 'description') v = v ? String(v).trim() : null
+        else if (f === 'border_color') v = String(v || '#FFD700').trim()
+        else if (f === 'min_per_match') v = Math.max(0, Math.min(10, Number(v) || 0))
+        else if (f === 'display_only') v = !!v
+        values.push(v)
+        updates.push(`${f} = $${values.length}`)
+      }
+    }
+    if (!updates.length) return res.status(400).json({ error: 'No fields to update' })
+    values.push(seasonId, groupId)
+    try {
+      const row = await queryOne(
+        `UPDATE season_player_groups SET ${updates.join(', ')}
+          WHERE season_id = $${values.length - 1} AND id = $${values.length}
+          RETURNING *`,
+        values
+      )
+      if (!row) return res.status(404).json({ error: 'Group not found' })
+      res.json(row)
+    } catch (e) {
+      if (e.code === '23505') return res.status(409).json({ error: 'Name already in use in this season' })
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  router.delete('/api/admin/seasons/:id/groups/:groupId', async (req, res) => {
+    const admin = await requirePermission(req, res, 'manage_seasons')
+    if (!admin) return
+    const seasonId = Number(req.params.id)
+    const groupId = Number(req.params.groupId)
+    try {
+      const r = await execute(
+        `DELETE FROM season_player_groups WHERE season_id = $1 AND id = $2`,
+        [seasonId, groupId]
+      )
+      if (!r.rowCount) return res.status(404).json({ error: 'Group not found' })
+      res.json({ ok: true })
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  router.post('/api/admin/seasons/:id/groups/:groupId/members', async (req, res) => {
+    const admin = await requirePermission(req, res, 'manage_seasons')
+    if (!admin) return
+    const seasonId = Number(req.params.id)
+    const groupId = Number(req.params.groupId)
+    const playerId = Number(req.body?.player_id)
+    if (!playerId) return res.status(400).json({ error: 'player_id required' })
+    try {
+      // Verify the group belongs to the season (defence-in-depth).
+      const group = await queryOne('SELECT id FROM season_player_groups WHERE id = $1 AND season_id = $2', [groupId, seasonId])
+      if (!group) return res.status(404).json({ error: 'Group not found' })
+      await execute(
+        `INSERT INTO season_player_group_members (group_id, player_id) VALUES ($1, $2)
+         ON CONFLICT DO NOTHING`,
+        [groupId, playerId]
+      )
+      // Live-sync any in-memory queue entry on pools attached to this
+      // season so the next startReadyCheck sees the new membership.
+      const pools = await query('SELECT id FROM queue_pools WHERE season_id = $1', [seasonId])
+      for (const { id: poolId } of pools) {
+        const q = poolQueues.get(poolId)
+        const entry = q?.get(playerId)
+        if (entry) {
+          entry.groupIds = entry.groupIds ? [...new Set([...entry.groupIds, groupId])] : [groupId]
+        }
+      }
+      const playerPool = playerInQueue.get(playerId)
+      if (playerPool) broadcastQueueUpdate(io, playerPool)
+      res.json({ ok: true })
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  router.delete('/api/admin/seasons/:id/groups/:groupId/members/:playerId', async (req, res) => {
+    const admin = await requirePermission(req, res, 'manage_seasons')
+    if (!admin) return
+    const seasonId = Number(req.params.id)
+    const groupId = Number(req.params.groupId)
+    const playerId = Number(req.params.playerId)
+    try {
+      const group = await queryOne('SELECT id FROM season_player_groups WHERE id = $1 AND season_id = $2', [groupId, seasonId])
+      if (!group) return res.status(404).json({ error: 'Group not found' })
+      await execute(`DELETE FROM season_player_group_members WHERE group_id = $1 AND player_id = $2`, [groupId, playerId])
+      // Live-sync removal.
+      const pools = await query('SELECT id FROM queue_pools WHERE season_id = $1', [seasonId])
+      for (const { id: poolId } of pools) {
+        const q = poolQueues.get(poolId)
+        const entry = q?.get(playerId)
+        if (entry?.groupIds) entry.groupIds = entry.groupIds.filter(g => g !== groupId)
+      }
+      const playerPool = playerInQueue.get(playerId)
+      if (playerPool) broadcastQueueUpdate(io, playerPool)
+      res.json({ ok: true })
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
   return router
 }
 
