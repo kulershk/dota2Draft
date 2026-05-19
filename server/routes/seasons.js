@@ -4,6 +4,8 @@ import { requirePermission } from '../middleware/permissions.js'
 import { adjustPlayerPoints, recomputeSeasonFromHistory, backfillSeasonFromPoolHistory } from '../services/seasonRankingApply.js'
 import { applyFridayBonusForSeason } from '../services/inhouseFridayBonus.js'
 import { withDefaults } from '../services/seasonRating.js'
+import { poolQueues, playerInQueue } from '../socket/queueState.js'
+import { broadcastQueueUpdate } from '../socket/queue.js'
 
 const ROUTER_TAGS = 'Seasons'
 
@@ -395,6 +397,99 @@ export default function createSeasonsRouter(io) {
       res.json({ ok: true, ...result })
     } catch (e) {
       console.error('[seasons friday-bonus]', e)
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  // ── Admin: list per-season captain / shadow flags ──
+  // Returns one row per flagged player (anyone with captain_pool=TRUE or
+  // shadow_pool>0). Used by the Season Setup page to render the captain
+  // and shadow management lists side-by-side. Requires `manage_seasons`.
+  router.get('/api/admin/seasons/:id/player-flags', async (req, res) => {
+    const admin = await requirePermission(req, res, 'manage_seasons')
+    if (!admin) return
+    const seasonId = Number(req.params.id)
+    try {
+      const rows = await query(`
+        SELECT spf.player_id, spf.captain_pool, spf.shadow_pool, spf.updated_at,
+               p.name, COALESCE(p.display_name, p.name) AS display_name, p.avatar_url, p.mmr, p.mmr_verified_at
+          FROM season_player_flags spf
+          JOIN players p ON p.id = spf.player_id
+         WHERE spf.season_id = $1
+           AND (spf.captain_pool = TRUE OR spf.shadow_pool > 0)
+         ORDER BY display_name ASC
+      `, [seasonId])
+      res.json(rows)
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  // ── Admin: set a player's captain_pool + shadow_pool for one season ──
+  // Body: { player_id, captain_pool?: boolean, shadow_pool?: 0|1|2 }. Both
+  // flags are optional — omitted fields keep their current value. When
+  // both end up false/0 the row is deleted so listings stay tidy. Also
+  // mutates any in-memory queue entries on pools attached to this
+  // season so the next startReadyCheck sees the new value.
+  router.post('/api/admin/seasons/:id/player-flags', async (req, res) => {
+    const admin = await requirePermission(req, res, 'manage_seasons')
+    if (!admin) return
+    const seasonId = Number(req.params.id)
+    const playerId = Number(req.body?.player_id)
+    if (!seasonId || !playerId) return res.status(400).json({ error: 'season_id and player_id required' })
+    const hasCaptain = Object.prototype.hasOwnProperty.call(req.body, 'captain_pool')
+    const hasShadow  = Object.prototype.hasOwnProperty.call(req.body, 'shadow_pool')
+    if (!hasCaptain && !hasShadow) return res.status(400).json({ error: 'Provide captain_pool and/or shadow_pool' })
+
+    const nextCaptain = hasCaptain ? !!req.body.captain_pool : null
+    const nextShadow  = hasShadow  ? Number(req.body.shadow_pool) : null
+    if (hasShadow && ![0, 1, 2].includes(nextShadow)) return res.status(400).json({ error: 'shadow_pool must be 0, 1, or 2' })
+
+    try {
+      const season = await queryOne('SELECT id FROM seasons WHERE id = $1', [seasonId])
+      if (!season) return res.status(404).json({ error: 'Season not found' })
+      const player = await queryOne('SELECT id FROM players WHERE id = $1', [playerId])
+      if (!player) return res.status(404).json({ error: 'Player not found' })
+
+      // Upsert. When the resulting row is fully inert (no captain, no
+      // shadow) we delete it instead so admin lists stay clean.
+      const current = await queryOne(
+        'SELECT captain_pool, shadow_pool FROM season_player_flags WHERE season_id = $1 AND player_id = $2',
+        [seasonId, playerId]
+      )
+      const resolvedCaptain = hasCaptain ? nextCaptain : !!current?.captain_pool
+      const resolvedShadow  = hasShadow  ? nextShadow  : Number(current?.shadow_pool || 0)
+      const isInert = !resolvedCaptain && resolvedShadow === 0
+      if (isInert) {
+        if (current) await execute('DELETE FROM season_player_flags WHERE season_id = $1 AND player_id = $2', [seasonId, playerId])
+      } else {
+        await execute(
+          `INSERT INTO season_player_flags (season_id, player_id, captain_pool, shadow_pool, updated_at)
+           VALUES ($1, $2, $3, $4, NOW())
+           ON CONFLICT (season_id, player_id) DO UPDATE
+             SET captain_pool = EXCLUDED.captain_pool,
+                 shadow_pool  = EXCLUDED.shadow_pool,
+                 updated_at   = NOW()`,
+          [seasonId, playerId, resolvedCaptain, resolvedShadow]
+        )
+      }
+
+      // Live-sync any in-memory queue entry on pools attached to this season.
+      const affectedPools = await query('SELECT id FROM queue_pools WHERE season_id = $1', [seasonId])
+      for (const { id: poolId } of affectedPools) {
+        const q = poolQueues.get(poolId)
+        const entry = q?.get(playerId)
+        if (entry) {
+          entry.captainPool = resolvedCaptain
+          entry.shadowPool = resolvedShadow
+        }
+      }
+      const playerPool = playerInQueue.get(playerId)
+      if (playerPool) broadcastQueueUpdate(io, playerPool)
+
+      res.json({ ok: true, captain_pool: resolvedCaptain, shadow_pool: resolvedShadow, deleted: isInert })
+    } catch (e) {
+      console.error('[seasons player-flags]', e)
       res.status(500).json({ error: e.message })
     }
   })

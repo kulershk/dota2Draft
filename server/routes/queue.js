@@ -854,59 +854,17 @@ export default function createQueueRouter(io) {
     }
   })
 
-  // ── Admin: set a player's shadow-pool flag (0=none, 1=soft, 2=hard) ──
-  // Global player flag, so gated on canManageAll only — mirrors how global bans
-  // are restricted. If the player is currently queued, the in-memory entry is
-  // mutated so the next startReadyCheck sees the new value without re-queueing,
-  // and a queue:updated broadcast pushes the badge change to all clients
-  // subscribed to that pool.
+  // Per-season captain + shadow flags are managed via the seasons
+  // router (`/api/admin/seasons/:seasonId/player-flags`). The legacy
+  // global toggle endpoints (`/players/:id/shadow`, `/captain-pool`)
+  // were removed when the flags moved to `season_player_flags`. A
+  // no-op stub kept here as a 410 Gone so any cached client gets a
+  // clean error instead of a 404.
   router.post('/api/admin/queue/players/:id/shadow', async (req, res) => {
-    const scope = await getQueueAdminScope(req, res)
-    if (!scope) return
-    if (!scope.canManageAll) return res.status(403).json({ error: 'Global player flag requires manage_queue_pools' })
-    const playerId = Number(req.params.id)
-    if (!playerId) return res.status(400).json({ error: 'Invalid player id' })
-    const next = Number(req.body?.shadow_pool)
-    if (![0, 1, 2].includes(next)) return res.status(400).json({ error: 'shadow_pool must be 0, 1, or 2' })
-    try {
-      const result = await execute('UPDATE players SET shadow_pool = $1 WHERE id = $2', [next, playerId])
-      if (result.rowCount === 0) return res.status(404).json({ error: 'Player not found' })
-      for (const q of poolQueues.values()) {
-        const e = q.get(playerId)
-        if (e) e.shadowPool = next
-      }
-      const poolId = playerInQueue.get(playerId)
-      if (poolId) broadcastQueueUpdate(io, poolId)
-      res.json({ ok: true, shadow_pool: next })
-    } catch (e) {
-      res.status(500).json({ error: e.message })
-    }
+    res.status(410).json({ error: 'Shadow pool is now per-season — use POST /api/admin/seasons/:seasonId/player-flags' })
   })
-
-  // ── Admin: set a player's captain-pool flag (inhouse captain) ──
-  // Mirrors the shadow-pool toggle: global flag, gated on canManageAll. The
-  // in-memory queue entry is mutated so the next startReadyCheck and the
-  // pool sidebar render see the new value without re-queueing.
   router.post('/api/admin/queue/players/:id/captain-pool', async (req, res) => {
-    const scope = await getQueueAdminScope(req, res)
-    if (!scope) return
-    if (!scope.canManageAll) return res.status(403).json({ error: 'Global player flag requires manage_queue_pools' })
-    const playerId = Number(req.params.id)
-    if (!playerId) return res.status(400).json({ error: 'Invalid player id' })
-    const next = !!req.body?.captain_pool
-    try {
-      const result = await execute('UPDATE players SET captain_pool = $1 WHERE id = $2', [next, playerId])
-      if (result.rowCount === 0) return res.status(404).json({ error: 'Player not found' })
-      for (const q of poolQueues.values()) {
-        const e = q.get(playerId)
-        if (e) e.captainPool = next
-      }
-      const poolId = playerInQueue.get(playerId)
-      if (poolId) broadcastQueueUpdate(io, poolId)
-      res.json({ ok: true, captain_pool: next })
-    } catch (e) {
-      res.status(500).json({ error: e.message })
-    }
+    res.status(410).json({ error: 'Captain pool is now per-season — use POST /api/admin/seasons/:seasonId/player-flags' })
   })
 
   // ── Admin: list active queue bans ──

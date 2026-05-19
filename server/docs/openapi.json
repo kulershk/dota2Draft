@@ -3068,22 +3068,10 @@
     "/api/admin/queue/players/{id}/shadow": {
       "post": {
         "tags": ["Queue"],
-        "summary": "Admin: set a player's shadow-pool flag",
-        "description": "Updates players.shadow_pool. 0 = none (matches normally), 1 = soft shadow (marked but matches normally), 2 = hard shadow (only included in a match-of-10 when at least one other shadow-flagged player is in the same group). The flag is a global player attribute; requires manage_queue_pools (manage_own_queue_pools is rejected). If the player is currently queued, the in-memory entry is updated and a queue:updated broadcast pushes the badge change to all clients in that pool.",
+        "summary": "DEPRECATED — global shadow-pool toggle",
+        "description": "Removed in the per-season refactor. Always returns 410 Gone with a pointer to POST /api/admin/seasons/{seasonId}/player-flags.",
         "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": ["shadow_pool"],
-                "properties": { "shadow_pool": { "type": "integer", "enum": [0, 1, 2] } }
-              }
-            }
-          }
-        },
-        "responses": { "200": { "description": "Flag updated" }, "400": { "description": "shadow_pool must be 0, 1, or 2" }, "403": { "description": "Requires full manage_queue_pools" }, "404": { "description": "Player not found" } }
+        "responses": { "410": { "description": "Use POST /api/admin/seasons/{seasonId}/player-flags instead." } }
       }
     },
     "/api/admin/queue/bans": {
@@ -3938,15 +3926,45 @@
       "/api/admin/queue/players/{id}/captain-pool": {
         "post": {
           "tags": ["Queue"],
-          "summary": "Toggle a player's inhouse captain-pool flag",
-          "description": "Global player flag (parallel to shadow_pool). Requires `manage_queue_pools`. When set, the player is eligible to act as a captain in inhouse pools that require_captain_pool.",
+          "summary": "DEPRECATED — global captain-pool toggle",
+          "description": "Removed in the per-season refactor. Always returns 410 Gone with a pointer to POST /api/admin/seasons/{seasonId}/player-flags. Kept so old clients fail cleanly.",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+          "responses": { "410": { "description": "Use POST /api/admin/seasons/{seasonId}/player-flags instead." } }
+        }
+      },
+      "/api/admin/seasons/{id}/player-flags": {
+        "get": {
+          "tags": ["Seasons"],
+          "summary": "List captain + shadow flags for a season",
+          "description": "Returns one row per flagged player (anyone with captain_pool=TRUE or shadow_pool>0). Requires `manage_seasons`.",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+          "responses": { "200": { "description": "Array of { player_id, captain_pool, shadow_pool, updated_at, name, display_name, avatar_url, mmr, mmr_verified_at }" } }
+        },
+        "post": {
+          "tags": ["Seasons"],
+          "summary": "Set a player's captain / shadow flag for one season",
+          "description": "Body must include `player_id` plus at least one of `captain_pool` (boolean) or `shadow_pool` (0/1/2). Omitted fields keep their current value. A row with both flags inert is deleted. Live-syncs in-memory queue entries on pools attached to this season.",
           "security": [{ "bearerAuth": [] }],
           "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
           "requestBody": {
             "required": true,
-            "content": { "application/json": { "schema": { "type": "object", "required": ["captain_pool"], "properties": { "captain_pool": { "type": "boolean" } } } } }
+            "content": { "application/json": { "schema": {
+              "type": "object",
+              "required": ["player_id"],
+              "properties": {
+                "player_id": { "type": "integer" },
+                "captain_pool": { "type": "boolean" },
+                "shadow_pool": { "type": "integer", "enum": [0, 1, 2] }
+              }
+            } } }
           },
-          "responses": { "200": { "description": "{ ok, captain_pool }" } }
+          "responses": {
+            "200": { "description": "{ ok, captain_pool, shadow_pool, deleted }" },
+            "400": { "description": "Missing fields or invalid shadow_pool value" },
+            "404": { "description": "Season or player not found" }
+          }
         }
       },
       "/api/inhouse/reports/toxic": {
