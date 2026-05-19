@@ -62,7 +62,22 @@ async function _doEnqueue(io, playerId, poolId) {
   const pool = await queryOne('SELECT * FROM queue_pools WHERE id = $1 AND enabled = true', [poolId])
   if (!pool) return { ok: false, error: 'Queue pool not found or disabled' }
 
-  const player = await queryOne('SELECT id, name, display_name, steam_id, avatar_url, mmr, mmr_verified_at, shadow_pool, captain_pool FROM players WHERE id = $1', [playerId])
+  const player = await queryOne('SELECT id, name, display_name, steam_id, avatar_url, mmr, mmr_verified_at FROM players WHERE id = $1', [playerId])
+  // Captain / shadow flags are now per-season (season_player_flags). A
+  // pool without a season carries no flags — that's intentional, since
+  // require_captain_pool only makes sense in an inhouse-with-season setup.
+  let shadowPool = 0
+  let captainPool = false
+  if (pool.season_id) {
+    const flagRow = await queryOne(
+      'SELECT captain_pool, shadow_pool FROM season_player_flags WHERE season_id = $1 AND player_id = $2',
+      [pool.season_id, playerId]
+    )
+    if (flagRow) {
+      shadowPool = Number(flagRow.shadow_pool) || 0
+      captainPool = !!flagRow.captain_pool
+    }
+  }
   if (!player?.steam_id) return { ok: false, error: 'Steam account required to queue' }
   if (!player.mmr || player.mmr <= 0) return { ok: false, error: 'You must set your MMR before queuing' }
   if (pool.min_mmr > 0 && player.mmr < pool.min_mmr) return { ok: false, error: `Minimum MMR for this pool is ${pool.min_mmr}` }
@@ -118,8 +133,8 @@ async function _doEnqueue(io, playerId, poolId) {
     steamId: player.steam_id,
     avatarUrl: player.avatar_url,
     mmr: player.mmr,
-    shadowPool: player.shadow_pool || 0,
-    captainPool: !!player.captain_pool,
+    shadowPool,
+    captainPool,
   })
   playerInQueue.set(playerId, poolId)
 

@@ -110,7 +110,9 @@ export async function initDb() {
     ['banned_at', 'TIMESTAMP DEFAULT NULL'],
     ['banned_by', 'INTEGER DEFAULT NULL REFERENCES players(id) ON DELETE SET NULL'],
     ['banned_reason', 'TEXT DEFAULT NULL'],
-    ['shadow_pool', 'SMALLINT NOT NULL DEFAULT 0 CHECK (shadow_pool IN (0, 1, 2))'],
+    // shadow_pool used to live here as a global flag; moved to
+    // season_player_flags. Listed in the DROP COLUMN IF EXISTS block
+    // further down so the legacy column is removed on next boot.
   ]) {
     const has = await queryOne(
       `SELECT 1 FROM information_schema.columns WHERE table_name = 'players' AND column_name = $1`, [col]
@@ -1016,7 +1018,9 @@ export async function initDb() {
   // with strike-based cooldowns (written to queue_bans), and a top-X%-by-
   // games-played prize qualifier.
   for (const [col, def] of [
-    ['captain_pool',                        'BOOLEAN NOT NULL DEFAULT FALSE'],
+    // captain_pool + shadow_pool used to live here as global flags but
+    // moved to the new season_player_flags table below — admins manage
+    // them per-season via Admin → Seasons → Season Setup.
     ['toxic_reports_received',              'INTEGER NOT NULL DEFAULT 0'],
     ['toxic_strikes',                       'INTEGER NOT NULL DEFAULT 0'],
     ['toxic_clean_games_since_last_strike', 'INTEGER NOT NULL DEFAULT 0'],
@@ -1162,6 +1166,28 @@ export async function initDb() {
     )
   `)
   try { await execute(`CREATE INDEX IF NOT EXISTS inhouse_strike_log_player_idx ON inhouse_strike_log (player_id, created_at DESC)`) } catch {}
+
+  // Per-season captain / shadow flags. Replaces the prior global flags on
+  // `players` (admin-managed in Admin → Seasons → Season Setup). The
+  // resolver in server/socket/queue.js joins this table via pool.season_id
+  // — pools without a season carry no captain/shadow rules.
+  await execute(`
+    CREATE TABLE IF NOT EXISTS season_player_flags (
+      season_id    INTEGER NOT NULL REFERENCES seasons(id) ON DELETE CASCADE,
+      player_id    INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      captain_pool BOOLEAN NOT NULL DEFAULT FALSE,
+      shadow_pool  SMALLINT NOT NULL DEFAULT 0 CHECK (shadow_pool IN (0, 1, 2)),
+      updated_at   TIMESTAMP NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (season_id, player_id)
+    )
+  `)
+  try { await execute(`CREATE INDEX IF NOT EXISTS season_player_flags_captain_idx ON season_player_flags (season_id) WHERE captain_pool = TRUE`) } catch {}
+  try { await execute(`CREATE INDEX IF NOT EXISTS season_player_flags_shadow_idx ON season_player_flags (season_id) WHERE shadow_pool > 0`) } catch {}
+
+  // Drop the now-obsolete global flags. IF EXISTS so fresh DBs (which
+  // never had them) and re-runs (which already dropped them) are no-ops.
+  try { await execute(`ALTER TABLE players DROP COLUMN IF EXISTS captain_pool`) } catch (e) { console.warn('[db] drop players.captain_pool:', e.message) }
+  try { await execute(`ALTER TABLE players DROP COLUMN IF EXISTS shadow_pool`)  } catch (e) { console.warn('[db] drop players.shadow_pool:',  e.message) }
 
   // ─── Request logs (admin observability) ──────────────────
   await execute(`
