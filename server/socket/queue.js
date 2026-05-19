@@ -65,17 +65,26 @@ async function _doEnqueue(io, playerId, poolId) {
   const player = await queryOne('SELECT id, name, display_name, steam_id, avatar_url, mmr, mmr_verified_at FROM players WHERE id = $1', [playerId])
   // Group memberships drive both visual marking and the matchmaking
   // rules (min_per_match, require_peer_when_present, captains_drawn_from,
-  // peer_group_ids). The rules themselves are resolved at match formation;
-  // here we only stash the player's group ids.
+  // peer_group_ids). The IDs feed the rule resolver at match-formation
+  // time; the metadata (`groups` — name + border_color, highest priority
+  // first) is what the queue / draft / lobby tiles render as a border.
   let groupIds = []
+  let groups = []
   if (pool.season_id) {
-    const groupRows = await query(`
-      SELECT m.group_id
+    const rows = await query(`
+      SELECT g.id, g.name, g.border_color, g.captains_drawn_from
         FROM season_player_group_members m
         JOIN season_player_groups g ON g.id = m.group_id
        WHERE m.player_id = $1 AND g.season_id = $2
+       ORDER BY g.captains_drawn_from DESC, g.min_per_match DESC, g.id ASC
     `, [playerId, pool.season_id])
-    groupIds = groupRows.map(r => Number(r.group_id))
+    groupIds = rows.map(r => Number(r.id))
+    groups = rows.map(r => ({
+      id: Number(r.id),
+      name: r.name,
+      border_color: r.border_color,
+      captains_drawn_from: !!r.captains_drawn_from,
+    }))
   }
   if (!player?.steam_id) return { ok: false, error: 'Steam account required to queue' }
   if (!player.mmr || player.mmr <= 0) return { ok: false, error: 'You must set your MMR before queuing' }
@@ -133,6 +142,7 @@ async function _doEnqueue(io, playerId, poolId) {
     avatarUrl: player.avatar_url,
     mmr: player.mmr,
     groupIds,
+    groups,
   })
   playerInQueue.set(playerId, poolId)
 

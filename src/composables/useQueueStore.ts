@@ -12,10 +12,15 @@ export interface QueuePlayer {
   seasonPoints?: number | null
   /** Saved role preferences carried from previous matches */
   preferredRoles?: string[]
-  /** Custom per-season group ids the player belongs to. Used by the
-   * leaderboard/queue avatar ring helpers (border colour resolved from
-   * the highest-priority matching group). */
+  /** Custom per-season group ids the player belongs to. Drives the
+   * matchmaking rules; the IDs alone are enough for that. */
   groupIds?: number[]
+  /** Resolved metadata (name + border_color) for each group the player
+   * is in, ordered highest-priority first (captains_drawn_from >
+   * min_per_match > id). Used by queue / draft / lobby tile renderers
+   * to colour the avatar border. Server includes this with every queue
+   * entry so the client doesn't need an extra metadata fetch. */
+  groups?: Array<{ id: number; name: string; border_color: string; captains_drawn_from: boolean }>
 }
 
 export interface QueuePool {

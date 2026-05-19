@@ -565,6 +565,35 @@ export default function createSeasonsRouter(io) {
     }
   })
 
+  // Re-resolve the player's group ids + metadata for the season and
+  // mutate every in-memory queue entry attached to pools on this season
+  // so the queue / draft / lobby tiles refresh borders immediately.
+  async function _syncGroupSnapshotInQueue(seasonId, playerId) {
+    const rows = await query(`
+      SELECT g.id, g.name, g.border_color, g.captains_drawn_from
+        FROM season_player_group_members m
+        JOIN season_player_groups g ON g.id = m.group_id
+       WHERE m.player_id = $1 AND g.season_id = $2
+       ORDER BY g.captains_drawn_from DESC, g.min_per_match DESC, g.id ASC
+    `, [playerId, seasonId])
+    const groupIds = rows.map(r => Number(r.id))
+    const groups = rows.map(r => ({
+      id: Number(r.id),
+      name: r.name,
+      border_color: r.border_color,
+      captains_drawn_from: !!r.captains_drawn_from,
+    }))
+    const pools = await query('SELECT id FROM queue_pools WHERE season_id = $1', [seasonId])
+    for (const { id: poolId } of pools) {
+      const q = poolQueues.get(poolId)
+      const entry = q?.get(playerId)
+      if (entry) {
+        entry.groupIds = groupIds
+        entry.groups = groups
+      }
+    }
+  }
+
   router.post('/api/admin/seasons/:id/groups/:groupId/members', async (req, res) => {
     const admin = await requirePermission(req, res, 'manage_seasons')
     if (!admin) return
@@ -581,16 +610,7 @@ export default function createSeasonsRouter(io) {
          ON CONFLICT DO NOTHING`,
         [groupId, playerId]
       )
-      // Live-sync any in-memory queue entry on pools attached to this
-      // season so the next startReadyCheck sees the new membership.
-      const pools = await query('SELECT id FROM queue_pools WHERE season_id = $1', [seasonId])
-      for (const { id: poolId } of pools) {
-        const q = poolQueues.get(poolId)
-        const entry = q?.get(playerId)
-        if (entry) {
-          entry.groupIds = entry.groupIds ? [...new Set([...entry.groupIds, groupId])] : [groupId]
-        }
-      }
+      await _syncGroupSnapshotInQueue(seasonId, playerId)
       const playerPool = playerInQueue.get(playerId)
       if (playerPool) broadcastQueueUpdate(io, playerPool)
       res.json({ ok: true })
@@ -609,13 +629,7 @@ export default function createSeasonsRouter(io) {
       const group = await queryOne('SELECT id FROM season_player_groups WHERE id = $1 AND season_id = $2', [groupId, seasonId])
       if (!group) return res.status(404).json({ error: 'Group not found' })
       await execute(`DELETE FROM season_player_group_members WHERE group_id = $1 AND player_id = $2`, [groupId, playerId])
-      // Live-sync removal.
-      const pools = await query('SELECT id FROM queue_pools WHERE season_id = $1', [seasonId])
-      for (const { id: poolId } of pools) {
-        const q = poolQueues.get(poolId)
-        const entry = q?.get(playerId)
-        if (entry?.groupIds) entry.groupIds = entry.groupIds.filter(g => g !== groupId)
-      }
+      await _syncGroupSnapshotInQueue(seasonId, playerId)
       const playerPool = playerInQueue.get(playerId)
       if (playerPool) broadcastQueueUpdate(io, playerPool)
       res.json({ ok: true })

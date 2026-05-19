@@ -67,11 +67,25 @@ const totalPlayers = computed(() => teamSize.value * 2)
 const emptySlots = computed(() => teamSize.value - 1) // per team, excluding captain
 
 const currentUserId = computed(() => store.currentUser.value?.id || null)
-// Removed when shadow_pool moved into custom groups. Group-based queue
-// tile borders are a separate piece of work — needs a public group
-// metadata endpoint so the queue UI can resolve border colours without
-// admin perms. Track as follow-up.
-const hasShadowPlayersInQueue = computed(() => false)
+// Whether anyone visible carries a custom group with a coloured border —
+// the legend renders only when at least one player has a group on
+// their entry. (Server sends `groups` with each queue entry.)
+const hasShadowPlayersInQueue = computed(() =>
+  queue.queuePlayers.value.some(p => (p.groups || []).length > 0)
+)
+
+// Border style for a player tile — the highest-priority group's colour.
+// Server already orders the array, so we just take the first entry.
+// boxShadow inset trick lets us render an arbitrary hex colour where a
+// Tailwind ring/border class can't.
+function tileBorderStyle(p: QueuePlayer): Record<string, string> {
+  const top = (p.groups || [])[0]
+  if (!top) return {}
+  return { boxShadow: `inset 0 0 0 2px ${top.border_color}` }
+}
+function tileBorderTitle(p: QueuePlayer): string {
+  return (p.groups || []).map(g => g.name).join(', ')
+}
 
 const iAmCaptain1 = computed(() => queue.activeMatch.value?.captain1.playerId === currentUserId.value)
 const iAmCaptain2 = computed(() => queue.activeMatch.value?.captain2.playerId === currentUserId.value)
@@ -817,7 +831,9 @@ onUnmounted(() => {
                     class="px-4 py-2.5 flex items-center gap-3 border-b border-border/20 last:border-b-0"
                     :class="[
                       isInLobby(p.steamId) ? '' : 'opacity-80',
-                    ]">
+                    ]"
+                    :style="tileBorderStyle(p)"
+                    :title="tileBorderTitle(p) || undefined">
                     <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-8 h-8 rounded-full" :class="idx === 0 ? 'ring-2 ring-cyan-500/40' : ''" />
                     <div class="flex-1 min-w-0">
                       <div class="flex items-center gap-2">
@@ -1198,7 +1214,9 @@ onUnmounted(() => {
                     :class="[
                       isMyTurn && i === 0 ? 'border-cyan-500/30' : 'border-border',
                       isMyTurn && i === 0 ? 'pool-card--highlight' : ''
-                    ]">
+                    ]"
+                    :style="tileBorderStyle(p)"
+                    :title="tileBorderTitle(p) || undefined">
                     <!-- Avatar (36px) -->
                     <img v-if="p.avatarUrl" :src="p.avatarUrl"
                       class="w-9 h-9 rounded-full object-cover shrink-0"
@@ -1494,7 +1512,8 @@ onUnmounted(() => {
                     v-for="p in queue.queuePlayers.value" :key="p.playerId"
                     :to="{ name: 'player-profile', params: { id: p.playerId } }"
                     class="flex flex-col items-center gap-2.5 min-w-0 px-2.5 py-3.5 rounded-[10px] bg-[#0F172A] border-2 border-border/40 hover:border-primary/40 hover:bg-[#111d33] transition-colors"
-                    :title="t('queuePlayerCardOpenProfile')"
+                    :style="tileBorderStyle(p)"
+                    :title="tileBorderTitle(p) || t('queuePlayerCardOpenProfile')"
                   >
                     <img
                       v-if="p.avatarUrl"
