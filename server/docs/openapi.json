@@ -3065,15 +3065,6 @@
         "responses": { "200": { "description": "Kick result" } }
       }
     },
-    "/api/admin/queue/players/{id}/shadow": {
-      "post": {
-        "tags": ["Queue"],
-        "summary": "DEPRECATED — global shadow-pool toggle",
-        "description": "Removed in the per-season refactor. Always returns 410 Gone with a pointer to POST /api/admin/seasons/{seasonId}/player-flags.",
-        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
-        "responses": { "410": { "description": "Use POST /api/admin/seasons/{seasonId}/player-flags instead." } }
-      }
-    },
     "/api/admin/queue/bans": {
       "get": {
         "tags": ["Queue"],
@@ -3140,7 +3131,7 @@
       "get": {
         "tags": ["Seasons"],
         "summary": "Public leaderboard for a season",
-        "description": "Filters out players below the season's `min_games_for_leaderboard` setting. Sorted by points DESC, then games DESC, then name ASC. Each row includes the player's `shadow_pool` flag (0 = none, 1 = soft, 2 = hard) so the UI can colour the avatar ring.",
+        "description": "Filters out players below the season's `min_games_for_leaderboard` setting. Sorted by points DESC, then games DESC, then name ASC. Each row carries a `groups` array (highest-priority first: captain groups, then groups with matchmaking rules, then display-only) so the UI can colour the avatar ring.",
         "parameters": [
           { "name": "slug",   "in": "path",  "required": true, "schema": { "type": "string" } },
           { "name": "limit",  "in": "query", "schema": { "type": "integer", "default": 50, "maximum": 200 } },
@@ -3923,50 +3914,6 @@
           }
         }
       },
-      "/api/admin/queue/players/{id}/captain-pool": {
-        "post": {
-          "tags": ["Queue"],
-          "summary": "DEPRECATED — global captain-pool toggle",
-          "description": "Removed in the per-season refactor. Always returns 410 Gone with a pointer to POST /api/admin/seasons/{seasonId}/player-flags. Kept so old clients fail cleanly.",
-          "security": [{ "bearerAuth": [] }],
-          "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
-          "responses": { "410": { "description": "Use POST /api/admin/seasons/{seasonId}/player-flags instead." } }
-        }
-      },
-      "/api/admin/seasons/{id}/player-flags": {
-        "get": {
-          "tags": ["Seasons"],
-          "summary": "List captain + shadow flags for a season",
-          "description": "Returns one row per flagged player (anyone with captain_pool=TRUE or shadow_pool>0). Requires `manage_seasons`.",
-          "security": [{ "bearerAuth": [] }],
-          "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
-          "responses": { "200": { "description": "Array of { player_id, captain_pool, shadow_pool, updated_at, name, display_name, avatar_url, mmr, mmr_verified_at }" } }
-        },
-        "post": {
-          "tags": ["Seasons"],
-          "summary": "Set a player's captain / shadow flag for one season",
-          "description": "Body must include `player_id` plus at least one of `captain_pool` (boolean) or `shadow_pool` (0/1/2). Omitted fields keep their current value. A row with both flags inert is deleted. Live-syncs in-memory queue entries on pools attached to this season.",
-          "security": [{ "bearerAuth": [] }],
-          "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
-          "requestBody": {
-            "required": true,
-            "content": { "application/json": { "schema": {
-              "type": "object",
-              "required": ["player_id"],
-              "properties": {
-                "player_id": { "type": "integer" },
-                "captain_pool": { "type": "boolean" },
-                "shadow_pool": { "type": "integer", "enum": [0, 1, 2] }
-              }
-            } } }
-          },
-          "responses": {
-            "200": { "description": "{ ok, captain_pool, shadow_pool, deleted }" },
-            "400": { "description": "Missing fields or invalid shadow_pool value" },
-            "404": { "description": "Season or player not found" }
-          }
-        }
-      },
       "/api/inhouse/reports/toxic": {
         "post": {
           "tags": ["Inhouse"],
@@ -4093,7 +4040,7 @@
         "post": {
           "tags": ["Inhouse"],
           "summary": "Approve a grief report",
-          "description": "Increments `grief_strikes` on the reported player, applies a queue ban per the pool's grief cooldown rules, and revokes captain_pool if the player was a captain.",
+          "description": "Increments `grief_strikes` on the reported player, applies a queue ban per the pool's grief cooldown rules, and removes the player from the season's captains_drawn_from group (if any) when the report ends in approval.",
           "security": [{ "bearerAuth": [] }],
           "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
           "requestBody": {

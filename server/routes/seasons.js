@@ -85,16 +85,39 @@ export default function createSeasonsRouter(io) {
       const minGames = Math.max(0, Number(cfg.min_games_for_leaderboard) || 0)
       const rows = await query(`
         SELECT sr.player_id, sr.points, sr.peak_points, sr.games_played, sr.wins, sr.losses, sr.last_match_at,
-          p.name, COALESCE(p.display_name, p.name) AS display_name, p.avatar_url, p.mmr, p.mmr_verified_at,
-          COALESCE(spf.shadow_pool, 0) AS shadow_pool,
-          COALESCE(spf.captain_pool, FALSE) AS captain_pool
+          p.name, COALESCE(p.display_name, p.name) AS display_name, p.avatar_url, p.mmr, p.mmr_verified_at
         FROM season_rankings sr
         JOIN players p ON p.id = sr.player_id
-        LEFT JOIN season_player_flags spf ON spf.season_id = sr.season_id AND spf.player_id = sr.player_id
         WHERE sr.season_id = $1 AND sr.games_played >= $2
         ORDER BY sr.points DESC, sr.games_played DESC, p.name ASC
         LIMIT $3 OFFSET $4
       `, [s.id, minGames, limit, offset])
+      // Attach each player's custom-group memberships so the frontend
+      // can pick a border colour. Highest-priority group first
+      // (captains_drawn_from > min_per_match desc > id asc).
+      const playerIds = rows.map(r => r.player_id)
+      if (playerIds.length) {
+        const memberRows = await query(`
+          SELECT m.player_id, g.id AS group_id, g.name, g.border_color,
+                 g.captains_drawn_from, g.min_per_match, g.display_only
+            FROM season_player_group_members m
+            JOIN season_player_groups g ON g.id = m.group_id
+           WHERE g.season_id = $1 AND m.player_id = ANY($2::int[])
+           ORDER BY g.captains_drawn_from DESC, g.min_per_match DESC, g.id ASC
+        `, [s.id, playerIds])
+        const byPid = {}
+        for (const m of memberRows) {
+          ;(byPid[m.player_id] ||= []).push({
+            group_id: m.group_id,
+            name: m.name,
+            border_color: m.border_color,
+            captains_drawn_from: !!m.captains_drawn_from,
+          })
+        }
+        for (const r of rows) r.groups = byPid[r.player_id] || []
+      } else {
+        for (const r of rows) r.groups = []
+      }
       res.json(rows)
     } catch (e) {
       res.status(500).json({ error: e.message })
@@ -404,98 +427,10 @@ export default function createSeasonsRouter(io) {
     }
   })
 
-  // ── Admin: list per-season captain / shadow flags ──
-  // Returns one row per flagged player (anyone with captain_pool=TRUE or
-  // shadow_pool>0). Used by the Season Setup page to render the captain
-  // and shadow management lists side-by-side. Requires `manage_seasons`.
-  router.get('/api/admin/seasons/:id/player-flags', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_seasons')
-    if (!admin) return
-    const seasonId = Number(req.params.id)
-    try {
-      const rows = await query(`
-        SELECT spf.player_id, spf.captain_pool, spf.shadow_pool, spf.updated_at,
-               p.name, COALESCE(p.display_name, p.name) AS display_name, p.avatar_url, p.mmr, p.mmr_verified_at
-          FROM season_player_flags spf
-          JOIN players p ON p.id = spf.player_id
-         WHERE spf.season_id = $1
-           AND (spf.captain_pool = TRUE OR spf.shadow_pool > 0)
-         ORDER BY display_name ASC
-      `, [seasonId])
-      res.json(rows)
-    } catch (e) {
-      res.status(500).json({ error: e.message })
-    }
-  })
-
-  // ── Admin: set a player's captain_pool + shadow_pool for one season ──
-  // Body: { player_id, captain_pool?: boolean, shadow_pool?: 0|1|2 }. Both
-  // flags are optional — omitted fields keep their current value. When
-  // both end up false/0 the row is deleted so listings stay tidy. Also
-  // mutates any in-memory queue entries on pools attached to this
-  // season so the next startReadyCheck sees the new value.
-  router.post('/api/admin/seasons/:id/player-flags', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_seasons')
-    if (!admin) return
-    const seasonId = Number(req.params.id)
-    const playerId = Number(req.body?.player_id)
-    if (!seasonId || !playerId) return res.status(400).json({ error: 'season_id and player_id required' })
-    const hasCaptain = Object.prototype.hasOwnProperty.call(req.body, 'captain_pool')
-    const hasShadow  = Object.prototype.hasOwnProperty.call(req.body, 'shadow_pool')
-    if (!hasCaptain && !hasShadow) return res.status(400).json({ error: 'Provide captain_pool and/or shadow_pool' })
-
-    const nextCaptain = hasCaptain ? !!req.body.captain_pool : null
-    const nextShadow  = hasShadow  ? Number(req.body.shadow_pool) : null
-    if (hasShadow && ![0, 1, 2].includes(nextShadow)) return res.status(400).json({ error: 'shadow_pool must be 0, 1, or 2' })
-
-    try {
-      const season = await queryOne('SELECT id FROM seasons WHERE id = $1', [seasonId])
-      if (!season) return res.status(404).json({ error: 'Season not found' })
-      const player = await queryOne('SELECT id FROM players WHERE id = $1', [playerId])
-      if (!player) return res.status(404).json({ error: 'Player not found' })
-
-      // Upsert. When the resulting row is fully inert (no captain, no
-      // shadow) we delete it instead so admin lists stay clean.
-      const current = await queryOne(
-        'SELECT captain_pool, shadow_pool FROM season_player_flags WHERE season_id = $1 AND player_id = $2',
-        [seasonId, playerId]
-      )
-      const resolvedCaptain = hasCaptain ? nextCaptain : !!current?.captain_pool
-      const resolvedShadow  = hasShadow  ? nextShadow  : Number(current?.shadow_pool || 0)
-      const isInert = !resolvedCaptain && resolvedShadow === 0
-      if (isInert) {
-        if (current) await execute('DELETE FROM season_player_flags WHERE season_id = $1 AND player_id = $2', [seasonId, playerId])
-      } else {
-        await execute(
-          `INSERT INTO season_player_flags (season_id, player_id, captain_pool, shadow_pool, updated_at)
-           VALUES ($1, $2, $3, $4, NOW())
-           ON CONFLICT (season_id, player_id) DO UPDATE
-             SET captain_pool = EXCLUDED.captain_pool,
-                 shadow_pool  = EXCLUDED.shadow_pool,
-                 updated_at   = NOW()`,
-          [seasonId, playerId, resolvedCaptain, resolvedShadow]
-        )
-      }
-
-      // Live-sync any in-memory queue entry on pools attached to this season.
-      const affectedPools = await query('SELECT id FROM queue_pools WHERE season_id = $1', [seasonId])
-      for (const { id: poolId } of affectedPools) {
-        const q = poolQueues.get(poolId)
-        const entry = q?.get(playerId)
-        if (entry) {
-          entry.captainPool = resolvedCaptain
-          entry.shadowPool = resolvedShadow
-        }
-      }
-      const playerPool = playerInQueue.get(playerId)
-      if (playerPool) broadcastQueueUpdate(io, playerPool)
-
-      res.json({ ok: true, captain_pool: resolvedCaptain, shadow_pool: resolvedShadow, deleted: isInert })
-    } catch (e) {
-      console.error('[seasons player-flags]', e)
-      res.status(500).json({ error: e.message })
-    }
-  })
+  // Legacy /player-flags routes lived here. They managed captain_pool /
+  // shadow_pool on the dropped season_player_flags table — now expressible
+  // via custom groups (see below). Removed entirely; any cached client
+  // call resolves to 404.
 
   // ── Custom per-season player groups ──
   // Generic admin-defined groups (in addition to the built-in captain /
@@ -555,12 +490,15 @@ export default function createSeasonsRouter(io) {
     const displayOnly = !!req.body?.display_only
     const requirePeerWhenPresent = !!req.body?.require_peer_when_present
     const captainsDrawnFrom = !!req.body?.captains_drawn_from
+    const peerGroupIds = Array.isArray(req.body?.peer_group_ids)
+      ? req.body.peer_group_ids.map(Number).filter(Number.isFinite)
+      : []
     try {
       const row = await queryOne(`
-        INSERT INTO season_player_groups (season_id, name, description, border_color, min_per_match, display_only, require_peer_when_present, captains_drawn_from)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        INSERT INTO season_player_groups (season_id, name, description, border_color, min_per_match, display_only, require_peer_when_present, captains_drawn_from, peer_group_ids)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
         RETURNING *
-      `, [seasonId, name, description, borderColor, minPerMatch, displayOnly, requirePeerWhenPresent, captainsDrawnFrom])
+      `, [seasonId, name, description, borderColor, minPerMatch, displayOnly, requirePeerWhenPresent, captainsDrawnFrom, JSON.stringify(peerGroupIds)])
       res.status(201).json(row)
     } catch (e) {
       if (e.code === '23505') return res.status(409).json({ error: 'A group with that name already exists in this season' })
@@ -573,19 +511,24 @@ export default function createSeasonsRouter(io) {
     if (!admin) return
     const seasonId = Number(req.params.id)
     const groupId = Number(req.params.groupId)
-    const fields = ['name', 'description', 'border_color', 'min_per_match', 'display_only', 'require_peer_when_present', 'captains_drawn_from']
+    const fields = ['name', 'description', 'border_color', 'min_per_match', 'display_only', 'require_peer_when_present', 'captains_drawn_from', 'peer_group_ids']
     const updates = []
     const values = []
     for (const f of fields) {
       if (Object.prototype.hasOwnProperty.call(req.body, f)) {
         let v = req.body[f]
+        let cast = ''
         if (f === 'name') v = String(v || '').trim()
         else if (f === 'description') v = v ? String(v).trim() : null
         else if (f === 'border_color') v = String(v || '#FFD700').trim()
         else if (f === 'min_per_match') v = Math.max(0, Math.min(10, Number(v) || 0))
         else if (f === 'display_only' || f === 'require_peer_when_present' || f === 'captains_drawn_from') v = !!v
+        else if (f === 'peer_group_ids') {
+          v = JSON.stringify(Array.isArray(v) ? v.map(Number).filter(Number.isFinite) : [])
+          cast = '::jsonb'
+        }
         values.push(v)
-        updates.push(`${f} = $${values.length}`)
+        updates.push(`${f} = $${values.length}${cast}`)
       }
     }
     if (!updates.length) return res.status(400).json({ error: 'No fields to update' })

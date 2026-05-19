@@ -211,23 +211,27 @@ export default function createInhouseReportsRouter(io) {
     if (!allowed) return res.status(403).json({ error: 'Permission denied' })
     const status = (req.query.status || 'pending').toString()
     try {
-      // captain_pool now lives per-season — look it up via the report's
-      // pool → season → season_player_flags. Falls back to FALSE when
-      // the pool has no season attached.
+      // Captain status now lives per-season as membership in a custom
+      // group with captains_drawn_from=TRUE. Resolve via the pool's
+      // season; falls back to FALSE if the pool has no season or no
+      // captain group is defined.
       const rows = await query(`
         SELECT gr.*,
                rp.name AS reporter_name, COALESCE(rp.display_name, rp.name) AS reporter_display_name, rp.avatar_url AS reporter_avatar,
                tp.name AS reported_name, COALESCE(tp.display_name, tp.name) AS reported_display_name, tp.avatar_url AS reported_avatar,
-               COALESCE(spf.captain_pool, FALSE) AS reported_captain_pool,
+               EXISTS (
+                 SELECT 1 FROM season_player_group_members m
+                 JOIN season_player_groups g ON g.id = m.group_id
+                 WHERE m.player_id = gr.reported_player_id
+                   AND g.season_id = qp.season_id
+                   AND g.captains_drawn_from = TRUE
+               ) AS reported_captain_pool,
                tp.grief_strikes AS reported_grief_strikes,
                qp.name AS pool_name
           FROM inhouse_grief_reports gr
           LEFT JOIN players rp ON rp.id = gr.reporter_player_id
           LEFT JOIN players tp ON tp.id = gr.reported_player_id
           LEFT JOIN queue_pools qp ON qp.id = gr.pool_id
-          LEFT JOIN season_player_flags spf
-            ON spf.player_id = gr.reported_player_id
-           AND spf.season_id = qp.season_id
          WHERE gr.status = $1
          ORDER BY gr.created_at DESC
       `, [status])
@@ -487,14 +491,21 @@ export default function createInhouseReportsRouter(io) {
         [report.reported_player_id]
       )).rows[0]
       const newStrikes = reportedRow.grief_strikes
-      // Captain status is now per-season — look it up via the pool's season.
-      const captainFlagRow = pool?.season_id
+      // Captain status is now per-season membership in a captains_drawn_from
+      // group. Find the matching group + membership row in one query so the
+      // revocation step can target the right (group, player) pair.
+      const captainGroupRow = pool?.season_id
         ? (await client.query(
-            `SELECT captain_pool FROM season_player_flags WHERE season_id = $1 AND player_id = $2`,
+            `SELECT g.id FROM season_player_groups g
+               JOIN season_player_group_members m ON m.group_id = g.id
+              WHERE g.season_id = $1
+                AND g.captains_drawn_from = TRUE
+                AND m.player_id = $2
+              ORDER BY g.id ASC LIMIT 1`,
             [pool.season_id, report.reported_player_id]
           )).rows[0]
         : null
-      const wasCaptain = !!captainFlagRow?.captain_pool
+      const wasCaptain = !!captainGroupRow
       await client.query(
         `INSERT INTO inhouse_strike_log (player_id, kind, delta, reason, source_report_id, source_queue_match_id, applied_by)
          VALUES ($1, 'grief', 1, $2, $3, $4, $5)`,
@@ -510,13 +521,13 @@ export default function createInhouseReportsRouter(io) {
 
       // Captain who griefs loses their captain status per spec — scoped
       // to this report's season so they keep captain flags they may hold
-      // in unrelated seasons.
+      // in unrelated seasons. We remove their membership in the
+      // captains_drawn_from group rather than touching any global flag.
       let captainRevoked = false
-      if (wasCaptain && pool?.season_id) {
+      if (wasCaptain && captainGroupRow) {
         await client.query(
-          `UPDATE season_player_flags SET captain_pool = FALSE, updated_at = NOW()
-            WHERE season_id = $1 AND player_id = $2`,
-          [pool.season_id, report.reported_player_id]
+          `DELETE FROM season_player_group_members WHERE group_id = $1 AND player_id = $2`,
+          [captainGroupRow.id, report.reported_player_id]
         )
         await client.query(
           `INSERT INTO inhouse_strike_log (player_id, kind, delta, reason, source_report_id, applied_by)

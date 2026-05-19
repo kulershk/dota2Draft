@@ -63,24 +63,12 @@ async function _doEnqueue(io, playerId, poolId) {
   if (!pool) return { ok: false, error: 'Queue pool not found or disabled' }
 
   const player = await queryOne('SELECT id, name, display_name, steam_id, avatar_url, mmr, mmr_verified_at FROM players WHERE id = $1', [playerId])
-  // Captain / shadow flags are now per-season (season_player_flags). A
-  // pool without a season carries no flags — that's intentional, since
-  // require_captain_pool only makes sense in an inhouse-with-season setup.
-  let shadowPool = 0
-  let captainPool = false
+  // Group memberships drive both visual marking and the matchmaking
+  // rules (min_per_match, require_peer_when_present, captains_drawn_from,
+  // peer_group_ids). The rules themselves are resolved at match formation;
+  // here we only stash the player's group ids.
   let groupIds = []
   if (pool.season_id) {
-    const flagRow = await queryOne(
-      'SELECT captain_pool, shadow_pool FROM season_player_flags WHERE season_id = $1 AND player_id = $2',
-      [pool.season_id, playerId]
-    )
-    if (flagRow) {
-      shadowPool = Number(flagRow.shadow_pool) || 0
-      captainPool = !!flagRow.captain_pool
-    }
-    // Custom group memberships — only the group ids are stashed here;
-    // the rules (min_per_match, border colour) are looked up at match
-    // formation time from season_player_groups.
     const groupRows = await query(`
       SELECT m.group_id
         FROM season_player_group_members m
@@ -144,8 +132,6 @@ async function _doEnqueue(io, playerId, poolId) {
     steamId: player.steam_id,
     avatarUrl: player.avatar_url,
     mmr: player.mmr,
-    shadowPool,
-    captainPool,
     groupIds,
   })
   playerInQueue.set(playerId, poolId)
@@ -753,55 +739,9 @@ async function startReadyCheck(poolId, io) {
     if (players.length >= totalPlayers) break
   }
 
-  // Shadow-pool rule: a hard shadow (shadowPool === 2) can only be matched
-  // when at least one OTHER shadow-flagged player (soft or hard) is in the
-  // same group of 10. If the picked 10 contain exactly one shadow player and
-  // it's a hard shadow, swap them out for the next queued player — non-shadow
-  // takes the count to 0 (fine), shadow takes it to 2 (fine). If no swap
-  // candidate exists, abort: the hard shadow waits in queue for company.
-  const shadowCount = players.filter(p => (p.shadowPool | 0) > 0).length
-  if (shadowCount === 1) {
-    const loneHardIdx = players.findIndex(p => p.shadowPool === 2)
-    if (loneHardIdx !== -1) {
-      let swapIn = null
-      let seen = 0
-      for (const [, info] of q) {
-        if (seen++ < totalPlayers) continue
-        swapIn = info
-        break
-      }
-      if (!swapIn) return
-      players[loneHardIdx] = swapIn
-    }
-  }
-
-  // Inhouse captain-pool rule: when require_captain_pool is on, the group
-  // must contain >= 2 captain-pool players. Walk the rest of the queue and
-  // swap out non-captains for captains until the count is met. If we can't
-  // reach 2, abort — the group waits for more captains to join.
-  if (pool?.inhouse_enabled && pool?.require_captain_pool) {
-    const needCaptains = 2
-    let captainCount = players.filter(p => p.captainPool).length
-    if (captainCount < needCaptains) {
-      const reservoir = []
-      let seen = 0
-      for (const [, info] of q) {
-        if (seen++ < totalPlayers) continue
-        if (info.captainPool) reservoir.push(info)
-      }
-      for (let i = players.length - 1; i >= 0 && captainCount < needCaptains; i--) {
-        if (players[i].captainPool) continue
-        const replacement = reservoir.shift()
-        if (!replacement) break
-        players[i] = replacement
-        captainCount++
-      }
-      if (captainCount < needCaptains) return
-    }
-  }
-
   // Custom per-season group rules — each group with min_per_match > 0
-  // demands at least that many of its members in the 10-player group.
+  // demands at least that many of its members (plus, optionally, members
+  // of any peer group listed in peer_group_ids) in the 10-player group.
   // Swap non-members out for members still waiting in the queue; if we
   // can't reach the threshold, abort so the group keeps waiting.
   //
@@ -811,7 +751,7 @@ async function startReadyCheck(poolId, io) {
   // alone so the lobby isn't blocked by the rule's mere existence.
   if (pool?.season_id) {
     const groupRules = await query(
-      `SELECT id, name, min_per_match, require_peer_when_present
+      `SELECT id, name, min_per_match, require_peer_when_present, peer_group_ids
          FROM season_player_groups
         WHERE season_id = $1 AND min_per_match > 0 AND display_only = FALSE`,
       [pool.season_id]
@@ -819,17 +759,25 @@ async function startReadyCheck(poolId, io) {
     for (const rule of groupRules) {
       const min = Number(rule.min_per_match) || 0
       if (min <= 0) continue
-      let count = players.filter(p => (p.groupIds || []).includes(rule.id)).length
-      if (rule.require_peer_when_present && count === 0) continue
+      const peerIds = Array.isArray(rule.peer_group_ids) ? rule.peer_group_ids.map(Number) : []
+      const eligibleIds = new Set([Number(rule.id), ...peerIds])
+      const isEligible = (p) => (p.groupIds || []).some(g => eligibleIds.has(Number(g)))
+      const isOwn     = (p) => (p.groupIds || []).some(g => Number(g) === Number(rule.id))
+      let count = players.filter(isEligible).length
+      const ownCount = players.filter(isOwn).length
+      // The "require_peer_when_present" gate uses ownership in THIS group
+      // — the rule shouldn't fire just because a peer-group member is
+      // sitting in the lobby.
+      if (rule.require_peer_when_present && ownCount === 0) continue
       if (count >= min) continue
       const reservoir = []
       let seen = 0
       for (const [, info] of q) {
         if (seen++ < totalPlayers) continue
-        if ((info.groupIds || []).includes(rule.id)) reservoir.push(info)
+        if (isEligible(info)) reservoir.push(info)
       }
       for (let i = players.length - 1; i >= 0 && count < min; i--) {
-        if ((players[i].groupIds || []).includes(rule.id)) continue
+        if (isEligible(players[i])) continue
         const replacement = reservoir.shift()
         if (!replacement) break
         players[i] = replacement
@@ -1059,12 +1007,11 @@ async function startQueueMatch(poolId, io, preselectedPlayers = null, preselecte
   // Captain 1 picks first; assign captain 1 = LOWER MMR of the two so the
   // weaker captain gets first pick. If MMRs are equal, pick randomly.
   players.sort((a, b) => b.mmr - a.mmr)
-  // Captain selection has three modes (checked in order):
-  //   1. Any custom group on this season has `captains_drawn_from = TRUE`:
-  //      take the two LOWEST-MMR group members in the picked 10. This is
-  //      the generic-groups replacement for the built-in captain pool.
-  //   2. Inhouse + require_captain_pool: legacy built-in captain pool.
-  //   3. Otherwise: an eligibility window. Anyone within `threshold` MMR
+  // Captain selection has two modes (checked in order):
+  //   1. A custom group on this season has `captains_drawn_from = TRUE`
+  //      and ≥ 2 members in the picked 10: the two LOWEST-MMR group
+  //      members become captain1 / captain2.
+  //   2. Otherwise: an eligibility window. Anyone within `threshold` MMR
   //      of the lobby's top MMR is a captain candidate; two are drawn at
   //      random. Lower-MMR still picks first as a balance handicap.
   let pickA, pickB
@@ -1080,13 +1027,8 @@ async function startQueueMatch(poolId, io, preselectedPlayers = null, preselecte
       captainGroupMembers = players.filter(p => (p.groupIds || []).includes(captainGroup.id))
     }
   }
-  const captainPoolPlayers = players.filter(p => p.captainPool)
   if (captainGroupMembers.length >= 2) {
     const sortedAsc = [...captainGroupMembers].sort((a, b) => a.mmr - b.mmr)
-    pickA = sortedAsc[0]
-    pickB = sortedAsc[1]
-  } else if (pool?.inhouse_enabled && pool?.require_captain_pool && captainPoolPlayers.length >= 2) {
-    const sortedAsc = [...captainPoolPlayers].sort((a, b) => a.mmr - b.mmr)
     pickA = sortedAsc[0]
     pickB = sortedAsc[1]
   } else {

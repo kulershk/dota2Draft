@@ -409,7 +409,7 @@ export default function createQueueRouter(io) {
       season_id,
       rules_title, rules_content,
       // Inhouse — every field optional; omitted ones fall back to DB default.
-      inhouse_enabled, require_captain_pool, pick_order,
+      inhouse_enabled, pick_order,
       weekday_game_mode, friday_game_mode,
       friday_win_bonus, friday_top1_bonus, friday_top2_bonus, friday_top3_bonus,
       leaver_penalty, leaver_grace_minutes,
@@ -441,7 +441,7 @@ export default function createQueueRouter(io) {
           accept_timer, decline_ban_minutes,
           captain_eligibility_threshold,
           season_id, rules_title, rules_content, created_by,
-          inhouse_enabled, require_captain_pool, pick_order,
+          inhouse_enabled, pick_order,
           weekday_game_mode, friday_game_mode,
           friday_win_bonus, friday_top1_bonus, friday_top2_bonus, friday_top3_bonus,
           leaver_penalty, leaver_grace_minutes,
@@ -452,7 +452,7 @@ export default function createQueueRouter(io) {
           report_window_minutes,
           use_static_points, inhouse_win_points, inhouse_loss_points
         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,
-                  $31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52)
+                  $31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51)
         RETURNING *
       `, [
         name, enabled !== false, min_mmr || 0, max_mmr || 0,
@@ -466,7 +466,7 @@ export default function createQueueRouter(io) {
         accept_timer ?? 20, decline_ban_minutes ?? 5,
         captain_eligibility_threshold ?? 1500,
         season_id || null, rules_title || '', rules_content || '', admin.id,
-        !!inhouse_enabled, !!require_captain_pool, po,
+        !!inhouse_enabled, po,
         weekday_game_mode ?? 16, friday_game_mode ?? 2,
         friday_win_bonus ?? 5, friday_top1_bonus ?? 12, friday_top2_bonus ?? 6, friday_top3_bonus ?? 6,
         leaver_penalty ?? -50, leaver_grace_minutes ?? 15,
@@ -514,7 +514,7 @@ export default function createQueueRouter(io) {
         'season_id',
         'rules_title', 'rules_content', 'is_featured',
         // Inhouse — same shape as create.
-        'inhouse_enabled', 'require_captain_pool', 'pick_order',
+        'inhouse_enabled', 'pick_order',
         'weekday_game_mode', 'friday_game_mode',
         'friday_win_bonus', 'friday_top1_bonus', 'friday_top2_bonus', 'friday_top3_bonus',
         'leaver_penalty', 'leaver_grace_minutes',
@@ -854,18 +854,9 @@ export default function createQueueRouter(io) {
     }
   })
 
-  // Per-season captain + shadow flags are managed via the seasons
-  // router (`/api/admin/seasons/:seasonId/player-flags`). The legacy
-  // global toggle endpoints (`/players/:id/shadow`, `/captain-pool`)
-  // were removed when the flags moved to `season_player_flags`. A
-  // no-op stub kept here as a 410 Gone so any cached client gets a
-  // clean error instead of a 404.
-  router.post('/api/admin/queue/players/:id/shadow', async (req, res) => {
-    res.status(410).json({ error: 'Shadow pool is now per-season — use POST /api/admin/seasons/:seasonId/player-flags' })
-  })
-  router.post('/api/admin/queue/players/:id/captain-pool', async (req, res) => {
-    res.status(410).json({ error: 'Captain pool is now per-season — use POST /api/admin/seasons/:seasonId/player-flags' })
-  })
+  // Captain + shadow are now expressed via custom per-season groups
+  // (POST /api/admin/seasons/:id/groups + members). The old global
+  // toggle endpoints are gone; cached clients get a plain 404.
 
   // ── Admin: list active queue bans ──
   // Optional ?pool_id=N to filter to one pool (use 'global' to filter to NULL).
