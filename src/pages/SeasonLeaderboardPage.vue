@@ -27,6 +27,7 @@ interface LeaderRow {
   mmr: number
   mmr_verified_at: string | null
   shadow_pool: number
+  captain_pool: boolean
   points: number
   peak_points: number
   games_played: number
@@ -76,14 +77,19 @@ function fmtRange(s: Season): string {
   const b = s.ends_at   ? new Date(s.ends_at  ).toLocaleDateString() : '—'
   return `${a} → ${b}`
 }
-function shadowRingClass(sp: number | null | undefined): string {
-  if (sp === 2) return 'ring-2 ring-red-500/80'
-  if (sp === 1) return 'ring-2 ring-yellow-500/80'
+// One ring class slot per avatar — captain pool wins when both flags are
+// set, mirroring the queue page where the purple inhouse-captain border
+// takes precedence over the yellow/red shadow border.
+function avatarRingClass(row: LeaderRow): string {
+  if (row.captain_pool) return 'ring-2 ring-purple-500/80'
+  if (row.shadow_pool === 2) return 'ring-2 ring-red-500/80'
+  if (row.shadow_pool === 1) return 'ring-2 ring-yellow-500/80'
   return ''
 }
-function shadowTitle(sp: number | null | undefined): string {
-  if (sp === 2) return t('queueShadowLegendHard')
-  if (sp === 1) return t('queueShadowLegendSoft')
+function avatarRingTitle(row: LeaderRow): string {
+  if (row.captain_pool) return t('seasonFlagsCaptainPool')
+  if (row.shadow_pool === 2) return t('queueShadowLegendHard')
+  if (row.shadow_pool === 1) return t('queueShadowLegendSoft')
   return ''
 }
 
@@ -164,14 +170,14 @@ onUnmounted(detachSocket)
                       v-if="row.avatar_url"
                       :src="row.avatar_url"
                       class="w-7 h-7 rounded-full object-cover"
-                      :class="shadowRingClass(row.shadow_pool)"
-                      :title="shadowTitle(row.shadow_pool) || undefined"
+                      :class="avatarRingClass(row)"
+                      :title="avatarRingTitle(row) || undefined"
                     />
                     <div
                       v-else
                       class="w-7 h-7 rounded-full bg-accent"
-                      :class="shadowRingClass(row.shadow_pool)"
-                      :title="shadowTitle(row.shadow_pool) || undefined"
+                      :class="avatarRingClass(row)"
+                      :title="avatarRingTitle(row) || undefined"
                     />
                     <span class="font-semibold">{{ row.display_name }}</span>
                     <BadgeCheck v-if="row.mmr_verified_at" class="w-4 h-4 text-cyan-400 shrink-0" :title="t('mmrVerifiedTooltip')" />
@@ -196,12 +202,19 @@ onUnmounted(detachSocket)
         </table>
       </div>
 
-      <div v-if="rows.some(r => (r.shadow_pool || 0) > 0)" class="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-[11px] text-muted-foreground">
-        <span class="flex items-center gap-1.5">
+      <div
+        v-if="rows.some(r => (r.shadow_pool || 0) > 0 || r.captain_pool)"
+        class="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-[11px] text-muted-foreground"
+      >
+        <span v-if="rows.some(r => r.captain_pool)" class="flex items-center gap-1.5">
+          <span class="inline-block w-3 h-3 rounded-full ring-2 ring-purple-500/80"></span>
+          {{ t('seasonFlagsCaptainPool') }}
+        </span>
+        <span v-if="rows.some(r => r.shadow_pool === 1)" class="flex items-center gap-1.5">
           <span class="inline-block w-3 h-3 rounded-full ring-2 ring-yellow-500/80"></span>
           {{ t('queueShadowLegendSoft') }}
         </span>
-        <span class="flex items-center gap-1.5">
+        <span v-if="rows.some(r => r.shadow_pool === 2)" class="flex items-center gap-1.5">
           <span class="inline-block w-3 h-3 rounded-full ring-2 ring-red-500/80"></span>
           {{ t('queueShadowLegendHard') }}
         </span>
