@@ -19,6 +19,12 @@ interface Season {
   match_count: number
 }
 
+interface LeaderGroupRef {
+  group_id: number
+  name: string
+  border_color: string
+  captains_drawn_from: boolean
+}
 interface LeaderRow {
   player_id: number
   display_name: string
@@ -26,8 +32,7 @@ interface LeaderRow {
   avatar_url: string | null
   mmr: number
   mmr_verified_at: string | null
-  shadow_pool: number
-  captain_pool: boolean
+  groups: LeaderGroupRef[]
   points: number
   peak_points: number
   games_played: number
@@ -77,21 +82,29 @@ function fmtRange(s: Season): string {
   const b = s.ends_at   ? new Date(s.ends_at  ).toLocaleDateString() : '—'
   return `${a} → ${b}`
 }
-// One ring class slot per avatar — captain pool wins when both flags are
-// set, mirroring the queue page where the purple inhouse-captain border
-// takes precedence over the yellow/red shadow border.
-function avatarRingClass(row: LeaderRow): string {
-  if (row.captain_pool) return 'ring-2 ring-purple-500/80'
-  if (row.shadow_pool === 2) return 'ring-2 ring-red-500/80'
-  if (row.shadow_pool === 1) return 'ring-2 ring-yellow-500/80'
-  return ''
+// Avatar ring colour comes from the player's highest-priority custom
+// group on this season (server already orders them captains_drawn_from
+// DESC > min_per_match DESC > id ASC). We use boxShadow inset to render
+// the colour since border_color is a per-row arbitrary CSS colour and
+// Tailwind ring-* utilities can't express that dynamically.
+function avatarRingStyle(row: LeaderRow): Record<string, string> {
+  const top = (row.groups || [])[0]
+  if (!top) return {}
+  return { boxShadow: `0 0 0 2px ${top.border_color}` }
 }
 function avatarRingTitle(row: LeaderRow): string {
-  if (row.captain_pool) return t('seasonFlagsCaptainPool')
-  if (row.shadow_pool === 2) return t('queueShadowLegendHard')
-  if (row.shadow_pool === 1) return t('queueShadowLegendSoft')
-  return ''
+  return (row.groups || []).map(g => g.name).join(', ')
 }
+// Unique groups across the visible page — drives the legend.
+const visibleGroups = computed(() => {
+  const map = new Map<number, LeaderGroupRef>()
+  for (const r of rows.value) {
+    for (const g of (r.groups || [])) {
+      if (!map.has(g.group_id)) map.set(g.group_id, g)
+    }
+  }
+  return [...map.values()]
+})
 
 let socketHandler: ((p: any) => void) | null = null
 function attachSocket() {
@@ -170,13 +183,13 @@ onUnmounted(detachSocket)
                       v-if="row.avatar_url"
                       :src="row.avatar_url"
                       class="w-7 h-7 rounded-full object-cover"
-                      :class="avatarRingClass(row)"
+                      :style="avatarRingStyle(row)"
                       :title="avatarRingTitle(row) || undefined"
                     />
                     <div
                       v-else
                       class="w-7 h-7 rounded-full bg-accent"
-                      :class="avatarRingClass(row)"
+                      :style="avatarRingStyle(row)"
                       :title="avatarRingTitle(row) || undefined"
                     />
                     <span class="font-semibold">{{ row.display_name }}</span>
@@ -203,20 +216,12 @@ onUnmounted(detachSocket)
       </div>
 
       <div
-        v-if="rows.some(r => (r.shadow_pool || 0) > 0 || r.captain_pool)"
+        v-if="visibleGroups.length"
         class="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-[11px] text-muted-foreground"
       >
-        <span v-if="rows.some(r => r.captain_pool)" class="flex items-center gap-1.5">
-          <span class="inline-block w-3 h-3 rounded-full ring-2 ring-purple-500/80"></span>
-          {{ t('seasonFlagsCaptainPool') }}
-        </span>
-        <span v-if="rows.some(r => r.shadow_pool === 1)" class="flex items-center gap-1.5">
-          <span class="inline-block w-3 h-3 rounded-full ring-2 ring-yellow-500/80"></span>
-          {{ t('queueShadowLegendSoft') }}
-        </span>
-        <span v-if="rows.some(r => r.shadow_pool === 2)" class="flex items-center gap-1.5">
-          <span class="inline-block w-3 h-3 rounded-full ring-2 ring-red-500/80"></span>
-          {{ t('queueShadowLegendHard') }}
+        <span v-for="g in visibleGroups" :key="g.group_id" class="flex items-center gap-1.5">
+          <span class="inline-block w-3 h-3 rounded-full" :style="{ boxShadow: `0 0 0 2px ${g.border_color}` }"></span>
+          {{ g.name }}
         </span>
       </div>
     </template>

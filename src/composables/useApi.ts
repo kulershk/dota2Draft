@@ -687,10 +687,9 @@ export function useApi() {
     getAdminQueuePlayers: () => request('/api/admin/queue/players'),
     adminKickFromQueue: (playerId: number, reason?: string) =>
       request(`/api/admin/queue/kick/${playerId}`, { method: 'POST', body: JSON.stringify({ reason }) }),
-    adminSetQueuePlayerShadow: (playerId: number, shadowPool: 0 | 1 | 2) =>
-      request(`/api/admin/queue/players/${playerId}/shadow`, { method: 'POST', body: JSON.stringify({ shadow_pool: shadowPool }) }),
-    adminSetQueuePlayerCaptainPool: (playerId: number, captainPool: boolean) =>
-      request(`/api/admin/queue/players/${playerId}/captain-pool`, { method: 'POST', body: JSON.stringify({ captain_pool: captainPool }) }),
+    // adminSetQueuePlayerShadow / adminSetQueuePlayerCaptainPool removed
+    // when captain + shadow flags moved into custom per-season groups.
+    // Manage them via Admin → Seasons → Season Setup → Groups instead.
     getAdminQueueBans: (poolId?: number | 'global') => {
       const qs = poolId == null ? '' : `?pool_id=${poolId}`
       return request(`/api/admin/queue/bans${qs}`)
@@ -771,15 +770,13 @@ export function useApi() {
       request(`/api/admin/seasons/${id}/recompute`, { method: 'POST' }),
     backfillSeason: (id: number) =>
       request(`/api/admin/seasons/${id}/backfill`, { method: 'POST' }),
-    getSeasonPlayerFlags: (seasonId: number) =>
-      request(`/api/admin/seasons/${seasonId}/player-flags`),
-    setSeasonPlayerFlag: (seasonId: number, data: { player_id: number; captain_pool?: boolean; shadow_pool?: 0 | 1 | 2 }) =>
-      request(`/api/admin/seasons/${seasonId}/player-flags`, { method: 'POST', body: JSON.stringify(data) }),
+    // getSeasonPlayerFlags / setSeasonPlayerFlag removed — flags moved
+    // into custom groups (see getSeasonGroups + addSeasonGroupMember).
     getSeasonGroups: (seasonId: number) =>
       request(`/api/admin/seasons/${seasonId}/groups`),
-    createSeasonGroup: (seasonId: number, data: { name: string; description?: string; border_color?: string; min_per_match?: number; display_only?: boolean; require_peer_when_present?: boolean; captains_drawn_from?: boolean }) =>
+    createSeasonGroup: (seasonId: number, data: { name: string; description?: string; border_color?: string; min_per_match?: number; display_only?: boolean; require_peer_when_present?: boolean; captains_drawn_from?: boolean; peer_group_ids?: number[] }) =>
       request(`/api/admin/seasons/${seasonId}/groups`, { method: 'POST', body: JSON.stringify(data) }),
-    updateSeasonGroup: (seasonId: number, groupId: number, data: { name?: string; description?: string; border_color?: string; min_per_match?: number; display_only?: boolean; require_peer_when_present?: boolean; captains_drawn_from?: boolean }) =>
+    updateSeasonGroup: (seasonId: number, groupId: number, data: { name?: string; description?: string; border_color?: string; min_per_match?: number; display_only?: boolean; require_peer_when_present?: boolean; captains_drawn_from?: boolean; peer_group_ids?: number[] }) =>
       request(`/api/admin/seasons/${seasonId}/groups/${groupId}`, { method: 'PATCH', body: JSON.stringify(data) }),
     deleteSeasonGroup: (seasonId: number, groupId: number) =>
       request(`/api/admin/seasons/${seasonId}/groups/${groupId}`, { method: 'DELETE' }),

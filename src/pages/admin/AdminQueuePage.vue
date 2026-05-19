@@ -52,7 +52,6 @@ function setTab(tab: QueueTab) {
 
 const INHOUSE_DEFAULTS = {
   inhouse_enabled: false,
-  require_captain_pool: false,
   pick_order: '1,2,1,2,1,2,2,1',
   weekday_game_mode: 16,
   friday_game_mode: 2,
@@ -210,12 +209,8 @@ async function kickQueued(playerId: number) {
   } catch (e: any) { alert(e.message) }
 }
 
-async function setShadowPool(playerId: number, value: 0 | 1 | 2) {
-  try {
-    await api.adminSetQueuePlayerShadow(playerId, value)
-    await fetchQueuedPlayers()
-  } catch (e: any) { alert(e.message) }
-}
+// setShadowPool removed when shadow flag moved into per-season custom
+// groups. Manage members via Admin → Seasons → Season Setup → Groups.
 
 function openBanModal(prefill?: { id: number; name: string; poolId?: number | null }) {
   // Default ban scope: the pool we're banning from (if known), otherwise the
@@ -571,19 +566,6 @@ onUnmounted(() => {
           <span class="text-[10px] text-muted-foreground tabular-nums">{{ p.mmr }} MMR</span>
           <span class="text-[10px] text-muted-foreground">pool #{{ p.poolId }}</span>
           <div class="ml-auto flex items-center gap-2">
-            <div class="flex items-center rounded border border-border/60 overflow-hidden" :title="t('queueAdminShadowTitle')">
-              <button
-                v-for="opt in [0, 1, 2] as const" :key="opt"
-                type="button"
-                class="px-2 py-1 text-[10px] font-bold uppercase tracking-wider transition-colors"
-                :class="(p.shadowPool || 0) === opt
-                  ? (opt === 0 ? 'bg-accent text-foreground' : 'bg-violet-500/20 text-violet-300')
-                  : 'text-muted-foreground hover:bg-accent/60'"
-                @click="setShadowPool(p.playerId, opt)"
-              >
-                {{ t('queueAdminShadow_' + opt) }}
-              </button>
-            </div>
             <button class="flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" @click="kickQueued(p.playerId)">
               <UserX class="w-3.5 h-3.5" /> {{ t('queueAdminKick') }}
             </button>
@@ -889,10 +871,7 @@ onUnmounted(() => {
           <!-- Captains subgroup -->
           <div class="flex flex-col gap-2">
             <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{{ t('queueInhouseCaptainsSection') }}</span>
-            <label class="flex items-center gap-2 cursor-pointer text-sm">
-              <input type="checkbox" v-model="form.require_captain_pool" class="w-4 h-4" />
-              <span>{{ t('queueInhouseRequireCaptainPool') }}</span>
-            </label>
+            <p class="text-[11px] text-muted-foreground">{{ t('queueInhouseCaptainsHint') }}</p>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label class="text-xs text-muted-foreground">{{ t('queueInhousePickOrder') }}</label>

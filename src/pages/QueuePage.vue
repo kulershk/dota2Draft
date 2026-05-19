@@ -67,7 +67,11 @@ const totalPlayers = computed(() => teamSize.value * 2)
 const emptySlots = computed(() => teamSize.value - 1) // per team, excluding captain
 
 const currentUserId = computed(() => store.currentUser.value?.id || null)
-const hasShadowPlayersInQueue = computed(() => queue.queuePlayers.value.some(p => (p.shadowPool || 0) > 0))
+// Removed when shadow_pool moved into custom groups. Group-based queue
+// tile borders are a separate piece of work — needs a public group
+// metadata endpoint so the queue UI can resolve border colours without
+// admin perms. Track as follow-up.
+const hasShadowPlayersInQueue = computed(() => false)
 
 const iAmCaptain1 = computed(() => queue.activeMatch.value?.captain1.playerId === currentUserId.value)
 const iAmCaptain2 = computed(() => queue.activeMatch.value?.captain2.playerId === currentUserId.value)
@@ -813,9 +817,6 @@ onUnmounted(() => {
                     class="px-4 py-2.5 flex items-center gap-3 border-b border-border/20 last:border-b-0"
                     :class="[
                       isInLobby(p.steamId) ? '' : 'opacity-80',
-                      p.shadowPool === 2 ? 'border-l-4 border-l-red-500/80' : '',
-                      p.shadowPool === 1 ? 'border-l-4 border-l-yellow-500/80' : '',
-                      p.captainPool ? 'border-l-4 border-l-purple-500/80' : '',
                     ]">
                     <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-8 h-8 rounded-full" :class="idx === 0 ? 'ring-2 ring-cyan-500/40' : ''" />
                     <div class="flex-1 min-w-0">
@@ -862,9 +863,6 @@ onUnmounted(() => {
                     class="px-4 py-2.5 flex items-center gap-3 border-b border-border/20 last:border-b-0"
                     :class="[
                       isInLobby(p.steamId) ? '' : 'opacity-80',
-                      p.shadowPool === 2 ? 'border-l-4 border-l-red-500/80' : '',
-                      p.shadowPool === 1 ? 'border-l-4 border-l-yellow-500/80' : '',
-                      p.captainPool ? 'border-l-4 border-l-purple-500/80' : '',
                     ]">
                     <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-8 h-8 rounded-full" :class="idx === 0 ? 'ring-2 ring-red-500/40' : ''" />
                     <div class="flex-1 min-w-0">
@@ -1198,10 +1196,7 @@ onUnmounted(() => {
                   <div v-for="(p, i) in queue.pickState.value.availablePlayers" :key="p.playerId"
                     class="rounded-xl bg-background border-2 flex items-center gap-3 px-3.5 py-2.5 transition-all"
                     :class="[
-                      p.captainPool ? 'border-purple-500/80'
-                        : p.shadowPool === 2 ? 'border-red-500/80'
-                        : p.shadowPool === 1 ? 'border-yellow-500/80'
-                        : (isMyTurn && i === 0 ? 'border-cyan-500/30' : 'border-border'),
+                      isMyTurn && i === 0 ? 'border-cyan-500/30' : 'border-border',
                       isMyTurn && i === 0 ? 'pool-card--highlight' : ''
                     ]">
                     <!-- Avatar (36px) -->
@@ -1498,14 +1493,7 @@ onUnmounted(() => {
                   <router-link
                     v-for="p in queue.queuePlayers.value" :key="p.playerId"
                     :to="{ name: 'player-profile', params: { id: p.playerId } }"
-                    class="flex flex-col items-center gap-2.5 min-w-0 px-2.5 py-3.5 rounded-[10px] bg-[#0F172A] border-2 hover:bg-[#111d33] transition-colors"
-                    :class="p.captainPool
-                      ? 'border-purple-500/80'
-                      : p.shadowPool === 2
-                        ? 'border-red-500/80'
-                        : p.shadowPool === 1
-                          ? 'border-yellow-500/80'
-                          : 'border-border/40 hover:border-primary/40'"
+                    class="flex flex-col items-center gap-2.5 min-w-0 px-2.5 py-3.5 rounded-[10px] bg-[#0F172A] border-2 border-border/40 hover:border-primary/40 hover:bg-[#111d33] transition-colors"
                     :title="t('queuePlayerCardOpenProfile')"
                   >
                     <img

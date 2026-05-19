@@ -12,10 +12,10 @@ export interface QueuePlayer {
   seasonPoints?: number | null
   /** Saved role preferences carried from previous matches */
   preferredRoles?: string[]
-  /** 0 = none, 1 = soft shadow, 2 = hard shadow */
-  shadowPool?: number
-  /** True if this player is in the inhouse captain pool. */
-  captainPool?: boolean
+  /** Custom per-season group ids the player belongs to. Used by the
+   * leaderboard/queue avatar ring helpers (border colour resolved from
+   * the highest-priority matching group). */
+  groupIds?: number[]
 }
 
 export interface QueuePool {
