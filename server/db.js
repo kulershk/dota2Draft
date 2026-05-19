@@ -1049,6 +1049,12 @@ export async function initDb() {
     ['grief_strike_cooldowns',      `JSONB NOT NULL DEFAULT '[{"strikes":1,"action":"warn"},{"strikes":2,"hours":24},{"strikes":3,"hours":72},{"strikes":4,"action":"ban"}]'::jsonb`],
     ['clean_games_to_decay_strike', 'INTEGER NOT NULL DEFAULT 5'],
     ['report_window_minutes',       'INTEGER NOT NULL DEFAULT 15'],
+    // Flat base points override ELO when use_static_points is TRUE.
+    // Bonuses (mmr-diff, winstreak, Friday, leaver/cushion) still stack
+    // on top exactly as in the ELO path.
+    ['use_static_points',            'BOOLEAN NOT NULL DEFAULT FALSE'],
+    ['inhouse_win_points',           'INTEGER NOT NULL DEFAULT 21'],
+    ['inhouse_loss_points',          'INTEGER NOT NULL DEFAULT 19'],
   ]) {
     const has = await queryOne(
       `SELECT 1 FROM information_schema.columns WHERE table_name = 'queue_pools' AND column_name = $1`, [col]

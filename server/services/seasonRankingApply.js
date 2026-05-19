@@ -131,6 +131,31 @@ export async function applyMatchToSeason({
         if (inhouse && isLeaver) {
           // Leaver penalty overrides the entire delta per spec.
           rawDelta = Number(inhousePool.leaver_penalty ?? -50)
+        } else if (inhouse && inhousePool.use_static_points) {
+          // Static-points mode: skip ELO entirely. The flat win/loss
+          // numbers become the base, and the same MMR-diff / winstreak /
+          // Friday / teammate-cushion bonuses stack on top below.
+          rawDelta = won
+            ? Number(inhousePool.inhouse_win_points ?? 21)
+            : -Number(inhousePool.inhouse_loss_points ?? 19)
+          if (inhouse) {
+            rawDelta += mmrDiffBonus({
+              myAvgMmr: teamAvg,
+              oppAvgMmr: oppAvg,
+              won,
+              tiers: inhousePool.mmr_diff_tiers || [],
+            })
+            if (won) {
+              rawDelta += winstreakBonus(streakBefore + 1, inhousePool.winstreak_tiers || [])
+              if (isFriday) {
+                const fwb = Number(inhousePool.friday_win_bonus ?? 5)
+                rawDelta += fwb
+                fridayBonusAccrued += fwb
+              }
+            } else if (teamHadEarlyLeaver) {
+              rawDelta = Math.round(rawDelta * 0.5)
+            }
+          }
         } else {
           const base = computeDelta({
             teamAvgMmr: teamAvg,

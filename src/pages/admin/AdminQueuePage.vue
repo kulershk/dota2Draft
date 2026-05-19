@@ -70,6 +70,9 @@ const INHOUSE_DEFAULTS = {
   grief_strike_cooldowns: [{ strikes: 1, action: 'warn' }, { strikes: 2, hours: 24 }, { strikes: 3, hours: 72 }, { strikes: 4, action: 'ban' }],
   clean_games_to_decay_strike: 5,
   report_window_minutes: 15,
+  use_static_points: false,
+  inhouse_win_points: 21,
+  inhouse_loss_points: 19,
 }
 
 const form = ref<Record<string, any>>({
@@ -921,6 +924,26 @@ onUnmounted(() => {
           <!-- Points subgroup -->
           <div class="flex flex-col gap-2">
             <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{{ t('queueInhousePointsSection') }}</span>
+
+            <!-- Static-points override. When on, the ELO base is skipped:
+                 winners get the flat win value, losers lose the flat loss
+                 value, and the MMR-diff / winstreak / Friday / leaver
+                 bonuses stack on top exactly as in ELO mode. -->
+            <label class="flex items-center gap-2 cursor-pointer text-sm">
+              <input type="checkbox" v-model="form.use_static_points" class="w-4 h-4" />
+              <span>{{ t('queueInhouseUseStaticPoints') }}</span>
+            </label>
+            <p class="text-[11px] text-muted-foreground -mt-1">{{ t('queueInhouseUseStaticPointsHint') }}</p>
+            <div v-if="form.use_static_points" class="grid grid-cols-2 gap-3 pl-6">
+              <div>
+                <label class="text-xs text-muted-foreground">{{ t('queueInhouseWinPoints') }}</label>
+                <input type="number" class="input-field" v-model.number="form.inhouse_win_points" />
+              </div>
+              <div>
+                <label class="text-xs text-muted-foreground">{{ t('queueInhouseLossPoints') }}</label>
+                <input type="number" class="input-field" v-model.number="form.inhouse_loss_points" />
+              </div>
+            </div>
 
             <div>
               <label class="text-xs text-muted-foreground">{{ t('queueInhouseMmrDiffTiers') }}</label>
