@@ -47,8 +47,6 @@ interface User {
   activity: { page: string; path: string; timestamp: number } | null
   discord_id: string | null
   discord_username: string | null
-  shadow_pool: number
-  captain_pool: boolean
   toxic_strikes: number
   grief_strikes: number
   dotacoins: number
@@ -93,10 +91,6 @@ const editUserGroupIds = ref<number[]>([])
 const editUserDisplayName = ref('')
 const editUserMmr = ref(0)
 const editUserRoles = ref<string[]>([])
-const editUserShadowPool = ref<0 | 1 | 2>(0)
-const editUserShadowPoolOriginal = ref<0 | 1 | 2>(0)
-const editUserCaptainPool = ref(false)
-const editUserCaptainPoolOriginal = ref(false)
 const savingUser = ref(false)
 const ALL_ROLES = ['Carry', 'Mid', 'Offlane', 'Pos4', 'Pos5']
 const onlinePlayerIds = ref<number[]>([])
@@ -202,11 +196,6 @@ async function openEditUser(user: User) {
   editUserDisplayName.value = user.display_name || ''
   editUserMmr.value = user.mmr
   editUserRoles.value = [...(user.roles || [])]
-  const sp = (user.shadow_pool === 1 || user.shadow_pool === 2) ? user.shadow_pool : 0
-  editUserShadowPool.value = sp
-  editUserShadowPoolOriginal.value = sp
-  editUserCaptainPool.value = !!user.captain_pool
-  editUserCaptainPoolOriginal.value = !!user.captain_pool
   const groups = await api.getPlayerGroups(user.id)
   editUserGroupIds.value = groups.map((g: PermGroup) => g.id)
 }
@@ -247,12 +236,9 @@ async function saveEditUser() {
     // Shadow-pool flag uses the queue-admin endpoint (manage_queue_pools).
     // Only send when changed AND this admin actually has the perm — otherwise
     // we'd 403 noisily on every save.
-    if (editUserShadowPool.value !== editUserShadowPoolOriginal.value && store.hasPerm('manage_queue_pools')) {
-      calls.push(api.adminSetQueuePlayerShadow(editUser.value.id, editUserShadowPool.value))
-    }
-    if (editUserCaptainPool.value !== editUserCaptainPoolOriginal.value && store.hasPerm('manage_queue_pools')) {
-      calls.push(api.adminSetQueuePlayerCaptainPool(editUser.value.id, editUserCaptainPool.value))
-    }
+    // Captain pool and Shadow pool are now per-season — manage via
+    // Admin → Seasons → Season Setup → Flags. The toggles that used to
+    // live on this page were removed when the global flags were dropped.
     await Promise.all(calls)
     editUser.value = null
     await fetchUsers()
@@ -941,44 +927,11 @@ function formatRelativeTime(dateStr: string | null) {
           </div>
         </div>
 
-        <!-- Shadow Pool (only shown to admins with manage_queue_pools) -->
-        <div v-if="store.hasPerm('manage_queue_pools')" class="flex flex-col gap-1.5">
-          <label class="block text-xs font-medium text-muted-foreground">{{ t('queueAdminShadowLabel') }}</label>
-          <div class="flex items-center rounded-lg border border-border overflow-hidden w-fit">
-            <button
-              v-for="opt in [0, 1, 2] as const" :key="opt"
-              type="button"
-              class="px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors"
-              :class="editUserShadowPool === opt
-                ? (opt === 0 ? 'bg-accent text-foreground' : 'bg-violet-500/20 text-violet-300')
-                : 'text-muted-foreground hover:bg-accent/60'"
-              @click="editUserShadowPool = opt"
-            >
-              {{ t('queueAdminShadow_' + opt) }}
-            </button>
-          </div>
-          <p class="text-xs text-muted-foreground">{{ t('queueAdminShadowHint') }}</p>
-        </div>
-
-        <!-- Captain Pool (inhouse — only shown to admins with manage_queue_pools) -->
-        <div v-if="store.hasPerm('manage_queue_pools')" class="flex flex-col gap-1.5">
-          <label class="block text-xs font-medium text-muted-foreground">{{ t('queueAdminCaptainPoolLabel') }}</label>
-          <div class="flex items-center rounded-lg border border-border overflow-hidden w-fit">
-            <button
-              type="button"
-              class="px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors"
-              :class="!editUserCaptainPool ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent/60'"
-              @click="editUserCaptainPool = false"
-            >{{ t('queueAdminCaptainPool_off') }}</button>
-            <button
-              type="button"
-              class="px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors"
-              :class="editUserCaptainPool ? 'bg-purple-500/20 text-purple-300' : 'text-muted-foreground hover:bg-accent/60'"
-              @click="editUserCaptainPool = true"
-            >{{ t('queueAdminCaptainPool_on') }}</button>
-          </div>
-          <p class="text-xs text-muted-foreground">{{ t('queueAdminCaptainPoolHint') }}</p>
-        </div>
+        <!-- Captain pool / Shadow pool moved to Admin → Seasons → Season
+             Setup → Flags when the global flags were dropped. -->
+        <p v-if="store.hasPerm('manage_seasons')" class="text-[11px] text-muted-foreground italic">
+          {{ t('queueAdminFlagsMoved') }}
+        </p>
 
         <!-- Inhouse strikes (read-only) -->
         <div v-if="store.hasPerm('manage_queue_pools') && editUser && (editUser.toxic_strikes > 0 || editUser.grief_strikes > 0)" class="flex flex-col gap-1.5">

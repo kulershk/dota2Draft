@@ -70,7 +70,7 @@ const api = useApi()
 
 const seasonId = computed(() => Number(route.params.id))
 
-const tab = ref<'settings' | 'leaderboard' | 'audit'>('settings')
+const tab = ref<'settings' | 'leaderboard' | 'audit' | 'flags'>('settings')
 const season = ref<SeasonRow | null>(null)
 const loading = ref(true)
 const error = ref<string | null>(null)
@@ -104,6 +104,78 @@ const adjustPlayer = ref<LeaderRow | null>(null)
 const adjustDelta = ref(0)
 const adjustReason = ref('')
 const adjustSaving = ref(false)
+
+// Per-season captain + shadow flags (replaces the prior global toggles on
+// AdminUsersPage). Two lists side by side: captain pool and shadow pool;
+// one row appears in both if the player carries both flags.
+interface FlagRow {
+  player_id: number
+  display_name: string
+  name: string
+  avatar_url: string | null
+  mmr: number
+  mmr_verified_at: string | null
+  captain_pool: boolean
+  shadow_pool: 0 | 1 | 2
+  updated_at: string
+}
+const flagRows = ref<FlagRow[]>([])
+const flagsLoading = ref(false)
+const flagSearchQuery = ref('')
+const flagSearchResults = ref<Array<{ id: number; name: string; display_name?: string | null; avatar_url?: string | null; mmr?: number }>>([])
+let flagSearchTimer: ReturnType<typeof setTimeout> | null = null
+const flagSaving = ref(false)
+
+const captainRows = computed(() => flagRows.value.filter(r => r.captain_pool))
+const shadowRows  = computed(() => flagRows.value.filter(r => r.shadow_pool > 0))
+
+async function loadFlags() {
+  flagsLoading.value = true
+  try {
+    flagRows.value = await api.getSeasonPlayerFlags(seasonId.value)
+  } catch (e: any) {
+    flagRows.value = []
+  } finally {
+    flagsLoading.value = false
+  }
+}
+
+function onFlagSearchInput() {
+  if (flagSearchTimer) clearTimeout(flagSearchTimer)
+  const q = flagSearchQuery.value.trim()
+  if (q.length < 2) { flagSearchResults.value = []; return }
+  flagSearchTimer = setTimeout(async () => {
+    try {
+      const res = await api.searchPlayers(q)
+      flagSearchResults.value = Array.isArray(res) ? res : (res?.players || [])
+    } catch {
+      flagSearchResults.value = []
+    }
+  }, 200)
+}
+
+async function setFlag(playerId: number, patch: { captain_pool?: boolean; shadow_pool?: 0 | 1 | 2 }) {
+  flagSaving.value = true
+  try {
+    await api.setSeasonPlayerFlag(seasonId.value, { player_id: playerId, ...patch })
+    await loadFlags()
+  } catch (e: any) {
+    alert(e?.message || 'Failed to update flag')
+  } finally {
+    flagSaving.value = false
+  }
+}
+
+function addCaptain(p: { id: number; name: string; display_name?: string | null }) {
+  flagSearchQuery.value = ''
+  flagSearchResults.value = []
+  setFlag(p.id, { captain_pool: true })
+}
+function setShadow(p: { id: number; name: string; display_name?: string | null }, level: 0 | 1 | 2) {
+  flagSearchQuery.value = ''
+  flagSearchResults.value = []
+  setFlag(p.id, { shadow_pool: level })
+}
 
 async function load() {
   loading.value = true
@@ -149,6 +221,7 @@ async function loadAudit() {
 watch(tab, (newTab) => {
   if (newTab === 'leaderboard') loadLeader()
   if (newTab === 'audit') loadAudit()
+  if (newTab === 'flags') loadFlags()
 })
 
 async function handleSave() {
@@ -257,7 +330,7 @@ onMounted(load)
     <!-- Tabs -->
     <div class="flex items-center gap-1 border-b border-border/40">
       <button
-        v-for="t_ in (['settings', 'leaderboard', 'audit'] as const)" :key="t_"
+        v-for="t_ in (['settings', 'leaderboard', 'audit', 'flags'] as const)" :key="t_"
         type="button"
         class="px-4 py-2 text-sm border-b-2 transition-colors"
         :class="tab === t_ ? 'border-primary text-foreground font-semibold' : 'border-transparent text-muted-foreground hover:text-foreground'"
@@ -481,6 +554,106 @@ onMounted(load)
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <!-- Flags tab — per-season captain pool + shadow pool -->
+    <div v-else-if="tab === 'flags'" class="flex flex-col gap-5">
+      <!-- Player search (shared between both lists; admin chooses
+           whether to flag the result as captain or shadow). -->
+      <div class="card p-4 flex flex-col gap-3">
+        <span class="text-sm font-semibold">{{ t('seasonFlagsAddPlayer') }}</span>
+        <p class="text-xs text-muted-foreground">{{ t('seasonFlagsAddPlayerHint') }}</p>
+        <input
+          v-model="flagSearchQuery"
+          type="text"
+          class="w-full bg-accent/40 border border-border/40 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40"
+          :placeholder="t('seasonFlagsSearchPlaceholder')"
+          @input="onFlagSearchInput"
+        />
+        <div v-if="flagSearchResults.length" class="flex flex-col gap-1 border border-border/40 rounded-lg overflow-hidden">
+          <div v-for="p in flagSearchResults" :key="p.id"
+               class="px-3 py-2 flex items-center gap-2 hover:bg-accent/40 transition-colors">
+            <img v-if="p.avatar_url" :src="p.avatar_url" class="w-7 h-7 rounded-full" />
+            <div v-else class="w-7 h-7 rounded-full bg-accent" />
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-medium truncate">{{ p.display_name || p.name }}</p>
+              <p class="text-[11px] text-muted-foreground">{{ p.mmr ?? 0 }} MMR</p>
+            </div>
+            <button type="button" class="text-[11px] px-2 py-1 rounded bg-purple-500/15 text-purple-300 hover:bg-purple-500/25 disabled:opacity-40"
+                    :disabled="flagSaving" @click="addCaptain(p)">+ {{ t('seasonFlagsCaptain') }}</button>
+            <button type="button" class="text-[11px] px-2 py-1 rounded bg-yellow-500/15 text-yellow-300 hover:bg-yellow-500/25 disabled:opacity-40"
+                    :disabled="flagSaving" @click="setShadow(p, 1)">+ {{ t('seasonFlagsShadowSoft') }}</button>
+            <button type="button" class="text-[11px] px-2 py-1 rounded bg-red-500/15 text-red-300 hover:bg-red-500/25 disabled:opacity-40"
+                    :disabled="flagSaving" @click="setShadow(p, 2)">+ {{ t('seasonFlagsShadowHard') }}</button>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="flagsLoading" class="text-sm text-muted-foreground">{{ t('loading') }}…</div>
+
+      <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <!-- Captain pool list -->
+        <div class="card p-4 flex flex-col gap-3">
+          <div class="flex items-center justify-between">
+            <span class="text-sm font-semibold flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-purple-400" />
+              {{ t('seasonFlagsCaptainPool') }}
+            </span>
+            <span class="text-[11px] text-muted-foreground">{{ captainRows.length }}</span>
+          </div>
+          <p v-if="captainRows.length === 0" class="text-xs text-muted-foreground py-2">{{ t('seasonFlagsCaptainEmpty') }}</p>
+          <div v-for="row in captainRows" :key="`cap-${row.player_id}`"
+               class="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-accent/15">
+            <img v-if="row.avatar_url" :src="row.avatar_url" class="w-7 h-7 rounded-full" />
+            <div v-else class="w-7 h-7 rounded-full bg-accent" />
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-medium truncate">{{ row.display_name }}</p>
+              <p class="text-[11px] text-muted-foreground">{{ row.mmr }} MMR</p>
+            </div>
+            <button type="button" class="text-[11px] px-2 py-1 rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 disabled:opacity-40"
+                    :disabled="flagSaving" @click="setFlag(row.player_id, { captain_pool: false })">
+              {{ t('remove') }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Shadow pool list -->
+        <div class="card p-4 flex flex-col gap-3">
+          <div class="flex items-center justify-between">
+            <span class="text-sm font-semibold flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-yellow-400" />
+              {{ t('seasonFlagsShadowPool') }}
+            </span>
+            <span class="text-[11px] text-muted-foreground">{{ shadowRows.length }}</span>
+          </div>
+          <p v-if="shadowRows.length === 0" class="text-xs text-muted-foreground py-2">{{ t('seasonFlagsShadowEmpty') }}</p>
+          <div v-for="row in shadowRows" :key="`sh-${row.player_id}`"
+               class="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-accent/15">
+            <img v-if="row.avatar_url" :src="row.avatar_url" class="w-7 h-7 rounded-full" />
+            <div v-else class="w-7 h-7 rounded-full bg-accent" />
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-medium truncate">{{ row.display_name }}</p>
+              <p class="text-[11px] text-muted-foreground">{{ row.mmr }} MMR</p>
+            </div>
+            <div class="flex items-center rounded-md border border-border/40 overflow-hidden">
+              <button
+                v-for="lvl in [1, 2] as const" :key="lvl"
+                type="button"
+                class="px-2 py-1 text-[11px] font-bold transition-colors"
+                :class="row.shadow_pool === lvl
+                  ? (lvl === 2 ? 'bg-red-500/20 text-red-300' : 'bg-yellow-500/20 text-yellow-300')
+                  : 'text-muted-foreground hover:bg-accent/40'"
+                :disabled="flagSaving"
+                @click="setFlag(row.player_id, { shadow_pool: lvl })"
+              >{{ lvl === 1 ? t('queueAdminShadow_1') : t('queueAdminShadow_2') }}</button>
+            </div>
+            <button type="button" class="text-[11px] px-2 py-1 rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 disabled:opacity-40"
+                    :disabled="flagSaving" @click="setFlag(row.player_id, { shadow_pool: 0 })">
+              {{ t('remove') }}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Adjust modal -->

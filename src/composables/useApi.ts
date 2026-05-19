@@ -771,6 +771,10 @@ export function useApi() {
       request(`/api/admin/seasons/${id}/recompute`, { method: 'POST' }),
     backfillSeason: (id: number) =>
       request(`/api/admin/seasons/${id}/backfill`, { method: 'POST' }),
+    getSeasonPlayerFlags: (seasonId: number) =>
+      request(`/api/admin/seasons/${seasonId}/player-flags`),
+    setSeasonPlayerFlag: (seasonId: number, data: { player_id: number; captain_pool?: boolean; shadow_pool?: 0 | 1 | 2 }) =>
+      request(`/api/admin/seasons/${seasonId}/player-flags`, { method: 'POST', body: JSON.stringify(data) }),
 
     // MMR verification (user)
     submitMmrVerification: async (mmr: number, screenshot: File) => {
