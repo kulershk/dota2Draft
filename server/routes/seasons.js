@@ -85,9 +85,12 @@ export default function createSeasonsRouter(io) {
       const minGames = Math.max(0, Number(cfg.min_games_for_leaderboard) || 0)
       const rows = await query(`
         SELECT sr.player_id, sr.points, sr.peak_points, sr.games_played, sr.wins, sr.losses, sr.last_match_at,
-          p.name, COALESCE(p.display_name, p.name) AS display_name, p.avatar_url, p.mmr, p.mmr_verified_at, p.shadow_pool
+          p.name, COALESCE(p.display_name, p.name) AS display_name, p.avatar_url, p.mmr, p.mmr_verified_at,
+          COALESCE(spf.shadow_pool, 0) AS shadow_pool,
+          COALESCE(spf.captain_pool, FALSE) AS captain_pool
         FROM season_rankings sr
         JOIN players p ON p.id = sr.player_id
+        LEFT JOIN season_player_flags spf ON spf.season_id = sr.season_id AND spf.player_id = sr.player_id
         WHERE sr.season_id = $1 AND sr.games_played >= $2
         ORDER BY sr.points DESC, sr.games_played DESC, p.name ASC
         LIMIT $3 OFFSET $4

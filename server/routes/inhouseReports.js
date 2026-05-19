@@ -211,16 +211,23 @@ export default function createInhouseReportsRouter(io) {
     if (!allowed) return res.status(403).json({ error: 'Permission denied' })
     const status = (req.query.status || 'pending').toString()
     try {
+      // captain_pool now lives per-season — look it up via the report's
+      // pool → season → season_player_flags. Falls back to FALSE when
+      // the pool has no season attached.
       const rows = await query(`
         SELECT gr.*,
                rp.name AS reporter_name, COALESCE(rp.display_name, rp.name) AS reporter_display_name, rp.avatar_url AS reporter_avatar,
                tp.name AS reported_name, COALESCE(tp.display_name, tp.name) AS reported_display_name, tp.avatar_url AS reported_avatar,
-               tp.captain_pool AS reported_captain_pool, tp.grief_strikes AS reported_grief_strikes,
+               COALESCE(spf.captain_pool, FALSE) AS reported_captain_pool,
+               tp.grief_strikes AS reported_grief_strikes,
                qp.name AS pool_name
           FROM inhouse_grief_reports gr
           LEFT JOIN players rp ON rp.id = gr.reporter_player_id
           LEFT JOIN players tp ON tp.id = gr.reported_player_id
           LEFT JOIN queue_pools qp ON qp.id = gr.pool_id
+          LEFT JOIN season_player_flags spf
+            ON spf.player_id = gr.reported_player_id
+           AND spf.season_id = qp.season_id
          WHERE gr.status = $1
          ORDER BY gr.created_at DESC
       `, [status])
@@ -476,10 +483,18 @@ export default function createInhouseReportsRouter(io) {
       )
 
       const reportedRow = (await client.query(
-        `UPDATE players SET grief_strikes = grief_strikes + 1 WHERE id = $1 RETURNING grief_strikes, captain_pool`,
+        `UPDATE players SET grief_strikes = grief_strikes + 1 WHERE id = $1 RETURNING grief_strikes`,
         [report.reported_player_id]
       )).rows[0]
       const newStrikes = reportedRow.grief_strikes
+      // Captain status is now per-season — look it up via the pool's season.
+      const captainFlagRow = pool?.season_id
+        ? (await client.query(
+            `SELECT captain_pool FROM season_player_flags WHERE season_id = $1 AND player_id = $2`,
+            [pool.season_id, report.reported_player_id]
+          )).rows[0]
+        : null
+      const wasCaptain = !!captainFlagRow?.captain_pool
       await client.query(
         `INSERT INTO inhouse_strike_log (player_id, kind, delta, reason, source_report_id, source_queue_match_id, applied_by)
          VALUES ($1, 'grief', 1, $2, $3, $4, $5)`,
@@ -493,10 +508,16 @@ export default function createInhouseReportsRouter(io) {
         banUntil = await _applyCooldown(client, report.reported_player_id, report.pool_id, cooldown, reasonText, admin.id)
       }
 
-      // Captain who griefs loses their captain status per spec.
+      // Captain who griefs loses their captain status per spec — scoped
+      // to this report's season so they keep captain flags they may hold
+      // in unrelated seasons.
       let captainRevoked = false
-      if (reportedRow.captain_pool) {
-        await client.query(`UPDATE players SET captain_pool = FALSE WHERE id = $1`, [report.reported_player_id])
+      if (wasCaptain && pool?.season_id) {
+        await client.query(
+          `UPDATE season_player_flags SET captain_pool = FALSE, updated_at = NOW()
+            WHERE season_id = $1 AND player_id = $2`,
+          [pool.season_id, report.reported_player_id]
+        )
         await client.query(
           `INSERT INTO inhouse_strike_log (player_id, kind, delta, reason, source_report_id, applied_by)
            VALUES ($1, 'captain_revoked', 0, 'Lost captain status due to approved grief report', $2, $3)`,
