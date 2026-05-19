@@ -1035,7 +1035,8 @@ export async function initDb() {
 
   for (const [col, def] of [
     ['inhouse_enabled',             'BOOLEAN NOT NULL DEFAULT FALSE'],
-    ['require_captain_pool',        'BOOLEAN NOT NULL DEFAULT FALSE'],
+    // require_captain_pool used to live here; replaced by per-group
+    // captains_drawn_from rule and dropped further down.
     ['pick_order',                  `TEXT NOT NULL DEFAULT '1,2,1,2,1,2,2,1'`],
     ['weekday_game_mode',           'INTEGER NOT NULL DEFAULT 16'],
     ['friday_game_mode',            'INTEGER NOT NULL DEFAULT 2'],
@@ -1167,22 +1168,14 @@ export async function initDb() {
   `)
   try { await execute(`CREATE INDEX IF NOT EXISTS inhouse_strike_log_player_idx ON inhouse_strike_log (player_id, created_at DESC)`) } catch {}
 
-  // Per-season captain / shadow flags. Replaces the prior global flags on
-  // `players` (admin-managed in Admin → Seasons → Season Setup). The
-  // resolver in server/socket/queue.js joins this table via pool.season_id
-  // — pools without a season carry no captain/shadow rules.
-  await execute(`
-    CREATE TABLE IF NOT EXISTS season_player_flags (
-      season_id    INTEGER NOT NULL REFERENCES seasons(id) ON DELETE CASCADE,
-      player_id    INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-      captain_pool BOOLEAN NOT NULL DEFAULT FALSE,
-      shadow_pool  SMALLINT NOT NULL DEFAULT 0 CHECK (shadow_pool IN (0, 1, 2)),
-      updated_at   TIMESTAMP NOT NULL DEFAULT NOW(),
-      PRIMARY KEY (season_id, player_id)
-    )
-  `)
-  try { await execute(`CREATE INDEX IF NOT EXISTS season_player_flags_captain_idx ON season_player_flags (season_id) WHERE captain_pool = TRUE`) } catch {}
-  try { await execute(`CREATE INDEX IF NOT EXISTS season_player_flags_shadow_idx ON season_player_flags (season_id) WHERE shadow_pool > 0`) } catch {}
+  // The earlier season_player_flags table held captain_pool / shadow_pool
+  // as well-known booleans. Both are now expressible via custom groups
+  // (captains_drawn_from + min_per_match=2 / require_peer_when_present
+  // + min_per_match=2 / display_only), so the table is gone.
+  try { await execute(`DROP TABLE IF EXISTS season_player_flags`) } catch (e) { console.warn('[db] drop season_player_flags:', e.message) }
+  // Pool-level toggle for the legacy captain pool — superseded by a
+  // group's captains_drawn_from flag.
+  try { await execute(`ALTER TABLE queue_pools DROP COLUMN IF EXISTS require_captain_pool`) } catch (e) { console.warn('[db] drop queue_pools.require_captain_pool:', e.message) }
 
   // Custom per-season player groups with simple matchmaking rules. Each
   // group is opt-in (admin creates + adds members on Season Setup →
@@ -1218,6 +1211,12 @@ export async function initDb() {
     // legacy queue_pools.require_captain_pool branch but at the group
     // level so admins can target any custom group.
     ['captains_drawn_from',       'BOOLEAN NOT NULL DEFAULT FALSE'],
+    // Peer-group alliance: when counting members of THIS group for the
+    // min_per_match rule, also include any player who belongs to one
+    // of the listed group ids. So a "High MMR" group with peer_group_ids
+    // = [veteransGroupId] is satisfied when High-MMR + Veteran members
+    // together reach the minimum.
+    ['peer_group_ids',            `JSONB NOT NULL DEFAULT '[]'::jsonb`],
   ]) {
     const has = await queryOne(
       `SELECT 1 FROM information_schema.columns WHERE table_name = 'season_player_groups' AND column_name = $1`, [col]
