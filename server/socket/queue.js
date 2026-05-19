@@ -68,6 +68,7 @@ async function _doEnqueue(io, playerId, poolId) {
   // require_captain_pool only makes sense in an inhouse-with-season setup.
   let shadowPool = 0
   let captainPool = false
+  let groupIds = []
   if (pool.season_id) {
     const flagRow = await queryOne(
       'SELECT captain_pool, shadow_pool FROM season_player_flags WHERE season_id = $1 AND player_id = $2',
@@ -77,6 +78,16 @@ async function _doEnqueue(io, playerId, poolId) {
       shadowPool = Number(flagRow.shadow_pool) || 0
       captainPool = !!flagRow.captain_pool
     }
+    // Custom group memberships — only the group ids are stashed here;
+    // the rules (min_per_match, border colour) are looked up at match
+    // formation time from season_player_groups.
+    const groupRows = await query(`
+      SELECT m.group_id
+        FROM season_player_group_members m
+        JOIN season_player_groups g ON g.id = m.group_id
+       WHERE m.player_id = $1 AND g.season_id = $2
+    `, [playerId, pool.season_id])
+    groupIds = groupRows.map(r => Number(r.group_id))
   }
   if (!player?.steam_id) return { ok: false, error: 'Steam account required to queue' }
   if (!player.mmr || player.mmr <= 0) return { ok: false, error: 'You must set your MMR before queuing' }
@@ -135,6 +146,7 @@ async function _doEnqueue(io, playerId, poolId) {
     mmr: player.mmr,
     shadowPool,
     captainPool,
+    groupIds,
   })
   playerInQueue.set(playerId, poolId)
 
@@ -785,6 +797,38 @@ async function startReadyCheck(poolId, io) {
         captainCount++
       }
       if (captainCount < needCaptains) return
+    }
+  }
+
+  // Custom per-season group rules — each group with min_per_match > 0
+  // demands at least that many of its members in the 10-player group.
+  // Swap non-members out for members still waiting in the queue; if we
+  // can't reach the threshold, abort so the group keeps waiting.
+  if (pool?.season_id) {
+    const groupRules = await query(
+      `SELECT id, name, min_per_match FROM season_player_groups
+        WHERE season_id = $1 AND min_per_match > 0 AND display_only = FALSE`,
+      [pool.season_id]
+    )
+    for (const rule of groupRules) {
+      const min = Number(rule.min_per_match) || 0
+      if (min <= 0) continue
+      let count = players.filter(p => (p.groupIds || []).includes(rule.id)).length
+      if (count >= min) continue
+      const reservoir = []
+      let seen = 0
+      for (const [, info] of q) {
+        if (seen++ < totalPlayers) continue
+        if ((info.groupIds || []).includes(rule.id)) reservoir.push(info)
+      }
+      for (let i = players.length - 1; i >= 0 && count < min; i--) {
+        if ((players[i].groupIds || []).includes(rule.id)) continue
+        const replacement = reservoir.shift()
+        if (!replacement) break
+        players[i] = replacement
+        count++
+      }
+      if (count < min) return
     }
   }
 
