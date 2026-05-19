@@ -330,7 +330,8 @@ export async function recomputeSeasonFromHistory(seasonId) {
     SELECT qm.id, qm.team1_players, qm.team2_players, qm.pool_id,
            (SELECT winner_captain_id FROM matches WHERE id = qm.match_id) AS winner_captain_id,
            qm.captain1_player_id, qm.captain2_player_id, qm.completed_at,
-           qp.inhouse_enabled, qp.mmr_diff_tiers, qp.winstreak_tiers, qp.friday_win_bonus
+           qp.inhouse_enabled, qp.mmr_diff_tiers, qp.winstreak_tiers, qp.friday_win_bonus,
+           qp.use_static_points, qp.inhouse_win_points, qp.inhouse_loss_points
     FROM queue_matches qm
     LEFT JOIN queue_pools qp ON qp.id = qm.pool_id
     WHERE qm.season_id = $1 AND qm.status = 'completed'
@@ -400,9 +401,22 @@ export async function recomputeSeasonFromHistory(seasonId) {
       // future manual adjust if absolute parity is needed.
       const inhouseHere = !!m.inhouse_enabled
       const matchIsFriday = m.completed_at ? new Date(m.completed_at).getDay() === 5 : false
+      // Compute the base delta for one player on a given side. Mirrors the
+      // live path: static-points mode skips ELO, leaver penalty still
+      // overrides everything (but recompute has no leaver snapshot, so
+      // that case is unreachable here — documented elsewhere).
+      function basePart(teamAvg, oppAvg, won) {
+        if (inhouseHere && m.use_static_points) {
+          const flat = won
+            ? Number(m.inhouse_win_points ?? 21)
+            : -Number(m.inhouse_loss_points ?? 19)
+          return { delta: flat, expected: null, kUsed: null }
+        }
+        return computeDelta({ teamAvgMmr: teamAvg, oppAvgMmr: oppAvg, won, settings: cfg })
+      }
       for (const pid of t1) {
         const before = getPts(pid)
-        const { delta, expected, kUsed } = computeDelta({ teamAvgMmr: t1Avg, oppAvgMmr: t2Avg, won: team1Won, settings: cfg })
+        const { delta, expected, kUsed } = basePart(t1Avg, t2Avg, team1Won)
         let bonus = 0
         if (inhouseHere) {
           bonus += mmrDiffBonus({ myAvgMmr: t1Avg, oppAvgMmr: t2Avg, won: team1Won, tiers: m.mmr_diff_tiers || [] })
@@ -421,7 +435,7 @@ export async function recomputeSeasonFromHistory(seasonId) {
       }
       for (const pid of t2) {
         const before = getPts(pid)
-        const { delta, expected, kUsed } = computeDelta({ teamAvgMmr: t2Avg, oppAvgMmr: t1Avg, won: team2Won, settings: cfg })
+        const { delta, expected, kUsed } = basePart(t2Avg, t1Avg, team2Won)
         let bonus = 0
         if (inhouseHere) {
           bonus += mmrDiffBonus({ myAvgMmr: t2Avg, oppAvgMmr: t1Avg, won: team2Won, tiers: m.mmr_diff_tiers || [] })
