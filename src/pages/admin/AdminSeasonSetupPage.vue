@@ -154,6 +154,128 @@ function onFlagSearchInput() {
   }, 200)
 }
 
+// ── Custom groups ────────────────────────────────────────────────
+// Admin-defined per-season groups with optional matchmaking rules.
+// Each group carries a min_per_match int (0 = no rule), a display_only
+// flag, and a border_color used by avatar rings on the leaderboard /
+// queue tiles. Group memberships are independent of the built-in
+// captain_pool / shadow_pool flags.
+interface GroupRow {
+  id: number
+  season_id: number
+  name: string
+  description: string | null
+  border_color: string
+  min_per_match: number
+  display_only: boolean
+  member_count: number
+  members: Array<{
+    player_id: number
+    name: string
+    display_name: string
+    avatar_url: string | null
+    mmr: number | null
+  }>
+}
+const groups = ref<GroupRow[]>([])
+const groupsLoading = ref(false)
+
+const newGroup = ref({
+  name: '',
+  border_color: '#FFD700',
+  min_per_match: 0,
+  display_only: false,
+})
+const creatingGroup = ref(false)
+
+// Per-group player search state (keyed by group id so each group's
+// search dropdown is independent).
+const groupSearchQuery = ref<Record<number, string>>({})
+const groupSearchResults = ref<Record<number, Array<{ id: number; name: string; display_name?: string | null; avatar_url?: string | null; mmr?: number }>>>({})
+const groupSearchTimers: Record<number, ReturnType<typeof setTimeout>> = {}
+
+async function loadGroups() {
+  groupsLoading.value = true
+  try {
+    groups.value = await api.getSeasonGroups(seasonId.value)
+  } catch (e: any) {
+    groups.value = []
+  } finally {
+    groupsLoading.value = false
+  }
+}
+
+async function createGroup() {
+  if (!newGroup.value.name.trim() || creatingGroup.value) return
+  creatingGroup.value = true
+  try {
+    await api.createSeasonGroup(seasonId.value, { ...newGroup.value, name: newGroup.value.name.trim() })
+    newGroup.value.name = ''
+    newGroup.value.border_color = '#FFD700'
+    newGroup.value.min_per_match = 0
+    newGroup.value.display_only = false
+    await loadGroups()
+  } catch (e: any) {
+    alert(e?.message || 'Failed to create group')
+  } finally {
+    creatingGroup.value = false
+  }
+}
+
+async function patchGroup(groupId: number, patch: Partial<GroupRow>) {
+  try {
+    await api.updateSeasonGroup(seasonId.value, groupId, patch as any)
+    await loadGroups()
+  } catch (e: any) {
+    alert(e?.message || 'Failed to update group')
+  }
+}
+
+async function deleteGroup(groupId: number) {
+  if (!confirm(t('seasonGroupDeleteConfirm'))) return
+  try {
+    await api.deleteSeasonGroup(seasonId.value, groupId)
+    await loadGroups()
+  } catch (e: any) {
+    alert(e?.message || 'Failed to delete group')
+  }
+}
+
+function onGroupSearchInput(groupId: number) {
+  const t_ = groupSearchTimers[groupId]
+  if (t_) clearTimeout(t_)
+  const q = (groupSearchQuery.value[groupId] || '').trim()
+  if (q.length < 2) { groupSearchResults.value[groupId] = []; return }
+  groupSearchTimers[groupId] = setTimeout(async () => {
+    try {
+      const res = await api.searchPlayers(q)
+      groupSearchResults.value[groupId] = Array.isArray(res) ? res : (res?.players || [])
+    } catch {
+      groupSearchResults.value[groupId] = []
+    }
+  }, 200)
+}
+
+async function addGroupMember(groupId: number, playerId: number) {
+  try {
+    await api.addSeasonGroupMember(seasonId.value, groupId, playerId)
+    groupSearchQuery.value[groupId] = ''
+    groupSearchResults.value[groupId] = []
+    await loadGroups()
+  } catch (e: any) {
+    alert(e?.message || 'Failed to add member')
+  }
+}
+
+async function removeGroupMember(groupId: number, playerId: number) {
+  try {
+    await api.removeSeasonGroupMember(seasonId.value, groupId, playerId)
+    await loadGroups()
+  } catch (e: any) {
+    alert(e?.message || 'Failed to remove member')
+  }
+}
+
 async function setFlag(playerId: number, patch: { captain_pool?: boolean; shadow_pool?: 0 | 1 | 2 }) {
   flagSaving.value = true
   try {
@@ -221,7 +343,7 @@ async function loadAudit() {
 watch(tab, (newTab) => {
   if (newTab === 'leaderboard') loadLeader()
   if (newTab === 'audit') loadAudit()
-  if (newTab === 'flags') loadFlags()
+  if (newTab === 'flags') { loadFlags(); loadGroups() }
 })
 
 async function handleSave() {
@@ -651,6 +773,123 @@ onMounted(load)
                     :disabled="flagSaving" @click="setFlag(row.player_id, { shadow_pool: 0 })">
               {{ t('remove') }}
             </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Custom groups (admin-defined, season-scoped) -->
+      <div class="card p-4 flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <span class="text-sm font-semibold">{{ t('seasonGroupsTitle') }}</span>
+          <span class="text-[11px] text-muted-foreground">{{ t('seasonGroupsHint') }}</span>
+        </div>
+
+        <!-- Create new group -->
+        <div class="grid grid-cols-12 gap-2 items-end p-3 rounded-lg bg-accent/20">
+          <div class="col-span-12 md:col-span-4">
+            <label class="block text-[11px] uppercase tracking-wide text-muted-foreground">{{ t('seasonGroupName') }}</label>
+            <input v-model="newGroup.name" type="text" class="mt-1 w-full bg-accent/40 border border-border/40 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40" :placeholder="t('seasonGroupNamePlaceholder')" />
+          </div>
+          <div class="col-span-4 md:col-span-2">
+            <label class="block text-[11px] uppercase tracking-wide text-muted-foreground">{{ t('seasonGroupColor') }}</label>
+            <input v-model="newGroup.border_color" type="color" class="mt-1 w-full h-[34px] bg-accent/40 border border-border/40 rounded-lg cursor-pointer" />
+          </div>
+          <div class="col-span-4 md:col-span-2">
+            <label class="block text-[11px] uppercase tracking-wide text-muted-foreground">{{ t('seasonGroupMinPerMatch') }}</label>
+            <input v-model.number="newGroup.min_per_match" type="number" min="0" max="10" class="mt-1 w-full bg-accent/40 border border-border/40 rounded-lg px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-primary/40" />
+          </div>
+          <div class="col-span-4 md:col-span-2 flex items-center pt-5">
+            <label class="flex items-center gap-1.5 text-xs cursor-pointer">
+              <input v-model="newGroup.display_only" type="checkbox" />
+              <span>{{ t('seasonGroupDisplayOnly') }}</span>
+            </label>
+          </div>
+          <div class="col-span-12 md:col-span-2 flex items-end">
+            <button type="button" class="btn-primary w-full px-3 py-1.5 text-xs disabled:opacity-40" :disabled="creatingGroup || !newGroup.name.trim()" @click="createGroup">
+              {{ creatingGroup ? `${t('saving')}…` : t('seasonGroupCreate') }}
+            </button>
+          </div>
+        </div>
+
+        <p v-if="groupsLoading" class="text-xs text-muted-foreground">{{ t('loading') }}…</p>
+        <p v-else-if="groups.length === 0" class="text-xs text-muted-foreground italic">{{ t('seasonGroupsEmpty') }}</p>
+
+        <!-- Each group: header with inline editable rule fields, member list, search to add -->
+        <div v-for="g in groups" :key="g.id" class="border border-border/30 rounded-lg overflow-hidden">
+          <div class="flex items-center gap-3 px-3 py-2 bg-accent/20 border-b border-border/30">
+            <span class="inline-block w-3 h-3 rounded-full" :style="{ boxShadow: `0 0 0 2px ${g.border_color}` }"></span>
+            <span class="text-sm font-semibold truncate flex-1">{{ g.name }}</span>
+            <label class="text-[11px] text-muted-foreground flex items-center gap-1">
+              {{ t('seasonGroupColor') }}
+              <input
+                type="color"
+                :value="g.border_color"
+                class="w-6 h-6 rounded cursor-pointer"
+                @change="(e: any) => patchGroup(g.id, { border_color: (e.target as HTMLInputElement).value })"
+              />
+            </label>
+            <label class="text-[11px] text-muted-foreground flex items-center gap-1">
+              {{ t('seasonGroupMinPerMatch') }}
+              <input
+                type="number" min="0" max="10"
+                :value="g.min_per_match"
+                class="w-12 bg-accent/40 border border-border/40 rounded px-1.5 py-0.5 text-xs font-mono"
+                @change="(e: any) => patchGroup(g.id, { min_per_match: Number((e.target as HTMLInputElement).value) || 0 })"
+              />
+            </label>
+            <label class="text-[11px] text-muted-foreground flex items-center gap-1">
+              <input
+                type="checkbox"
+                :checked="g.display_only"
+                @change="(e: any) => patchGroup(g.id, { display_only: (e.target as HTMLInputElement).checked })"
+              />
+              {{ t('seasonGroupDisplayOnly') }}
+            </label>
+            <button type="button" class="text-[11px] px-2 py-1 rounded bg-red-500/10 text-red-400 hover:bg-red-500/20" @click="deleteGroup(g.id)">
+              {{ t('seasonGroupDelete') }}
+            </button>
+          </div>
+
+          <!-- Member search -->
+          <div class="px-3 py-2 border-b border-border/20">
+            <input
+              v-model="groupSearchQuery[g.id]"
+              type="text"
+              class="w-full bg-accent/40 border border-border/40 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40"
+              :placeholder="t('seasonGroupAddMember')"
+              @input="onGroupSearchInput(g.id)"
+            />
+            <div v-if="(groupSearchResults[g.id] || []).length" class="mt-1 flex flex-col gap-1 border border-border/30 rounded-lg overflow-hidden">
+              <button
+                v-for="p in groupSearchResults[g.id]" :key="p.id"
+                type="button"
+                class="px-3 py-1.5 flex items-center gap-2 text-left hover:bg-accent/40 transition-colors"
+                @click="addGroupMember(g.id, p.id)"
+              >
+                <img v-if="p.avatar_url" :src="p.avatar_url" class="w-6 h-6 rounded-full" />
+                <div v-else class="w-6 h-6 rounded-full bg-accent" />
+                <span class="text-sm flex-1 truncate">{{ p.display_name || p.name }}</span>
+                <span class="text-[11px] text-muted-foreground">{{ p.mmr ?? 0 }} MMR</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Members -->
+          <div v-if="g.members.length === 0" class="px-3 py-3 text-xs text-muted-foreground italic">
+            {{ t('seasonGroupNoMembers') }}
+          </div>
+          <div v-else class="flex flex-wrap gap-2 px-3 py-3">
+            <div
+              v-for="m in g.members" :key="m.player_id"
+              class="flex items-center gap-2 pl-1 pr-2 py-1 rounded-full bg-accent/30 ring-2"
+              :style="{ boxShadow: `inset 0 0 0 2px ${g.border_color}` }"
+            >
+              <img v-if="m.avatar_url" :src="m.avatar_url" class="w-6 h-6 rounded-full" />
+              <div v-else class="w-6 h-6 rounded-full bg-accent" />
+              <span class="text-xs">{{ m.display_name }}</span>
+              <button type="button" class="text-[11px] text-muted-foreground hover:text-red-400" :title="t('remove')"
+                      @click="removeGroupMember(g.id, m.player_id)">×</button>
+            </div>
           </div>
         </div>
       </div>

@@ -775,6 +775,18 @@ export function useApi() {
       request(`/api/admin/seasons/${seasonId}/player-flags`),
     setSeasonPlayerFlag: (seasonId: number, data: { player_id: number; captain_pool?: boolean; shadow_pool?: 0 | 1 | 2 }) =>
       request(`/api/admin/seasons/${seasonId}/player-flags`, { method: 'POST', body: JSON.stringify(data) }),
+    getSeasonGroups: (seasonId: number) =>
+      request(`/api/admin/seasons/${seasonId}/groups`),
+    createSeasonGroup: (seasonId: number, data: { name: string; description?: string; border_color?: string; min_per_match?: number; display_only?: boolean }) =>
+      request(`/api/admin/seasons/${seasonId}/groups`, { method: 'POST', body: JSON.stringify(data) }),
+    updateSeasonGroup: (seasonId: number, groupId: number, data: { name?: string; description?: string; border_color?: string; min_per_match?: number; display_only?: boolean }) =>
+      request(`/api/admin/seasons/${seasonId}/groups/${groupId}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    deleteSeasonGroup: (seasonId: number, groupId: number) =>
+      request(`/api/admin/seasons/${seasonId}/groups/${groupId}`, { method: 'DELETE' }),
+    addSeasonGroupMember: (seasonId: number, groupId: number, playerId: number) =>
+      request(`/api/admin/seasons/${seasonId}/groups/${groupId}/members`, { method: 'POST', body: JSON.stringify({ player_id: playerId }) }),
+    removeSeasonGroupMember: (seasonId: number, groupId: number, playerId: number) =>
+      request(`/api/admin/seasons/${seasonId}/groups/${groupId}/members/${playerId}`, { method: 'DELETE' }),
 
     // MMR verification (user)
     submitMmrVerification: async (mmr: number, screenshot: File) => {
