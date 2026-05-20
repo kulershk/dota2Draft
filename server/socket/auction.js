@@ -211,7 +211,7 @@ export function registerAuctionHandlers(socket, io) {
   socket.on('auction:start', async () => {
     const compId = socketCompetitions.get(socket.id)
     if (!compId) return
-    if (!await isAdminSocket(socket.id)) {
+    if (!await isAdminSocket(socket.id, compId)) {
       return socket.emit('auction:error', { message: 'Admin access required' })
     }
     const captains = await getCaptains(compId)
@@ -273,7 +273,7 @@ export function registerAuctionHandlers(socket, io) {
     const compId = socketCompetitions.get(socket.id)
     if (!compId) return
     const captainId = await getSocketCaptainId(socket.id, compId)
-    const isAdmin = await isAdminSocket(socket.id)
+    const isAdmin = await isAdminSocket(socket.id, compId)
     const comp = await getCompetition(compId)
     const state = parseAuctionState(comp)
 
@@ -458,7 +458,7 @@ export function registerAuctionHandlers(socket, io) {
   socket.on('auction:pause', async () => {
     const compId = socketCompetitions.get(socket.id)
     if (!compId) return
-    if (!await isAdminSocket(socket.id)) return socket.emit('auction:error', { message: 'Admin access required' })
+    if (!await isAdminSocket(socket.id, compId)) return socket.emit('auction:error', { message: 'Admin access required' })
     clearCompBidTimer(compId)
     await setAuctionState(compId, { bidTimerEnd: 0, status: 'paused' })
     await saveAuctionLog(compId, 'pause', 'Auction paused by admin')
@@ -470,7 +470,7 @@ export function registerAuctionHandlers(socket, io) {
   socket.on('auction:resume', async () => {
     const compId = socketCompetitions.get(socket.id)
     if (!compId) return
-    if (!await isAdminSocket(socket.id)) return socket.emit('auction:error', { message: 'Admin access required' })
+    if (!await isAdminSocket(socket.id, compId)) return socket.emit('auction:error', { message: 'Admin access required' })
     const comp = await getCompetition(compId)
     const state = parseAuctionState(comp)
     if (state.nominatedPlayerId) {
@@ -488,7 +488,7 @@ export function registerAuctionHandlers(socket, io) {
   socket.on('auction:recheck-order', async () => {
     const compId = socketCompetitions.get(socket.id)
     if (!compId) return
-    if (!await isAdminSocket(socket.id)) return socket.emit('auction:error', { message: 'Admin access required' })
+    if (!await isAdminSocket(socket.id, compId)) return socket.emit('auction:error', { message: 'Admin access required' })
     const comp = await getCompetition(compId)
     const state = parseAuctionState(comp)
     if (state.status !== 'paused' && state.status !== 'nominating') {
@@ -511,7 +511,7 @@ export function registerAuctionHandlers(socket, io) {
   socket.on('auction:set-nominator', async ({ captainId }) => {
     const compId = socketCompetitions.get(socket.id)
     if (!compId) return
-    if (!await isAdminSocket(socket.id)) return socket.emit('auction:error', { message: 'Admin access required' })
+    if (!await isAdminSocket(socket.id, compId)) return socket.emit('auction:error', { message: 'Admin access required' })
     const comp = await getCompetition(compId)
     const state = parseAuctionState(comp)
     if (state.status !== 'paused' && state.status !== 'nominating') {
@@ -529,7 +529,7 @@ export function registerAuctionHandlers(socket, io) {
   socket.on('auction:end', async () => {
     const compId = socketCompetitions.get(socket.id)
     if (!compId) return
-    if (!await isAdminSocket(socket.id)) return socket.emit('auction:error', { message: 'Admin access required' })
+    if (!await isAdminSocket(socket.id, compId)) return socket.emit('auction:error', { message: 'Admin access required' })
     clearCompBidTimer(compId)
     await setAuctionState(compId, {
       status: 'finished', nominatedPlayerId: '', currentBid: 0, currentBidderId: '',
@@ -544,7 +544,7 @@ export function registerAuctionHandlers(socket, io) {
   socket.on('auction:undo', async () => {
     const compId = socketCompetitions.get(socket.id)
     if (!compId) return
-    if (!await isAdminSocket(socket.id)) return socket.emit('auction:error', { message: 'Admin access required' })
+    if (!await isAdminSocket(socket.id, compId)) return socket.emit('auction:error', { message: 'Admin access required' })
 
     const comp = await getCompetition(compId)
     const state = parseAuctionState(comp)
@@ -621,7 +621,7 @@ export function registerAuctionHandlers(socket, io) {
   socket.on('auction:reset', async () => {
     const compId = socketCompetitions.get(socket.id)
     if (!compId) return
-    if (!await isAdminSocket(socket.id)) return socket.emit('auction:error', { message: 'Admin access required' })
+    if (!await isAdminSocket(socket.id, compId)) return socket.emit('auction:error', { message: 'Admin access required' })
 
     clearCompBidTimer(compId)
     compReadyCaptains.get(compId)?.clear()

@@ -1,5 +1,5 @@
 import { queryOne } from '../db.js'
-import { hasPermission } from '../middleware/permissions.js'
+import { playerCanManageComp } from '../middleware/permissions.js'
 
 // Per-competition state maps
 export const socketPlayers = new Map()       // socketId -> playerId
@@ -26,11 +26,16 @@ export function getReadyCaptainIds(compId) {
   return [...set]
 }
 
-export async function isAdminSocket(socketId) {
+// Can this socket control the auction for the given competition? Comp-
+// scoped so the comp's owner (manage_own_competitions) and helpers can
+// run their own auction without the global manage_auction perm — matches
+// requireCompPermission. compId is optional for back-compat but should
+// always be passed by auction handlers.
+export async function isAdminSocket(socketId, compId = null) {
   const playerId = socketPlayers.get(socketId)
   if (!playerId) return false
   const player = await queryOne('SELECT * FROM players WHERE id = $1', [playerId])
-  return await hasPermission(player, 'manage_auction')
+  return await playerCanManageComp(player, compId, 'manage_auction')
 }
 
 export async function getSocketCaptainId(socketId, compId) {

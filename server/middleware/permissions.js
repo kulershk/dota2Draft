@@ -93,19 +93,28 @@ export async function isCompetitionHelper(playerId, compId) {
   return row.length > 0
 }
 
+// Boolean form of the comp-permission check — no req/res. Shared by
+// requireCompPermission (REST) and socket handlers (e.g. auction control)
+// so the rules stay identical: a global manage_competitions admin, a
+// holder of the sub-permission, a comp helper, or the comp's own creator
+// (with manage_own_competitions) all pass.
+export async function playerCanManageComp(player, compId, subPermission) {
+  if (!player) return false
+  if (await hasPermission(player, 'manage_competitions')) return true
+  if (subPermission && await hasPermission(player, subPermission)) return true
+  if (compId && await isCompetitionHelper(player.id, compId)) return true
+  if (await hasPermission(player, 'manage_own_competitions')) {
+    if (!compId) return true
+    const comp = await getCompetition(compId)
+    if (comp && comp.created_by === player.id) return true
+  }
+  return false
+}
+
 export async function requireCompPermission(req, res, compId, subPermission) {
   const player = await getAuthPlayer(req)
   if (!player) { res.status(401).json({ error: 'Not authenticated' }); return null }
-  if (await hasPermission(player, 'manage_competitions')) return player
-  if (subPermission && await hasPermission(player, subPermission)) return player
-  // Helper grant: anyone explicitly added to competition_helpers passes,
-  // even without the global manage_own_competitions perm.
-  if (compId && await isCompetitionHelper(player.id, compId)) return player
-  if (await hasPermission(player, 'manage_own_competitions')) {
-    if (!compId) return player
-    const comp = await getCompetition(compId)
-    if (comp && comp.created_by === player.id) return player
-  }
+  if (await playerCanManageComp(player, compId, subPermission)) return player
   res.status(403).json({ error: 'Permission denied' })
   return null
 }
