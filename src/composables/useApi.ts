@@ -90,6 +90,8 @@ export function useApi() {
 
     // Competition Players
     getCompPlayers: (compId: number) => request(`/api/competitions/${compId}/players`),
+    searchCompPlayers: (compId: number, q: string) =>
+      request(`/api/competitions/${compId}/player-search?q=${encodeURIComponent(q)}`),
     registerForComp: (compId: number, data: { roles: string[]; mmr?: number; info?: string }) =>
       request(`/api/competitions/${compId}/players/register`, { method: 'POST', body: JSON.stringify(data) }),
     updateCompPlayer: (compId: number, playerId: number, data: Record<string, any>) =>

@@ -169,8 +169,25 @@ const promotePlayerId = ref<number | null>(null)
 const promoteTeam = ref('')
 const editCaptain = ref({ id: 0, team: '', budget: 1000 })
 
-// All users (for promote dropdown)
-const allUsers = ref<any[]>([])
+// Player-picker search results. Driven by debounced server search
+// (GET /api/competitions/:id/player-search) instead of fetching the whole
+// user table — works with manage_own_competitions and never ships the
+// full database. Each is the latest ≤10 matches for its search box.
+const participantResults = ref<any[]>([])
+const promoteResults = ref<any[]>([])
+const helperResults = ref<any[]>([])
+function debouncedCompSearch(getQuery: () => string, target: { value: any[] }) {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  return () => {
+    if (timer) clearTimeout(timer)
+    const q = getQuery().trim()
+    if (q.length < 2) { target.value = []; return }
+    timer = setTimeout(async () => {
+      try { target.value = await api.searchCompPlayers(compId.value, q) }
+      catch { target.value = [] }
+    }, 200)
+  }
+}
 
 // Leagues for the lobbyLeagueId dropdown
 const leagues = ref<{ id: number; name: string; dota_league_id: number }[]>([])
@@ -197,9 +214,7 @@ onMounted(async () => {
   // Load leagues for the dropdown (public endpoint)
   try { leagues.value = await api.getLeagues() } catch { /* non-blocking */ }
   loaded.value = true
-  // Load all users for promote
-  allUsers.value = await api.getUsers()
-  // Load streams
+  // Streams
   await fetchStreams()
   // Load helpers (best-effort — page works without them)
   await fetchHelpers().catch(() => {})
@@ -227,10 +242,7 @@ async function fetchHelpers() {
 
 const eligibleHelpers = computed(() => {
   const helperIds = new Set(helpers.value.map(h => h.player_id))
-  const q = helperSearch.value.trim().toLowerCase()
-  let list = allUsers.value.filter(u => !helperIds.has(u.id) && !u.is_banned)
-  if (q) list = list.filter(u => (u.name || '').toLowerCase().includes(q) || (u.steam_id || '').includes(q))
-  return list.slice(0, 20)
+  return helperResults.value.filter(u => !helperIds.has(u.id))
 })
 
 async function addHelper(playerId: number) {
@@ -262,22 +274,19 @@ async function removeHelper(playerId: number) {
   }
 }
 
-// Players eligible for promotion (Steam-registered, not already captains in this competition)
+// Players eligible for promotion to captain — search results minus those
+// already captains. (Server already excludes banned + non-Steam.)
 const promotablePlayers = computed(() => {
   const captainPlayerIds = store.captains.value.map(c => c.player_id).filter(Boolean)
-  return allUsers.value.filter(u => u.steam_id && !captainPlayerIds.includes(u.id))
+  return promoteResults.value.filter(u => !captainPlayerIds.includes(u.id))
 })
 
-// Users that can be added as participants (not already in pool, not captains, not banned)
+// Players that can be added as participants — search results minus those
+// already in the pool or already captains.
 const addableUsers = computed(() => {
   const poolPlayerIds = store.players.value.map(p => p.id || 0)
   const captainPlayerIds = store.captains.value.map(c => c.player_id).filter(Boolean)
-  let list = allUsers.value.filter(u => u.steam_id && !u.is_banned && !poolPlayerIds.includes(u.id) && !captainPlayerIds.includes(u.id))
-  if (participantSearchQuery.value) {
-    const q = participantSearchQuery.value.toLowerCase()
-    list = list.filter(u => u.name.toLowerCase().includes(q))
-  }
-  return list
+  return participantResults.value.filter(u => !poolPlayerIds.includes(u.id) && !captainPlayerIds.includes(u.id))
 })
 
 const paginatedAddableUsers = computed(() => addableUsers.value.slice(0, addParticipantPage.value * PAGE_SIZE))
@@ -293,14 +302,16 @@ const filteredParticipants = computed(() => {
 const paginatedParticipants = computed(() => filteredParticipants.value.slice(0, participantTablePage.value * PAGE_SIZE))
 const hasMoreParticipants = computed(() => paginatedParticipants.value.length < filteredParticipants.value.length)
 
-// Promotable players with search
-const filteredPromotable = computed(() => {
-  if (!promoteSearchQuery.value) return promotablePlayers.value
-  const q = promoteSearchQuery.value.toLowerCase()
-  return promotablePlayers.value.filter(u => u.name.toLowerCase().includes(q))
-})
+// Search is server-side now, so promotablePlayers is already filtered.
+const filteredPromotable = computed(() => promotablePlayers.value)
 
-watch(participantSearchQuery, () => { addParticipantPage.value = 1 })
+// Debounced server searches feeding the three pickers.
+const runParticipantSearch = debouncedCompSearch(() => participantSearchQuery.value, participantResults)
+const runPromoteSearch = debouncedCompSearch(() => promoteSearchQuery.value, promoteResults)
+const runHelperSearch = debouncedCompSearch(() => helperSearch.value, helperResults)
+watch(participantSearchQuery, () => { addParticipantPage.value = 1; runParticipantSearch() })
+watch(promoteSearchQuery, () => { runPromoteSearch() })
+watch(helperSearch, () => { runHelperSearch() })
 watch(participantTableSearch, () => { participantTablePage.value = 1 })
 
 async function addParticipant(userId: number) {

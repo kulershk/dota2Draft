@@ -13,6 +13,31 @@ export default function createPlayersRouter(io) {
     res.json(await getCompPlayers(Number(req.params.compId)))
   })
 
+  // Search players to add to a competition (participants / captains /
+  // helpers). Comp-scoped so manage_own_competitions owners + helpers can
+  // use it — unlike the global /api/users dump which needs manage_users.
+  // Returns ≤10 matches with only the fields the picker needs (no bans,
+  // dotacoins, discord ids, etc.), and requires a >=2 char query so the
+  // whole player table can't be enumerated.
+  router.get('/api/competitions/:compId/player-search', async (req, res) => {
+    const compId = Number(req.params.compId)
+    const admin = await requireCompPermission(req, res, compId, 'manage_players')
+    if (!admin) return
+    const q = (req.query.q || '').toString().trim().toLowerCase()
+    if (q.length < 2) return res.json([])
+    const results = await query(
+      `SELECT id, name, display_name, steam_id, avatar_url, mmr
+         FROM players
+        WHERE steam_id IS NOT NULL
+          AND is_banned = FALSE
+          AND (LOWER(name) LIKE $1 OR LOWER(COALESCE(display_name, '')) LIKE $1)
+        ORDER BY display_name NULLS LAST, name
+        LIMIT 10`,
+      [`%${q}%`]
+    )
+    res.json(results)
+  })
+
   router.post('/api/competitions/:compId/players/register', async (req, res) => {
     const player = await getAuthPlayer(req)
     if (!player) return res.status(401).json({ error: 'Not authenticated' })
