@@ -223,7 +223,10 @@ router.post('/api/competitions/:id/helpers', async (req, res) => {
 
   const playerId = Number(req.body?.player_id)
   if (!Number.isFinite(playerId)) return res.status(400).json({ error: 'player_id required' })
-  if (playerId === owner.id) return res.status(400).json({ error: 'You are already the owner' })
+  // `owner` is the authenticated caller (comp creator OR a global
+  // manage_competitions admin) — not necessarily the comp's owner, so
+  // the message must say "yourself", not "owner".
+  if (playerId === owner.id) return res.status(400).json({ error: 'You can\'t add yourself as a helper' })
 
   const target = await queryOne('SELECT id FROM players WHERE id = $1', [playerId])
   if (!target) return res.status(404).json({ error: 'Player not found' })
