@@ -7,6 +7,7 @@ import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { useFriendStore } from '@/composables/useFriendStore'
 import { useDotaConstants } from '@/composables/useDotaConstants'
+import ModalOverlay from '@/components/common/ModalOverlay.vue'
 import RoleBadge from '@/components/common/RoleBadge.vue'
 import MmrDisplay from '@/components/common/MmrDisplay.vue'
 import LevelBadge from '@/components/common/LevelBadge.vue'
@@ -55,6 +56,28 @@ async function friendAction_unblock() {
   if (!profile.value?.friendship?.id) return
   await api.unblockUser(profile.value.friendship.id)
   await refreshProfileAndFriends()
+}
+
+// Confirmation modal for the destructive friend actions (block / remove).
+// Per the CLAUDE.md UI rule, no window.confirm — a proper modal.
+const confirmAction = ref<'block' | 'unfriend' | null>(null)
+const confirmBusy = ref(false)
+const profileName = computed(() => profile.value?.display_name || profile.value?.name || '')
+// True when blocking would also sever an existing friendship.
+const blockRemovesFriend = computed(() => profile.value?.friendship?.status === 'accepted')
+function askConfirm(action: 'block' | 'unfriend') { confirmAction.value = action }
+async function runConfirm() {
+  if (confirmBusy.value || !confirmAction.value) return
+  confirmBusy.value = true
+  try {
+    if (confirmAction.value === 'block') await friendAction_block()
+    else await friendAction_remove()
+    confirmAction.value = null
+  } catch (e: any) {
+    alert(e?.message || 'Action failed')
+  } finally {
+    confirmBusy.value = false
+  }
 }
 
 dota.loadConstants()
@@ -316,7 +339,7 @@ const streakBadge = computed(() => {
                   <UserPlus class="w-3.5 h-3.5" />
                   {{ t('sendFriendRequest') }}
                 </button>
-                <button class="btn-secondary text-xs" @click="friendAction_block">
+                <button class="btn-secondary text-xs" @click="askConfirm('block')">
                   <Ban class="w-3.5 h-3.5" />
                   {{ t('blockUser') }}
                 </button>
@@ -343,11 +366,11 @@ const streakBadge = computed(() => {
                   <Check class="w-3.5 h-3.5" />
                   {{ t('alreadyFriends') }}
                 </span>
-                <button class="btn-secondary text-xs" @click="friendAction_remove">
+                <button class="btn-secondary text-xs" @click="askConfirm('unfriend')">
                   <UserMinus class="w-3.5 h-3.5" />
                   {{ t('removeFriend') }}
                 </button>
-                <button class="btn-secondary text-xs text-destructive" @click="friendAction_block">
+                <button class="btn-secondary text-xs text-destructive" @click="askConfirm('block')">
                   <Ban class="w-3.5 h-3.5" />
                   {{ t('blockUser') }}
                 </button>
@@ -838,5 +861,37 @@ const streakBadge = computed(() => {
         </div>
       </div>
     </template>
+
+    <!-- Confirm modal for block / unfriend -->
+    <ModalOverlay :show="!!confirmAction" @close="confirmAction = null">
+      <div class="px-6 py-5 border-b border-border flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg bg-destructive/15 flex items-center justify-center shrink-0">
+          <component :is="confirmAction === 'block' ? Ban : UserMinus" class="w-5 h-5 text-destructive" />
+        </div>
+        <h2 class="text-base font-semibold">
+          {{ confirmAction === 'block' ? t('blockUser') : t('removeFriend') }}
+        </h2>
+      </div>
+      <div class="px-6 py-5 flex flex-col gap-2">
+        <p class="text-sm text-foreground">
+          {{ confirmAction === 'block'
+            ? t('confirmBlockBody', { name: profileName })
+            : t('confirmUnfriendBody', { name: profileName }) }}
+        </p>
+        <p v-if="confirmAction === 'block' && blockRemovesFriend" class="text-xs text-amber-400">
+          {{ t('confirmBlockRemovesFriend') }}
+        </p>
+      </div>
+      <div class="px-6 py-4 border-t border-border flex justify-end gap-2">
+        <button class="btn-outline" :disabled="confirmBusy" @click="confirmAction = null">{{ t('cancel') }}</button>
+        <button
+          class="btn-primary !bg-destructive hover:!bg-destructive/90"
+          :disabled="confirmBusy"
+          @click="runConfirm"
+        >
+          {{ confirmBusy ? `${t('saving')}…` : (confirmAction === 'block' ? t('blockUser') : t('removeFriend')) }}
+        </button>
+      </div>
+    </ModalOverlay>
   </div>
 </template>
