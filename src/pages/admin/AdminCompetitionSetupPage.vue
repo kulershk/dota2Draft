@@ -242,8 +242,7 @@ async function fetchHelpers() {
 
 const eligibleHelpers = computed(() => {
   const helperIds = new Set(helpers.value.map(h => h.player_id))
-  const myId = store.currentUser.value?.id
-  return helperResults.value.filter(u => !helperIds.has(u.id) && u.id !== myId)
+  return helperResults.value.filter(u => !helperIds.has(u.id))
 })
 
 async function addHelper(playerId: number) {

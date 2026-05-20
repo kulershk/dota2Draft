@@ -223,15 +223,14 @@ router.post('/api/competitions/:id/helpers', async (req, res) => {
 
   const playerId = Number(req.body?.player_id)
   if (!Number.isFinite(playerId)) return res.status(400).json({ error: 'player_id required' })
-  // `owner` is the authenticated caller (comp creator OR a global
-  // manage_competitions admin) — not necessarily the comp's owner, so
-  // the message must say "yourself", not "owner".
-  if (playerId === owner.id) return res.status(400).json({ error: 'You can\'t add yourself as a helper' })
 
   const target = await queryOne('SELECT id FROM players WHERE id = $1', [playerId])
   if (!target) return res.status(404).json({ error: 'Player not found' })
 
-  // Don't add helper if they're already the comp's creator.
+  // The only invalid target is the comp's actual creator (they already
+  // have full rights). A global manage_competitions admin adding
+  // themselves as a helper is fine — they're not the owner, and a helper
+  // row is harmless/redundant for them.
   const comp = await getCompetition(id)
   if (comp?.created_by === playerId) {
     return res.status(400).json({ error: 'That player is the competition owner' })
