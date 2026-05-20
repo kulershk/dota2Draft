@@ -60,6 +60,7 @@ const permLabels: Record<string, string> = {
   manage_games: 'Manage Games',
   manage_queue_pools: 'Manage Queue Pools',
   manage_seasons: 'Manage Seasons',
+  manage_own_seasons: 'Manage Own Seasons',
   manage_mmr_verifications: 'Approve MMR Verifications',
 }
 

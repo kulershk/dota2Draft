@@ -66,8 +66,8 @@ const router = createRouter({
         { path: 'fantasy', name: 'admin-fantasy', meta: { permissions: ['manage_fantasy'] }, component: () => import('@/pages/admin/AdminFantasyPage.vue') },
         { path: 'xp-log', name: 'admin-xp-log', meta: { permissions: ['manage_xp_log'] }, component: () => import('@/pages/admin/AdminXpLogPage.vue') },
         { path: 'queue', name: 'admin-queue', meta: { permissions: ['manage_queue_pools', 'manage_own_queue_pools'] }, component: () => import('@/pages/admin/AdminQueuePage.vue') },
-        { path: 'seasons', name: 'admin-seasons', meta: { permissions: ['manage_seasons'] }, component: () => import('@/pages/admin/AdminSeasonsPage.vue') },
-        { path: 'seasons/:id', name: 'admin-season-setup', meta: { permissions: ['manage_seasons'] }, component: () => import('@/pages/admin/AdminSeasonSetupPage.vue') },
+        { path: 'seasons', name: 'admin-seasons', meta: { permissions: ['manage_seasons', 'manage_own_seasons'] }, component: () => import('@/pages/admin/AdminSeasonsPage.vue') },
+        { path: 'seasons/:id', name: 'admin-season-setup', meta: { permissions: ['manage_seasons', 'manage_own_seasons'] }, component: () => import('@/pages/admin/AdminSeasonSetupPage.vue') },
         { path: 'mmr-verifications', name: 'admin-mmr-verifications', meta: { permissions: ['manage_mmr_verifications'] }, component: () => import('@/pages/admin/AdminMmrVerificationsPage.vue') },
         { path: 'reports', name: 'admin-reports', meta: { permissions: ['review_grief_reports'] }, component: () => import('@/pages/admin/AdminReportsPage.vue') },
         // Back-compat: legacy /admin/grief-reports route still renders the new combined page.

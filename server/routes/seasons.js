@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { query, queryOne, execute } from '../db.js'
-import { requirePermission } from '../middleware/permissions.js'
+import { requireSeasonPermission, hasPermission } from '../middleware/permissions.js'
+import { getAuthPlayer } from '../middleware/auth.js'
 import { adjustPlayerPoints, recomputeSeasonFromHistory, backfillSeasonFromPoolHistory } from '../services/seasonRankingApply.js'
 import { applyFridayBonusForSeason } from '../services/inhouseFridayBonus.js'
 import { withDefaults } from '../services/seasonRating.js'
@@ -173,19 +174,25 @@ export default function createSeasonsRouter(io) {
     }
   })
 
-  // ── Admin: list all seasons (incl. archived) ──
+  // ── Admin: list seasons (incl. archived). manage_seasons sees all;
+  // manage_own_seasons sees only seasons they created. ──
   router.get('/api/admin/seasons', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_seasons')
+    const admin = await requireSeasonPermission(req, res, null)
     if (!admin) return
     try {
+      const ownAll = await hasPermission(admin, 'manage_seasons')
+      const params = []
+      let where = ''
+      if (!ownAll) { params.push(admin.id); where = 'WHERE s.created_by = $1' }
       const seasons = await query(`
         SELECT s.*,
           (SELECT COUNT(*)::int FROM queue_pools     WHERE season_id = s.id) AS pool_count,
           (SELECT COUNT(*)::int FROM season_rankings WHERE season_id = s.id) AS player_count,
           (SELECT COUNT(*)::int FROM season_match_log WHERE season_id = s.id AND queue_match_id IS NOT NULL) AS match_count
         FROM seasons s
+        ${where}
         ORDER BY s.is_active DESC, COALESCE(s.starts_at, s.created_at) DESC
-      `)
+      `, params)
       res.json(seasons)
     } catch (e) {
       res.status(500).json({ error: e.message })
@@ -194,7 +201,7 @@ export default function createSeasonsRouter(io) {
 
   // ── Admin: single season + assigned pools ──
   router.get('/api/admin/seasons/:id', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_seasons')
+    const admin = await requireSeasonPermission(req, res, Number(req.params.id))
     if (!admin) return
     try {
       const s = await queryOne('SELECT * FROM seasons WHERE id = $1', [req.params.id])
@@ -206,9 +213,9 @@ export default function createSeasonsRouter(io) {
     }
   })
 
-  // ── Admin: create season ──
+  // ── Admin: create season (manage_seasons or manage_own_seasons) ──
   router.post('/api/admin/seasons', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_seasons')
+    const admin = await requireSeasonPermission(req, res, null)
     if (!admin) return
     try {
       const { name, slug, description, starts_at, ends_at, is_active, verified_mmr_only, settings } = req.body
@@ -240,7 +247,7 @@ export default function createSeasonsRouter(io) {
 
   // ── Admin: update season ──
   router.patch('/api/admin/seasons/:id', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_seasons')
+    const admin = await requireSeasonPermission(req, res, Number(req.params.id))
     if (!admin) return
     try {
       const seasonId = Number(req.params.id)
@@ -282,7 +289,7 @@ export default function createSeasonsRouter(io) {
 
   // ── Admin: delete season (cascades rankings + log) ──
   router.delete('/api/admin/seasons/:id', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_seasons')
+    const admin = await requireSeasonPermission(req, res, Number(req.params.id))
     if (!admin) return
     try {
       // The pool fk is ON DELETE SET NULL so pools survive but lose their season link.
@@ -295,7 +302,7 @@ export default function createSeasonsRouter(io) {
 
   // ── Admin: full leaderboard (no min_games filter, includes hidden) ──
   router.get('/api/admin/seasons/:id/leaderboard', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_seasons')
+    const admin = await requireSeasonPermission(req, res, Number(req.params.id))
     if (!admin) return
     try {
       const rows = await query(`
@@ -314,7 +321,7 @@ export default function createSeasonsRouter(io) {
 
   // ── Admin: audit log (paginated, optional player filter) ──
   router.get('/api/admin/seasons/:id/audit', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_seasons')
+    const admin = await requireSeasonPermission(req, res, Number(req.params.id))
     if (!admin) return
     try {
       const limit = Math.min(Number(req.query.limit) || 100, 500)
@@ -344,7 +351,7 @@ export default function createSeasonsRouter(io) {
 
   // ── Admin: manual point adjustment ──
   router.post('/api/admin/seasons/:id/adjust', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_seasons')
+    const admin = await requireSeasonPermission(req, res, Number(req.params.id))
     if (!admin) return
     try {
       const { player_id, delta, reason } = req.body
@@ -368,7 +375,7 @@ export default function createSeasonsRouter(io) {
   // ── Admin: rebuild rankings by replaying every audit-log row ──
   // Useful if settings changed retroactively or rows were corrupted.
   router.post('/api/admin/seasons/:id/recompute', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_seasons')
+    const admin = await requireSeasonPermission(req, res, Number(req.params.id))
     if (!admin) return
     try {
       const seasonId = Number(req.params.id)
@@ -388,7 +395,7 @@ export default function createSeasonsRouter(io) {
   // belong to a pool currently assigned to this season and fall in the
   // season's date window. Then runs a full recompute so points reflect them.
   router.post('/api/admin/seasons/:id/backfill', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_seasons')
+    const admin = await requireSeasonPermission(req, res, Number(req.params.id))
     if (!admin) return
     try {
       const seasonId = Number(req.params.id)
@@ -410,7 +417,7 @@ export default function createSeasonsRouter(io) {
   // 'YYYY-MM-DD' }. Useful for testing and for back-filling a day that the
   // scheduler missed (e.g. server downtime over midnight).
   router.post('/api/admin/seasons/:id/friday-bonus', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_seasons')
+    const admin = await requireSeasonPermission(req, res, Number(req.params.id))
     if (!admin) return
     try {
       const seasonId = Number(req.params.id)
@@ -442,7 +449,7 @@ export default function createSeasonsRouter(io) {
   // border_color is a CSS colour string used by the avatar ring helper.
 
   router.get('/api/admin/seasons/:id/groups', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_seasons')
+    const admin = await requireSeasonPermission(req, res, Number(req.params.id))
     if (!admin) return
     const seasonId = Number(req.params.id)
     try {
@@ -479,7 +486,7 @@ export default function createSeasonsRouter(io) {
   })
 
   router.post('/api/admin/seasons/:id/groups', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_seasons')
+    const admin = await requireSeasonPermission(req, res, Number(req.params.id))
     if (!admin) return
     const seasonId = Number(req.params.id)
     const name = String(req.body?.name || '').trim()
@@ -507,7 +514,7 @@ export default function createSeasonsRouter(io) {
   })
 
   router.patch('/api/admin/seasons/:id/groups/:groupId', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_seasons')
+    const admin = await requireSeasonPermission(req, res, Number(req.params.id))
     if (!admin) return
     const seasonId = Number(req.params.id)
     const groupId = Number(req.params.groupId)
@@ -549,7 +556,7 @@ export default function createSeasonsRouter(io) {
   })
 
   router.delete('/api/admin/seasons/:id/groups/:groupId', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_seasons')
+    const admin = await requireSeasonPermission(req, res, Number(req.params.id))
     if (!admin) return
     const seasonId = Number(req.params.id)
     const groupId = Number(req.params.groupId)
@@ -595,7 +602,7 @@ export default function createSeasonsRouter(io) {
   }
 
   router.post('/api/admin/seasons/:id/groups/:groupId/members', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_seasons')
+    const admin = await requireSeasonPermission(req, res, Number(req.params.id))
     if (!admin) return
     const seasonId = Number(req.params.id)
     const groupId = Number(req.params.groupId)
@@ -620,7 +627,7 @@ export default function createSeasonsRouter(io) {
   })
 
   router.delete('/api/admin/seasons/:id/groups/:groupId/members/:playerId', async (req, res) => {
-    const admin = await requirePermission(req, res, 'manage_seasons')
+    const admin = await requireSeasonPermission(req, res, Number(req.params.id))
     if (!admin) return
     const seasonId = Number(req.params.id)
     const groupId = Number(req.params.groupId)

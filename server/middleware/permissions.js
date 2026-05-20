@@ -19,6 +19,7 @@ export const ALL_PERMISSIONS = [
   'manage_queue_pools',
   'manage_own_queue_pools',
   'manage_seasons',
+  'manage_own_seasons',
   'manage_mmr_verifications',
   'view_request_stats',
   'manage_menu',
@@ -141,6 +142,22 @@ export async function requireLeaguePermission(req, res, leagueId) {
     if (!leagueId) return player
     const league = await query('SELECT created_by FROM leagues WHERE id = $1', [leagueId]).then(r => r[0])
     if (league && league.created_by === player.id) return player
+  }
+  res.status(403).json({ error: 'Permission denied' })
+  return null
+}
+
+// Mirrors the league check for seasons. Full perm = manage_seasons (every
+// season); manage_own_seasons = only seasons you created. seasonId omitted
+// (e.g. create / list) passes for either perm — the caller scopes the data.
+export async function requireSeasonPermission(req, res, seasonId) {
+  const player = await getAuthPlayer(req)
+  if (!player) { res.status(401).json({ error: 'Not authenticated' }); return null }
+  if (await hasPermission(player, 'manage_seasons')) return player
+  if (await hasPermission(player, 'manage_own_seasons')) {
+    if (!seasonId) return player
+    const season = await query('SELECT created_by FROM seasons WHERE id = $1', [seasonId]).then(r => r[0])
+    if (season && season.created_by === player.id) return player
   }
   res.status(403).json({ error: 'Permission denied' })
   return null

@@ -132,7 +132,7 @@ const navGroups: NavGroup[] = [
       { labelKey: 'adminGames', icon: Gamepad2, path: '/admin/games', permissions: ['manage_games'] },
       { labelKey: 'adminFantasy', icon: Star, path: '/admin/fantasy', permissions: ['manage_fantasy'] },
       { labelKey: 'adminQueuePools', icon: Swords, path: '/admin/queue', permissions: ['manage_queue_pools', 'manage_own_queue_pools'] },
-      { labelKey: 'adminSeasons', icon: Medal, path: '/admin/seasons', permissions: ['manage_seasons'] },
+      { labelKey: 'adminSeasons', icon: Medal, path: '/admin/seasons', permissions: ['manage_seasons', 'manage_own_seasons'] },
       { labelKey: 'adminLeagues', icon: Award, path: '/admin/leagues', permissions: ['manage_leagues', 'manage_own_leagues'] },
     ],
   },
