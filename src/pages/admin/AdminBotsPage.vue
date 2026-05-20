@@ -28,13 +28,30 @@ async function fetchBots() {
   } catch { bots.value = [] }
 }
 
-// Steam profile URLs for every bot that has resolved its steam_id.
-// Used by the "copy all" button so an admin can paste the list into a
-// browser / friend-invite flow to set the bots up as friends.
+// steamcommunity.com/profiles/ expects a 64-bit SteamID. Bots store the
+// legacy STEAM_X:Y:Z form (and could in theory be SteamID3 or already a
+// 64-bit id), so normalise first. SteamID64 exceeds Number.MAX_SAFE_INTEGER
+// (~9e15 vs ~7.6e16), so the arithmetic MUST use BigInt.
+const STEAM64_BASE = 76561197960265728n
+function toSteamId64(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  const s = String(raw).trim()
+  if (/^\d{17}$/.test(s)) return s // already SteamID64
+  const legacy = s.match(/^STEAM_[0-5]:([01]):(\d+)$/i)
+  if (legacy) return (BigInt(legacy[2]) * 2n + BigInt(legacy[1]) + STEAM64_BASE).toString()
+  const id3 = s.match(/^\[?U:1:(\d+)\]?$/i)
+  if (id3) return (BigInt(id3[1]) + STEAM64_BASE).toString()
+  return null // unknown format — skip
+}
+
+// Steam profile URLs for every bot whose steam_id we can normalise to a
+// SteamID64. Used by the "copy all" button so an admin can paste the
+// list into a browser / friend-invite flow to set the bots up as friends.
 const botProfileUrls = computed<string[]>(() =>
   bots.value
-    .filter(b => b.steam_id)
-    .map(b => `https://steamcommunity.com/profiles/${b.steam_id}`)
+    .map(b => toSteamId64(b.steam_id))
+    .filter((id): id is string => !!id)
+    .map(id => `https://steamcommunity.com/profiles/${id}`)
 )
 const copiedUrls = ref(false)
 async function copyProfileUrls() {
