@@ -366,7 +366,7 @@
     "auction:start": {
       "publish": {
         "summary": "Start the draft (admin only)",
-        "description": "Requires manage_auction permission. Needs ≥2 captains. If requireAllOnline, all captains must be ready.",
+        "description": "Requires comp management rights (global manage_competitions, comp owner, or helper). Needs ≥2 captains. If requireAllOnline, all captains must be ready.",
         "message": { "payload": { "type": "null" } }
       }
     },

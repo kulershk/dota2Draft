@@ -27,15 +27,14 @@ export function getReadyCaptainIds(compId) {
 }
 
 // Can this socket control the auction for the given competition? Comp-
-// scoped so the comp's owner (manage_own_competitions) and helpers can
-// run their own auction without the global manage_auction perm — matches
-// requireCompPermission. compId is optional for back-compat but should
-// always be passed by auction handlers.
+// scoped (owner / helper / global manage_competitions) — matches
+// requireCompPermission. compId should always be passed by auction
+// handlers.
 export async function isAdminSocket(socketId, compId = null) {
   const playerId = socketPlayers.get(socketId)
   if (!playerId) return false
   const player = await queryOne('SELECT * FROM players WHERE id = $1', [playerId])
-  return await playerCanManageComp(player, compId, 'manage_auction')
+  return await playerCanManageComp(player, compId)
 }
 
 export async function getSocketCaptainId(socketId, compId) {

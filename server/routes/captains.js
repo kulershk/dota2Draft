@@ -17,7 +17,7 @@ export default function createCaptainsRouter(io) {
 
   router.post('/api/competitions/:compId/captains/promote', async (req, res) => {
     const compId = Number(req.params.compId)
-    const admin = await requireCompPermission(req, res, compId, 'manage_captains')
+    const admin = await requireCompPermission(req, res, compId)
     if (!admin) return
 
     const { playerId, team } = req.body
@@ -56,7 +56,7 @@ export default function createCaptainsRouter(io) {
 
   router.put('/api/competitions/:compId/captains/:id', async (req, res) => {
     const compId = Number(req.params.compId)
-    const admin = await requireCompPermission(req, res, compId, 'manage_captains')
+    const admin = await requireCompPermission(req, res, compId)
     if (!admin) return
 
     const captain = await queryOne('SELECT * FROM captains WHERE id = $1 AND competition_id = $2', [req.params.id, compId])
@@ -133,7 +133,7 @@ export default function createCaptainsRouter(io) {
 
   router.post('/api/competitions/:compId/captains/:id/demote', async (req, res) => {
     const compId = Number(req.params.compId)
-    const admin = await requireCompPermission(req, res, compId, 'manage_captains')
+    const admin = await requireCompPermission(req, res, compId)
     if (!admin) return
 
     const captain = await queryOne('SELECT player_id FROM captains WHERE id = $1 AND competition_id = $2', [req.params.id, compId])

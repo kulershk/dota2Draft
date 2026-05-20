@@ -8,9 +8,10 @@ export const ALL_PERMISSIONS = [
   'manage_users',
   'manage_news',
   'manage_site_settings',
-  'manage_captains',
+  // manage_captains + manage_auction were removed — captain + auction
+  // control is comp-scoped (owner / helper / manage_competitions), so the
+  // standalone cross-comp grants were redundant.
   'manage_players',
-  'manage_auction',
   'manage_permissions',
   'manage_bots',
   'manage_jobs',

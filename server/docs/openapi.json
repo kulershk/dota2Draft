@@ -794,7 +794,7 @@
         "tags": ["Captains"],
         "summary": "Promote player to captain",
         "security": [{ "bearerAuth": [] }],
-        "description": "Requires manage_captains permission",
+        "description": "Requires comp management rights: global manage_competitions, or the comp's owner (manage_own_competitions), or a competition helper.",
         "parameters": [{ "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } }],
         "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "playerId": { "type": "integer" }, "team": { "type": "string" } }, "required": ["playerId", "team"] } } } },
         "responses": { "200": { "description": "Promoted" } }

@@ -257,6 +257,22 @@ export async function initDb() {
       PRIMARY KEY (player_id, group_id)
     );
   `)
+  // Strip the retired manage_captains / manage_auction permissions from any
+  // existing groups (captain + auction control is comp-scoped now).
+  try {
+    await execute(`
+      UPDATE permission_groups
+         SET permissions = (
+           SELECT COALESCE(jsonb_agg(p), '[]'::jsonb)
+             FROM jsonb_array_elements(permissions) AS p
+            WHERE p::text NOT IN ('"manage_captains"', '"manage_auction"')
+         )
+       WHERE permissions @> '"manage_captains"'::jsonb
+          OR permissions @> '"manage_auction"'::jsonb
+    `)
+  } catch (e) {
+    console.warn('[db] strip retired captain/auction perms:', e.message)
+  }
 
   // ─── Tournament tables ─────────────────────────────────
   // Add tournament_state column to competitions
