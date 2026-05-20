@@ -203,7 +203,7 @@ onUnmounted(detachSocket)
                 </td>
                 <td class="px-4 py-2.5 text-right font-mono tabular-nums hidden md:table-cell">
                   <span v-if="(row.current_winstreak || 0) > 0" class="text-orange-400 font-semibold">🔥 {{ row.current_winstreak }}</span>
-                  <span v-else-if="(row.current_winstreak || 0) < 0" class="text-red-500 font-semibold">💀 {{ Math.abs(row.current_winstreak) }}</span>
+                  <span v-else-if="(row.current_winstreak || 0) < 0" class="text-blue-400 font-semibold">🧊 {{ Math.abs(row.current_winstreak) }}</span>
                   <span v-else class="text-muted-foreground">—</span>
                 </td>
               </tr>
