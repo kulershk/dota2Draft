@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Coins, Loader2 } from 'lucide-vue-next'
 import ModalOverlay from './ModalOverlay.vue'
@@ -18,6 +18,15 @@ const store = useDraftStore()
 const dota = useDotaConstants()
 const api = useApi()
 
+// Pixel height of one reel cell — vertical scrolling math is in px, so this is
+// fixed rather than aspect-based.
+const ITEM_H = 96
+// Number of symbols each reel scrolls through before landing.
+const STRIP_LEN = 28
+// Staggered spin durations (seconds) so the reels stop left-to-right.
+const DURATIONS = [1.5, 1.95, 2.4]
+const EASE = 'cubic-bezier(0.16, 1, 0.3, 1)'
+
 const betTiers = ref<number[]>([10, 50, 100, 500])
 const paytable = ref<SlotSymbol[]>([])
 const consolationKey = ref('vengefulspirit')
@@ -25,10 +34,17 @@ const consolationMult = ref(2)
 const configLoaded = ref(false)
 
 const selectedBet = ref(10)
-const displayReels = ref<string[]>(['vengefulspirit', 'invoker', 'meepo'])
 const spinning = ref(false)
 const error = ref<string | null>(null)
 const lastResult = ref<{ win: boolean; payout: number; net: number } | null>(null)
+
+// Per-reel scroll state. Each reel renders a vertical strip translated by its
+// offset; the visible window (ITEM_H tall) shows whichever item is at the top.
+const DEFAULTS = ['vengefulspirit', 'invoker', 'meepo']
+const currentSymbols = ref<string[]>([...DEFAULTS])
+const reelStrips = ref<string[][]>(DEFAULTS.map(k => [k]))
+const reelOffsets = ref<number[]>([0, 0, 0])
+const reelTransitions = ref<string[]>(['none', 'none', 'none'])
 
 const balance = computed(() => store.currentUser.value?.gcoins ?? 0)
 const symbolKeys = computed(() => paytable.value.map(s => s.key))
@@ -49,17 +65,23 @@ function imgFor(key: string): string {
   return id ? dota.heroImg(id) : ''
 }
 
-let cyclers: ReturnType<typeof setInterval>[] = []
-function clearCyclers() { cyclers.forEach(clearInterval); cyclers = [] }
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
+// Two rAFs guarantee the browser commits the transition:none reset before we
+// apply the animated offset, so the scroll actually plays.
+const nextFrame = () => new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())))
 function randomKey(): string {
   const keys = symbolKeys.value
-  if (!keys.length) return ''
+  if (!keys.length) return DEFAULTS[Math.floor(Math.random() * DEFAULTS.length)]
   return keys[Math.floor(Math.random() * keys.length)]
 }
 
+function resetReels() {
+  reelStrips.value = currentSymbols.value.map(k => [k])
+  reelOffsets.value = [0, 0, 0]
+  reelTransitions.value = ['none', 'none', 'none']
+}
+
 async function loadConfig() {
-  // Hero portraits come from the shared Dota constants.
   dota.loadConstants()
   if (configLoaded.value) return
   try {
@@ -71,9 +93,6 @@ async function loadConfig() {
     if (Array.isArray(cfg?.symbols)) paytable.value = cfg.symbols
     if (typeof cfg?.consolationKey === 'string') consolationKey.value = cfg.consolationKey
     if (typeof cfg?.consolationMult === 'number') consolationMult.value = cfg.consolationMult
-    if (!displayReels.value.length && symbolKeys.value.length) {
-      displayReels.value = [symbolKeys.value[0], symbolKeys.value[Math.min(1, symbolKeys.value.length - 1)], symbolKeys.value[Math.min(2, symbolKeys.value.length - 1)]]
-    }
     configLoaded.value = true
   } catch {
     // Leave defaults; the spin endpoint is still the source of truth.
@@ -88,26 +107,47 @@ async function spin() {
   if (balance.value < bet) { error.value = t('slotsNotEnough'); return }
 
   spinning.value = true
-  clearCyclers()
-  cyclers = [0, 1, 2].map(i => setInterval(() => { displayReels.value[i] = randomKey() }, 70))
 
+  // Build each reel: start on the currently shown symbol (continuity), scroll
+  // through a run of randoms, land on a placeholder we overwrite once the
+  // server result is in.
+  const strips = currentSymbols.value.map((cur) => {
+    const s = [cur]
+    for (let k = 0; k < STRIP_LEN - 2; k++) s.push(randomKey())
+    s.push(randomKey())
+    return s
+  })
+  reelStrips.value = strips
+  reelOffsets.value = [0, 0, 0]
+  reelTransitions.value = ['none', 'none', 'none']
+  await nextTick()
+
+  let r: any
   try {
-    const r: any = await api.spinSlots(bet)
-    // Stagger the reel stops for a classic slot feel.
-    for (let i = 0; i < 3; i++) {
-      await sleep(i === 0 ? 520 : 300)
-      clearInterval(cyclers[i])
-      displayReels.value[i] = r.reels[i]
-    }
-    if (store.currentUser.value) store.currentUser.value.gcoins = r.balance
-    lastResult.value = { win: !!r.win, payout: r.payout, net: r.net }
+    r = await api.spinSlots(bet)
   } catch (e: any) {
-    clearCyclers()
     error.value = e?.message || t('slotsSpinFailed')
-  } finally {
-    cyclers = []
+    resetReels()
     spinning.value = false
+    return
   }
+
+  // Land each reel on its real result.
+  for (let i = 0; i < 3; i++) reelStrips.value[i][reelStrips.value[i].length - 1] = r.reels[i]
+
+  await nextFrame()
+  for (let i = 0; i < 3; i++) {
+    reelTransitions.value[i] = `transform ${DURATIONS[i]}s ${EASE}`
+    reelOffsets.value[i] = (reelStrips.value[i].length - 1) * ITEM_H
+  }
+
+  await sleep(DURATIONS[2] * 1000 + 140)
+
+  currentSymbols.value = [...r.reels]
+  resetReels()
+  if (store.currentUser.value) store.currentUser.value.gcoins = r.balance
+  lastResult.value = { win: !!r.win, payout: r.payout, net: r.net }
+  spinning.value = false
 }
 
 function close() {
@@ -116,15 +156,15 @@ function close() {
 }
 
 watch(() => slots.isOpen.value, (open) => {
-  if (open) loadConfig()
+  if (open) { resetReels(); loadConfig() }
 })
 // Slots are a queue-only feature: bail out the moment the player stops
 // searching (match found, or left the queue).
 watch(() => queue.inQueue.value, (inQ) => {
-  if (!inQ && slots.isOpen.value) { clearCyclers(); spinning.value = false; slots.closeSlots() }
+  if (!inQ && slots.isOpen.value) { spinning.value = false; resetReels(); slots.closeSlots() }
 })
 
-onUnmounted(clearCyclers)
+onUnmounted(() => { spinning.value = false })
 </script>
 
 <template>
@@ -139,16 +179,30 @@ onUnmounted(clearCyclers)
         </div>
       </div>
 
-      <!-- Reels -->
+      <!-- Reels: each is a fixed-height window over a vertically scrolling strip -->
       <div class="grid grid-cols-3 gap-3">
         <div
-          v-for="(sym, i) in displayReels" :key="i"
-          class="aspect-[16/10] rounded-xl overflow-hidden flex items-center justify-center border-2 bg-[#0F172A]"
-          :class="spinning ? 'border-primary/40 animate-pulse' : 'border-border/60'"
-          :title="heroNameByKey[sym] || ''"
+          v-for="(strip, i) in reelStrips" :key="i"
+          class="relative rounded-xl overflow-hidden border-2 bg-[#0F172A]"
+          :class="spinning ? 'border-primary/50' : 'border-border/60'"
+          :style="{ height: ITEM_H + 'px' }"
         >
-          <img v-if="imgFor(sym)" :src="imgFor(sym)" :alt="heroNameByKey[sym] || sym" class="w-full h-full object-cover" />
-          <span v-else class="text-[10px] text-muted-foreground text-center px-1">{{ heroNameByKey[sym] || '…' }}</span>
+          <div
+            class="will-change-transform"
+            :style="{ transform: `translateY(-${reelOffsets[i]}px)`, transition: reelTransitions[i] }"
+          >
+            <div
+              v-for="(key, idx) in strip" :key="idx"
+              class="flex items-center justify-center"
+              :style="{ height: ITEM_H + 'px' }"
+              :title="heroNameByKey[key] || ''"
+            >
+              <img v-if="imgFor(key)" :src="imgFor(key)" :alt="heroNameByKey[key] || key" class="w-full h-full object-cover" />
+              <span v-else class="text-[10px] text-muted-foreground text-center px-1">{{ heroNameByKey[key] || '…' }}</span>
+            </div>
+          </div>
+          <!-- subtle top/bottom shading for depth -->
+          <div class="pointer-events-none absolute inset-0" style="box-shadow: inset 0 8px 12px -8px #000, inset 0 -8px 12px -8px #000"></div>
         </div>
       </div>
 
