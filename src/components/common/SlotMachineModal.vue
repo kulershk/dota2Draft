@@ -6,41 +6,61 @@ import ModalOverlay from './ModalOverlay.vue'
 import { useSlotMachine } from '@/composables/useSlotMachine'
 import { useQueueStore } from '@/composables/useQueueStore'
 import { useDraftStore } from '@/composables/useDraftStore'
+import { useDotaConstants } from '@/composables/useDotaConstants'
 import { useApi } from '@/composables/useApi'
+
+interface SlotSymbol { key: string; heroId: number; name: string; three: number }
 
 const { t } = useI18n()
 const slots = useSlotMachine()
 const queue = useQueueStore()
 const store = useDraftStore()
+const dota = useDotaConstants()
 const api = useApi()
 
-const EMOJI: Record<string, string> = {
-  cherry: '🍒', lemon: '🍋', bell: '🔔', star: '⭐', diamond: '💎', seven: '7️⃣',
-}
-
 const betTiers = ref<number[]>([10, 50, 100, 500])
-const paytable = ref<{ key: string; three: number }[]>([])
-const twoCherry = ref(2)
+const paytable = ref<SlotSymbol[]>([])
+const consolationKey = ref('vengefulspirit')
+const consolationMult = ref(2)
 const configLoaded = ref(false)
 
 const selectedBet = ref(10)
-const displayReels = ref<string[]>(['cherry', 'lemon', 'bell'])
+const displayReels = ref<string[]>(['vengefulspirit', 'invoker', 'meepo'])
 const spinning = ref(false)
 const error = ref<string | null>(null)
 const lastResult = ref<{ win: boolean; payout: number; net: number } | null>(null)
 
 const balance = computed(() => store.currentUser.value?.gcoins ?? 0)
 const symbolKeys = computed(() => paytable.value.map(s => s.key))
+const heroIdByKey = computed<Record<string, number>>(() => {
+  const m: Record<string, number> = {}
+  for (const s of paytable.value) m[s.key] = s.heroId
+  return m
+})
+const heroNameByKey = computed<Record<string, string>>(() => {
+  const m: Record<string, string> = {}
+  for (const s of paytable.value) m[s.key] = s.name
+  return m
+})
+const consolationHero = computed(() => paytable.value.find(s => s.key === consolationKey.value) || null)
+
+function imgFor(key: string): string {
+  const id = heroIdByKey.value[key]
+  return id ? dota.heroImg(id) : ''
+}
 
 let cyclers: ReturnType<typeof setInterval>[] = []
 function clearCyclers() { cyclers.forEach(clearInterval); cyclers = [] }
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
 function randomKey(): string {
-  const keys = symbolKeys.value.length ? symbolKeys.value : Object.keys(EMOJI)
+  const keys = symbolKeys.value
+  if (!keys.length) return ''
   return keys[Math.floor(Math.random() * keys.length)]
 }
 
 async function loadConfig() {
+  // Hero portraits come from the shared Dota constants.
+  dota.loadConstants()
   if (configLoaded.value) return
   try {
     const cfg: any = await api.getSlotsConfig()
@@ -49,10 +69,14 @@ async function loadConfig() {
       selectedBet.value = cfg.betTiers[0]
     }
     if (Array.isArray(cfg?.symbols)) paytable.value = cfg.symbols
-    if (typeof cfg?.twoCherry === 'number') twoCherry.value = cfg.twoCherry
+    if (typeof cfg?.consolationKey === 'string') consolationKey.value = cfg.consolationKey
+    if (typeof cfg?.consolationMult === 'number') consolationMult.value = cfg.consolationMult
+    if (!displayReels.value.length && symbolKeys.value.length) {
+      displayReels.value = [symbolKeys.value[0], symbolKeys.value[Math.min(1, symbolKeys.value.length - 1)], symbolKeys.value[Math.min(2, symbolKeys.value.length - 1)]]
+    }
     configLoaded.value = true
   } catch {
-    // Fall back to the hardcoded defaults above.
+    // Leave defaults; the spin endpoint is still the source of truth.
   }
 }
 
@@ -91,7 +115,6 @@ function close() {
   slots.closeSlots()
 }
 
-// Load config the first time the modal opens.
 watch(() => slots.isOpen.value, (open) => {
   if (open) loadConfig()
 })
@@ -120,11 +143,12 @@ onUnmounted(clearCyclers)
       <div class="grid grid-cols-3 gap-3">
         <div
           v-for="(sym, i) in displayReels" :key="i"
-          class="aspect-square rounded-xl flex items-center justify-center text-5xl select-none border-2"
+          class="aspect-[16/10] rounded-xl overflow-hidden flex items-center justify-center border-2 bg-[#0F172A]"
           :class="spinning ? 'border-primary/40 animate-pulse' : 'border-border/60'"
-          style="background:#0F172A"
+          :title="heroNameByKey[sym] || ''"
         >
-          {{ EMOJI[sym] || '❔' }}
+          <img v-if="imgFor(sym)" :src="imgFor(sym)" :alt="heroNameByKey[sym] || sym" class="w-full h-full object-cover" />
+          <span v-else class="text-[10px] text-muted-foreground text-center px-1">{{ heroNameByKey[sym] || '…' }}</span>
         </div>
       </div>
 
@@ -172,15 +196,17 @@ onUnmounted(clearCyclers)
 
       <!-- Paytable -->
       <div v-if="paytable.length" class="text-[11px] text-muted-foreground">
-        <div class="uppercase tracking-wide mb-1.5">{{ t('slotsPaytable') }}</div>
-        <div class="grid grid-cols-3 gap-1.5">
-          <div v-for="s in paytable" :key="s.key" class="flex items-center gap-1.5">
-            <span class="text-base">{{ EMOJI[s.key] }}{{ EMOJI[s.key] }}{{ EMOJI[s.key] }}</span>
-            <span class="font-mono font-bold text-foreground/80">{{ s.three }}×</span>
+        <div class="uppercase tracking-wide mb-2">{{ t('slotsPaytable') }}</div>
+        <div class="grid grid-cols-2 gap-2">
+          <div v-for="s in paytable" :key="s.key" class="flex items-center gap-2">
+            <img v-if="imgFor(s.key)" :src="imgFor(s.key)" :alt="s.name" class="w-9 h-6 rounded object-cover shrink-0" />
+            <span class="truncate text-foreground/80">{{ s.name }} ×3</span>
+            <span class="font-mono font-bold text-amber-300 ml-auto">{{ s.three }}×</span>
           </div>
-          <div class="flex items-center gap-1.5">
-            <span class="text-base">🍒🍒</span>
-            <span class="font-mono font-bold text-foreground/80">{{ twoCherry }}×</span>
+          <div v-if="consolationHero" class="flex items-center gap-2">
+            <img v-if="imgFor(consolationHero.key)" :src="imgFor(consolationHero.key)" :alt="consolationHero.name" class="w-9 h-6 rounded object-cover shrink-0" />
+            <span class="truncate text-foreground/80">{{ consolationHero.name }} ×2</span>
+            <span class="font-mono font-bold text-amber-300 ml-auto">{{ consolationMult }}×</span>
           </div>
         </div>
       </div>

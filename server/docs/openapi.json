@@ -2222,8 +2222,9 @@
             "description": "Slot config",
             "content": { "application/json": { "schema": { "type": "object", "properties": {
               "betTiers": { "type": "array", "items": { "type": "integer" } },
-              "symbols": { "type": "array", "items": { "type": "object", "properties": { "key": { "type": "string" }, "three": { "type": "integer", "description": "Three-of-a-kind multiplier" } } } },
-              "twoCherry": { "type": "integer", "description": "Multiplier for exactly two cherries" }
+              "symbols": { "type": "array", "items": { "type": "object", "properties": { "key": { "type": "string", "description": "Internal hero key (e.g. \"meepo\")" }, "heroId": { "type": "integer", "description": "Dota 2 hero id for the portrait" }, "name": { "type": "string", "description": "Localized hero name" }, "three": { "type": "integer", "description": "Three-of-a-kind multiplier" } } } },
+              "consolationKey": { "type": "string", "description": "Hero key that pays a consolation on exactly two-of-a-kind" },
+              "consolationMult": { "type": "integer", "description": "Multiplier for exactly two of the consolation hero" }
             } } } }
           }
         }

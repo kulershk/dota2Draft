@@ -8,16 +8,22 @@ import { playerInQueue, playerInReadyCheck } from '../socket/queueState.js'
 // server-side so clients can't fake a result. Rarer symbols pay more.
 const BET_TIERS = [10, 50, 100, 500]
 
+// Curated Dota 2 hero reel. heroId is the Valve constant the client renders a
+// portrait for (via useDotaConstants). Rarer (lower weight) heroes pay more,
+// with Meepo as the jackpot. Keeping it to 6 heroes keeps three-of-a-kind a
+// realistic outcome.
 const SYMBOLS = [
-  { key: 'cherry',  weight: 30, three: 5 },
-  { key: 'lemon',   weight: 24, three: 8 },
-  { key: 'bell',    weight: 18, three: 12 },
-  { key: 'star',    weight: 12, three: 20 },
-  { key: 'diamond', weight: 9,  three: 45 },
-  { key: 'seven',   weight: 6,  three: 100 },
+  { key: 'vengefulspirit',   heroId: 20,  name: 'Vengeful Spirit',   weight: 30, three: 5 },
+  { key: 'lina',             heroId: 25,  name: 'Lina',              weight: 24, three: 8 },
+  { key: 'legion_commander', heroId: 104, name: 'Legion Commander',  weight: 18, three: 12 },
+  { key: 'broodmother',      heroId: 61,  name: 'Broodmother',       weight: 12, three: 20 },
+  { key: 'invoker',          heroId: 74,  name: 'Invoker',           weight: 9,  three: 45 },
+  { key: 'meepo',            heroId: 82,  name: 'Meepo',             weight: 6,  three: 100 },
 ]
-// Any two cherries (without a full three-of-a-kind) is a small consolation win.
-const TWO_CHERRY_MULT = 2
+// Two of the most common hero (Vengeful Spirit) — without a full three-of-a-
+// kind — is a small consolation win.
+const CONSOLATION_KEY = 'vengefulspirit'
+const CONSOLATION_MULT = 2
 
 const TOTAL_WEIGHT = SYMBOLS.reduce((s, x) => s + x.weight, 0)
 
@@ -36,7 +42,7 @@ function payoutFor(reels, bet) {
     const sym = SYMBOLS.find(s => s.key === a)
     return bet * (sym ? sym.three : 0)
   }
-  if (reels.filter(x => x === 'cherry').length === 2) return bet * TWO_CHERRY_MULT
+  if (reels.filter(x => x === CONSOLATION_KEY).length === 2) return bet * CONSOLATION_MULT
   return 0
 }
 
@@ -47,8 +53,9 @@ export default function createSlotsRouter(io) {
   router.get('/api/slots/config', (req, res) => {
     res.json({
       betTiers: BET_TIERS,
-      symbols: SYMBOLS.map(s => ({ key: s.key, three: s.three })),
-      twoCherry: TWO_CHERRY_MULT,
+      symbols: SYMBOLS.map(s => ({ key: s.key, heroId: s.heroId, name: s.name, three: s.three })),
+      consolationKey: CONSOLATION_KEY,
+      consolationMult: CONSOLATION_MULT,
     })
   })
 
