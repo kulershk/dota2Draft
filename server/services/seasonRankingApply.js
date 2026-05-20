@@ -119,8 +119,12 @@ export async function applyMatchToSeason({
       for (const pid of playerIds) {
         const row = rankById[pid]
         const before = row ? Number(row.points) : settings.starting_points
+        // Signed streak: positive = consecutive wins, negative = losses.
+        // winRun is the new win-streak length used for the win bonus (loss
+        // streaks never earn a bonus).
         const streakBefore = row ? Number(row.current_winstreak || 0) : 0
         const peakStreakBefore = row ? Number(row.peak_winstreak || 0) : 0
+        const winRun = streakBefore >= 0 ? streakBefore + 1 : 1
 
         const isLeaver = !!(leaverInfo && leaverInfo.get(pid))
         const leaveMinute = isLeaver ? Number(leaverInfo.get(pid).leaveMinute) : null
@@ -146,7 +150,7 @@ export async function applyMatchToSeason({
               tiers: inhousePool.mmr_diff_tiers || [],
             })
             if (won) {
-              rawDelta += winstreakBonus(streakBefore + 1, inhousePool.winstreak_tiers || [])
+              rawDelta += winstreakBonus(winRun, inhousePool.winstreak_tiers || [])
               if (isFriday) {
                 const fwb = Number(inhousePool.friday_win_bonus ?? 5)
                 rawDelta += fwb
@@ -174,7 +178,7 @@ export async function applyMatchToSeason({
               tiers: inhousePool.mmr_diff_tiers || [],
             })
             if (won) {
-              rawDelta += winstreakBonus(streakBefore + 1, inhousePool.winstreak_tiers || [])
+              rawDelta += winstreakBonus(winRun, inhousePool.winstreak_tiers || [])
               if (isFriday) {
                 const fwb = Number(inhousePool.friday_win_bonus ?? 5)
                 rawDelta += fwb
@@ -191,7 +195,12 @@ export async function applyMatchToSeason({
 
         const after = clampPoints(before + rawDelta, settings)
         const realDelta = after - before
-        const newStreak = isLeaver ? 0 : (won ? streakBefore + 1 : 0)
+        // Signed: a win extends/starts a win streak (+), a loss extends/
+        // starts a loss streak (−). peak_winstreak tracks the best positive
+        // run only.
+        const newStreak = won
+          ? (streakBefore >= 0 ? streakBefore + 1 : 1)
+          : (streakBefore <= 0 ? streakBefore - 1 : -1)
         const newPeakStreak = Math.max(peakStreakBefore, newStreak)
         updates.push({
           pid,
@@ -358,7 +367,9 @@ export async function recomputeSeasonFromHistory(seasonId) {
     cur.games++; if (won) cur.wins++; else cur.losses++
     if (newPts > cur.peak) cur.peak = newPts
     stats.set(pid, cur)
-    const newStreak = won ? getStreak(pid) + 1 : 0
+    // Signed streak (see live path): + win run, − loss run.
+    const cs = getStreak(pid)
+    const newStreak = won ? (cs >= 0 ? cs + 1 : 1) : (cs <= 0 ? cs - 1 : -1)
     streaks.set(pid, newStreak)
     peakStreaks.set(pid, Math.max(peakStreaks.get(pid) || 0, newStreak))
   }
@@ -421,7 +432,7 @@ export async function recomputeSeasonFromHistory(seasonId) {
         if (inhouseHere) {
           bonus += mmrDiffBonus({ myAvgMmr: t1Avg, oppAvgMmr: t2Avg, won: team1Won, tiers: m.mmr_diff_tiers || [] })
           if (team1Won) {
-            bonus += winstreakBonus(getStreak(pid) + 1, m.winstreak_tiers || [])
+            bonus += winstreakBonus(getStreak(pid) >= 0 ? getStreak(pid) + 1 : 1, m.winstreak_tiers || [])
             if (matchIsFriday) bonus += Number(m.friday_win_bonus ?? 5)
           }
         }
@@ -440,7 +451,7 @@ export async function recomputeSeasonFromHistory(seasonId) {
         if (inhouseHere) {
           bonus += mmrDiffBonus({ myAvgMmr: t2Avg, oppAvgMmr: t1Avg, won: team2Won, tiers: m.mmr_diff_tiers || [] })
           if (team2Won) {
-            bonus += winstreakBonus(getStreak(pid) + 1, m.winstreak_tiers || [])
+            bonus += winstreakBonus(getStreak(pid) >= 0 ? getStreak(pid) + 1 : 1, m.winstreak_tiers || [])
             if (matchIsFriday) bonus += Number(m.friday_win_bonus ?? 5)
           }
         }
