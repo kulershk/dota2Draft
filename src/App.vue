@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Gamepad2, Shield, ShieldAlert, LogOut, Sun, Moon, Menu, X, Home, LogIn, Lock, Globe, Settings, Swords, Info, Radio, ChevronDown, Check, LayoutDashboard, Bell, User, Newspaper, Calendar, Trophy, Medal, Ban, Megaphone, Coins } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
-import { onMounted, ref, computed, watch } from 'vue'
+import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { useQueueStore } from '@/composables/useQueueStore'
@@ -223,6 +223,7 @@ onMounted(async () => {
     friendStore.loadAll()
     notifStore.loadAll()
     messageStore.loadThreads()
+    startPresencePoll()
   }
 
   // Wire friend socket events — any of them just triggers a refetch and
@@ -253,12 +254,26 @@ watch(() => store.currentUser.value?.id, (uid) => {
     friendStore.loadAll()
     notifStore.loadAll()
     messageStore.loadThreads()
+    startPresencePoll()
   } else {
     friendStore.reset()
     notifStore.reset()
     messageStore.reset()
+    stopPresencePoll()
   }
 })
+
+// Poll friend presence (online / in queue / in match) on a short interval so
+// the sidebar reflects queue/match transitions without a full reload.
+let presenceTimer: ReturnType<typeof setInterval> | null = null
+function startPresencePoll() {
+  if (presenceTimer) return
+  presenceTimer = setInterval(() => friendStore.refreshPresence(), 20000)
+}
+function stopPresencePoll() {
+  if (presenceTimer) { clearInterval(presenceTimer); presenceTimer = null }
+}
+onUnmounted(stopPresencePoll)
 
 // Auto-navigate to /queue when a match is found while the user is on another
 // page — skip if they're already on /queue.

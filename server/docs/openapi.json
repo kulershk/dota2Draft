@@ -90,6 +90,8 @@
           "created_at": { "type": "string", "format": "date-time" },
           "responded_at": { "type": "string", "format": "date-time", "nullable": true },
           "online": { "type": "boolean", "description": "Present only on /api/friends; true when the other player has any active socket." },
+          "in_queue": { "type": "boolean", "description": "Present only on /api/friends; true when the other player is currently searching in a queue pool." },
+          "in_match": { "type": "boolean", "description": "Present only on /api/friends; true when the other player is in an active queue match. Takes precedence over in_queue." },
           "player": {
             "type": "object",
             "properties": {

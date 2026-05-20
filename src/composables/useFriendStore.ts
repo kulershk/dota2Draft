@@ -16,6 +16,8 @@ export interface FriendEntry {
   created_at: string
   responded_at?: string | null
   online?: boolean
+  in_queue?: boolean
+  in_match?: boolean
   player: FriendPlayer
 }
 
@@ -40,6 +42,19 @@ async function loadAll() {
     loaded.value = true
   } catch {
     // Best-effort — friend system shouldn't block app boot.
+  }
+}
+
+// Presence-only refresh: re-fetches just the friends list (which carries the
+// online / in_queue / in_match flags) without touching requests or blocks.
+// Cheap enough to poll on an interval so queue/match status stays live.
+async function refreshPresence() {
+  if (!loaded.value) return
+  const api = useApi()
+  try {
+    friends.value = await api.getFriends()
+  } catch {
+    // Best-effort; a transient failure just leaves the last-known presence.
   }
 }
 
@@ -69,6 +84,7 @@ export function useFriendStore() {
     onlineCount,
     loaded: computed(() => loaded.value),
     loadAll,
+    refreshPresence,
     reset,
     bumpPendingFromBackend,
   }

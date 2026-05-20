@@ -30,6 +30,15 @@ function initialFor(entry: any): string {
   return n.charAt(0).toUpperCase()
 }
 
+// Friend presence: in_match wins over in_queue, both imply online. Returns
+// null when the friend is offline (no dot rendered).
+function friendStatus(f: any): { color: string; label: string; pulse: boolean } | null {
+  if (f.in_match) return { color: '#A855F7', label: t('presenceInMatch'), pulse: false }
+  if (f.in_queue) return { color: '#F59E0B', label: t('presenceInQueue'), pulse: true }
+  if (f.online) return { color: '#22C55E', label: t('presenceOnline'), pulse: false }
+  return null
+}
+
 const { t } = useI18n()
 const store = useDraftStore()
 
@@ -204,14 +213,15 @@ const queueElapsed = computed(() => {
       :to="{ name: 'player-profile', params: { id: f.player.id } }"
       class="relative w-[38px] h-[38px] rounded-full flex items-center justify-center"
       :style="{ background: gradientFor(f.player.id) }"
-      :title="f.player.display_name || f.player.name"
+      :title="friendStatus(f) ? `${f.player.display_name || f.player.name} · ${friendStatus(f)!.label}` : (f.player.display_name || f.player.name)"
     >
       <img v-if="f.player.avatar_url" :src="f.player.avatar_url" class="w-full h-full rounded-full object-cover" />
       <span v-else class="text-white text-[15px] font-extrabold">{{ initialFor(f) }}</span>
       <span
-        v-if="f.online"
+        v-if="friendStatus(f)"
         class="absolute right-[-2px] bottom-[-2px] w-[10px] h-[10px] rounded-full"
-        style="background:#22C55E;box-shadow:inset 0 0 0 2px #0A0F1C"
+        :class="{ 'animate-pulse': friendStatus(f)!.pulse }"
+        :style="{ background: friendStatus(f)!.color, boxShadow: 'inset 0 0 0 2px #0A0F1C' }"
       />
     </router-link>
 

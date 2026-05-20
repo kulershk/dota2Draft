@@ -70,6 +70,13 @@ function initialFor(name: string | null | undefined): string {
   return (name || '?').charAt(0).toUpperCase()
 }
 
+// Online-friend presence detail: in_match > in_queue > plain online.
+function presenceFor(f: any): { color: string; label: string; pulse: boolean } {
+  if (f.in_match) return { color: '#A855F7', label: t('presenceInMatch'), pulse: false }
+  if (f.in_queue) return { color: '#F59E0B', label: t('presenceInQueue'), pulse: true }
+  return { color: '#22D3EE', label: t('online'), pulse: false }
+}
+
 function nameMatches(name: string | null | undefined): boolean {
   if (!filterQuery.value.trim()) return true
   const q = filterQuery.value.trim().toLowerCase()
@@ -206,11 +213,12 @@ const showEmptyState = computed(() =>
                     <span v-else class="text-white text-[15px] font-extrabold">{{ initialFor(f.player.display_name || f.player.name) }}</span>
                   </div>
                   <span class="absolute right-[-2px] bottom-[-2px] w-[10px] h-[10px] rounded-full"
-                        style="background:#22D3EE;box-shadow:inset 0 0 0 2px #0F172A" />
+                        :class="{ 'animate-pulse': presenceFor(f).pulse }"
+                        :style="{ background: presenceFor(f).color, boxShadow: 'inset 0 0 0 2px #0F172A' }" />
                 </div>
                 <div class="flex-1 min-w-0">
                   <div class="text-[13px] font-bold truncate" style="color:#F1F5F9">{{ f.player.display_name || f.player.name }}</div>
-                  <div class="text-[11px] truncate" style="color:#64748B">{{ t('online') }}</div>
+                  <div class="text-[11px] truncate" :style="{ color: presenceFor(f).color }">{{ presenceFor(f).label }}</div>
                 </div>
               </button>
               <button
