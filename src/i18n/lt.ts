@@ -1495,6 +1495,7 @@ export default {
   seasonPoints: 'Taškai',
   seasonPeak: 'Maks.',
   seasonGames: 'Rungtynės',
+  seasonStreak: 'Serija',
   seasonRecord: 'L / P',
   seasonLastPlayed: 'Paskutinį kartą',
   seasonAdjust: 'Rankinis koregavimas',

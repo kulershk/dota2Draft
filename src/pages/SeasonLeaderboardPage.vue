@@ -38,6 +38,7 @@ interface LeaderRow {
   games_played: number
   wins: number
   losses: number
+  current_winstreak: number
   last_match_at: string | null
 }
 
@@ -71,11 +72,6 @@ async function load() {
 
 function fmtPoints(p: number): string {
   return Math.round(Number(p) || 0).toString()
-}
-function winratePct(r: LeaderRow): number {
-  const total = (r.wins || 0) + (r.losses || 0)
-  if (!total) return 0
-  return Math.round(((r.wins || 0) / total) * 100)
 }
 function fmtRange(s: Season): string {
   const a = s.starts_at ? new Date(s.starts_at).toLocaleDateString() : '—'
@@ -166,7 +162,7 @@ onUnmounted(detachSocket)
               <th class="text-right px-4 py-2.5 hidden md:table-cell">{{ t('seasonPeak') }}</th>
               <th class="text-right px-4 py-2.5">{{ t('seasonGames') }}</th>
               <th class="text-right px-4 py-2.5">W / L</th>
-              <th class="text-right px-4 py-2.5 hidden md:table-cell">WR</th>
+              <th class="text-right px-4 py-2.5 hidden md:table-cell">{{ t('seasonStreak') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -205,9 +201,9 @@ onUnmounted(detachSocket)
                   <span class="text-muted-foreground"> / </span>
                   <span class="text-red-500">{{ row.losses }}</span>
                 </td>
-                <td class="px-4 py-2.5 text-right font-mono tabular-nums hidden md:table-cell"
-                    :class="winratePct(row) >= 60 ? 'text-green-500' : (winratePct(row) >= 45 ? 'text-amber-400' : 'text-red-500')">
-                  {{ winratePct(row) }}%
+                <td class="px-4 py-2.5 text-right font-mono tabular-nums hidden md:table-cell">
+                  <span v-if="(row.current_winstreak || 0) > 0" class="text-orange-400 font-semibold">🔥 {{ row.current_winstreak }}</span>
+                  <span v-else class="text-muted-foreground">—</span>
                 </td>
               </tr>
             </router-link>

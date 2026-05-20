@@ -1495,6 +1495,7 @@ export default {
   seasonPoints: 'Punkti',
   seasonPeak: 'Maks.',
   seasonGames: 'Spēles',
+  seasonStreak: 'Sērija',
   seasonRecord: 'U / Z',
   seasonLastPlayed: 'Pēdējoreiz',
   seasonAdjust: 'Manuāla pielāgošana',

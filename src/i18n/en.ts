@@ -1503,6 +1503,7 @@ export default {
   seasonPoints: 'Points',
   seasonPeak: 'Peak',
   seasonGames: 'Games',
+  seasonStreak: 'Streak',
   seasonRecord: 'W / L',
   seasonLastPlayed: 'Last played',
   seasonAdjust: 'Manual adjust',
