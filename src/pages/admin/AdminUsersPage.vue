@@ -688,7 +688,7 @@ function formatRelativeTime(dateStr: string | null) {
                   <button v-if="store.hasPerm('impersonate_users')" class="btn-ghost p-2" :title="t('loginAs')" @click="impersonateUser(user)">
                     <LogIn class="w-4 h-4" />
                   </button>
-                  <button class="btn-ghost p-2 flex items-center gap-1 text-yellow-500" :title="`${t('dotacoins')}: ${(user.dotacoins || 0).toLocaleString()}`" @click="openDotacoinsModal(user)">
+                  <button v-if="store.hasPerm('manage_dotacoins')" class="btn-ghost p-2 flex items-center gap-1 text-yellow-500" :title="`${t('dotacoins')}: ${(user.dotacoins || 0).toLocaleString()}`" @click="openDotacoinsModal(user)">
                     <Coins class="w-4 h-4" />
                     <span class="text-xs font-mono">{{ (user.dotacoins || 0).toLocaleString() }}</span>
                   </button>

@@ -63,15 +63,12 @@ router.get('/api/users', async (req, res) => {
 })
 
 // Shared gate for the dotacoins admin endpoints: the dedicated
-// `manage_dotacoins` permission, or `manage_users` for backward-compat,
-// or full admin. Returns the admin player or null (after writing the
-// 401/403 response).
+// `manage_dotacoins` permission (or full admin). Returns the admin
+// player or null (after writing the 401/403 response).
 async function requireDotacoinsAdmin(req, res) {
   const admin = await getAuthPlayer(req)
   if (!admin) { res.status(401).json({ error: 'Not authenticated' }); return null }
-  const allowed = admin.is_admin
-    || await hasPermission(admin, 'manage_dotacoins')
-    || await hasPermission(admin, 'manage_users')
+  const allowed = admin.is_admin || await hasPermission(admin, 'manage_dotacoins')
   if (!allowed) { res.status(403).json({ error: 'Permission denied' }); return null }
   return admin
 }
