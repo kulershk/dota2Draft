@@ -426,6 +426,25 @@ onMounted(() => {
       </div>
     </div>
 
+    <!-- Permission preview banner — shown while an admin is previewing a
+         permission group. Global so it can be cancelled from anywhere,
+         even pages the previewed group can't normally reach. -->
+    <div v-if="store.previewGroup.value" class="border-b border-amber-500/50 bg-amber-500/15">
+      <div class="max-w-[1400px] mx-auto w-full flex items-center gap-3 px-4 md:px-8 py-2">
+        <Shield class="w-4 h-4 text-amber-400 shrink-0" />
+        <p class="flex-1 min-w-0 text-sm text-amber-100">
+          {{ t('permPreviewBanner', { group: store.previewGroup.value.name }) }}
+          <span class="text-amber-300/70 ml-1">{{ t('permPreviewBannerHint') }}</span>
+        </p>
+        <button
+          class="shrink-0 text-xs font-semibold px-3 py-1 rounded-md bg-amber-500/25 hover:bg-amber-500/40 text-amber-100 transition-colors"
+          @click="store.stopPermissionPreview()"
+        >
+          {{ t('permPreviewExit') }}
+        </button>
+      </div>
+    </div>
+
     <!-- Admin top-bar notification — site-wide, dismissible per session.
          Editing the message in /admin/settings re-shows it (key includes
          a hash of the html). -->

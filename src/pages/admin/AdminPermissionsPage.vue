@@ -1,12 +1,22 @@
 <script setup lang="ts">
-import { ShieldCheck, Plus, Trash2, Save, ChevronDown, ChevronUp } from 'lucide-vue-next'
+import { ShieldCheck, Plus, Trash2, Save, ChevronDown, ChevronUp, Eye } from 'lucide-vue-next'
 import { ref, reactive, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
+import { useDraftStore } from '@/composables/useDraftStore'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 
 const { t } = useI18n()
 const api = useApi()
+const store = useDraftStore()
+
+// Start previewing a group's permission set — the whole UI (nav, route
+// guards, buttons) re-renders as a member of that group would see it.
+// Cancellable from the global banner. Frontend-only: API calls still run
+// as the real admin.
+function previewGroup(group: PermGroup) {
+  store.startPermissionPreview({ id: group.id, name: group.name, permissions: group.permissions })
+}
 
 interface PermGroup {
   id: number
@@ -139,6 +149,14 @@ async function deleteGroup(id: number) {
             <span class="text-xs text-muted-foreground">({{ group.permissions.length }} {{ t('permissionsCount') }})</span>
           </div>
           <div class="flex items-center gap-2">
+            <button
+              class="btn-ghost p-1.5 flex items-center gap-1 text-amber-500"
+              :title="t('permPreviewTooltip')"
+              @click.stop="previewGroup(group)"
+            >
+              <Eye class="w-3.5 h-3.5" />
+              <span class="text-[11px] font-semibold hidden sm:inline">{{ t('permPreviewTest') }}</span>
+            </button>
             <button class="btn-ghost p-1.5 text-destructive" :title="t('delete')" @click.stop="deleteGroup(group.id)">
               <Trash2 class="w-3.5 h-3.5" />
             </button>

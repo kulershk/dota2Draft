@@ -237,18 +237,48 @@ export interface LogEntry {
 const activityLog = ref<LogEntry[]>([])
 const myBlindBid = ref<number | null>(null)
 
+// ── Permission preview (testing tool) ──────────────────────────────
+// An admin can "preview" a permission group: while active, hasPerm /
+// isAdmin / canAccessAdmin resolve against ONLY that group's permission
+// set (the admin's real is_admin bypass is suppressed), so the UI —
+// nav items, route guards, in-page buttons — renders exactly as a member
+// of that group would see it. Frontend-only: the backend still treats
+// the admin as themselves, so API calls aren't restricted. Persisted in
+// localStorage so it survives reloads; cancellable from a global banner.
+const PERM_PREVIEW_KEY = 'perm_preview'
+function loadPermPreview(): { id: number; name: string; permissions: string[] } | null {
+  try {
+    const raw = localStorage.getItem(PERM_PREVIEW_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch { return null }
+}
+const previewGroup = ref(loadPermPreview())
+function startPermissionPreview(group: { id: number; name: string; permissions: string[] }) {
+  previewGroup.value = { id: group.id, name: group.name, permissions: [...(group.permissions || [])] }
+  try { localStorage.setItem(PERM_PREVIEW_KEY, JSON.stringify(previewGroup.value)) } catch {}
+}
+function stopPermissionPreview() {
+  previewGroup.value = null
+  try { localStorage.removeItem(PERM_PREVIEW_KEY) } catch {}
+}
+
 // Derived state
-const isAdmin = computed(() => !!currentUser.value?.is_admin)
+const isAdmin = computed(() => {
+  if (previewGroup.value) return false
+  return !!currentUser.value?.is_admin
+})
 
 function hasPerm(permission: string): boolean {
   if (!currentUser.value) return false
+  if (previewGroup.value) return previewGroup.value.permissions.includes(permission)
   if (currentUser.value.is_admin) return true
   return currentUser.value.permissions?.includes(permission) ?? false
 }
 
-const canAccessAdmin = computed(() =>
-  isAdmin.value || (currentUser.value?.permissions?.length ?? 0) > 0
-)
+const canAccessAdmin = computed(() => {
+  if (previewGroup.value) return previewGroup.value.permissions.length > 0
+  return isAdmin.value || (currentUser.value?.permissions?.length ?? 0) > 0
+})
 const currentCaptain = computed<Captain | null>(() => {
   if (!compUser.value?.captain) return null
   return {
@@ -620,6 +650,9 @@ export function useDraftStore() {
     isAdmin,
     canAccessAdmin,
     hasPerm,
+    previewGroup,
+    startPermissionPreview,
+    stopPermissionPreview,
     currentUser,
     compUser,
     currentCaptain,
