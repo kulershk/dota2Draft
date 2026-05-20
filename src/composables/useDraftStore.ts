@@ -136,6 +136,9 @@ export interface CurrentUser {
   avatar_url: string
   is_admin: boolean
   permissions: string[]
+  /** Set by the server when this session is in permission-preview mode —
+   * is_admin + permissions above already reflect ONLY this group. */
+  preview_group?: { id: number; name: string } | null
   roles: string[]
   mmr: number
   mmr_verified_at: string | null
@@ -238,47 +241,32 @@ const activityLog = ref<LogEntry[]>([])
 const myBlindBid = ref<number | null>(null)
 
 // ── Permission preview (testing tool) ──────────────────────────────
-// An admin can "preview" a permission group: while active, hasPerm /
-// isAdmin / canAccessAdmin resolve against ONLY that group's permission
-// set (the admin's real is_admin bypass is suppressed), so the UI —
-// nav items, route guards, in-page buttons — renders exactly as a member
-// of that group would see it. Frontend-only: the backend still treats
-// the admin as themselves, so API calls aren't restricted. Persisted in
-// localStorage so it survives reloads; cancellable from a global banner.
-const PERM_PREVIEW_KEY = 'perm_preview'
-function loadPermPreview(): { id: number; name: string; permissions: string[] } | null {
-  try {
-    const raw = localStorage.getItem(PERM_PREVIEW_KEY)
-    return raw ? JSON.parse(raw) : null
-  } catch { return null }
-}
-const previewGroup = ref(loadPermPreview())
-function startPermissionPreview(group: { id: number; name: string; permissions: string[] }) {
-  previewGroup.value = { id: group.id, name: group.name, permissions: [...(group.permissions || [])] }
-  try { localStorage.setItem(PERM_PREVIEW_KEY, JSON.stringify(previewGroup.value)) } catch {}
-}
-function stopPermissionPreview() {
-  previewGroup.value = null
-  try { localStorage.removeItem(PERM_PREVIEW_KEY) } catch {}
-}
+// An admin can "preview" a permission group. This is enforced SERVER-SIDE:
+// startPermissionPreview swaps the session token for one carrying a
+// previewGroupId claim; the server then resolves is_admin=false and
+// permissions = ONLY that group's set, and /api/auth/me returns those.
+// So both the UI (driven by currentUser below) AND every backend
+// endpoint enforce exactly the group — a genuine end-to-end test. The
+// banner reads currentUser.preview_group; exiting swaps back to a clean
+// token. There is no client-trusted state here — editing localStorage
+// can't change permissions because the token is a server-signed JWT.
+const previewGroup = computed(() => currentUser.value?.preview_group || null)
+// startPermissionPreview / stopPermissionPreview are defined inside
+// useDraftStore() because they need api + setAuthToken + restoreAuth.
 
-// Derived state
-const isAdmin = computed(() => {
-  if (previewGroup.value) return false
-  return !!currentUser.value?.is_admin
-})
+// Derived state — currentUser already reflects preview mode (server-set),
+// so no special-casing needed here.
+const isAdmin = computed(() => !!currentUser.value?.is_admin)
 
 function hasPerm(permission: string): boolean {
   if (!currentUser.value) return false
-  if (previewGroup.value) return previewGroup.value.permissions.includes(permission)
   if (currentUser.value.is_admin) return true
   return currentUser.value.permissions?.includes(permission) ?? false
 }
 
-const canAccessAdmin = computed(() => {
-  if (previewGroup.value) return previewGroup.value.permissions.length > 0
-  return isAdmin.value || (currentUser.value?.permissions?.length ?? 0) > 0
-})
+const canAccessAdmin = computed(() =>
+  isAdmin.value || (currentUser.value?.permissions?.length ?? 0) > 0
+)
 const currentCaptain = computed<Captain | null>(() => {
   if (!compUser.value?.captain) return null
   return {
@@ -453,6 +441,23 @@ export function useDraftStore() {
     setAuthToken(token)
     await restoreAuth()
     authReadyResolve()
+  }
+
+  // Permission preview — swap to a server-issued token that scopes this
+  // session to one group's permissions, then re-fetch /me so currentUser
+  // (and thus all UI gating) reflects it. Enforced server-side.
+  async function startPermissionPreview(group: { id: number }) {
+    const res = await api.startPermissionPreview(group.id)
+    setAuthToken(res.token)
+    await restoreAuth()
+  }
+  async function stopPermissionPreview() {
+    try {
+      const res = await api.stopPermissionPreview()
+      setAuthToken(res.token)
+    } finally {
+      await restoreAuth()
+    }
   }
 
   async function claimAdmin(password: string) {

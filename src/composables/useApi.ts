@@ -471,6 +471,10 @@ export function useApi() {
       request(`/api/players/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     impersonateUser: (id: number) =>
       request(`/api/admin/impersonate/${id}`, { method: 'POST' }),
+    startPermissionPreview: (groupId: number) =>
+      request(`/api/admin/preview/${groupId}`, { method: 'POST' }),
+    stopPermissionPreview: () =>
+      request(`/api/admin/preview/stop`, { method: 'POST' }),
     banPlayer: (id: number, reason?: string) =>
       request(`/api/admin/players/${id}/ban`, { method: 'POST', body: JSON.stringify({ reason: reason || null }) }),
     unbanPlayer: (id: number) =>

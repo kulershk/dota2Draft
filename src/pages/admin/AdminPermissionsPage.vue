@@ -10,12 +10,20 @@ const { t } = useI18n()
 const api = useApi()
 const store = useDraftStore()
 
-// Start previewing a group's permission set — the whole UI (nav, route
-// guards, buttons) re-renders as a member of that group would see it.
-// Cancellable from the global banner. Frontend-only: API calls still run
-// as the real admin.
-function previewGroup(group: PermGroup) {
-  store.startPermissionPreview({ id: group.id, name: group.name, permissions: group.permissions })
+// Start previewing a group — swaps to a server-scoped session so the
+// whole UI AND backend enforce exactly that group's permissions.
+// Cancellable from the global banner.
+const previewBusy = ref(false)
+async function previewGroup(group: PermGroup) {
+  if (previewBusy.value) return
+  previewBusy.value = true
+  try {
+    await store.startPermissionPreview({ id: group.id })
+  } catch (e: any) {
+    alert(e?.message || 'Failed to start preview')
+  } finally {
+    previewBusy.value = false
+  }
 }
 
 interface PermGroup {

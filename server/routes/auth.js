@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { queryOne, execute } from '../db.js'
 import { createSession, getSessionPlayerId, getTokenFromReq, getAuthPlayer } from '../middleware/auth.js'
-import { requirePermission, getPlayerPermissions } from '../middleware/permissions.js'
+import { requirePermission, getPlayerPermissions, getEffectivePermissions, hasPermission } from '../middleware/permissions.js'
 import { getTwitchAppToken } from '../helpers/twitch.js'
 import { BASE_URL, TWITCH_CLIENT_ID, TWITCH_CLIENT_SECRET, DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET } from '../config.js'
 import { getCompetition } from '../helpers/competition.js'
@@ -72,18 +72,28 @@ router.get('/api/auth/me', async (req, res) => {
   const player = await getAuthPlayer(req)
   if (!player) return res.status(401).json({ error: 'Not authenticated' })
   execute('UPDATE players SET last_online = NOW() WHERE id = $1', [player.id]).catch(() => {})
-  const perms = await getPlayerPermissions(player.id)
+  // Effective permissions honour preview mode (group perms only). When
+  // previewing, also resolve the group name for the client banner.
+  const perms = await getEffectivePermissions(player)
+  let previewGroup = null
+  if (player.preview_group_id) {
+    const g = await queryOne('SELECT id, name FROM permission_groups WHERE id = $1', [player.preview_group_id])
+    previewGroup = g ? { id: g.id, name: g.name } : { id: player.preview_group_id, name: `#${player.preview_group_id}` }
+  }
 
   // Virtual perm: lights up if the player is a helper on any competition.
   // Lets the frontend route guard and sidebar surface /admin/competitions
   // for helpers without granting them the global manage_own_competitions
   // perm. Server-side enforcement lives in requireCompPermission +
-  // isCompetitionHelper — this flag is purely UI gating.
-  const helperRow = await queryOne(
-    'SELECT 1 FROM competition_helpers WHERE player_id = $1 LIMIT 1',
-    [player.id],
-  )
-  if (helperRow) perms.add('_helps_competition')
+  // isCompetitionHelper — this flag is purely UI gating. Suppressed in
+  // preview mode so the previewed group's surface is exact.
+  if (!player.preview_group_id) {
+    const helperRow = await queryOne(
+      'SELECT 1 FROM competition_helpers WHERE player_id = $1 LIMIT 1',
+      [player.id],
+    )
+    if (helperRow) perms.add('_helps_competition')
+  }
 
   let bannedByName = null
   if (player.is_banned && player.banned_by) {
@@ -124,6 +134,7 @@ router.get('/api/auth/me', async (req, res) => {
     avatar_url: player.avatar_url,
     is_admin: !!player.is_admin,
     permissions: [...perms],
+    preview_group: previewGroup,
     roles: JSON.parse(player.roles || '[]'),
     mmr: player.mmr,
     mmr_verified_at: player.mmr_verified_at || null,

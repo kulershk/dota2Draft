@@ -946,6 +946,35 @@ router.post('/api/admin/impersonate/:id', async (req, res) => {
   res.json({ token })
 })
 
+// ── Permission-preview test tool ──
+// Start: issue a token that keeps the caller's identity but resolves
+// permissions to ONLY the given group's set (is_admin neutralised) — so
+// both UI and backend enforce exactly that group. Requires
+// manage_permissions (or admin). The caller can't preview their way into
+// MORE than they already have at the DB level, but since this is an
+// admin-only tool that's fine.
+router.post('/api/admin/preview/:groupId', async (req, res) => {
+  const admin = await requirePermission(req, res, 'manage_permissions')
+  if (!admin) return
+  const groupId = Number(req.params.groupId)
+  const group = await queryOne('SELECT id, name FROM permission_groups WHERE id = $1', [groupId])
+  if (!group) return res.status(404).json({ error: 'Permission group not found' })
+  // The token is minted for the REAL player id (admin.id is the real id;
+  // getAuthPlayer only neutralised the in-memory is_admin, not identity).
+  const token = createSession(admin.id, group.id)
+  res.json({ token, group: { id: group.id, name: group.name } })
+})
+
+// Stop: hand back a clean token. Auth-only (NO permission check) so a
+// preview session that lacks manage_permissions can always exit. Uses
+// the real player id from the verified token.
+router.post('/api/admin/preview/stop', async (req, res) => {
+  const player = await getAuthPlayer(req)
+  if (!player) return res.status(401).json({ error: 'Not authenticated' })
+  const token = createSession(player.id)
+  res.json({ token })
+})
+
 // Step 1: Parse input text into resolved Steam IDs
 router.post('/api/admin/parse-steam-ids', async (req, res) => {
   const admin = await requirePermission(req, res, 'manage_users')

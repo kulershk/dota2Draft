@@ -2150,6 +2150,28 @@
         "responses": { "200": { "description": "Session token", "content": { "application/json": { "schema": { "type": "object", "properties": { "token": { "type": "string" } } } } } } }
       }
     },
+    "/api/admin/preview/{groupId}": {
+      "post": {
+        "tags": ["Users"],
+        "summary": "Start permission-group preview",
+        "description": "Issues a session token that keeps the caller's identity but scopes effective permissions to ONLY the given group (is_admin neutralised). Enforced server-side, so both UI and API behave as a member of that group. Requires `manage_permissions`.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "groupId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": { "description": "{ token, group: { id, name } }" },
+          "404": { "description": "Permission group not found" }
+        }
+      }
+    },
+    "/api/admin/preview/stop": {
+      "post": {
+        "tags": ["Users"],
+        "summary": "Exit permission-group preview",
+        "description": "Returns a clean session token (no preview claim). Auth-only — deliberately has NO permission check so a preview session that lacks manage_permissions can always exit.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "{ token }" } }
+      }
+    },
     "/api/admin/players/{id}/ban": {
       "post": {
         "tags": ["Users"],

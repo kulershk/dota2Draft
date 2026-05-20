@@ -47,8 +47,30 @@ export async function getPlayerPermissions(playerId) {
   return perms
 }
 
+// Permissions of a single group — used by the preview resolver.
+export async function getGroupPermissions(groupId) {
+  const row = await query('SELECT permissions FROM permission_groups WHERE id = $1', [groupId]).then(r => r[0])
+  return new Set(row?.permissions || [])
+}
+
+// Effective permission set for a player, honouring preview mode. In a
+// preview session the set is exactly the previewed group's permissions
+// (the real groups are ignored), which is what /api/auth/me reports so
+// the client UI matches the server's enforcement.
+export async function getEffectivePermissions(player) {
+  if (!player) return new Set()
+  if (player.preview_group_id) return await getGroupPermissions(player.preview_group_id)
+  return await getPlayerPermissions(player.id)
+}
+
 export async function hasPermission(player, permission) {
   if (!player) return false
+  // In preview mode, getAuthPlayer has already forced is_admin=false, so the
+  // bypass below is skipped and we check the group's permission set.
+  if (player.preview_group_id) {
+    const perms = await getGroupPermissions(player.preview_group_id)
+    return perms.has(permission)
+  }
   if (player.is_admin) return true
   const perms = await getPlayerPermissions(player.id)
   return perms.has(permission)
