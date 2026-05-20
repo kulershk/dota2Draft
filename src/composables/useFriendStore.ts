@@ -44,6 +44,7 @@ async function loadAll() {
 }
 
 const pendingCount = computed(() => incoming.value.length)
+const onlineCount = computed(() => friends.value.filter(f => f.online).length)
 
 export function useFriendStore() {
   const store = useDraftStore()
@@ -65,6 +66,7 @@ export function useFriendStore() {
     outgoing: computed(() => outgoing.value),
     blocks: computed(() => blocks.value),
     pendingCount,
+    onlineCount,
     loaded: computed(() => loaded.value),
     loadAll,
     reset,

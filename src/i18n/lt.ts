@@ -64,6 +64,7 @@ export default {
   apply: 'Taikyti',
   friends: 'Draugai',
   friendsPendingTooltip: '{n} nauji draugystės prašymai',
+  friendsOnlineTooltip: '{n} draugų prisijungę',
   friendsSubtitle: 'Tvarkyk savo draugus ir užklausas',
   addFriend: 'Pridėti draugą',
   searchPlayers: 'Ieškoti žaidėjų…',

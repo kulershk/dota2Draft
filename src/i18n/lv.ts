@@ -64,6 +64,7 @@ export default {
   apply: 'Piemērot',
   friends: 'Draugi',
   friendsPendingTooltip: '{n} jaunie draugu pieprasījumi',
+  friendsOnlineTooltip: '{n} draugi tiešsaistē',
   friendsSubtitle: 'Pārvaldi savus draugus un pieprasījumus',
   addFriend: 'Pievienot draugu',
   searchPlayers: 'Meklēt spēlētājus…',

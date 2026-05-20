@@ -64,6 +64,7 @@ export default {
   apply: 'Apply',
   friends: 'Friends',
   friendsPendingTooltip: '{n} new friend request(s)',
+  friendsOnlineTooltip: '{n} friend(s) online',
   friendsSubtitle: 'Manage your friend connections and requests',
   addFriend: 'Add friend',
   searchPlayers: 'Search players by name…',

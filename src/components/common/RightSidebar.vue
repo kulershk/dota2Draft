@@ -167,11 +167,14 @@ const queueElapsed = computed(() => {
         class="absolute inline-flex items-center justify-center text-[9px] font-black px-[3px] rounded text-white"
         style="top:6px;right:2px;min-width:14px;height:12px;background:#EF4444"
       >{{ friendStore.pendingCount.value }}</span>
+      <!-- Otherwise show how many friends are online right now (green,
+           matching the online-dot colour). Hidden when none are online. -->
       <span
-        v-else-if="friendStore.friends.value.length > 0"
+        v-else-if="friendStore.onlineCount.value > 0"
         class="absolute inline-flex items-center justify-center text-[9px] font-black px-[3px] rounded"
-        style="top:6px;right:2px;min-width:14px;height:12px;background:#22D3EE;color:#0A0F1C"
-      >{{ friendStore.friends.value.length }}</span>
+        style="top:6px;right:2px;min-width:14px;height:12px;background:#22C55E;color:#0A0F1C"
+        :title="t('friendsOnlineTooltip', { n: friendStore.onlineCount.value })"
+      >{{ friendStore.onlineCount.value }}</span>
     </button>
 
     <div class="w-[38px] h-px" style="background:#1E293B" />
