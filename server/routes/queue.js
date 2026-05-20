@@ -22,6 +22,7 @@ async function getQueueAdminScope(req, res) {
   return null
 }
 import { activeQueueMatches, playerInMatch, playerInQueue, poolQueues, getPoolQueuePlayers, clearPickTimer } from '../socket/queueState.js'
+import { broadcastPresence } from '../socket/presence.js'
 import { socketPlayers } from '../socket/state.js'
 import { botPool } from '../services/botPool.js'
 import { kickPlayerFromQueue, broadcastQueueUpdate, autoRequeueEligible } from '../socket/queue.js'
@@ -670,6 +671,7 @@ export default function createQueueRouter(io) {
         io.to(`queue-match:${qmId}`).emit('queue:cancelled', { queueMatchId: qmId, reason: 'Cancelled by admin' })
         for (const p of match.allPlayers) {
           playerInMatch.delete(p.playerId)
+          broadcastPresence(p.playerId)
         }
         const room = `queue-match:${qmId}`
         for (const [socketId, playerId] of socketPlayers) {
@@ -701,7 +703,10 @@ export default function createQueueRouter(io) {
           ...((roster?.team2_players || []).map(p => p.playerId)),
         ]
         for (const pid of cancelledRosterIds) {
-          if (playerInMatch.get(pid) === qmId) playerInMatch.delete(pid)
+          if (playerInMatch.get(pid) === qmId) {
+            playerInMatch.delete(pid)
+            broadcastPresence(pid)
+          }
         }
         activeQueueMatches.delete(qmId)
         // Auto-requeue subscribers — runs after playerInMatch is cleared so
@@ -768,7 +773,10 @@ export default function createQueueRouter(io) {
         ...((qmRow.team2_players || []).map(p => p.playerId)),
       ]
       for (const pid of allIds) {
-        if (playerInMatch.get(pid) === qmId) playerInMatch.delete(pid)
+        if (playerInMatch.get(pid) === qmId) {
+          playerInMatch.delete(pid)
+          broadcastPresence(pid)
+        }
       }
       activeQueueMatches.delete(qmId)
       // Notify any clients still pinned to the room so their UI clears.

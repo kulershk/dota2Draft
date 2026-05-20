@@ -1,5 +1,6 @@
 import { query, queryOne, execute } from '../db.js'
 import { playerInMatch, activeQueueMatches } from '../socket/queueState.js'
+import { broadcastPresence } from '../socket/presence.js'
 import { socketPlayers } from '../socket/state.js'
 import { fetchAndSaveGameStats, fetchOpenDotaMatch, saveMatchGameStats, requestOpenDotaParse } from '../helpers/opendota.js'
 import { fetchSteamMatchDetails } from '../helpers/steam.js'
@@ -717,7 +718,10 @@ class BotPool {
 
       const playerIds = Array.isArray(qm.all_player_ids) ? qm.all_player_ids : []
       for (const pid of playerIds) {
-        if (playerInMatch.get(pid) === qm.id) playerInMatch.delete(pid)
+        if (playerInMatch.get(pid) === qm.id) {
+          playerInMatch.delete(pid)
+          broadcastPresence(pid)
+        }
       }
       activeQueueMatches.delete(qm.id)
 
@@ -892,7 +896,10 @@ class BotPool {
           await execute("UPDATE queue_matches SET status = 'cancelled', completed_at = NOW() WHERE id = $1", [qm.id])
           const playerIds = Array.isArray(qm.all_player_ids) ? qm.all_player_ids : []
           for (const pid of playerIds) {
-            if (playerInMatch.get(pid) === qm.id) playerInMatch.delete(pid)
+            if (playerInMatch.get(pid) === qm.id) {
+              playerInMatch.delete(pid)
+              broadcastPresence(pid)
+            }
           }
           activeQueueMatches.delete(qm.id)
           if (this.io) {
@@ -1156,7 +1163,10 @@ class BotPool {
         // Free players so they can re-queue now that the game is over
         const allIds = [...team1Ids, ...team2Ids]
         for (const pid of allIds) {
-          if (playerInMatch.get(pid) === queueMatchXp.id) playerInMatch.delete(pid)
+          if (playerInMatch.get(pid) === queueMatchXp.id) {
+            playerInMatch.delete(pid)
+            broadcastPresence(pid)
+          }
         }
         activeQueueMatches.delete(queueMatchXp.id)
 

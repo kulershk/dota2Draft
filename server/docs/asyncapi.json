@@ -37,6 +37,30 @@
         "message": { "payload": { "type": "null" } }
       }
     },
+    "friend:presence": {
+      "subscribe": {
+        "summary": "Live presence update for one of the recipient's friends",
+        "description": "Broadcast to a player's `user:{id}` room whenever an accepted friend connects/disconnects, joins/leaves a queue, or enters/leaves a match. in_match takes precedence over in_queue; both imply online. The client patches that single friend's flags without refetching the list.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "playerId": { "type": "integer", "description": "The friend whose presence changed" },
+              "online": { "type": "boolean" },
+              "in_queue": { "type": "boolean", "description": "Searching in a queue pool (includes the ready-check window)" },
+              "in_match": { "type": "boolean", "description": "In an active queue match" }
+            },
+            "required": ["playerId", "online", "in_queue", "in_match"]
+          },
+          "examples": [
+            {
+              "name": "Friend started searching",
+              "payload": { "playerId": 42, "online": true, "in_queue": true, "in_match": false }
+            }
+          ]
+        }
+      }
+    },
     "time:sync": {
       "publish": {
         "summary": "Request server time for clock sync",

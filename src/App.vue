@@ -233,6 +233,9 @@ onMounted(async () => {
   sock.on('friend:accepted', () => { friendStore.loadAll().then(() => friendStore.bumpPendingFromBackend()) })
   sock.on('friend:removed', () => { friendStore.loadAll().then(() => friendStore.bumpPendingFromBackend()) })
 
+  // Live presence push — patches a single friend's online/queue/match flags.
+  sock.on('friend:presence', (p: any) => friendStore.applyPresence(p))
+
   // Notifications — broadcasts and admin deletes both just refetch.
   sock.on('notification:new', () => { notifStore.loadAll() })
   sock.on('notification:removed', () => { notifStore.loadAll() })

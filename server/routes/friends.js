@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { query, queryOne, execute } from '../db.js'
 import { getAuthPlayer } from '../middleware/auth.js'
 import { getOnlinePlayerIds } from '../socket/state.js'
-import { playerInQueue, playerInMatch } from '../socket/queueState.js'
+import { playerInQueue, playerInMatch, playerInReadyCheck } from '../socket/queueState.js'
 
 export default function createFriendsRouter(io) {
   const router = Router()
@@ -52,9 +52,10 @@ export default function createFriendsRouter(io) {
       player: publicPlayer({ id: r.p_id, name: r.p_name, display_name: r.p_display, avatar_url: r.p_avatar, mmr: r.p_mmr }),
       online: online.has(r.p_id),
       // Live queue/match presence from the in-memory maps. in_match wins
-      // over in_queue; both imply online.
+      // over in_queue; both imply online. "Searching" includes the short
+      // ready-check window so the flag doesn't flicker between queue and match.
       in_match: playerInMatch.has(r.p_id),
-      in_queue: playerInQueue.has(r.p_id),
+      in_queue: playerInQueue.has(r.p_id) || playerInReadyCheck.has(r.p_id),
     })))
   })
 

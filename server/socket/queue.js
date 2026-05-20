@@ -9,6 +9,7 @@ import {
 import { botPool } from '../services/botPool.js'
 import { discordBot } from '../services/discordBotClient.js'
 import { hasPerk, PERK } from '../helpers/subscription.js'
+import { broadcastPresence } from './presence.js'
 
 // Generate pick order for a given pool + team size.
 // When pool.pick_order is a valid CSV of "1"/"2" with the right per-captain
@@ -145,6 +146,7 @@ async function _doEnqueue(io, playerId, poolId) {
     groups,
   })
   playerInQueue.set(playerId, poolId)
+  broadcastPresence(playerId)
 
   const teamSize = pool.team_size || 5
   const totalPlayers = teamSize * 2
@@ -687,6 +689,7 @@ function removeFromQueue(playerId, poolId, socket) {
   if (q) q.delete(playerId)
   playerInQueue.delete(playerId)
   if (socket) socket.leave(`queue:${poolId}`)
+  broadcastPresence(playerId)
 }
 
 export function broadcastQueueUpdate(io, poolId) {
@@ -715,6 +718,7 @@ export function kickPlayerFromQueue(io, playerId, reason = null, onlyInPool = nu
   const q = poolQueues.get(poolId)
   if (q) q.delete(playerId)
   playerInQueue.delete(playerId)
+  broadcastPresence(playerId)
 
   // Leave queue room on every socket this player is connected on
   for (const [socketId, pid] of socketPlayers) {
@@ -915,6 +919,8 @@ async function resolveReadyCheck(id, io, { reason }) {
         banMinutes: rc.declineBanMinutes || 0,
       })
     }
+    // No longer queued/in-match — let friends see them drop back to idle.
+    broadcastPresence(p.playerId)
   }
 
   // Non-banned players go back to the front of the queue so they don't lose
@@ -1117,6 +1123,7 @@ async function startQueueMatch(poolId, io, preselectedPlayers = null, preselecte
   // Mark all players as in-match
   for (const p of players) {
     playerInMatch.set(p.playerId, queueMatchId)
+    broadcastPresence(p.playerId)
   }
 
   // Join all 10 players' sockets to the match room
@@ -1347,7 +1354,10 @@ async function cancelQueueMatch(queueMatchId, reason, io) {
   // Free playerInMatch only for those still pinned to THIS match (so we don't
   // accidentally release a player who's already moved into a new match)
   for (const pid of allPlayerIds) {
-    if (playerInMatch.get(pid) === queueMatchId) playerInMatch.delete(pid)
+    if (playerInMatch.get(pid) === queueMatchId) {
+      playerInMatch.delete(pid)
+      broadcastPresence(pid)
+    }
   }
 
   // Leave room

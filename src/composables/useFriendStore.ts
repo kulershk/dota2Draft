@@ -58,6 +58,18 @@ async function refreshPresence() {
   }
 }
 
+// Patch a single friend's live presence from a server push (friend:presence),
+// avoiding a full refetch. Deep reactivity on the ref array makes the in-place
+// flag update flow through to the sidebar.
+function applyPresence(p: { playerId: number; online: boolean; in_queue: boolean; in_match: boolean }) {
+  if (!p?.playerId) return
+  const f = friends.value.find(x => x.player.id === p.playerId)
+  if (!f) return
+  f.online = p.online
+  f.in_queue = p.in_queue
+  f.in_match = p.in_match
+}
+
 const pendingCount = computed(() => incoming.value.length)
 const onlineCount = computed(() => friends.value.filter(f => f.online).length)
 
@@ -85,6 +97,7 @@ export function useFriendStore() {
     loaded: computed(() => loaded.value),
     loadAll,
     refreshPresence,
+    applyPresence,
     reset,
     bumpPendingFromBackend,
   }

@@ -9,6 +9,7 @@ import {
 import { registerAuctionHandlers } from './auction.js'
 import { registerMatchReadyHandlers } from './matchReady.js'
 import { registerQueueHandlers } from './queue.js'
+import { registerPresenceIo, broadcastPresence } from './presence.js'
 import { logSocketEvent } from '../middleware/requestLogger.js'
 
 // Permissions that gate access to private socket events. Sockets join
@@ -26,6 +27,8 @@ export function setSocketsEnabled(value) { socketsEnabled = !!value }
 export function getSocketsEnabled() { return socketsEnabled }
 
 export function initSocket(io) {
+  registerPresenceIo(io)
+
   io.use((socket, next) => {
     if (!socketsEnabled) return next(new Error('sockets_disabled'))
     next()
@@ -82,6 +85,7 @@ export function initSocket(io) {
       }
 
       execute('UPDATE players SET last_online = NOW() WHERE id = $1', [player.id]).catch(() => {})
+      broadcastPresence(player.id)
       return player
     }
 
@@ -180,9 +184,13 @@ export function initSocket(io) {
     // Disconnect
     socket.on('disconnect', () => {
       const compId = socketCompetitions.get(socket.id)
+      const pid = socketPlayers.get(socket.id)
       socketPlayers.delete(socket.id)
       socketCompetitions.delete(socket.id)
       bannedSockets.delete(socket.id)
+      // Notify friends the player went offline — only once their last socket
+      // is gone (multi-tab users stay online). flagsFor recomputes online.
+      if (pid && ![...socketPlayers.values()].includes(pid)) broadcastPresence(pid)
 
       if (compId) {
         const onlineMap = compOnlineCaptains.get(compId)
