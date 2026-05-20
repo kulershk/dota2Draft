@@ -145,6 +145,7 @@ export interface CurrentUser {
   info: string
   total_xp: number
   dotacoins: number
+  gcoins: number
   pending_friend_requests: number
   unread_notifications: number
   unread_messages: number

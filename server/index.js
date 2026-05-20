@@ -28,6 +28,7 @@ import settingRoutes from './routes/settings.js'
 import discordSettingsRoutes from './routes/discordSettings.js'
 import userRoutes from './routes/users.js'
 import createFriendsRouter from './routes/friends.js'
+import createSlotsRouter from './routes/slots.js'
 import createNotificationsRouter from './routes/notifications.js'
 import createMessagesRouter from './routes/messages.js'
 import createNewsRouter from './routes/news.js'
@@ -150,6 +151,7 @@ app.use(settingRoutes)
 app.use(discordSettingsRoutes)
 app.use(userRoutes)
 app.use(createFriendsRouter(io))
+app.use(createSlotsRouter(io))
 app.use(createNotificationsRouter(io))
 app.use(createMessagesRouter(io))
 app.use(createNewsRouter(io))

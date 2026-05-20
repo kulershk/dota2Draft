@@ -2212,6 +2212,51 @@
         }
       }
     },
+    "/api/slots/config": {
+      "get": {
+        "tags": ["Slots"],
+        "summary": "Slot machine config: bet tiers + paytable",
+        "description": "Public config the client needs to render the in-queue slot machine. Payouts are multipliers on the bet.",
+        "responses": {
+          "200": {
+            "description": "Slot config",
+            "content": { "application/json": { "schema": { "type": "object", "properties": {
+              "betTiers": { "type": "array", "items": { "type": "integer" } },
+              "symbols": { "type": "array", "items": { "type": "object", "properties": { "key": { "type": "string" }, "three": { "type": "integer", "description": "Three-of-a-kind multiplier" } } } },
+              "twoCherry": { "type": "integer", "description": "Multiplier for exactly two cherries" }
+            } } } }
+          }
+        }
+      }
+    },
+    "/api/slots/spin": {
+      "post": {
+        "tags": ["Slots"],
+        "summary": "Spin the slot machine for gcoins",
+        "description": "Server-authoritative spin. Requires the caller to be currently searching in a queue (or in the ready-check window) — this is a queue-only feature. Validates the bet against the configured tiers, applies the net gcoins change atomically, and writes a gcoin_transactions audit row.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "required": ["bet"], "properties": { "bet": { "type": "integer", "description": "Must be one of the configured bet tiers" } } } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Spin result",
+            "content": { "application/json": { "schema": { "type": "object", "properties": {
+              "reels": { "type": "array", "items": { "type": "string" }, "description": "The three symbol keys" },
+              "bet": { "type": "integer" },
+              "payout": { "type": "integer", "description": "gcoins paid out (0 on a loss)" },
+              "net": { "type": "integer", "description": "payout - bet" },
+              "balance": { "type": "integer", "description": "New gcoins balance" },
+              "win": { "type": "boolean" }
+            } } } }
+          },
+          "400": { "description": "Invalid bet or not enough gcoins" },
+          "401": { "description": "Not authenticated" },
+          "403": { "description": "Not currently searching for a match" }
+        }
+      }
+    },
     "/api/friends": {
       "get": {
         "tags": ["Friends"],

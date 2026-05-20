@@ -2,10 +2,11 @@
 import { computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Swords, X, Play, Loader2, LogOut, Users, Star, AlertCircle, CheckCircle2 } from 'lucide-vue-next'
+import { Swords, X, Play, Loader2, LogOut, Users, Star, AlertCircle, CheckCircle2, Coins } from 'lucide-vue-next'
 import { useQueueStore } from '@/composables/useQueueStore'
 import { useSidePanels } from '@/composables/useSidePanels'
 import { useDraftStore } from '@/composables/useDraftStore'
+import { useSlotMachine } from '@/composables/useSlotMachine'
 import { getSocket } from '@/composables/useSocket'
 
 const { t } = useI18n()
@@ -13,6 +14,7 @@ const router = useRouter()
 const queue = useQueueStore()
 const panels = useSidePanels()
 const store = useDraftStore()
+const slots = useSlotMachine()
 
 const isLoggedIn = computed(() => !!store.currentUser.value)
 
@@ -183,6 +185,14 @@ function goToProfile(playerId: number) {
                     <Loader2 class="w-3.5 h-3.5 animate-spin" />
                     {{ t('searching') }}
                   </div>
+                  <button
+                    class="flex items-center justify-center gap-2 rounded-md px-4 py-2.5 text-[12px] font-extrabold transition-colors"
+                    style="background:rgba(245,158,11,0.12);color:#FCD34D"
+                    @click="slots.openSlots()"
+                  >
+                    <Coins class="w-3.5 h-3.5" />
+                    {{ t('slotsPlayWhileWaiting') }}
+                  </button>
                 </template>
 
                 <!-- Idle: join button -->

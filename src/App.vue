@@ -17,6 +17,7 @@ import ModalOverlay from '@/components/common/ModalOverlay.vue'
 import AppFooter from '@/components/common/AppFooter.vue'
 import QueueStatusOverlay from '@/components/common/QueueStatusOverlay.vue'
 import ReadyCheckModal from '@/components/common/ReadyCheckModal.vue'
+import SlotMachineModal from '@/components/common/SlotMachineModal.vue'
 import UpdateAvailableModal from '@/components/common/UpdateAvailableModal.vue'
 import InputGroup from '@/components/common/InputGroup.vue'
 import LeftSidebar from '@/components/common/LeftSidebar.vue'
@@ -741,6 +742,9 @@ onMounted(() => {
 
     <!-- Global ready-check modal (visible on any route) -->
     <ReadyCheckModal />
+
+    <!-- In-queue slot machine (self-gates on queue.inQueue) -->
+    <SlotMachineModal />
 
     <!-- Global update-available modal (shown when server version changes mid-session) -->
     <UpdateAvailableModal />

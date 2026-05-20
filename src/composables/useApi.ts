@@ -488,6 +488,9 @@ export function useApi() {
       }),
     getPlayerDotacoins: (id: number) =>
       request(`/api/admin/players/${id}/dotacoins`),
+    getSlotsConfig: () => request('/api/slots/config'),
+    spinSlots: (bet: number) =>
+      request('/api/slots/spin', { method: 'POST', body: JSON.stringify({ bet }) }),
     getFriends: () => request('/api/friends'),
     getFriendRequests: () => request('/api/friends/requests'),
     getFriendBlocks: () => request('/api/friends/blocks'),

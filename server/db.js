@@ -1382,6 +1382,24 @@ export async function initDb() {
   `)
   await execute(`CREATE INDEX IF NOT EXISTS idx_dotacoin_tx_player ON dotacoin_transactions(player_id, created_at DESC)`)
 
+  // Separate "gcoins" currency that powers the in-queue slot machine. New
+  // accounts start with 1000 so they can play immediately; existing rows are
+  // backfilled to 1000 by the column DEFAULT. Full audit log mirrors dotacoins
+  // so every spin (and any admin grant) is attributable.
+  try { await execute(`ALTER TABLE players ADD COLUMN gcoins INTEGER NOT NULL DEFAULT 1000`) } catch {}
+
+  await execute(`
+    CREATE TABLE IF NOT EXISTS gcoin_transactions (
+      id          SERIAL PRIMARY KEY,
+      player_id   INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      delta       INTEGER NOT NULL,
+      reason      TEXT NULL,
+      created_by  INTEGER NULL REFERENCES players(id) ON DELETE SET NULL,
+      created_at  TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+  `)
+  await execute(`CREATE INDEX IF NOT EXISTS idx_gcoin_tx_player ON gcoin_transactions(player_id, created_at DESC)`)
+
   // Player-to-player friend graph. One directional row per request: requester
   // sent to addressee. status pending|accepted is semantically symmetric (the
   // single row represents the relationship for either party). status=blocked

@@ -2,9 +2,10 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { Clock, Users, Swords, X, Check, Loader2, Shield, ShieldCheck, ChevronRight, ChevronDown, Timer, Send, MessageCircle, Ban, Target, Copy, Eye, EyeOff, Hourglass, ListOrdered, UserPlus, Plus, Info, Crown, Medal, BadgeCheck } from 'lucide-vue-next'
+import { Clock, Users, Swords, X, Check, Loader2, Shield, ShieldCheck, ChevronRight, ChevronDown, Timer, Send, MessageCircle, Ban, Target, Copy, Eye, EyeOff, Hourglass, ListOrdered, UserPlus, Plus, Info, Crown, Medal, BadgeCheck, Coins } from 'lucide-vue-next'
 import { useQueueStore, type QueuePlayer, QUEUE_ROLES } from '@/composables/useQueueStore'
 import { useDraftStore } from '@/composables/useDraftStore'
+import { useSlotMachine } from '@/composables/useSlotMachine'
 import ReportPlayerDialog from '@/components/inhouse/ReportPlayerDialog.vue'
 import { getServerNow, getSocket } from '@/composables/useSocket'
 import { formatRelativeTime } from '@/utils/format'
@@ -27,6 +28,7 @@ const { t } = useI18n()
 const router = useRouter()
 const store = useDraftStore()
 const queue = useQueueStore()
+const slots = useSlotMachine()
 
 const selectedPoolId = ref<number | null>(null)
 
@@ -1475,13 +1477,21 @@ onUnmounted(() => {
                       @click="handleJoin">
                       {{ t('queueJoin') }}
                     </button>
-                    <button v-else
-                      class="px-6 py-2.5 rounded-lg text-sm font-semibold border border-primary/30 text-primary bg-primary/5 hover:bg-primary/10 transition-colors flex items-center gap-2"
-                      @click="handleLeave">
-                      <Loader2 class="w-4 h-4 animate-spin" />
-                      <span>{{ t('queueSearching') }}...</span>
-                      <span class="text-primary/60 ml-1">{{ t('queueLeave') }}</span>
-                    </button>
+                    <template v-else>
+                      <button
+                        class="px-5 py-2.5 rounded-lg text-sm font-semibold border border-amber-500/40 text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 transition-colors flex items-center gap-2"
+                        @click="slots.openSlots()">
+                        <Coins class="w-4 h-4" />
+                        <span>{{ t('slotsPlayWhileWaiting') }}</span>
+                      </button>
+                      <button
+                        class="px-6 py-2.5 rounded-lg text-sm font-semibold border border-primary/30 text-primary bg-primary/5 hover:bg-primary/10 transition-colors flex items-center gap-2"
+                        @click="handleLeave">
+                        <Loader2 class="w-4 h-4 animate-spin" />
+                        <span>{{ t('queueSearching') }}...</span>
+                        <span class="text-primary/60 ml-1">{{ t('queueLeave') }}</span>
+                      </button>
+                    </template>
                   </div>
                 </div>
 
