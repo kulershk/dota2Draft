@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { query, queryOne, execute } from '../db.js'
 import { createSession, getAuthPlayer } from '../middleware/auth.js'
-import { requirePermission, getPlayerPermissions } from '../middleware/permissions.js'
+import { requirePermission, getPlayerPermissions, hasPermission } from '../middleware/permissions.js'
 import { fetchSteamProfile, fetchSteamProfiles, parseSteamIds } from '../helpers/steam.js'
 import { getActiveSubscription } from '../helpers/subscription.js'
 import { socketPlayers, getOnlinePlayerIds, getPlayerActivities } from '../socket/state.js'
@@ -62,10 +62,50 @@ router.get('/api/users', async (req, res) => {
   })))
 })
 
+// Shared gate for the dotacoins admin endpoints: the dedicated
+// `manage_dotacoins` permission, or `manage_users` for backward-compat,
+// or full admin. Returns the admin player or null (after writing the
+// 401/403 response).
+async function requireDotacoinsAdmin(req, res) {
+  const admin = await getAuthPlayer(req)
+  if (!admin) { res.status(401).json({ error: 'Not authenticated' }); return null }
+  const allowed = admin.is_admin
+    || await hasPermission(admin, 'manage_dotacoins')
+    || await hasPermission(admin, 'manage_users')
+  if (!allowed) { res.status(403).json({ error: 'Permission denied' }); return null }
+  return admin
+}
+
+// Read a player's current dotacoins balance + recent transaction log.
+// Drives the standalone Dotacoins admin page.
+router.get('/api/admin/players/:id/dotacoins', async (req, res) => {
+  const admin = await requireDotacoinsAdmin(req, res)
+  if (!admin) return
+  const playerId = Number(req.params.id)
+  const player = await queryOne(
+    'SELECT id, name, COALESCE(display_name, name) AS display_name, avatar_url, dotacoins FROM players WHERE id = $1',
+    [playerId]
+  )
+  if (!player) return res.status(404).json({ error: 'Player not found' })
+  const transactions = await query(
+    `SELECT tx.id, tx.delta, tx.reason, tx.created_at,
+            COALESCE(cb.display_name, cb.name) AS created_by_name
+       FROM dotacoin_transactions tx
+       LEFT JOIN players cb ON cb.id = tx.created_by
+      WHERE tx.player_id = $1
+      ORDER BY tx.id DESC
+      LIMIT 50`,
+    [playerId]
+  )
+  res.json({ player, transactions })
+})
+
 // Adjust a player's dotacoins balance by a signed delta. Writes a row to
-// dotacoin_transactions for audit. Requires manage_users.
+// dotacoin_transactions for audit. Gated on the dedicated
+// `manage_dotacoins` permission (manage_users still accepted for
+// backward-compat with existing setups; is_admin always passes).
 router.post('/api/admin/players/:id/dotacoins', async (req, res) => {
-  const admin = await requirePermission(req, res, 'manage_users')
+  const admin = await requireDotacoinsAdmin(req, res)
   if (!admin) return
   const playerId = Number(req.params.id)
   if (!Number.isFinite(playerId)) return res.status(400).json({ error: 'Invalid player id' })

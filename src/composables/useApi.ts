@@ -480,6 +480,8 @@ export function useApi() {
         method: 'POST',
         body: JSON.stringify({ delta, reason: reason || null }),
       }),
+    getPlayerDotacoins: (id: number) =>
+      request(`/api/admin/players/${id}/dotacoins`),
     getFriends: () => request('/api/friends'),
     getFriendRequests: () => request('/api/friends/requests'),
     getFriendBlocks: () => request('/api/friends/blocks'),

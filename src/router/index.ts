@@ -55,6 +55,7 @@ const router = createRouter({
         { path: 'competitions', name: 'admin-competitions', meta: { permissions: ['manage_competitions', 'manage_own_competitions', '_helps_competition'] }, component: () => import('@/pages/admin/AdminCompetitionsPage.vue') },
         { path: 'competitions/:compId', name: 'admin-competition-setup', meta: { permissions: ['manage_competitions', 'manage_own_competitions', '_helps_competition'] }, component: () => import('@/pages/admin/AdminCompetitionSetupPage.vue') },
         { path: 'users', name: 'admin-users', meta: { permissions: ['manage_users'] }, component: () => import('@/pages/admin/AdminUsersPage.vue') },
+        { path: 'dotacoins', name: 'admin-dotacoins', meta: { permissions: ['manage_dotacoins', 'manage_users'] }, component: () => import('@/pages/admin/AdminDotacoinsPage.vue') },
         { path: 'news', name: 'admin-news', meta: { permissions: ['manage_news'] }, component: () => import('@/pages/admin/AdminNewsPage.vue') },
         { path: 'announcements', name: 'admin-announcements', meta: { permissions: ['manage_notifications'] }, component: () => import('@/pages/admin/AdminAnnouncementsPage.vue') },
         { path: 'settings', name: 'admin-settings', meta: { permissions: ['manage_site_settings'] }, component: () => import('@/pages/admin/AdminSiteSettingsPage.vue') },

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Newspaper, Users, Trophy, ChevronRight, ChevronDown, Settings, ShieldCheck, Bot, Gamepad2, Star, Zap, Swords, Activity, Medal, Shield, BarChart3, Menu as MenuIcon, Award, Wrench, Crown, MessageSquare, Bell } from 'lucide-vue-next'
+import { Newspaper, Users, Trophy, ChevronRight, ChevronDown, Settings, ShieldCheck, Bot, Gamepad2, Star, Zap, Swords, Activity, Medal, Shield, BarChart3, Menu as MenuIcon, Award, Wrench, Crown, MessageSquare, Bell, Coins } from 'lucide-vue-next'
 import { computed, ref, onBeforeUnmount, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -142,6 +142,7 @@ const navGroups: NavGroup[] = [
     icon: Users,
     children: [
       { labelKey: 'users', icon: Users, path: '/admin/users', permissions: ['manage_users'] },
+      { labelKey: 'adminDotacoinsTitle', icon: Coins, path: '/admin/dotacoins', permissions: ['manage_dotacoins', 'manage_users'] },
       { labelKey: 'permissionGroups', icon: ShieldCheck, path: '/admin/permissions', permissions: ['manage_permissions'] },
       { labelKey: 'adminMmrVerifications', icon: Shield, path: '/admin/mmr-verifications', permissions: ['manage_mmr_verifications'] },
       { labelKey: 'adminReportsTitle', icon: Shield, path: '/admin/reports', permissions: ['review_grief_reports'] },

@@ -30,6 +30,7 @@ export const ALL_PERMISSIONS = [
   'manage_subscription_plans',
   'manage_discord_settings',
   'review_grief_reports',
+  'manage_dotacoins',
 ]
 
 export async function getPlayerPermissions(playerId) {

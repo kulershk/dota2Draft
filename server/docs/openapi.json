@@ -2429,10 +2429,21 @@
       }
     },
     "/api/admin/players/{id}/dotacoins": {
+      "get": {
+        "tags": ["Users"],
+        "summary": "Read a player's dotacoins balance + recent transactions",
+        "description": "Returns { player: { id, name, display_name, avatar_url, dotacoins }, transactions: [...] } (latest 50). Requires `manage_dotacoins` (or `manage_users`).",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": { "description": "Balance + transaction log" },
+          "404": { "description": "Player not found" }
+        }
+      },
       "post": {
         "tags": ["Users"],
         "summary": "Adjust a player's dotacoins balance",
-        "description": "Applies a signed delta to the player's dotacoins balance and writes a row to dotacoin_transactions for audit. Resulting balance must not go negative. Requires `manage_users` permission.",
+        "description": "Applies a signed delta to the player's dotacoins balance and writes a row to dotacoin_transactions for audit. Resulting balance must not go negative. Requires `manage_dotacoins` permission (`manage_users` also accepted for backward-compat).",
         "security": [{ "bearerAuth": [] }],
         "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
         "requestBody": {
