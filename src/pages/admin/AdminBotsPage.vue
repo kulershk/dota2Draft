@@ -212,6 +212,24 @@ async function uploadAvatarToAllBots() {
   }
 }
 
+// Live "in this state for X" clock. A 1s tick drives the recompute.
+const nowMs = ref(Date.now())
+let stateTimer: ReturnType<typeof setInterval> | null = null
+
+function statusSince(bot: any): string {
+  if (!bot.status_since) return ''
+  const start = new Date(bot.status_since).getTime()
+  if (Number.isNaN(start)) return ''
+  let secs = Math.max(0, Math.floor((nowMs.value - start) / 1000))
+  const d = Math.floor(secs / 86400); secs -= d * 86400
+  const h = Math.floor(secs / 3600); secs -= h * 3600
+  const m = Math.floor(secs / 60); secs -= m * 60
+  if (d > 0) return `${d}d ${h}h`
+  if (h > 0) return `${h}h ${m}m`
+  if (m > 0) return `${m}m ${secs}s`
+  return `${secs}s`
+}
+
 function statusColor(status: string) {
   if (status === 'available') return 'text-green-500'
   if (status === 'busy') return 'text-amber-500'
@@ -235,6 +253,10 @@ function statusLabel(status: string) {
 function onBotStatusChanged(data: any) {
   const bot = bots.value.find(b => b.id === data.botId)
   if (bot) {
+    // Only reset the "in state for" clock when the status actually
+    // changed — a repeat event for the same status keeps the original
+    // start time.
+    if (bot.status !== data.status) bot.status_since = new Date().toISOString()
     bot.status = data.status
     bot.error_message = data.errorMessage || null
   }
@@ -264,6 +286,7 @@ function onSteamGuardRequired(data: any) {
 
 onMounted(() => {
   fetchBots()
+  stateTimer = setInterval(() => { nowMs.value = Date.now() }, 1000)
   const socket = getSocket()
   socket.on('bot:statusChanged', onBotStatusChanged)
   socket.on('bot:steamGuardRequired', onSteamGuardRequired)
@@ -271,6 +294,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  if (stateTimer) clearInterval(stateTimer)
   const socket = getSocket()
   socket.off('bot:statusChanged', onBotStatusChanged)
   socket.off('bot:steamGuardRequired', onSteamGuardRequired)
@@ -402,6 +426,7 @@ onUnmounted(() => {
           </div>
           <div class="flex items-center gap-2 mt-0.5 flex-wrap">
             <span class="text-xs font-medium" :class="statusColor(bot.status)">{{ statusLabel(bot.status) }}</span>
+            <span v-if="statusSince(bot)" class="text-[11px] text-muted-foreground font-mono" :title="t('botStatusSinceHint')">· {{ statusSince(bot) }}</span>
             <span v-if="bot.error_message" class="text-xs text-red-500">— {{ bot.error_message }}</span>
             <label class="flex items-center gap-1 cursor-pointer ml-2" @click.stop>
               <input type="checkbox" class="w-3.5 h-3.5 accent-primary" :checked="bot.auto_connect" @change="toggleAutoConnect(bot)" />

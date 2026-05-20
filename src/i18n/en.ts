@@ -1032,6 +1032,7 @@ export default {
   noBotAvailable: 'No bot available',
   noLogs: 'No logs yet.',
   botStatusTimeline: 'Status timeline',
+  botStatusSinceHint: 'How long the bot has been in its current state',
   noStatusHistory: 'No status history yet.',
   lobbySettings: 'Lobby Settings',
   lobbyGameMode: 'Game Mode',

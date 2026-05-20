@@ -1026,6 +1026,7 @@ export default {
   noBotAvailable: 'Nav pieejamu botu',
   noLogs: 'Vēl nav žurnālu.',
   botStatusTimeline: 'Statusu vēsture',
+  botStatusSinceHint: 'Cik ilgi bots ir pašreizējā stāvoklī',
   noStatusHistory: 'Vēl nav statusu vēstures.',
   lobbySettings: 'Lobby iestatījumi',
   lobbyGameMode: 'Spēles režīms',

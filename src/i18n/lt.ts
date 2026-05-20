@@ -1026,6 +1026,7 @@ export default {
   noBotAvailable: 'Nėra galimų botų',
   noLogs: 'Dar nėra žurnalų.',
   botStatusTimeline: 'Būsenų istorija',
+  botStatusSinceHint: 'Kiek laiko botas yra dabartinėje būsenoje',
   noStatusHistory: 'Dar nėra būsenų istorijos.',
   lobbySettings: 'Lobby nustatymai',
   lobbyGameMode: 'Žaidimo režimas',
