@@ -34,6 +34,7 @@ export default {
   navSectionNavigate: 'PĀRVIETOTIES',
   navSectionAccount: 'KONTS',
   findMatch: 'Atrast spēli',
+  queueSearchingFor: 'Meklē spēli — {time}',
   notifications: 'Paziņojumi',
   party: 'Grupa',
   messages: 'Ziņas',

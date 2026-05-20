@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { getSocket } from './useSocket'
 import { useApi } from './useApi'
 
@@ -67,6 +67,16 @@ export type QueueRole = typeof QUEUE_ROLES[number]
 
 const pools = ref<QueuePool[]>([])
 const inQueue = ref(false)
+// Epoch ms when the current search started — set on the rising edge of
+// inQueue, cleared when we leave the queue. Used by the right rail to
+// show an elapsed "searching for Xs" timer. Client-side clock; close
+// enough for a UI counter (server FIFO order is the source of truth for
+// actual matchmaking).
+const queueStartedAt = ref<number | null>(null)
+watch(inQueue, (now, prev) => {
+  if (now && !prev) queueStartedAt.value = Date.now()
+  else if (!now) queueStartedAt.value = null
+})
 const currentPoolId = ref<number | null>(null)
 const currentPoolName = ref<string | null>(null)
 const queueCount = ref(0)
@@ -556,6 +566,7 @@ export function useQueueStore() {
   return {
     pools,
     inQueue,
+    queueStartedAt,
     currentPoolId,
     currentPoolName,
     queueCount,

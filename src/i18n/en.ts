@@ -34,6 +34,7 @@ export default {
   navSectionNavigate: 'NAVIGATE',
   navSectionAccount: 'ACCOUNT',
   findMatch: 'Find match',
+  queueSearchingFor: 'Searching for a match — {time}',
   notifications: 'Notifications',
   party: 'Party',
   messages: 'Messages',

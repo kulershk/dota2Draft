@@ -34,6 +34,7 @@ export default {
   navSectionNavigate: 'NAVIGACIJA',
   navSectionAccount: 'PASKYRA',
   findMatch: 'Rasti rungtynes',
+  queueSearchingFor: 'Ieškoma rungtynių — {time}',
   notifications: 'Pranešimai',
   party: 'Grupė',
   messages: 'Žinutės',
