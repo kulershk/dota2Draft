@@ -2541,6 +2541,49 @@
         }
       }
     },
+    "/api/admin/players/{id}/gcoins": {
+      "get": {
+        "tags": ["Users"],
+        "summary": "Read a player's gcoins balance + recent transactions",
+        "description": "Returns { player: { id, name, display_name, avatar_url, gcoins }, transactions: [...] } (latest 50). Requires `manage_gcoins`.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": { "description": "Balance + transaction log" },
+          "404": { "description": "Player not found" }
+        }
+      },
+      "post": {
+        "tags": ["Users"],
+        "summary": "Adjust a player's gcoins balance",
+        "description": "Applies a signed delta to the player's gcoins balance and writes a row to gcoin_transactions for audit. Resulting balance must not go negative. Requires `manage_gcoins` permission.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["delta"],
+                "properties": {
+                  "delta": { "type": "integer", "description": "Signed amount to add (positive) or subtract (negative). Must be non-zero." },
+                  "reason": { "type": "string", "nullable": true, "description": "Optional note recorded with the transaction (≤280 chars)." }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Balance updated",
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "ok": { "type": "boolean" }, "gcoins": { "type": "integer" } } } } }
+          },
+          "400": { "description": "Invalid delta or resulting balance would be negative" },
+          "404": { "description": "Player not found" }
+        }
+      }
+    },
     "/api/admin/parse-steam-ids": {
       "post": {
         "tags": ["Users"],

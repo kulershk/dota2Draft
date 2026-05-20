@@ -142,7 +142,7 @@ const navGroups: NavGroup[] = [
     icon: Users,
     children: [
       { labelKey: 'users', icon: Users, path: '/admin/users', permissions: ['manage_users'] },
-      { labelKey: 'adminDotacoinsTitle', icon: Coins, path: '/admin/dotacoins', permissions: ['manage_dotacoins'] },
+      { labelKey: 'adminCurrencyTitle', icon: Coins, path: '/admin/dotacoins', permissions: ['manage_dotacoins', 'manage_gcoins'] },
       { labelKey: 'permissionGroups', icon: ShieldCheck, path: '/admin/permissions', permissions: ['manage_permissions'] },
       { labelKey: 'adminMmrVerifications', icon: Shield, path: '/admin/mmr-verifications', permissions: ['manage_mmr_verifications'] },
       { labelKey: 'adminReportsTitle', icon: Shield, path: '/admin/reports', permissions: ['review_grief_reports'] },

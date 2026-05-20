@@ -1,19 +1,36 @@
 <script setup lang="ts">
-// Standalone dotacoins admin page — gated by the manage_dotacoins
-// permission (or manage_users / admin). Lets an economy moderator
-// search a player, see their balance + recent transactions, and apply
-// a signed adjustment, without exposing the full user-management page.
-import { ref, computed } from 'vue'
+// Currency admin page — handles BOTH dotacoins and gcoins. A toggle picks the
+// active currency; only the currencies the admin can manage are shown
+// (manage_dotacoins / manage_gcoins, or full admin). Lets an economy
+// moderator search a player, see their balance + recent transactions, and
+// apply a signed adjustment without exposing the full user-management page.
+import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Coins, Search, Loader2, Plus, Minus } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
+import { useDraftStore } from '@/composables/useDraftStore'
 import { fmtDateTime } from '@/utils/format'
 
 const { t } = useI18n()
 const api = useApi()
+const store = useDraftStore()
 
+type Currency = 'dotacoins' | 'gcoins'
 interface TxRow { id: number; delta: number; reason: string | null; created_at: string; created_by_name: string | null }
-interface PlayerInfo { id: number; name: string; display_name: string; avatar_url: string | null; dotacoins: number }
+interface PlayerInfo { id: number; name: string; display_name: string; avatar_url: string | null; balance: number }
+
+const canDota = computed(() => store.isAdmin.value || store.hasPerm('manage_dotacoins'))
+const canG = computed(() => store.isAdmin.value || store.hasPerm('manage_gcoins'))
+const availableCurrencies = computed<Currency[]>(() => {
+  const arr: Currency[] = []
+  if (canDota.value) arr.push('dotacoins')
+  if (canG.value) arr.push('gcoins')
+  return arr
+})
+const currency = ref<Currency>(canDota.value ? 'dotacoins' : 'gcoins')
+const currencyLabel = computed(() => (currency.value === 'gcoins' ? t('gcoins') : t('dotacoins')))
+const pageTitle = computed(() => (currency.value === 'gcoins' ? t('adminGcoinsTitle') : t('adminDotacoinsTitle')))
+const pageDesc = computed(() => (currency.value === 'gcoins' ? t('adminGcoinsDesc') : t('adminDotacoinsDesc')))
 
 const searchQuery = ref('')
 const searchResults = ref<Array<{ id: number; name: string; display_name?: string | null; avatar_url?: string | null }>>([])
@@ -42,16 +59,22 @@ function onSearchInput() {
   }, 200)
 }
 
-async function pickPlayer(p: { id: number }) {
-  searchQuery.value = ''
-  searchResults.value = []
-  error.value = ''
-  delta.value = null
-  reason.value = ''
+// Fetch a player's balance + log for the active currency.
+async function loadPlayer(id: number) {
   loading.value = true
+  error.value = ''
   try {
-    const data = await api.getPlayerDotacoins(p.id)
-    selected.value = data.player
+    const data = currency.value === 'gcoins'
+      ? await api.getPlayerGcoins(id)
+      : await api.getPlayerDotacoins(id)
+    const pl = data.player
+    selected.value = {
+      id: pl.id,
+      name: pl.name,
+      display_name: pl.display_name,
+      avatar_url: pl.avatar_url,
+      balance: currency.value === 'gcoins' ? (pl.gcoins ?? 0) : (pl.dotacoins ?? 0),
+    }
     transactions.value = data.transactions || []
   } catch (e: any) {
     error.value = e?.message || 'Failed to load'
@@ -60,11 +83,27 @@ async function pickPlayer(p: { id: number }) {
   }
 }
 
+async function pickPlayer(p: { id: number }) {
+  searchQuery.value = ''
+  searchResults.value = []
+  delta.value = null
+  reason.value = ''
+  await loadPlayer(p.id)
+}
+
+// Switching currency re-loads the selected player against the other ledger.
+watch(currency, () => {
+  delta.value = null
+  reason.value = ''
+  error.value = ''
+  if (selected.value) loadPlayer(selected.value.id)
+})
+
 const previewBalance = computed(() => {
   if (!selected.value) return null
   const d = Number(delta.value)
-  if (!Number.isFinite(d) || d === 0) return selected.value.dotacoins
-  return selected.value.dotacoins + Math.trunc(d)
+  if (!Number.isFinite(d) || d === 0) return selected.value.balance
+  return selected.value.balance + Math.trunc(d)
 })
 const previewNegative = computed(() => (previewBalance.value ?? 0) < 0)
 
@@ -76,11 +115,12 @@ async function apply() {
   saving.value = true
   error.value = ''
   try {
-    const res = await api.adjustDotacoins(selected.value.id, d, reason.value.trim() || undefined)
-    selected.value.dotacoins = res.dotacoins
+    const res = currency.value === 'gcoins'
+      ? await api.adjustGcoins(selected.value.id, d, reason.value.trim() || undefined)
+      : await api.adjustDotacoins(selected.value.id, d, reason.value.trim() || undefined)
+    selected.value.balance = currency.value === 'gcoins' ? res.gcoins : res.dotacoins
     // Refresh the transaction log so the new row shows immediately.
-    const data = await api.getPlayerDotacoins(selected.value.id)
-    transactions.value = data.transactions || []
+    await loadPlayer(selected.value.id)
     delta.value = null
     reason.value = ''
   } catch (e: any) {
@@ -96,9 +136,24 @@ async function apply() {
     <div>
       <h1 class="text-2xl font-semibold text-foreground flex items-center gap-2">
         <Coins class="w-5 h-5 text-yellow-500" />
-        {{ t('adminDotacoinsTitle') }}
+        {{ pageTitle }}
       </h1>
-      <p class="text-sm text-muted-foreground mt-1">{{ t('adminDotacoinsDesc') }}</p>
+      <p class="text-sm text-muted-foreground mt-1">{{ pageDesc }}</p>
+    </div>
+
+    <!-- Currency toggle (only when the admin can manage more than one) -->
+    <div v-if="availableCurrencies.length > 1" class="flex items-center gap-2">
+      <button
+        v-for="c in availableCurrencies" :key="c"
+        type="button"
+        class="px-4 py-1.5 rounded-lg text-sm font-semibold border-2 transition-colors"
+        :class="currency === c
+          ? 'border-yellow-500 bg-yellow-500/10 text-yellow-500'
+          : 'border-border/60 text-muted-foreground hover:border-yellow-500/40'"
+        @click="currency = c"
+      >
+        {{ c === 'gcoins' ? t('gcoins') : t('dotacoins') }}
+      </button>
     </div>
 
     <!-- Player search -->
@@ -144,8 +199,8 @@ async function apply() {
             <p class="text-[11px] text-muted-foreground font-mono">#{{ selected.id }}</p>
           </div>
           <div class="text-right">
-            <p class="text-[10px] uppercase tracking-wider text-muted-foreground">{{ t('dotacoins') }}</p>
-            <p class="text-2xl font-bold font-mono text-yellow-500 tabular-nums">{{ selected.dotacoins.toLocaleString() }}</p>
+            <p class="text-[10px] uppercase tracking-wider text-muted-foreground">{{ currencyLabel }}</p>
+            <p class="text-2xl font-bold font-mono text-yellow-500 tabular-nums">{{ selected.balance.toLocaleString() }}</p>
           </div>
         </div>
 

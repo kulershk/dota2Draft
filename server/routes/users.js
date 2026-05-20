@@ -130,6 +130,71 @@ router.post('/api/admin/players/:id/dotacoins', async (req, res) => {
   res.json({ ok: true, dotacoins: newBalance })
 })
 
+// Shared gate for the gcoins admin endpoints: the dedicated `manage_gcoins`
+// permission (or full admin). Separate from dotacoins so the two currencies
+// can be delegated independently.
+async function requireGcoinsAdmin(req, res) {
+  const admin = await getAuthPlayer(req)
+  if (!admin) { res.status(401).json({ error: 'Not authenticated' }); return null }
+  const allowed = admin.is_admin || await hasPermission(admin, 'manage_gcoins')
+  if (!allowed) { res.status(403).json({ error: 'Permission denied' }); return null }
+  return admin
+}
+
+// Read a player's current gcoins balance + recent transaction log.
+router.get('/api/admin/players/:id/gcoins', async (req, res) => {
+  const admin = await requireGcoinsAdmin(req, res)
+  if (!admin) return
+  const playerId = Number(req.params.id)
+  const player = await queryOne(
+    'SELECT id, name, COALESCE(display_name, name) AS display_name, avatar_url, gcoins FROM players WHERE id = $1',
+    [playerId]
+  )
+  if (!player) return res.status(404).json({ error: 'Player not found' })
+  const transactions = await query(
+    `SELECT tx.id, tx.delta, tx.reason, tx.created_at,
+            COALESCE(cb.display_name, cb.name) AS created_by_name
+       FROM gcoin_transactions tx
+       LEFT JOIN players cb ON cb.id = tx.created_by
+      WHERE tx.player_id = $1
+      ORDER BY tx.id DESC
+      LIMIT 50`,
+    [playerId]
+  )
+  res.json({ player, transactions })
+})
+
+// Adjust a player's gcoins balance by a signed delta. Writes a gcoin_transactions
+// row for audit. Gated on `manage_gcoins` (is_admin always passes).
+router.post('/api/admin/players/:id/gcoins', async (req, res) => {
+  const admin = await requireGcoinsAdmin(req, res)
+  if (!admin) return
+  const playerId = Number(req.params.id)
+  if (!Number.isFinite(playerId)) return res.status(400).json({ error: 'Invalid player id' })
+  const delta = Math.trunc(Number(req.body?.delta))
+  if (!Number.isFinite(delta) || delta === 0) return res.status(400).json({ error: 'delta must be a non-zero integer' })
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 280) || null : null
+
+  const player = await queryOne('SELECT id, gcoins FROM players WHERE id = $1', [playerId])
+  if (!player) return res.status(404).json({ error: 'Player not found' })
+  const newBalance = (player.gcoins || 0) + delta
+  if (newBalance < 0) return res.status(400).json({ error: 'Balance cannot go negative' })
+
+  await execute('BEGIN')
+  try {
+    await execute('UPDATE players SET gcoins = $1 WHERE id = $2', [newBalance, playerId])
+    await execute(
+      'INSERT INTO gcoin_transactions (player_id, delta, reason, created_by) VALUES ($1, $2, $3, $4)',
+      [playerId, delta, reason, admin.id],
+    )
+    await execute('COMMIT')
+  } catch (e) {
+    await execute('ROLLBACK')
+    throw e
+  }
+  res.json({ ok: true, gcoins: newBalance })
+})
+
 // Player search (authenticated, for standin selection etc.)
 router.get('/api/players/search', async (req, res) => {
   const player = await getAuthPlayer(req)

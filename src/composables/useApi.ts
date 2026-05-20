@@ -488,6 +488,13 @@ export function useApi() {
       }),
     getPlayerDotacoins: (id: number) =>
       request(`/api/admin/players/${id}/dotacoins`),
+    adjustGcoins: (id: number, delta: number, reason?: string) =>
+      request(`/api/admin/players/${id}/gcoins`, {
+        method: 'POST',
+        body: JSON.stringify({ delta, reason: reason || null }),
+      }),
+    getPlayerGcoins: (id: number) =>
+      request(`/api/admin/players/${id}/gcoins`),
     getSlotsConfig: () => request('/api/slots/config'),
     spinSlots: (bet: number) =>
       request('/api/slots/spin', { method: 'POST', body: JSON.stringify({ bet }) }),
