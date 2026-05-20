@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Bot, Plus, Trash2, Plug, Unplug, ShieldQuestion, ChevronDown, ChevronUp, X, Circle, ExternalLink, Image as ImageIcon, Upload, Swords, Trophy, History } from 'lucide-vue-next'
+import { Bot, Plus, Trash2, Plug, Unplug, ShieldQuestion, ChevronDown, ChevronUp, X, Circle, ExternalLink, Image as ImageIcon, Upload, Swords, Trophy, History, Copy, Check } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { getSocket } from '@/composables/useSocket'
 import { fmtDateTime } from '@/utils/format'
@@ -26,6 +26,26 @@ async function fetchBots() {
   try {
     bots.value = await api.getBots()
   } catch { bots.value = [] }
+}
+
+// Steam profile URLs for every bot that has resolved its steam_id.
+// Used by the "copy all" button so an admin can paste the list into a
+// browser / friend-invite flow to set the bots up as friends.
+const botProfileUrls = computed<string[]>(() =>
+  bots.value
+    .filter(b => b.steam_id)
+    .map(b => `https://steamcommunity.com/profiles/${b.steam_id}`)
+)
+const copiedUrls = ref(false)
+async function copyProfileUrls() {
+  if (!botProfileUrls.value.length) return
+  try {
+    await navigator.clipboard.writeText(botProfileUrls.value.join('\n'))
+    copiedUrls.value = true
+    setTimeout(() => { copiedUrls.value = false }, 2000)
+  } catch {
+    // Clipboard API can be blocked (insecure context); ignore silently.
+  }
 }
 
 async function addBot() {
@@ -250,6 +270,15 @@ onUnmounted(() => {
         <h1 class="text-xl font-bold text-foreground">{{ t('botManagement') }}</h1>
       </div>
       <div class="flex items-center gap-2">
+        <button
+          v-if="botProfileUrls.length"
+          class="btn-secondary text-sm"
+          :title="t('copyBotProfileUrlsHint')"
+          @click="copyProfileUrls"
+        >
+          <component :is="copiedUrls ? Check : Copy" class="w-4 h-4" :class="copiedUrls ? 'text-green-500' : ''" />
+          {{ copiedUrls ? t('copied') : t('copyBotProfileUrls', { n: botProfileUrls.length }) }}
+        </button>
         <button
           v-if="bots.length"
           class="btn-secondary text-sm"
