@@ -78,6 +78,9 @@ router.get('/api/competitions', async (req, res) => {
     rows: sliced.map(c => ({
       ...c,
       settings: parseCompSettings(c),
+      // True when the current player is a helper on this comp — lets the
+      // admin list show comps they help on but didn't create.
+      am_helper: helperCompIds.has(c.id),
     })),
     total,
     limit: limit !== null ? limit : total,

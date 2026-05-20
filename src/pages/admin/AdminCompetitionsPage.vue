@@ -64,9 +64,9 @@ async function deleteCompetition(id: number) {
 const visibleCompetitions = computed(() => {
   const all = store.competitions.value
   if (store.hasPerm('manage_competitions')) return all
-  // manage_own_competitions: only show own
+  // manage_own_competitions / helper: show comps you created OR help on.
   const userId = store.currentUser.value?.id
-  return all.filter(c => c.created_by === userId)
+  return all.filter(c => c.created_by === userId || (c as any).am_helper)
 })
 
 function formatDate(dateStr: string) {
