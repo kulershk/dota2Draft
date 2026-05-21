@@ -126,6 +126,106 @@ export default function createSeasonsRouter(io) {
     }
   })
 
+  // ── Public: per-Friday inhouse standings ("Friday top") ──
+  // Only meaningful when the season has an inhouse-enabled pool: inhouse runs a
+  // special Friday with a top-3 net-points bonus. For each Friday that had
+  // matches we rank players by net season points earned that day (Europe/Riga
+  // calendar date) and re-derive the podium + bonus with the same slot/tie rule
+  // the Friday aggregator uses. Re-deriving (rather than reading the synthetic
+  // friday_top_bonus rows) is deliberate: those rows are written after midnight
+  // — i.e. on Saturday's date — and may not exist yet for the latest Friday.
+  router.get('/api/seasons/:slug/fridays', async (req, res) => {
+    try {
+      const s = await queryOne('SELECT id FROM seasons WHERE slug = $1', [req.params.slug])
+      if (!s) return res.status(404).json({ error: 'Season not found' })
+
+      // Bonus amounts come from the season's inhouse pool (smallest id wins if
+      // several, matching inhouseFridayBonus). No inhouse pool ⇒ feature off.
+      const inhousePool = await queryOne(
+        `SELECT friday_top1_bonus, friday_top2_bonus, friday_top3_bonus
+           FROM queue_pools WHERE season_id = $1 AND inhouse_enabled = TRUE ORDER BY id LIMIT 1`,
+        [s.id]
+      )
+      if (!inhousePool) return res.json({ enabled: false, fridays: [] })
+
+      // Net points + W/L per (Friday calendar date, player) from match-derived
+      // rows only — synthetic friday_top_bonus rows (queue_match_id IS NULL) are
+      // excluded. DOW 5 = Friday in Europe/Riga. Pre-sorted for the JS grouping.
+      const rows = await query(`
+        SELECT
+          to_char((sml.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Riga')::date, 'YYYY-MM-DD') AS date,
+          sml.player_id,
+          COALESCE(p.display_name, p.name) AS display_name,
+          p.name, p.avatar_url, p.mmr, p.mmr_verified_at,
+          SUM(sml.delta)::float8 AS net_points,
+          COUNT(*)::int                                 AS games,
+          COUNT(*) FILTER (WHERE sml.won IS TRUE)::int  AS wins,
+          COUNT(*) FILTER (WHERE sml.won IS FALSE)::int AS losses
+        FROM season_match_log sml
+        JOIN players p ON p.id = sml.player_id
+        WHERE sml.season_id = $1
+          AND sml.queue_match_id IS NOT NULL
+          AND EXTRACT(DOW FROM (sml.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Riga')) = 5
+        GROUP BY date, sml.player_id, display_name, p.name, p.avatar_url, p.mmr, p.mmr_verified_at
+        ORDER BY date DESC, net_points DESC, display_name ASC
+      `, [s.id])
+
+      // friday_topN_bonus slot prizes, in order.
+      const slots = [
+        Number(inhousePool.friday_top1_bonus ?? 12),
+        Number(inhousePool.friday_top2_bonus ?? 6),
+        Number(inhousePool.friday_top3_bonus ?? 6),
+      ]
+
+      // Group the already-sorted rows by date.
+      const byDate = new Map()
+      for (const r of rows) {
+        if (!byDate.has(r.date)) byDate.set(r.date, [])
+        byDate.get(r.date).push({
+          player_id: r.player_id,
+          display_name: r.display_name,
+          name: r.name,
+          avatar_url: r.avatar_url,
+          mmr: r.mmr,
+          mmr_verified_at: r.mmr_verified_at,
+          net_points: r.net_points,
+          games: r.games,
+          wins: r.wins,
+          losses: r.losses,
+          place: null,   // 1|2|3 once a podium slot is assigned
+          bonus: 0,      // Friday-top bonus this player would collect
+        })
+      }
+
+      // Re-derive the podium per day. Only net>0 players are eligible; ties at a
+      // slot pool that slot's prize with the next and split it equally (mirrors
+      // inhouseFridayBonus.applyFridayBonusForSeason).
+      const fridays = []
+      for (const [date, players] of byDate) {
+        const eligible = players.filter(pl => pl.net_points > 0)
+        let slotIdx = 0
+        let i = 0
+        while (slotIdx < slots.length && i < eligible.length) {
+          const place = slotIdx + 1
+          const tiedAt = eligible[i].net_points
+          const tied = []
+          while (i < eligible.length && eligible[i].net_points === tiedAt) { tied.push(eligible[i]); i++ }
+          const consumed = Math.min(tied.length, slots.length - slotIdx)
+          let combined = 0
+          for (let k = 0; k < consumed; k++) combined += slots[slotIdx + k]
+          const perPlayer = tied.length ? Math.round(combined / tied.length) : 0
+          for (const pl of tied) { pl.place = place; pl.bonus = perPlayer }
+          slotIdx += tied.length
+        }
+        fridays.push({ date, players })
+      }
+
+      res.json({ enabled: true, fridays })
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
   // ── Public: every season this player has played, with rank within it ──
   router.get('/api/players/:playerId/seasons', async (req, res) => {
     try {

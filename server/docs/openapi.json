@@ -3264,6 +3264,20 @@
         "responses": { "200": { "description": "Ranked rows" } }
       }
     },
+    "/api/seasons/{slug}/fridays": {
+      "get": {
+        "tags": ["Seasons"],
+        "summary": "Per-Friday inhouse standings (\"Friday top\")",
+        "description": "Returns `{ enabled, fridays }`. `enabled` is false (and `fridays` empty) unless the season has an inhouse-enabled queue pool. Each Friday (Europe/Riga calendar date that fell on a Friday) lists the players who played, ranked by net season points earned that day (match-derived rows only). The top-3 podium and `bonus` per player are re-derived using the pool's friday_top1/2/3_bonus with the same tie-splitting rule as the Friday bonus aggregator, so the view matches awarded prizes even before the post-midnight aggregator has run. Players: { player_id, display_name, name, avatar_url, mmr, mmr_verified_at, net_points, games, wins, losses, place (1|2|3|null), bonus }.",
+        "parameters": [
+          { "name": "slug", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "{ enabled: boolean, fridays: [{ date: 'YYYY-MM-DD', players: [...] }] } sorted by date DESC" },
+          "404": { "description": "Season not found" }
+        }
+      }
+    },
     "/api/mmr-verifications": {
       "post": {
         "tags": ["MMR Verifications"],

@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Medal, Trophy, ChevronLeft, BadgeCheck } from 'lucide-vue-next'
+import { Medal, Trophy, ChevronLeft, ChevronDown, ChevronRight, BadgeCheck } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { getSocket } from '@/composables/useSocket'
 
@@ -42,6 +42,25 @@ interface LeaderRow {
   last_match_at: string | null
 }
 
+interface FridayPlayer {
+  player_id: number
+  display_name: string
+  name: string
+  avatar_url: string | null
+  mmr: number
+  mmr_verified_at: string | null
+  net_points: number
+  games: number
+  wins: number
+  losses: number
+  place: number | null
+  bonus: number
+}
+interface FridayDay {
+  date: string
+  players: FridayPlayer[]
+}
+
 const { t } = useI18n()
 const route = useRoute()
 const api = useApi()
@@ -53,21 +72,71 @@ const rows = ref<LeaderRow[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
 
+// Fridays tab — only shown when the season has an inhouse-enabled pool.
+const tab = ref<'overall' | 'fridays'>('overall')
+const fridaysEnabled = ref(false)
+const fridays = ref<FridayDay[]>([])
+const expandedDates = ref<Set<string>>(new Set())
+const showAllDates = ref<Set<string>>(new Set())
+
 async function load() {
   loading.value = true
   error.value = null
   try {
-    const [s, rs] = await Promise.all([
+    const [s, rs, fr] = await Promise.all([
       api.getPublicSeason(slug.value),
       api.getSeasonLeaderboard(slug.value, { limit: 200 }),
+      // A Fridays failure must not blank the leaderboard.
+      api.getSeasonFridays(slug.value).catch(() => ({ enabled: false, fridays: [] })),
     ])
     season.value = s
     rows.value = rs
+    fridaysEnabled.value = !!fr?.enabled
+    fridays.value = fr?.fridays || []
+    // Expand the most recent Friday by default so the latest result is visible.
+    expandedDates.value = new Set(fridays.value.length ? [fridays.value[0].date] : [])
+    showAllDates.value = new Set()
+    if (!fridaysEnabled.value) tab.value = 'overall'
   } catch (e: any) {
     error.value = e.message || 'Failed to load season'
   } finally {
     loading.value = false
   }
+}
+
+function fmtFridayDate(d: string): string {
+  // d is a Europe/Riga calendar date 'YYYY-MM-DD'; midday avoids any TZ rollover.
+  return new Date(d + 'T12:00:00').toLocaleDateString(undefined, {
+    weekday: 'long', year: 'numeric', month: 'short', day: 'numeric',
+  })
+}
+function fmtNet(n: number): string {
+  const r = Math.round(Number(n) || 0)
+  return (r > 0 ? '+' : '') + r
+}
+function netClass(n: number): string {
+  return n > 0 ? 'text-green-500' : n < 0 ? 'text-red-500' : 'text-muted-foreground'
+}
+function medal(place: number | null): string {
+  return place === 1 ? '🥇' : place === 2 ? '🥈' : place === 3 ? '🥉' : ''
+}
+function podiumOf(day: FridayDay): FridayPlayer[] { return day.players.filter(p => p.place != null) }
+function restOf(day: FridayDay): FridayPlayer[] { return day.players.filter(p => p.place == null) }
+function dayWinner(day: FridayDay): FridayPlayer | null {
+  const top = day.players[0]
+  return top && top.net_points > 0 ? top : null
+}
+function isExpanded(d: string): boolean { return expandedDates.value.has(d) }
+function isShowAll(d: string): boolean { return showAllDates.value.has(d) }
+function toggleDate(d: string) {
+  const s = new Set(expandedDates.value)
+  s.has(d) ? s.delete(d) : s.add(d)
+  expandedDates.value = s
+}
+function toggleShowAll(d: string) {
+  const s = new Set(showAllDates.value)
+  s.has(d) ? s.delete(d) : s.add(d)
+  showAllDates.value = s
 }
 
 function fmtPoints(p: number): string {
@@ -148,6 +217,22 @@ onUnmounted(detachSocket)
         <span v-else class="px-2 py-1 rounded bg-muted/40">{{ t('seasonStatus_ended') }}</span>
       </div>
 
+      <!-- Tabs — the Fridays tab only exists when this season runs an inhouse competition. -->
+      <div v-if="fridaysEnabled" class="flex items-center gap-1 mb-4 border-b border-border/40">
+        <button
+          class="px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors"
+          :class="tab === 'overall' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'"
+          @click="tab = 'overall'"
+        >{{ t('seasonTabOverall') }}</button>
+        <button
+          class="px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors"
+          :class="tab === 'fridays' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'"
+          @click="tab = 'fridays'"
+        >{{ t('seasonTabFridays') }}</button>
+      </div>
+
+      <!-- ─── OVERALL TAB ─── -->
+      <template v-if="tab === 'overall'">
       <div v-if="rows.length === 0" class="card p-8 text-center text-muted-foreground">
         <Trophy class="w-10 h-10 mx-auto mb-3 opacity-40" />
         <p class="text-sm">{{ t('seasonLeaderboardEmpty') }}</p>
@@ -221,6 +306,79 @@ onUnmounted(detachSocket)
           {{ g.name }}
         </span>
       </div>
+      </template>
+
+      <!-- ─── FRIDAYS TAB ─── -->
+      <template v-else>
+        <div v-if="fridays.length === 0" class="card p-8 text-center text-muted-foreground">
+          <Trophy class="w-10 h-10 mx-auto mb-3 opacity-40" />
+          <p class="text-sm">{{ t('seasonFridaysEmpty') }}</p>
+        </div>
+        <div v-else class="flex flex-col gap-2">
+          <div v-for="day in fridays" :key="day.date" class="card overflow-hidden">
+            <!-- Day header — click to collapse/expand. Collapsed shows the winner. -->
+            <button
+              class="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-accent/20"
+              @click="toggleDate(day.date)"
+            >
+              <component :is="isExpanded(day.date) ? ChevronDown : ChevronRight" class="w-4 h-4 text-muted-foreground shrink-0" />
+              <span class="font-semibold text-sm">{{ fmtFridayDate(day.date) }}</span>
+              <span v-if="!isExpanded(day.date) && dayWinner(day)" class="text-xs text-muted-foreground ml-auto truncate">
+                {{ t('seasonFridayWonBy', { name: dayWinner(day)!.display_name, pts: fmtNet(dayWinner(day)!.net_points) }) }}
+              </span>
+            </button>
+
+            <div v-if="isExpanded(day.date)" class="border-t border-border/40">
+              <!-- Podium (always shown when expanded) -->
+              <router-link
+                v-for="p in podiumOf(day)" :key="p.player_id"
+                :to="{ name: 'player-profile', params: { id: p.player_id } }"
+                class="flex items-center gap-2 px-4 py-2 hover:bg-accent/20"
+              >
+                <span class="w-6 text-center text-base shrink-0">{{ medal(p.place) }}</span>
+                <img v-if="p.avatar_url" :src="p.avatar_url" class="w-7 h-7 rounded-full object-cover shrink-0" />
+                <div v-else class="w-7 h-7 rounded-full bg-accent shrink-0" />
+                <span class="font-semibold text-sm truncate">{{ p.display_name }}</span>
+                <BadgeCheck v-if="p.mmr_verified_at" class="w-4 h-4 text-cyan-400 shrink-0" :title="t('mmrVerifiedTooltip')" />
+                <span class="ml-auto font-mono tabular-nums font-bold text-sm" :class="netClass(p.net_points)">{{ fmtNet(p.net_points) }}</span>
+                <span class="font-mono tabular-nums text-xs w-12 text-right shrink-0">
+                  <span class="text-green-500">{{ p.wins }}</span><span class="text-muted-foreground">-</span><span class="text-red-500">{{ p.losses }}</span>
+                </span>
+                <span class="w-12 text-right shrink-0">
+                  <span v-if="p.bonus" class="text-[11px] text-amber-400 font-semibold" :title="t('seasonFridayBonusTooltip')">+{{ p.bonus }}★</span>
+                </span>
+              </router-link>
+
+              <!-- Full standings (everyone beyond the podium), behind a toggle -->
+              <button
+                v-if="restOf(day).length"
+                class="w-full text-center text-xs text-muted-foreground hover:text-foreground py-2 border-t border-border/40"
+                @click="toggleShowAll(day.date)"
+              >
+                {{ isShowAll(day.date) ? t('seasonFridayShowLess') : t('seasonFridayShowAll', { n: day.players.length }) }}
+              </button>
+              <template v-if="isShowAll(day.date)">
+                <router-link
+                  v-for="(p, idx) in restOf(day)" :key="p.player_id"
+                  :to="{ name: 'player-profile', params: { id: p.player_id } }"
+                  class="flex items-center gap-2 px-4 py-2 bg-muted/10 hover:bg-accent/20 border-t border-border/30"
+                >
+                  <span class="w-6 text-center text-xs text-muted-foreground font-mono tabular-nums shrink-0">{{ podiumOf(day).length + idx + 1 }}</span>
+                  <img v-if="p.avatar_url" :src="p.avatar_url" class="w-6 h-6 rounded-full object-cover shrink-0" />
+                  <div v-else class="w-6 h-6 rounded-full bg-accent shrink-0" />
+                  <span class="text-sm truncate">{{ p.display_name }}</span>
+                  <BadgeCheck v-if="p.mmr_verified_at" class="w-3.5 h-3.5 text-cyan-400 shrink-0" :title="t('mmrVerifiedTooltip')" />
+                  <span class="ml-auto font-mono tabular-nums text-sm" :class="netClass(p.net_points)">{{ fmtNet(p.net_points) }}</span>
+                  <span class="font-mono tabular-nums text-xs w-12 text-right shrink-0">
+                    <span class="text-green-500">{{ p.wins }}</span><span class="text-muted-foreground">-</span><span class="text-red-500">{{ p.losses }}</span>
+                  </span>
+                  <span class="w-12 shrink-0"></span>
+                </router-link>
+              </template>
+            </div>
+          </div>
+        </div>
+      </template>
     </template>
   </div>
 </template>

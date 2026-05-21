@@ -759,6 +759,8 @@ export function useApi() {
       const tail = qs.toString() ? `?${qs}` : ''
       return request(`/api/seasons/${slug}/leaderboard${tail}`)
     },
+    getSeasonFridays: (slug: string) =>
+      request(`/api/seasons/${slug}/fridays`),
     getSeasonPlayer: (slug: string, playerId: number) =>
       request(`/api/seasons/${slug}/players/${playerId}`),
     getPlayerSeasons: (playerId: number) =>
