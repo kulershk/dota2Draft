@@ -4,6 +4,7 @@ import { requireSeasonPermission, hasPermission } from '../middleware/permission
 import { getAuthPlayer } from '../middleware/auth.js'
 import { adjustPlayerPoints, recomputeSeasonFromHistory, backfillSeasonFromPoolHistory } from '../services/seasonRankingApply.js'
 import { applyFridayBonusForSeason } from '../services/inhouseFridayBonus.js'
+import { fridayWindowSql, clampHour } from '../services/fridayWindow.js'
 import { withDefaults } from '../services/seasonRating.js'
 import { poolQueues, playerInQueue } from '../socket/queueState.js'
 import { broadcastQueueUpdate } from '../socket/queue.js'
@@ -128,32 +129,36 @@ export default function createSeasonsRouter(io) {
 
   // ── Public: per-Friday inhouse standings ("Friday top") ──
   // Only meaningful when the season has an inhouse-enabled pool: inhouse runs a
-  // special Friday with a top-3 net-points bonus. For each Friday that had
-  // matches we rank players by net season points earned that day (Europe/Riga
-  // calendar date) and re-derive the podium + bonus with the same slot/tie rule
-  // the Friday aggregator uses. Re-deriving (rather than reading the synthetic
-  // friday_top_bonus rows) is deliberate: those rows are written after midnight
-  // — i.e. on Saturday's date — and may not exist yet for the latest Friday.
+  // special Friday with a top-3 net-points bonus. For each Friday window that
+  // had matches we rank players by net season points earned in that window
+  // (the pool's configurable Europe/Riga window, see services/fridayWindow.js)
+  // and re-derive the podium + bonus with the same slot/tie rule the Friday
+  // aggregator uses. Re-deriving (rather than reading the synthetic
+  // friday_top_bonus rows) is deliberate: it works even before the aggregator
+  // has finalised the window.
   router.get('/api/seasons/:slug/fridays', async (req, res) => {
     try {
       const s = await queryOne('SELECT id FROM seasons WHERE slug = $1', [req.params.slug])
       if (!s) return res.status(404).json({ error: 'Season not found' })
 
-      // Bonus amounts come from the season's inhouse pool (smallest id wins if
-      // several, matching inhouseFridayBonus). No inhouse pool ⇒ feature off.
+      // Bonus amounts + the Friday window come from the season's inhouse pool
+      // (smallest id wins, matching inhouseFridayBonus). No inhouse pool ⇒ off.
       const inhousePool = await queryOne(
-        `SELECT friday_top1_bonus, friday_top2_bonus, friday_top3_bonus
+        `SELECT friday_top1_bonus, friday_top2_bonus, friday_top3_bonus,
+                friday_window_start_hour, friday_window_end_hour
            FROM queue_pools WHERE season_id = $1 AND inhouse_enabled = TRUE ORDER BY id LIMIT 1`,
         [s.id]
       )
       if (!inhousePool) return res.json({ enabled: false, fridays: [] })
 
-      // Net points + W/L per (Friday calendar date, player) from match-derived
-      // rows only — synthetic friday_top_bonus rows (queue_match_id IS NULL) are
-      // excluded. DOW 5 = Friday in Europe/Riga. Pre-sorted for the JS grouping.
+      // Map each match-derived row to its Friday window date (NULL outside any
+      // window). Synthetic friday_top_bonus rows (queue_match_id IS NULL) are
+      // excluded. Pre-sorted for the JS grouping below.
+      const windowExpr = fridayWindowSql('sml.created_at',
+        clampHour(inhousePool.friday_window_start_hour), clampHour(inhousePool.friday_window_end_hour))
       const rows = await query(`
         SELECT
-          to_char((sml.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Riga')::date, 'YYYY-MM-DD') AS date,
+          to_char(${windowExpr}, 'YYYY-MM-DD') AS date,
           sml.player_id,
           COALESCE(p.display_name, p.name) AS display_name,
           p.name, p.avatar_url, p.mmr, p.mmr_verified_at,
@@ -165,7 +170,7 @@ export default function createSeasonsRouter(io) {
         JOIN players p ON p.id = sml.player_id
         WHERE sml.season_id = $1
           AND sml.queue_match_id IS NOT NULL
-          AND EXTRACT(DOW FROM (sml.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Riga')) = 5
+          AND (${windowExpr}) IS NOT NULL
         GROUP BY date, sml.player_id, display_name, p.name, p.avatar_url, p.mmr, p.mmr_verified_at
         ORDER BY date DESC, net_points DESC, display_name ASC
       `, [s.id])
@@ -516,7 +521,8 @@ export default function createSeasonsRouter(io) {
   // Idempotent — re-running for the same date no-ops via the
   // season_match_log_friday_top_unique partial index. Body: { friday_date:
   // 'YYYY-MM-DD' }. Useful for testing and for back-filling a day that the
-  // scheduler missed (e.g. server downtime over midnight).
+  // scheduler missed (e.g. server downtime). `force` bypasses the window-closed
+  // guard so an admin can finalize a Friday whose window is still open.
   router.post('/api/admin/seasons/:id/friday-bonus', async (req, res) => {
     const admin = await requireSeasonPermission(req, res, Number(req.params.id))
     if (!admin) return
@@ -526,7 +532,7 @@ export default function createSeasonsRouter(io) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(fridayDate)) return res.status(400).json({ error: 'friday_date required (YYYY-MM-DD)' })
       const s = await queryOne('SELECT id FROM seasons WHERE id = $1', [seasonId])
       if (!s) return res.status(404).json({ error: 'Season not found' })
-      const result = await applyFridayBonusForSeason(seasonId, fridayDate)
+      const result = await applyFridayBonusForSeason(seasonId, fridayDate, { force: true })
       if (io) io.emit('season:rankUpdated', { seasonId, fridayDate })
       res.json({ ok: true, ...result })
     } catch (e) {

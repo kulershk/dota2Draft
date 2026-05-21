@@ -1060,6 +1060,10 @@ export async function initDb() {
     ['friday_top1_bonus',           'INTEGER NOT NULL DEFAULT 12'],
     ['friday_top2_bonus',           'INTEGER NOT NULL DEFAULT 6'],
     ['friday_top3_bonus',           'INTEGER NOT NULL DEFAULT 6'],
+    // Configurable Friday window (Europe/Riga): starts Fri at start_hour, ends
+    // Sat at end_hour. 0/0 = plain calendar Friday. See services/fridayWindow.js.
+    ['friday_window_start_hour',    'INTEGER NOT NULL DEFAULT 0'],
+    ['friday_window_end_hour',      'INTEGER NOT NULL DEFAULT 0'],
     ['leaver_penalty',              'INTEGER NOT NULL DEFAULT -50'],
     ['leaver_grace_minutes',        'INTEGER NOT NULL DEFAULT 15'],
     ['winstreak_tiers',             `JSONB NOT NULL DEFAULT '[{"streak":3,"bonus":1},{"streak":5,"bonus":2},{"streak":8,"bonus":3}]'::jsonb`],

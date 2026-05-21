@@ -10,6 +10,7 @@
 
 import pool, { query, queryOne, execute } from '../db.js'
 import { computeDelta, clampPoints, teamAvgMmr, withDefaults, mmrDiffBonus, winstreakBonus } from './seasonRating.js'
+import { isInFridayWindow } from './fridayWindow.js'
 
 export async function applyMatchToSeason({
   queueMatchId,
@@ -68,7 +69,9 @@ export async function applyMatchToSeason({
       if (qm?.pool_id) inhousePool = (await client.query('SELECT * FROM queue_pools WHERE id = $1', [qm.pool_id])).rows[0] || null
     }
     const inhouse = !!inhousePool?.inhouse_enabled
-    const isFriday = new Date().getDay() === 5
+    // Friday is the pool's configurable Riga window, evaluated at match-end
+    // (now). Falls back to the plain calendar Friday when hours are 0/0.
+    const isFriday = isInFridayWindow(new Date(), inhousePool?.friday_window_start_hour, inhousePool?.friday_window_end_hour)
 
     // Pull MMR + winstreak for everyone in both teams.
     const allIds = [...new Set([...team1PlayerIds, ...team2PlayerIds])]
@@ -340,6 +343,7 @@ export async function recomputeSeasonFromHistory(seasonId) {
            (SELECT winner_captain_id FROM matches WHERE id = qm.match_id) AS winner_captain_id,
            qm.captain1_player_id, qm.captain2_player_id, qm.completed_at,
            qp.inhouse_enabled, qp.mmr_diff_tiers, qp.winstreak_tiers, qp.friday_win_bonus,
+           qp.friday_window_start_hour, qp.friday_window_end_hour,
            qp.use_static_points, qp.inhouse_win_points, qp.inhouse_loss_points
     FROM queue_matches qm
     LEFT JOIN queue_pools qp ON qp.id = qm.pool_id
@@ -411,7 +415,9 @@ export async function recomputeSeasonFromHistory(seasonId) {
       // had a leaver. Acceptable for an admin diagnostic — re-apply via a
       // future manual adjust if absolute parity is needed.
       const inhouseHere = !!m.inhouse_enabled
-      const matchIsFriday = m.completed_at ? new Date(m.completed_at).getDay() === 5 : false
+      const matchIsFriday = m.completed_at
+        ? isInFridayWindow(m.completed_at, m.friday_window_start_hour, m.friday_window_end_hour)
+        : false
       // Compute the base delta for one player on a given side. Mirrors the
       // live path: static-points mode skips ELO, leaver penalty still
       // overrides everything (but recompute has no leaver snapshot, so

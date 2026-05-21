@@ -10,6 +10,7 @@ import { botPool } from '../services/botPool.js'
 import { discordBot } from '../services/discordBotClient.js'
 import { hasPerk, PERK } from '../helpers/subscription.js'
 import { broadcastPresence } from './presence.js'
+import { isInFridayWindow } from '../services/fridayWindow.js'
 
 // Generate pick order for a given pool + team size.
 // When pool.pick_order is a valid CSV of "1"/"2" with the right per-captain
@@ -1255,7 +1256,7 @@ async function finalizeQueueMatch(queueMatchId, io) {
     // inhouse_enabled. Otherwise the bot uses pool.lobby_game_mode as before.
     let gameModeOverride
     if (match.pool?.inhouse_enabled) {
-      const isFriday = new Date().getDay() === 5
+      const isFriday = isInFridayWindow(new Date(), match.pool.friday_window_start_hour, match.pool.friday_window_end_hour)
       gameModeOverride = isFriday
         ? (match.pool.friday_game_mode ?? 2)
         : (match.pool.weekday_game_mode ?? 16)

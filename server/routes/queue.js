@@ -413,6 +413,7 @@ export default function createQueueRouter(io) {
       inhouse_enabled, pick_order,
       weekday_game_mode, friday_game_mode,
       friday_win_bonus, friday_top1_bonus, friday_top2_bonus, friday_top3_bonus,
+      friday_window_start_hour, friday_window_end_hour,
       leaver_penalty, leaver_grace_minutes,
       winstreak_tiers, mmr_diff_tiers,
       prize_active_pct,
@@ -451,9 +452,10 @@ export default function createQueueRouter(io) {
           toxic_report_thresholds, toxic_strike_cooldowns, grief_strike_cooldowns,
           clean_games_to_decay_strike,
           report_window_minutes,
-          use_static_points, inhouse_win_points, inhouse_loss_points
+          use_static_points, inhouse_win_points, inhouse_loss_points,
+          friday_window_start_hour, friday_window_end_hour
         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,
-                  $31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51)
+                  $31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53)
         RETURNING *
       `, [
         name, enabled !== false, min_mmr || 0, max_mmr || 0,
@@ -482,6 +484,8 @@ export default function createQueueRouter(io) {
         !!use_static_points,
         inhouse_win_points ?? 21,
         inhouse_loss_points ?? 19,
+        Math.min(23, Math.max(0, Math.trunc(Number(friday_window_start_hour)) || 0)),
+        Math.min(23, Math.max(0, Math.trunc(Number(friday_window_end_hour)) || 0)),
       ])
       res.status(201).json(pool)
     } catch (e) {
@@ -518,6 +522,7 @@ export default function createQueueRouter(io) {
         'inhouse_enabled', 'pick_order',
         'weekday_game_mode', 'friday_game_mode',
         'friday_win_bonus', 'friday_top1_bonus', 'friday_top2_bonus', 'friday_top3_bonus',
+        'friday_window_start_hour', 'friday_window_end_hour',
         'leaver_penalty', 'leaver_grace_minutes',
         'winstreak_tiers', 'mmr_diff_tiers',
         'prize_active_pct',
@@ -530,6 +535,8 @@ export default function createQueueRouter(io) {
         'winstreak_tiers', 'mmr_diff_tiers',
         'toxic_report_thresholds', 'toxic_strike_cooldowns', 'grief_strike_cooldowns',
       ])
+      // Friday window hours are clamped to a valid 0–23 before persisting.
+      const hourFields = new Set(['friday_window_start_hour', 'friday_window_end_hour'])
       // Validate pick_order against the effective team_size (post-change).
       if (req.body.pick_order !== undefined) {
         const ts = req.body.team_size !== undefined ? Number(req.body.team_size) : existing.team_size
@@ -541,7 +548,10 @@ export default function createQueueRouter(io) {
       for (const f of fields) {
         if (req.body[f] !== undefined) {
           const raw = req.body[f]
-          values.push(jsonbFields.has(f) ? JSON.stringify(raw) : raw)
+          const val = jsonbFields.has(f) ? JSON.stringify(raw)
+            : hourFields.has(f) ? Math.min(23, Math.max(0, Math.trunc(Number(raw)) || 0))
+            : raw
+          values.push(val)
           setClauses.push(`${f} = $${values.length}`)
         }
       }

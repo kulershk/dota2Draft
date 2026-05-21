@@ -59,6 +59,8 @@ const INHOUSE_DEFAULTS = {
   friday_top1_bonus: 12,
   friday_top2_bonus: 6,
   friday_top3_bonus: 6,
+  friday_window_start_hour: 0,
+  friday_window_end_hour: 0,
   leaver_penalty: -50,
   leaver_grace_minutes: 15,
   winstreak_tiers: [{ streak: 3, bonus: 1 }, { streak: 5, bonus: 2 }, { streak: 8, bonus: 3 }],
@@ -132,6 +134,13 @@ function resetForm() {
     grief_strike_cooldowns: INHOUSE_DEFAULTS.grief_strike_cooldowns.map(t => ({ ...t })),
   }
 }
+
+// Friday window slider helpers. Hours are 0–23 (Europe/Riga); the window runs
+// from Friday start_hour to Saturday end_hour. 0/0 = plain calendar Friday.
+function hh(h: number): string { return String(Math.min(23, Math.max(0, Math.trunc(Number(h)) || 0))).padStart(2, '0') + ':00' }
+const fridayWindowLabel = computed(
+  () => `Fri ${hh(form.value.friday_window_start_hour)} → Sat ${hh(form.value.friday_window_end_hour)}`
+)
 
 async function fetchPools() {
   try { pools.value = await api.getAdminQueuePools() } catch { pools.value = [] }
@@ -897,6 +906,30 @@ onUnmounted(() => {
                   <option :value="22">AD</option><option :value="23">Turbo</option>
                 </select>
               </div>
+            </div>
+
+            <!-- Friday window: a Riga-time window from Friday start_hour to
+                 Saturday end_hour. 0/0 = plain calendar Friday. Drives the
+                 Friday game mode, win bonus, top-3 bonus and leaderboard tab. -->
+            <div>
+              <label class="text-xs text-muted-foreground">{{ t('queueInhouseFridayWindow') }}</label>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 mt-1">
+                <div>
+                  <div class="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>{{ t('queueInhouseFridayWindowStart') }}</span>
+                    <span class="font-mono tabular-nums text-foreground">{{ hh(form.friday_window_start_hour) }}</span>
+                  </div>
+                  <input type="range" min="0" max="23" step="1" v-model.number="form.friday_window_start_hour" class="w-full accent-primary" />
+                </div>
+                <div>
+                  <div class="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>{{ t('queueInhouseFridayWindowEnd') }}</span>
+                    <span class="font-mono tabular-nums text-foreground">{{ hh(form.friday_window_end_hour) }}</span>
+                  </div>
+                  <input type="range" min="0" max="23" step="1" v-model.number="form.friday_window_end_hour" class="w-full accent-primary" />
+                </div>
+              </div>
+              <p class="text-[11px] text-muted-foreground mt-1">{{ t('queueInhouseFridayWindowHint', { window: fridayWindowLabel }) }}</p>
             </div>
           </div>
 

@@ -293,6 +293,8 @@
           "xp_participate": { "type": "integer" },
           "rules_title": { "type": "string", "description": "Heading shown above the rules block on /queue when this pool is selected. Empty = falls back to the localized 'Rules' label." },
           "rules_content": { "type": "string", "description": "Sanitized HTML body shown in the collapsible rules card on /queue. Empty = no rules card is rendered for this pool." },
+          "friday_window_start_hour": { "type": "integer", "description": "Inhouse only. Hour (0–23, Europe/Riga) the Friday window starts on Friday." },
+          "friday_window_end_hour": { "type": "integer", "description": "Inhouse only. Hour (0–23, Europe/Riga) the Friday window ends on the following Saturday. Together with start it defines the window [Fri start, Sat end) that counts as a Friday for the game mode, win bonus, top-3 bonus and leaderboard. 0/0 = the whole calendar Friday." },
           "created_at": { "type": "string", "format": "date-time" },
           "queue_count": { "type": "integer", "description": "Number of players currently waiting in this pool. Included on the public /api/queue/pools listing for pool-selector badges; not persisted in the DB." }
         }
@@ -326,7 +328,9 @@
           "xp_win": { "type": "integer", "default": 15 },
           "xp_participate": { "type": "integer", "default": 5 },
           "rules_title": { "type": "string", "default": "", "description": "Heading for the rules block. Optional." },
-          "rules_content": { "type": "string", "default": "", "description": "Sanitized HTML body for the rules block. Optional." }
+          "rules_content": { "type": "string", "default": "", "description": "Sanitized HTML body for the rules block. Optional." },
+          "friday_window_start_hour": { "type": "integer", "default": 0, "minimum": 0, "maximum": 23, "description": "Inhouse only. Hour (Europe/Riga) the Friday window starts on Friday. Clamped to 0–23." },
+          "friday_window_end_hour": { "type": "integer", "default": 0, "minimum": 0, "maximum": 23, "description": "Inhouse only. Hour (Europe/Riga) the Friday window ends on the following Saturday. Window = [Fri start, Sat end). 0/0 = the whole calendar Friday." }
         }
       }
     }
@@ -3268,7 +3272,7 @@
       "get": {
         "tags": ["Seasons"],
         "summary": "Per-Friday inhouse standings (\"Friday top\")",
-        "description": "Returns `{ enabled, fridays }`. `enabled` is false (and `fridays` empty) unless the season has an inhouse-enabled queue pool. Each Friday (Europe/Riga calendar date that fell on a Friday) lists the players who played, ranked by net season points earned that day (match-derived rows only). The top-3 podium and `bonus` per player are re-derived using the pool's friday_top1/2/3_bonus with the same tie-splitting rule as the Friday bonus aggregator, so the view matches awarded prizes even before the post-midnight aggregator has run. Players: { player_id, display_name, name, avatar_url, mmr, mmr_verified_at, net_points, games, wins, losses, place (1|2|3|null), bonus }.",
+        "description": "Returns `{ enabled, fridays }`. `enabled` is false (and `fridays` empty) unless the season has an inhouse-enabled queue pool. Each entry is one Friday window (the pool's configurable Europe/Riga window: [Fri friday_window_start_hour, Sat friday_window_end_hour); 0/0 = the whole calendar Friday) keyed by the Friday's date, listing the players who played, ranked by net season points earned in that window (match-derived rows only). The top-3 podium and `bonus` per player are re-derived using the pool's friday_top1/2/3_bonus with the same tie-splitting rule as the Friday bonus aggregator, so the view matches awarded prizes even before the aggregator has finalised the window. Players: { player_id, display_name, name, avatar_url, mmr, mmr_verified_at, net_points, games, wins, losses, place (1|2|3|null), bonus }.",
         "parameters": [
           { "name": "slug", "in": "path", "required": true, "schema": { "type": "string" } }
         ],
