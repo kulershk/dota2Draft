@@ -12,6 +12,13 @@ import { discordBot } from './discordBotClient.js'
 import SteamCommunity from 'steamcommunity'
 import { LoginSession, EAuthTokenPlatformType } from 'steam-session'
 
+// Flat gcoins payout for finishing a queue match — credited once per player
+// when the match completes (winners get more, losers get a consolation amount).
+// XP is configured per-pool; this gcoins reward is intentionally a fixed
+// global value, so it lives here as a constant rather than a pool column.
+const GCOIN_QUEUE_WIN = 200
+const GCOIN_QUEUE_LOSS = 50
+
 class BotPool {
   constructor() {
     this.io = null
@@ -1136,9 +1143,42 @@ class BotPool {
             })
           }
         }
-        // Update queue match status
-        await execute("UPDATE queue_matches SET status = 'completed', completed_at = NOW() WHERE id = $1", [queueMatchXp.id])
+        // Update queue match status. The `status != 'completed'` guard makes
+        // this transition fire exactly once even if _autoFillGameWinner is
+        // retried — gcoin_transactions has no per-row idempotency key like
+        // xp_log, so we hang the one-time gcoins payout off this guard.
+        const { rowCount: justCompleted } = await execute(
+          "UPDATE queue_matches SET status = 'completed', completed_at = NOW() WHERE id = $1 AND status != 'completed'",
+          [queueMatchXp.id]
+        )
         // (live poller already stopped at the top of _autoFillGameWinner)
+
+        // ── gcoins: queue match payout ──
+        // Winners get GCOIN_QUEUE_WIN, losers GCOIN_QUEUE_LOSS. Each player gets
+        // a gcoin_transactions audit row and a live balance push so the in-queue
+        // slot machine reflects the new total without a reload.
+        if (justCompleted > 0) {
+          const payout = async (ids, delta, label) => {
+            if (!ids?.length) return
+            const updated = await query(
+              'UPDATE players SET gcoins = gcoins + $1 WHERE id = ANY($2::int[]) RETURNING id, gcoins',
+              [delta, ids]
+            )
+            await execute(
+              'INSERT INTO gcoin_transactions (player_id, delta, reason) SELECT unnest($1::int[]), $2, $3',
+              [ids, delta, `Queue ${label} (${queueMatchXp.pool_name})`]
+            )
+            for (const row of updated) {
+              this.io?.to(`user:${row.id}`).emit('gcoins:balance', { gcoins: row.gcoins, delta, reason: `queue_${label}` })
+            }
+          }
+          try {
+            await payout(winIds, GCOIN_QUEUE_WIN, 'win')
+            await payout(loseIds, GCOIN_QUEUE_LOSS, 'loss')
+          } catch (e) {
+            console.error('[gcoins] queue payout failed for match', queueMatchXp.id, e.message)
+          }
+        }
 
         // Tell the discord bot to schedule cleanup of per-team voice channels.
         // Fire-and-forget — failures here MUST NOT block the season/XP path.

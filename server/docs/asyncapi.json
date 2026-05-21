@@ -1502,6 +1502,22 @@
           }
         }
       }
+    },
+    "gcoins:balance": {
+      "subscribe": {
+        "summary": "The player's gcoins balance changed server-side (PRIVATE — sent only to the affected player's `user:${id}` room). Currently emitted on queue match completion: winners are credited 200 gcoins, losers 50. The client overwrites its cached balance with `gcoins`.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "gcoins": { "type": "integer", "description": "New total gcoins balance" },
+              "delta": { "type": "integer", "description": "Signed amount applied by this change" },
+              "reason": { "type": "string", "description": "Source of the change, e.g. \"queue_win\" or \"queue_loss\"" }
+            },
+            "required": ["gcoins"]
+          }
+        }
+      }
     }
   }
 }

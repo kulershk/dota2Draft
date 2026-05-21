@@ -249,6 +249,12 @@ onMounted(async () => {
   sock.on('message:read', (data: { reader_id: number; message_ids: number[] }) => {
     messageStore.onMessagesRead(data.reader_id, data.message_ids)
   })
+
+  // gcoins balance push — server credits queue match payouts (and any other
+  // server-side change) and sends the new total so the slot machine stays fresh.
+  sock.on('gcoins:balance', (p: { gcoins: number }) => {
+    if (store.currentUser.value) store.currentUser.value.gcoins = p.gcoins
+  })
 })
 
 // If the user gets logged in later (e.g. Steam redirect), also sync then.
