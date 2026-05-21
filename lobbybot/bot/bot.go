@@ -357,6 +357,30 @@ func (b *Bot) Disconnect() {
 	b.setStatus(StatusOffline)
 }
 
+// RecoverGCSession forces a full Steam+GC reconnect to clear a silently-dead
+// GC session. When the GC drops/forgets a session without telling us, the
+// Steam connection stays up but every GC request (CreateLobby, etc.) hangs
+// until its context deadline. go-dota2 can't detect or recover from this on
+// its own — only a fresh ClientHello handshake does — so a bot left in this
+// state would fail every later lobby creation until an operator restarts it.
+//
+// We trigger recovery by disconnecting the underlying Steam client, which
+// emits a DisconnectedEvent and drives the existing auto-reconnect path in
+// handleSteamEvents (fresh client → login → GC hello → ClientWelcomed →
+// available). This mirrors a manual bot restart, so the next lobby attempt
+// works without intervention.
+func (b *Bot) RecoverGCSession(reason string) {
+	sc := b.steamClient
+	if sc != nil && sc.Connected() {
+		b.log(fmt.Sprintf("Recovering GC session (%s) — forcing reconnect", reason))
+		sc.Disconnect()
+		return
+	}
+	// Steam itself isn't connected: the disconnect/error path is already
+	// reconnecting (or the bot is offline), so there's nothing to force here.
+	b.log(fmt.Sprintf("RecoverGCSession (%s): Steam not connected — relying on existing reconnect path", reason))
+}
+
 func (b *Bot) SubmitSteamGuard(code string) {
 	select {
 	case b.guardCh <- code:

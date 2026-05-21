@@ -2,6 +2,7 @@ package lobby
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"lobbybot/bot"
 	"lobbybot/protocol"
@@ -185,6 +186,14 @@ func (m *Manager) runLobby(ctx context.Context, lobby *Lobby) {
 		lobby.Bot.SetActiveLobbyID("")
 		lobby.Bot.SetBusy(false)
 		m.removeLobby(lobby.ID)
+		// A context-deadline error means the GC never answered the create —
+		// the bot's GC session is almost certainly dead, and go-dota2 won't
+		// recover it on its own. Without this, every later create on this bot
+		// would time out the same way until someone restarts it. Force a
+		// reconnect so the bot self-heals for the next attempt.
+		if errors.Is(err, context.DeadlineExceeded) {
+			lobby.Bot.RecoverGCSession("create lobby timed out — GC not responding")
+		}
 		return
 	}
 
