@@ -2219,16 +2219,18 @@
     "/api/slots/config": {
       "get": {
         "tags": ["Slots"],
-        "summary": "Slot machine config: bet tiers + paytable",
-        "description": "Public config the client needs to render the in-queue slot machine. Payouts are multipliers on the bet.",
+        "summary": "Slot machine config: bet tiers, paytable, paylines",
+        "description": "Public config for the in-queue Book of Ra-style slot. 5×3 grid, fixed paylines. Line wins pay `mult × (bet/lines)`; the Aegis is wild + scatter and pays `scatter[count] × bet`.",
         "responses": {
           "200": {
             "description": "Slot config",
             "content": { "application/json": { "schema": { "type": "object", "properties": {
               "betTiers": { "type": "array", "items": { "type": "integer" } },
-              "symbols": { "type": "array", "items": { "type": "object", "properties": { "key": { "type": "string", "description": "Internal hero key (e.g. \"meepo\")" }, "heroId": { "type": "integer", "description": "Dota 2 hero id for the portrait" }, "name": { "type": "string", "description": "Localized hero name" }, "three": { "type": "integer", "description": "Three-of-a-kind multiplier" } } } },
-              "consolationKey": { "type": "string", "description": "Hero key that pays a consolation on exactly two-of-a-kind" },
-              "consolationMult": { "type": "integer", "description": "Multiplier for exactly two of the consolation hero" }
+              "lines": { "type": "integer", "description": "Number of fixed paylines" },
+              "paylines": { "type": "array", "items": { "type": "array", "items": { "type": "integer" } }, "description": "Row index (0/1/2) per reel for each line" },
+              "symbols": { "type": "array", "items": { "type": "object", "properties": { "key": { "type": "string" }, "heroId": { "type": "integer", "description": "Dota 2 hero id for the portrait" }, "tier": { "type": "string" }, "pay": { "type": "object", "description": "Map of run length (2/3/4/5) → × lineStake multiplier" } } } },
+              "aegis": { "type": "object", "properties": { "itemId": { "type": "integer", "description": "Dota item id for the Aegis portrait" }, "name": { "type": "string" }, "scatter": { "type": "object", "description": "Map of scatter count (3/4/5) → × total bet" }, "freeSpins": { "type": "integer" } } },
+              "gamble": { "type": "object", "properties": { "maxSteps": { "type": "integer" }, "maxAmount": { "type": "integer" } } }
             } } } }
           }
         }
@@ -2238,7 +2240,7 @@
       "post": {
         "tags": ["Slots"],
         "summary": "Spin the slot machine for gcoins",
-        "description": "Server-authoritative spin. Requires the caller to be currently searching in a queue (or in the ready-check window) — this is a queue-only feature. Validates the bet against the configured tiers, applies the net gcoins change atomically, and writes a gcoin_transactions audit row.",
+        "description": "Server-authoritative. Queue-only (searching or ready-check). Auto-collects any prior pending win first, debits the bet atomically (one gcoin_transactions row), rolls the 5×3 grid, evaluates the 10 paylines + Aegis scatter, and resolves the ENTIRE free-spins bonus (3+ Aegis → 10 free spins with a random expanding symbol, re-triggerable) in the response. The total win is held PENDING for the gamble — not banked until /collect.",
         "security": [{ "bearerAuth": [] }],
         "requestBody": {
           "required": true,
@@ -2248,17 +2250,67 @@
           "200": {
             "description": "Spin result",
             "content": { "application/json": { "schema": { "type": "object", "properties": {
-              "reels": { "type": "array", "items": { "type": "string" }, "description": "The three symbol keys" },
               "bet": { "type": "integer" },
-              "payout": { "type": "integer", "description": "gcoins paid out (0 on a loss)" },
-              "net": { "type": "integer", "description": "payout - bet" },
-              "balance": { "type": "integer", "description": "New gcoins balance" },
-              "win": { "type": "boolean" }
+              "lineStake": { "type": "integer", "description": "bet / lines" },
+              "grid": { "type": "array", "items": { "type": "array", "items": { "type": "string" } }, "description": "5 reels × 3 rows of symbol keys" },
+              "lineWins": { "type": "array", "items": { "type": "object", "properties": { "line": { "type": "integer" }, "symbol": { "type": "string" }, "count": { "type": "integer" }, "amount": { "type": "integer" }, "cells": { "type": "array", "items": { "type": "object" } } } } },
+              "scatter": { "type": "object", "properties": { "count": { "type": "integer" }, "positions": { "type": "array", "items": { "type": "object" } } } },
+              "baseWin": { "type": "integer" },
+              "bonus": { "type": "object", "nullable": true, "description": "Free-spins round when 3+ scatter, else null", "properties": { "specialSymbol": { "type": "string" }, "spins": { "type": "array", "items": { "type": "object" } }, "totalBonusPayout": { "type": "integer" } } },
+              "totalWin": { "type": "integer" },
+              "pendingWin": { "type": "integer", "description": "Held for gamble/collect — not yet in balance" },
+              "canGamble": { "type": "boolean" },
+              "balance": { "type": "integer", "description": "Balance after the bet debit (win not yet banked)" },
+              "autoCollected": { "type": "integer", "description": "A prior pending win banked before this spin" }
             } } } }
           },
           "400": { "description": "Invalid bet or not enough gcoins" },
           "401": { "description": "Not authenticated" },
           "403": { "description": "Not currently searching for a match" }
+        }
+      }
+    },
+    "/api/slots/gamble": {
+      "post": {
+        "tags": ["Slots"],
+        "summary": "Gamble the pending win (red/black double-or-nothing)",
+        "description": "Queue-only. Server flips a card colour; a correct guess doubles the pending win (up to gamble.maxSteps / gamble.maxAmount), a wrong guess loses it. No balance change — banking happens at /collect.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "required": ["guess"], "properties": { "guess": { "type": "string", "enum": ["red", "black"] } } } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Gamble result",
+            "content": { "application/json": { "schema": { "type": "object", "properties": {
+              "result": { "type": "string", "enum": ["win", "lose"] },
+              "card": { "type": "string", "enum": ["red", "black"] },
+              "amount": { "type": "integer", "description": "New pending win (0 on lose)" },
+              "steps": { "type": "integer" },
+              "canGamble": { "type": "boolean" }
+            } } } }
+          },
+          "400": { "description": "Invalid guess, nothing pending, or gamble limit reached" },
+          "401": { "description": "Not authenticated" },
+          "403": { "description": "Not currently searching for a match" },
+          "409": { "description": "A gamble/collect is already in progress" }
+        }
+      }
+    },
+    "/api/slots/collect": {
+      "post": {
+        "tags": ["Slots"],
+        "summary": "Bank the pending slot win",
+        "description": "Credits the pending win to the player's gcoins atomically and writes a gcoin_transactions audit row. Allowed even when no longer searching (used by the queue-leave / modal-close settle paths). No pending win → collected: 0.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Collected",
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "balance": { "type": "integer" }, "collected": { "type": "integer" } } } } }
+          },
+          "401": { "description": "Not authenticated" },
+          "409": { "description": "A gamble is in progress" }
         }
       }
     },

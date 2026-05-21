@@ -11,6 +11,7 @@ import { discordBot } from '../services/discordBotClient.js'
 import { hasPerk, PERK } from '../helpers/subscription.js'
 import { broadcastPresence } from './presence.js'
 import { isInFridayWindow } from '../services/fridayWindow.js'
+import { autoCollectPending } from '../routes/slots.js'
 
 // Generate pick order for a given pool + team size.
 // When pool.pick_order is a valid CSV of "1"/"2" with the right per-captain
@@ -690,6 +691,9 @@ function removeFromQueue(playerId, poolId, socket) {
   if (q) q.delete(playerId)
   playerInQueue.delete(playerId)
   if (socket) socket.leave(`queue:${poolId}`)
+  // Player has stopped searching — bank any pending slot-machine win so it is
+  // never forfeited (idempotent; no-op if nothing pending).
+  autoCollectPending(playerId)
   broadcastPresence(playerId)
 }
 
@@ -719,6 +723,7 @@ export function kickPlayerFromQueue(io, playerId, reason = null, onlyInPool = nu
   const q = poolQueues.get(poolId)
   if (q) q.delete(playerId)
   playerInQueue.delete(playerId)
+  autoCollectPending(playerId) // bank any pending slot win on kick
   broadcastPresence(playerId)
 
   // Leave queue room on every socket this player is connected on
@@ -864,6 +869,8 @@ async function resolveReadyCheck(id, io, { reason }) {
   }
 
   if (reason === 'all_accepted') {
+    // Heading into a match — searching is over, bank any pending slot wins.
+    for (const p of rc.players) autoCollectPending(p.playerId)
     io.to(`ready-check:${id}`).emit('queue:readyCheckPassed', { readyCheckId: id })
     // Leave ready-check room on every player socket (will join match room next)
     for (const [socketId, pid] of socketPlayers) {
@@ -921,6 +928,7 @@ async function resolveReadyCheck(id, io, { reason }) {
       })
     }
     // No longer queued/in-match — let friends see them drop back to idle.
+    autoCollectPending(p.playerId) // bank any pending slot win on kick
     broadcastPresence(p.playerId)
   }
 
@@ -989,6 +997,7 @@ async function startQueueMatch(poolId, io, preselectedPlayers = null, preselecte
     for (const p of players) {
       q.delete(p.playerId)
       playerInQueue.delete(p.playerId)
+      autoCollectPending(p.playerId) // bank any pending slot win — match starting
     }
   }
 

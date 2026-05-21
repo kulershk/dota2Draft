@@ -498,6 +498,10 @@ export function useApi() {
     getSlotsConfig: () => request('/api/slots/config'),
     spinSlots: (bet: number) =>
       request('/api/slots/spin', { method: 'POST', body: JSON.stringify({ bet }) }),
+    gambleSlots: (guess: 'red' | 'black') =>
+      request('/api/slots/gamble', { method: 'POST', body: JSON.stringify({ guess }) }),
+    collectSlots: () =>
+      request('/api/slots/collect', { method: 'POST', body: '{}' }),
     getFriends: () => request('/api/friends'),
     getFriendRequests: () => request('/api/friends/requests'),
     getFriendBlocks: () => request('/api/friends/blocks'),
