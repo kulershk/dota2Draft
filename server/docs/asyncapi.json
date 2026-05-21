@@ -1246,6 +1246,16 @@
                     "team": { "type": "string", "enum": ["radiant", "dire"] }
                   }
                 }
+              },
+              "errorMessage": { "type": "string", "nullable": true, "description": "Failure reason when status is 'error'; sent as null when an auto-retry re-enters 'creating'." },
+              "retry": {
+                "type": "object",
+                "nullable": true,
+                "description": "Present when a failed competition-match lobby creation is being auto-retried on a different bot.",
+                "properties": {
+                  "attempt": { "type": "integer", "description": "1-based attempt number for this retry." },
+                  "maxAttempts": { "type": "integer", "description": "Cap after which the retry loop gives up." }
+                }
               }
             }
           }
