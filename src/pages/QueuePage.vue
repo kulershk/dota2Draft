@@ -409,6 +409,82 @@ function formatBanRemaining(ms: number): string {
   return rh > 0 ? `${d}d ${rh}h` : `${d}d`
 }
 
+// ── Inhouse Friday window countdown ──────────────────────────────────────
+// Mirrors server/services/fridayWindow.js: an inhouse pool's Friday is the
+// half-open window [Fri start_hour, Sat end_hour) in Europe/Riga (0/0 = the
+// plain calendar Friday). We show how long until it opens, or — once live —
+// how long until it closes. Riga wall-clock is converted to absolute instants
+// so DST never shifts the boundary.
+const RIGA_TZ = 'Europe/Riga'
+function clampHour(h: any): number {
+  const n = Math.trunc(Number(h))
+  return Number.isFinite(n) ? Math.min(23, Math.max(0, n)) : 0
+}
+// Riga-local calendar parts (1-based month) + day-of-week (0=Sun..6=Sat).
+function rigaPartsOf(ms: number): { y: number; m: number; d: number; dow: number } {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: RIGA_TZ, year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short',
+  }).formatToParts(new Date(ms))
+  const p: Record<string, string> = {}
+  for (const x of parts) p[x.type] = x.value
+  const dow = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(p.weekday)
+  return { y: Number(p.year), m: Number(p.month), d: Number(p.day), dow }
+}
+// Offset (Riga wall clock − UTC) in ms for an instant.
+function rigaOffsetMs(ms: number): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: RIGA_TZ, hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(new Date(ms))
+  const p: Record<string, string> = {}
+  for (const x of parts) p[x.type] = x.value
+  let hour = Number(p.hour); if (hour === 24) hour = 0
+  const asUTC = Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day), hour, Number(p.minute), Number(p.second))
+  return asUTC - ms
+}
+// Absolute ms for a Riga wall-clock time (two-pass to settle DST transitions).
+function rigaWallClockMs(y: number, m: number, d: number, h: number): number {
+  const guess = Date.UTC(y, m - 1, d, h, 0, 0)
+  const off = rigaOffsetMs(guess)
+  let utc = guess - off
+  const off2 = rigaOffsetMs(utc)
+  if (off2 !== off) utc = guess - off2
+  return utc
+}
+// Shift a {y,m,d} by n days via UTC noon (no DST date roll).
+function shiftYmd(y: number, m: number, d: number, n: number): { y: number; m: number; d: number } {
+  const dt = new Date(Date.UTC(y, m - 1, d, 12))
+  dt.setUTCDate(dt.getUTCDate() + n)
+  return { y: dt.getUTCFullYear(), m: dt.getUTCMonth() + 1, d: dt.getUTCDate() }
+}
+
+const fridayCountdown = computed<{ state: 'live' | 'upcoming'; untilMs: number } | null>(() => {
+  const p = selectedPool.value as any
+  if (!p?.inhouse_enabled) return null
+  const sh = clampHour(p.friday_window_start_hour)
+  const eh = clampHour(p.friday_window_end_hour)
+  const nowMs = now.value
+  const rp = rigaPartsOf(nowMs)
+  const thisFri = shiftYmd(rp.y, rp.m, rp.d, 5 - rp.dow) // Friday of the current Riga week
+
+  // Inside a window right now? Check the prev/this/next Friday's window.
+  for (const off of [-7, 0, 7]) {
+    const fri = shiftYmd(thisFri.y, thisFri.m, thisFri.d, off)
+    const sat = shiftYmd(fri.y, fri.m, fri.d, 1)
+    const start = rigaWallClockMs(fri.y, fri.m, fri.d, sh)
+    const end = rigaWallClockMs(sat.y, sat.m, sat.d, eh)
+    if (nowMs >= start && nowMs < end) return { state: 'live', untilMs: end - nowMs }
+  }
+  // Otherwise, the nearest upcoming window start.
+  for (const off of [0, 7, 14]) {
+    const fri = shiftYmd(thisFri.y, thisFri.m, thisFri.d, off)
+    const start = rigaWallClockMs(fri.y, fri.m, fri.d, sh)
+    if (start > nowMs) return { state: 'upcoming', untilMs: start - nowMs }
+  }
+  return null
+})
+
 // Ready sound — plays when a match is found (10/10)
 const readySound = new Audio('/sounds/ready.wav')
 readySound.preload = 'auto'
@@ -1430,6 +1506,24 @@ onUnmounted(() => {
                   </div>
                   <span class="text-[10px] font-semibold bg-primary/10 text-primary px-2.5 py-1 rounded-full uppercase tracking-wider">
                     {{ t('captains') }}
+                  </span>
+                </div>
+
+                <!-- Inhouse Friday window countdown (until it opens / until it closes) -->
+                <div
+                  v-if="fridayCountdown"
+                  class="px-6 py-2.5 border-b border-border/30 flex items-center gap-2 text-sm"
+                  :class="fridayCountdown.state === 'live' ? 'bg-green-500/10' : 'bg-amber-500/10'"
+                >
+                  <Timer class="w-4 h-4 shrink-0" :class="fridayCountdown.state === 'live' ? 'text-green-400' : 'text-amber-400'" />
+                  <span
+                    class="text-[10px] font-bold tracking-wider uppercase px-1.5 py-0.5 rounded"
+                    :class="fridayCountdown.state === 'live' ? 'bg-green-500/20 text-green-300' : 'bg-amber-500/20 text-amber-300'"
+                  >{{ t('queueFridayBadge') }}</span>
+                  <span class="font-medium" :class="fridayCountdown.state === 'live' ? 'text-green-300' : 'text-amber-300'">
+                    {{ fridayCountdown.state === 'live'
+                      ? t('queueFridayEndsIn', { t: formatBanRemaining(fridayCountdown.untilMs) })
+                      : t('queueFridayStartsIn', { t: formatBanRemaining(fridayCountdown.untilMs) }) }}
                   </span>
                 </div>
 
