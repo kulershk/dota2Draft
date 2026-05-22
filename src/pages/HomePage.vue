@@ -48,6 +48,18 @@ interface TopPlayer {
   win_rate: number | null
 }
 interface Sponsor { id: number; logo_url: string; alt: string; link: string }
+interface Streamer {
+  id: number
+  name: string
+  avatar_url: string | null
+  twitch_username: string
+  stream: {
+    title: string
+    viewer_count: number
+    thumbnail_url: string
+    started_at: string
+  }
+}
 
 const { t } = useI18n()
 const api = useApi()
@@ -65,6 +77,9 @@ const news = ref<NewsCard[]>([])
 const topPlayers = ref<{ players: TopPlayer[]; season: { id: number; name: string; slug: string } | null }>({ players: [], season: null })
 const heroPickRate = ref<{ days: number; heroes: { hero_id: number; picks: number; pick_rate: string }[] }>({ days: 7, heroes: [] })
 const upcomingNext = ref<any | null>(null)
+// Live Dota 2 streamers (player accounts streaming now). Server filters to
+// live + game_id=Dota2 and caches 60s, so streamers.length is the live count.
+const streamers = ref<Streamer[]>([])
 // Hydrate from the SWR site-settings cache synchronously so the hero text
 // doesn't flash the i18n fallback before loadAll() resolves.
 const _cachedSettings = (() => {
@@ -127,7 +142,7 @@ function newsGradient(idx: number): string {
 let pollInterval: ReturnType<typeof setInterval> | null = null
 
 async function loadAll() {
-  const [s, history, feat, n, top, pickRate, upcoming, settings] = await Promise.all([
+  const [s, history, feat, n, top, pickRate, upcoming, settings, live] = await Promise.all([
     api.getHomeStats().catch(() => null),
     api.getQueueHistory({ limit: 6 }).catch(() => []),
     api.getFeaturedTournament().catch(() => null),
@@ -136,8 +151,10 @@ async function loadAll() {
     api.getHomeHeroPickRate(7, 3).catch(() => ({ days: 7, heroes: [] })),
     api.getUpcomingMatches().catch(() => []),
     api.getSiteSettings().catch(() => null),
+    api.getStreamers().catch(() => []),
   ])
   stats.value = s
+  streamers.value = (live as Streamer[]) || []
 
   // Merge queue + tournament live matches into a unified card list, newest first.
   const queueLive: LiveMatch[] = (history as any[])
@@ -280,6 +297,7 @@ onMounted(() => {
   // Live stats refresh every 30s — keeps the hero chips honest without spamming.
   pollInterval = setInterval(() => {
     api.getHomeStats().then(s => { stats.value = s }).catch(() => {})
+    api.getStreamers().then(live => { streamers.value = (live as Streamer[]) || [] }).catch(() => {})
   }, 30000)
   const sock = getSocket()
   sock?.on('home:liveStats', onLiveStats)
@@ -571,12 +589,47 @@ onUnmounted(() => {
               <span class="text-[10px] font-extrabold tracking-[1.2px] text-[#475569]">{{ t('homeStreamsTitle').toUpperCase() }}</span>
               <span class="inline-flex items-center gap-1 px-1.5 py-[2px] rounded bg-[#3F1D1D]">
                 <span class="w-[5px] h-[5px] rounded-full bg-red-500" />
-                <span class="text-[10px] font-extrabold text-[#FCA5A5]">0</span>
+                <span class="text-[10px] font-extrabold text-[#FCA5A5]">{{ streamers.length }}</span>
               </span>
             </div>
           </div>
-          <!-- Empty state — no Twitch stream API wired yet, structure preserved -->
-          <div class="flex flex-col items-center justify-center gap-2 p-8 rounded-[10px] bg-[#0F172A] border border-[#9146FF]/60 text-center">
+          <!-- Live streamer cards (from /api/streamers — live Dota 2 streams) -->
+          <template v-if="streamers.length > 0">
+            <a
+              v-for="streamer in streamers" :key="streamer.id"
+              :href="`https://twitch.tv/${streamer.twitch_username}`"
+              target="_blank" rel="noopener noreferrer"
+              class="flex items-center gap-3 p-3 rounded-[10px] bg-[#0F172A] border border-[#1E293B] hover:border-[#9146FF]/60 transition-colors"
+            >
+              <!-- Thumbnail (84×84) with LIVE badge overlay -->
+              <div class="relative w-[84px] h-[84px] rounded-lg overflow-hidden shrink-0 bg-[#0A0F1C]">
+                <img v-if="streamer.stream.thumbnail_url" :src="streamer.stream.thumbnail_url" class="w-full h-full object-cover" alt="" />
+                <Twitch v-else class="absolute inset-0 m-auto w-6 h-6 text-[#9146FF]" />
+                <span class="absolute top-1.5 left-1.5 inline-flex items-center gap-1 px-1.5 py-[1px] rounded text-[8px] font-extrabold tracking-[0.5px] text-white" style="background: rgba(239,68,68,0.9);">
+                  <span class="w-[4px] h-[4px] rounded-full bg-white" />
+                  LIVE
+                </span>
+              </div>
+              <div class="flex flex-col justify-between gap-1 flex-1 min-w-0 h-[84px]">
+                <div class="flex flex-col gap-1 min-w-0">
+                  <span class="text-[13px] font-bold text-[#F1F5F9] leading-[1.2] truncate">{{ streamer.twitch_username }}</span>
+                  <span class="text-[11px] text-[#94A3B8] leading-[1.3] line-clamp-2">{{ streamer.stream.title }}</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <Eye class="w-2.5 h-2.5 text-[#64748B] shrink-0" />
+                  <span class="text-[10px] font-mono text-[#64748B] truncate">{{ streamer.stream.viewer_count.toLocaleString() }}</span>
+                </div>
+              </div>
+            </a>
+            <!-- View all on Twitch -->
+            <a href="https://www.twitch.tv/directory/category/dota-2" target="_blank" rel="noopener noreferrer"
+               class="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-lg border border-[#1E293B] hover:bg-[#0F172A] transition-colors">
+              <span class="text-[12px] font-bold text-[#CBD5E1]">{{ t('homeStreamsViewAll') }}</span>
+              <ExternalLink class="w-3 h-3 text-[#9146FF]" />
+            </a>
+          </template>
+          <!-- Empty state -->
+          <div v-else class="flex flex-col items-center justify-center gap-2 p-8 rounded-[10px] bg-[#0F172A] border border-[#9146FF]/60 text-center">
             <Twitch class="w-6 h-6 text-[#9146FF]" />
             <p class="text-[12px] text-[#64748B] leading-relaxed">{{ t('homeStreamsEmpty') }}</p>
           </div>
