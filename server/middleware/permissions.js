@@ -18,6 +18,7 @@ export const ALL_PERMISSIONS = [
   'manage_games',
   'manage_queue_pools',
   'manage_own_queue_pools',
+  'delete_queue_matches',
   'manage_seasons',
   'manage_own_seasons',
   'manage_mmr_verifications',

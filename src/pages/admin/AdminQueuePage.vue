@@ -11,12 +11,19 @@ const { t } = useI18n()
 const api = useApi()
 const store = useDraftStore()
 const canManageAllPools = computed(() => store.hasPerm('manage_queue_pools'))
+const canDeleteMatches = computed(() => store.hasPerm('delete_queue_matches'))
 const canEditPool = (pool: any) => canManageAllPools.value || pool.created_by === store.currentUser.value?.id
 const pools = ref<any[]>([])
 const editingId = ref<number | null>(null)
 const showCreate = ref(false)
 const activeMatches = ref<any[]>([])
 const loadingMatches = ref(false)
+const matchHistory = ref<any[]>([])
+const loadingHistory = ref(false)
+// Delete-confirm modal state (no window.confirm — see CLAUDE.md UI Dialogs rule).
+const deleteTarget = ref<any | null>(null)
+const deleting = ref(false)
+const deleteError = ref('')
 const queuedPlayers = ref<any[]>([])
 const bans = ref<any[]>([])
 const banForm = ref<{
@@ -41,13 +48,15 @@ let refreshInterval: ReturnType<typeof setInterval> | null = null
 const seasons = ref<Array<{ id: number; name: string; is_active: boolean }>>([])
 const leagues = ref<Array<{ id: number; name: string; dota_league_id: number }>>([])
 
-type QueueTab = 'pools' | 'queue' | 'matches'
+type QueueTab = 'pools' | 'queue' | 'matches' | 'history'
 const TAB_STORAGE_KEY = 'admin_queue_tab'
-const validTab = (v: string | null): QueueTab => (v === 'pools' || v === 'queue' || v === 'matches' ? v : 'pools')
+const validTab = (v: string | null): QueueTab =>
+  (v === 'pools' || v === 'queue' || v === 'matches' || v === 'history' ? v : 'pools')
 const activeTab = ref<QueueTab>(validTab(typeof window !== 'undefined' ? localStorage.getItem(TAB_STORAGE_KEY) : null))
 function setTab(tab: QueueTab) {
   activeTab.value = tab
   try { localStorage.setItem(TAB_STORAGE_KEY, tab) } catch {}
+  if (tab === 'history') fetchMatchHistory()
 }
 
 const INHOUSE_DEFAULTS = {
@@ -203,6 +212,35 @@ async function fetchActiveMatches() {
   loadingMatches.value = false
 }
 
+async function fetchMatchHistory() {
+  loadingHistory.value = true
+  try { matchHistory.value = await api.getAdminQueueMatchHistory({ limit: 50 }) } catch { matchHistory.value = [] }
+  loadingHistory.value = false
+}
+
+function openDeleteMatch(qm: any) {
+  deleteError.value = ''
+  deleteTarget.value = qm
+}
+function closeDeleteMatch() {
+  if (deleting.value) return
+  deleteTarget.value = null
+}
+async function confirmDeleteMatch() {
+  if (!deleteTarget.value) return
+  deleting.value = true
+  deleteError.value = ''
+  try {
+    await api.deleteQueueMatch(deleteTarget.value.id)
+    deleteTarget.value = null
+    await Promise.all([fetchActiveMatches(), fetchMatchHistory()])
+  } catch (e: any) {
+    deleteError.value = e?.message || 'Failed to delete match'
+  } finally {
+    deleting.value = false
+  }
+}
+
 async function fetchQueuedPlayers() {
   try { queuedPlayers.value = await api.getAdminQueuePlayers() } catch { queuedPlayers.value = [] }
 }
@@ -335,6 +373,8 @@ function statusLabel(status: string) {
     case 'picking': return t('queueStatusPicking')
     case 'lobby_creating': return t('queueStatusCreatingLobby')
     case 'live': return t('queueStatusLive')
+    case 'completed': return t('queueStatusCompleted')
+    case 'cancelled': return t('queueStatusCancelled')
     default: return status
   }
 }
@@ -344,6 +384,8 @@ function statusColor(status: string) {
     case 'picking': return 'bg-amber-500/10 text-amber-500'
     case 'lobby_creating': return 'bg-blue-500/10 text-blue-500'
     case 'live': return 'bg-green-500/10 text-green-500'
+    case 'completed': return 'bg-primary/10 text-primary'
+    case 'cancelled': return 'bg-destructive/10 text-destructive'
     default: return 'bg-accent text-muted-foreground'
   }
 }
@@ -378,6 +420,7 @@ onMounted(() => {
   fetchActiveMatches()
   fetchQueuedPlayers()
   fetchBans()
+  if (activeTab.value === 'history') fetchMatchHistory()
   refreshInterval = setInterval(() => {
     fetchActiveMatches()
     fetchQueuedPlayers()
@@ -427,6 +470,13 @@ onUnmounted(() => {
       >
         {{ t('queueTabActiveMatches') }}
         <span v-if="activeMatches.length > 0" class="text-[10px] font-semibold bg-primary/15 text-primary px-1.5 rounded-full">{{ activeMatches.length }}</span>
+      </button>
+      <button
+        class="px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px flex items-center gap-2"
+        :class="activeTab === 'history' ? 'text-primary border-primary' : 'text-muted-foreground border-transparent hover:text-foreground hover:border-border'"
+        @click="setTab('history')"
+      >
+        {{ t('queueTabHistory') }}
       </button>
     </div>
 
@@ -491,6 +541,14 @@ onUnmounted(() => {
               >
                 <CheckSquare class="w-3.5 h-3.5" /> {{ t('queueAdminForceComplete') }}
               </button>
+              <button
+                v-if="canDeleteMatches"
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-destructive hover:bg-destructive/10 transition-colors"
+                :title="t('queueAdminDeleteTitle')"
+                @click="openDeleteMatch(qm)"
+              >
+                <Trash2 class="w-3.5 h-3.5" /> {{ t('queueAdminDelete') }}
+              </button>
             </div>
           </div>
 
@@ -549,6 +607,62 @@ onUnmounted(() => {
             <div v-if="qm.lobby_error" class="px-2 py-1.5 rounded bg-red-500/10 border border-red-500/30 text-red-400 text-[11px] font-mono whitespace-pre-wrap break-all">
               {{ qm.lobby_error }}
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════ Match History ═══════════════════ -->
+    <div v-if="activeTab === 'history'">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-3">
+          <h2 class="text-xl font-bold">{{ t('queueAdminMatchHistory') }}</h2>
+          <span v-if="matchHistory.length > 0" class="text-xs font-semibold bg-accent text-muted-foreground px-2 py-0.5 rounded-full">
+            {{ matchHistory.length }}
+          </span>
+        </div>
+        <button class="p-1.5 rounded hover:bg-accent" :class="loadingHistory ? 'animate-spin' : ''" @click="fetchMatchHistory">
+          <RefreshCw class="w-4 h-4" />
+        </button>
+      </div>
+
+      <div v-if="matchHistory.length === 0" class="card px-6 py-8 text-center mb-8">
+        <Clock class="w-8 h-8 text-muted-foreground/20 mx-auto mb-2" />
+        <p class="text-sm text-muted-foreground">{{ t('queueAdminNoHistory') }}</p>
+      </div>
+
+      <div v-else class="flex flex-col gap-2 mb-8">
+        <div v-for="qm in matchHistory" :key="qm.id" class="card px-4 py-3 flex items-center justify-between gap-4">
+          <!-- Left: status + ids + pool -->
+          <div class="flex items-center gap-3 flex-wrap min-w-0">
+            <span class="text-xs px-2 py-0.5 rounded font-semibold" :class="statusColor(qm.status)">
+              {{ statusLabel(qm.status) }}
+            </span>
+            <span class="text-sm font-semibold text-muted-foreground">#{{ qm.id }}</span>
+            <span v-if="qm.match_id" class="text-[10px] font-mono text-muted-foreground bg-accent/60 px-1.5 py-0.5 rounded">match #{{ qm.match_id }}</span>
+            <span v-if="qm.pool_name" class="text-xs text-muted-foreground bg-accent px-2 py-0.5 rounded">{{ qm.pool_name }}</span>
+            <span v-if="qm.season_id" class="text-[10px] font-semibold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded">{{ t('queueAdminSeasonTag') }}</span>
+          </div>
+
+          <!-- Middle: captains + score -->
+          <div class="flex items-center gap-2 text-xs min-w-0 flex-1 justify-center">
+            <span class="font-medium truncate max-w-[120px]">{{ qm.captain1_display_name || qm.captain1_name || '—' }}</span>
+            <span v-if="qm.score1 != null && qm.score2 != null" class="font-mono font-bold text-foreground">{{ qm.score1 }}–{{ qm.score2 }}</span>
+            <span v-else class="text-muted-foreground/40 font-bold">vs</span>
+            <span class="font-medium truncate max-w-[120px]">{{ qm.captain2_display_name || qm.captain2_name || '—' }}</span>
+          </div>
+
+          <!-- Right: date + delete -->
+          <div class="flex items-center gap-3 shrink-0">
+            <span class="text-[11px] text-muted-foreground whitespace-nowrap">{{ new Date(qm.completed_at || qm.created_at).toLocaleString() }}</span>
+            <button
+              v-if="canDeleteMatches"
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-destructive hover:bg-destructive/10 transition-colors"
+              :title="t('queueAdminDeleteTitle')"
+              @click="openDeleteMatch(qm)"
+            >
+              <Trash2 class="w-3.5 h-3.5" /> {{ t('queueAdminDelete') }}
+            </button>
           </div>
         </div>
       </div>
@@ -1180,6 +1294,45 @@ onUnmounted(() => {
         <button class="btn-outline" @click="closeBanModal">{{ t('cancel') }}</button>
         <button class="btn-primary flex items-center gap-1.5" :disabled="!banForm.player_id" @click="submitBan">
           <Ban class="w-3.5 h-3.5" /> {{ t('queueAdminBan') }}
+        </button>
+      </div>
+    </ModalOverlay>
+
+    <!-- Delete queue match confirmation -->
+    <ModalOverlay :show="!!deleteTarget" @close="closeDeleteMatch">
+      <div class="border-b border-border px-6 py-5">
+        <h2 class="text-lg font-bold flex items-center gap-2">
+          <Trash2 class="w-4 h-4 text-destructive" />
+          {{ t('queueAdminDeleteTitle') }}
+        </h2>
+        <p class="text-xs text-muted-foreground mt-1">
+          {{ t('queueAdminDeleteConfirm') }}
+        </p>
+      </div>
+
+      <div v-if="deleteTarget" class="px-6 py-5 flex flex-col gap-3">
+        <div class="flex items-center gap-2 text-sm flex-wrap">
+          <span class="text-xs px-2 py-0.5 rounded font-semibold" :class="statusColor(deleteTarget.status)">{{ statusLabel(deleteTarget.status) }}</span>
+          <span class="font-semibold text-muted-foreground">#{{ deleteTarget.id }}</span>
+          <span v-if="deleteTarget.pool_name" class="text-xs text-muted-foreground bg-accent px-2 py-0.5 rounded">{{ deleteTarget.pool_name }}</span>
+          <span class="font-medium">{{ deleteTarget.captain1_display_name || deleteTarget.captain1_name || '—' }}</span>
+          <span class="text-muted-foreground/40 font-bold">vs</span>
+          <span class="font-medium">{{ deleteTarget.captain2_display_name || deleteTarget.captain2_name || '—' }}</span>
+        </div>
+        <p v-if="deleteTarget.season_id" class="text-xs text-amber-500 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
+          {{ t('queueAdminDeleteSeasonNote') }}
+        </p>
+        <p v-if="deleteError" class="text-xs text-destructive bg-destructive/10 border border-destructive/30 rounded-lg px-3 py-2">
+          {{ deleteError }}
+        </p>
+      </div>
+
+      <div class="px-6 py-4 border-t border-border/30 flex justify-end gap-2">
+        <button class="btn-outline" :disabled="deleting" @click="closeDeleteMatch">{{ t('cancel') }}</button>
+        <button class="btn-destructive flex items-center gap-1.5" :disabled="deleting" @click="confirmDeleteMatch">
+          <Loader2 v-if="deleting" class="w-3.5 h-3.5 animate-spin" />
+          <Trash2 v-else class="w-3.5 h-3.5" />
+          {{ t('queueAdminDelete') }}
         </button>
       </div>
     </ModalOverlay>

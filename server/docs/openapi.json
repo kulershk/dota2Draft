@@ -3192,6 +3192,35 @@
         "responses": { "200": { "description": "Array of active queue matches with team rosters and lobby info" } }
       }
     },
+    "/api/admin/queue/matches/history": {
+      "get": {
+        "tags": ["Queue"],
+        "summary": "Admin: list recent queue match history",
+        "description": "Returns recent queue matches in completed, cancelled, or live status (newest first), with captain names/avatars, pool name, score, season_id and player count. Backs the History tab in the admin Queue page. Requires manage_queue_pools (full) or manage_own_queue_pools (limited to your own pools).",
+        "parameters": [
+          { "name": "poolId", "in": "query", "required": false, "schema": { "type": "integer" }, "description": "Filter to a single pool." },
+          { "name": "limit", "in": "query", "required": false, "schema": { "type": "integer", "default": 30, "maximum": 100 } },
+          { "name": "offset", "in": "query", "required": false, "schema": { "type": "integer", "default": 0 } }
+        ],
+        "responses": { "200": { "description": "Array of past queue matches" } }
+      }
+    },
+    "/api/admin/queue/matches/{id}": {
+      "delete": {
+        "tags": ["Queue"],
+        "summary": "Admin: permanently delete a queue match",
+        "description": "Hard-deletes a queue match. If still active, tears down in-memory state (pick timer, playerInMatch locks, room sockets) and cancels its Dota 2 lobby + discord voice like /cancel. Dropping the queue_matches row cascades its season_match_log rows; toxic/grief/strike logs keep the row with a NULL match reference. The linked Dota match record is deleted too (cascading match_games, match_game_player_stats, match_lobbies, match_standins, discord_match_voice). Does NOT recompute season standings — players keep whatever points/W-L the match already applied. Requires the dedicated delete_queue_matches permission in addition to queue admin scope (own-pool admins can only delete matches in their own pools).",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": {
+            "description": "Match deleted",
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "ok": { "type": "boolean" }, "deletedMatchId": { "type": "integer" }, "freedPlayers": { "type": "integer" } } } } }
+          },
+          "403": { "description": "Missing delete_queue_matches, or match is not in a pool you own" },
+          "404": { "description": "Queue match not found" }
+        }
+      }
+    },
     "/api/admin/queue/matches/{id}/cancel": {
       "post": {
         "tags": ["Queue"],

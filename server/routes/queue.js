@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { query, queryOne, execute } from '../db.js'
+import pool, { query, queryOne, execute } from '../db.js'
 import { requirePermission, hasPermission } from '../middleware/permissions.js'
 import { getAuthPlayer } from '../middleware/auth.js'
 import { getLiveSnapshot } from '../services/liveMatchPoller.js'
@@ -645,6 +645,158 @@ export default function createQueueRouter(io) {
       })
 
       res.json(result)
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  // ── Admin: recent queue match history (completed / cancelled / live) ──
+  // Backs the History tab in AdminQueuePage. Scoped to owned pools for
+  // manage_own_queue_pools holders, same as the active-matches list.
+  router.get('/api/admin/queue/matches/history', async (req, res) => {
+    const scope = await getQueueAdminScope(req, res)
+    if (!scope) return
+    try {
+      const limit = Math.min(Number(req.query.limit) || 30, 100)
+      const offset = Number(req.query.offset) || 0
+      const poolId = req.query.poolId ? Number(req.query.poolId) : null
+
+      const params = []
+      let where = `qm.status IN ('completed', 'cancelled', 'live')`
+      if (!scope.canManageAll) {
+        const ids = [...scope.ownedPoolIds]
+        if (ids.length === 0) return res.json([])
+        params.push(ids)
+        where += ` AND qm.pool_id = ANY($${params.length}::int[])`
+      }
+      if (poolId) {
+        params.push(poolId)
+        where += ` AND qm.pool_id = $${params.length}`
+      }
+      params.push(limit, offset)
+
+      const rows = await query(`
+        SELECT qm.id, qm.pool_id, qm.status, qm.created_at, qm.completed_at, qm.match_id, qm.season_id,
+          p1.name AS captain1_name, COALESCE(p1.display_name, p1.name) AS captain1_display_name, p1.avatar_url AS captain1_avatar,
+          p2.name AS captain2_name, COALESCE(p2.display_name, p2.name) AS captain2_display_name, p2.avatar_url AS captain2_avatar,
+          qp.name AS pool_name,
+          m.score1, m.score2, m.winner_captain_id, m.best_of,
+          (COALESCE(jsonb_array_length(qm.team1_players), 0) + COALESCE(jsonb_array_length(qm.team2_players), 0)) AS player_count
+        FROM queue_matches qm
+        LEFT JOIN players p1 ON p1.id = qm.captain1_player_id
+        LEFT JOIN players p2 ON p2.id = qm.captain2_player_id
+        LEFT JOIN queue_pools qp ON qp.id = qm.pool_id
+        LEFT JOIN matches m ON m.id = qm.match_id
+        WHERE ${where}
+        ORDER BY qm.created_at DESC
+        LIMIT $${params.length - 1} OFFSET $${params.length}
+      `, params)
+      res.json(rows)
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  // ── Admin: permanently delete a queue match ──
+  // Gated by the dedicated `delete_queue_matches` permission *on top of* queue
+  // admin scope (so own-pool admins can only delete in their own pools). Hard
+  // delete: dropping the queue_matches row cascades its season_match_log rows;
+  // toxic/grief/strike logs keep the row with a NULL match reference (audit
+  // trail preserved). The linked Dota match record is removed too — its FK
+  // cascade clears match_games / match_game_player_stats / match_lobbies /
+  // match_standins / discord_match_voice — so nothing lingers orphaned.
+  // Does NOT recompute season standings: players keep whatever points/W-L the
+  // match already applied to season_rankings (intentional — see AdminQueuePage).
+  router.delete('/api/admin/queue/matches/:id', async (req, res) => {
+    const scope = await getQueueAdminScope(req, res)
+    if (!scope) return
+    if (!scope.player.is_admin && !(await hasPermission(scope.player, 'delete_queue_matches'))) {
+      return res.status(403).json({ error: 'Permission denied — requires delete_queue_matches' })
+    }
+    const qmId = Number(req.params.id)
+    if (!qmId) return res.status(400).json({ error: 'invalid id' })
+
+    try {
+      const qmRow = await queryOne(
+        'SELECT id, match_id, pool_id, status, team1_players, team2_players FROM queue_matches WHERE id = $1',
+        [qmId]
+      )
+      if (!qmRow) return res.status(404).json({ error: 'queue match not found' })
+      if (!scope.canManageAll && !scope.ownedPoolIds.has(qmRow.pool_id)) {
+        return res.status(403).json({ error: 'Permission denied — match is not in a pool you own' })
+      }
+
+      // If still active, tear down in-memory state exactly like /cancel: stop
+      // the pick timer, free roster players from the playerInMatch lock, kick
+      // sockets out of the room. Without this, deleting a live/picking match
+      // leaves players pinned (unable to re-queue) and timers firing on a row
+      // that no longer exists.
+      const mem = activeQueueMatches.get(qmId)
+      if (mem) {
+        clearPickTimer(qmId)
+        for (const p of mem.allPlayers) {
+          playerInMatch.delete(p.playerId)
+          broadcastPresence(p.playerId)
+        }
+        const room = `queue-match:${qmId}`
+        for (const [socketId, playerId] of socketPlayers) {
+          if (mem.allPlayers.some(p => p.playerId === playerId)) {
+            const s = io.sockets.sockets.get(socketId)
+            if (s) s.leave(room)
+          }
+        }
+        activeQueueMatches.delete(qmId)
+      }
+      // Safety net: free any persisted-roster player still pinned to this match
+      // (state can drift after a server restart). Equality check ensures we never
+      // free someone who's since been pulled into a different match.
+      const rosterIds = [
+        ...((qmRow.team1_players || []).map(p => p.playerId)),
+        ...((qmRow.team2_players || []).map(p => p.playerId)),
+      ]
+      for (const pid of rosterIds) {
+        if (playerInMatch.get(pid) === qmId) {
+          playerInMatch.delete(pid)
+          broadcastPresence(pid)
+        }
+      }
+      activeQueueMatches.delete(qmId)
+      io.to(`queue-match:${qmId}`).emit('queue:cancelled', { queueMatchId: qmId, reason: 'Deleted by admin' })
+
+      // Tear down any live Dota 2 lobby + discord voice before dropping the
+      // match record (bot needs the lobby id; matchEnd needs the match id).
+      if (qmRow.match_id) {
+        discordBot.matchEnd(qmRow.match_id, true)
+          .catch((err) => console.warn('[Queue] discord matchEnd (admin delete) failed:', err.message))
+        const lobbies = await query(
+          "SELECT id FROM match_lobbies WHERE match_id = $1 AND status NOT IN ('completed', 'cancelled', 'error')",
+          [qmRow.match_id]
+        )
+        for (const lobby of lobbies) {
+          try { await botPool.cancelLobby(lobby.id) } catch (e) { console.error('[Queue] cancel lobby on delete failed:', e.message) }
+        }
+      }
+
+      // Hard delete in one transaction. Delete the linked match first (its FK
+      // cascade clears match_games / stats / lobbies / standins / voice and
+      // SET NULLs qm.match_id), then the queue match (cascade clears
+      // season_match_log).
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        if (qmRow.match_id) {
+          await client.query('DELETE FROM matches WHERE id = $1', [qmRow.match_id])
+        }
+        await client.query('DELETE FROM queue_matches WHERE id = $1', [qmId])
+        await client.query('COMMIT')
+      } catch (txErr) {
+        try { await client.query('ROLLBACK') } catch {}
+        throw txErr
+      } finally {
+        client.release()
+      }
+
+      res.json({ ok: true, deletedMatchId: qmId, freedPlayers: rosterIds.length })
     } catch (e) {
       res.status(500).json({ error: e.message })
     }

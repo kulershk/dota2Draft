@@ -59,6 +59,7 @@ const permLabels: Record<string, string> = {
   manage_jobs: 'Manage Background Jobs',
   manage_games: 'Manage Games',
   manage_queue_pools: 'Manage Queue Pools',
+  delete_queue_matches: 'Delete Queue Matches',
   manage_seasons: 'Manage Seasons',
   manage_own_seasons: 'Manage Own Seasons',
   manage_mmr_verifications: 'Approve MMR Verifications',

@@ -702,10 +702,20 @@ export function useApi() {
     deleteQueuePool: (id: number) =>
       request(`/api/admin/queue/pools/${id}`, { method: 'DELETE' }),
     getAdminQueueMatches: () => request('/api/admin/queue/matches'),
+    getAdminQueueMatchHistory: (params?: { poolId?: number; limit?: number; offset?: number }) => {
+      const qs = new URLSearchParams()
+      if (params?.poolId) qs.set('poolId', String(params.poolId))
+      if (params?.limit) qs.set('limit', String(params.limit))
+      if (params?.offset) qs.set('offset', String(params.offset))
+      const q = qs.toString()
+      return request(`/api/admin/queue/matches/history${q ? `?${q}` : ''}`)
+    },
     cancelQueueMatch: (id: number) =>
       request(`/api/admin/queue/matches/${id}/cancel`, { method: 'POST' }),
     forceCompleteQueueMatch: (id: number) =>
       request(`/api/admin/queue/matches/${id}/force-complete`, { method: 'POST' }),
+    deleteQueueMatch: (id: number) =>
+      request(`/api/admin/queue/matches/${id}`, { method: 'DELETE' }),
     getAdminQueuePlayers: () => request('/api/admin/queue/players'),
     adminKickFromQueue: (playerId: number, reason?: string) =>
       request(`/api/admin/queue/kick/${playerId}`, { method: 'POST', body: JSON.stringify({ reason }) }),
