@@ -246,6 +246,23 @@ func (b *Bot) handleSteamEvents() {
 				} else {
 					b.log(fmt.Sprintf("GC session restored but still busy with lobby %s — staying busy", b.activeLobbyID))
 				}
+			} else {
+				// GC session lost (GC_GOING_DOWN / NO_SESSION). A bot with no GC
+				// session can't create or manage lobbies, so it must stop
+				// advertising as available — otherwise Node hands it a match it
+				// can't fulfil. Demote to connecting_gc; the HAVE_SESSION branch
+				// above (or a fresh ClientWelcomed) promotes it back when the
+				// session returns. Only act when currently available: busy bots
+				// stay busy (an in-flight match has its own lifecycle, and the
+				// double down-transition GOING_DOWN→NO_SESSION must not clobber
+				// it), and other states are left untouched.
+				b.mu.Lock()
+				wasAvailable := b.Status == StatusAvailable
+				b.mu.Unlock()
+				if wasAvailable {
+					b.log("GC session lost while idle — no longer available until GC reconnects")
+					b.setStatus(StatusConnectingGC)
+				}
 			}
 
 		case *devents.UnhandledGCPacket:
