@@ -2084,6 +2084,7 @@ export default {
   queueInhouseWinPoints: 'Win points',
   queueInhouseLossPoints: 'Loss points',
   queueInhouseMmrDiffTiers: 'Underdog MMR-diff bonus tiers',
+  queueInhouseMmrDiffTiersHint: 'Per-tier handicap for team MMR gaps. The lower-MMR team gains the bonus and the higher-MMR team loses it — applied to everyone, win or lose.',
   queueInhouseMmrDiffMin: 'Min diff',
   queueInhouseMmrDiffMax: 'Max diff',
   queueInhouseTierBonus: 'Bonus',

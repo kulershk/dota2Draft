@@ -1073,6 +1073,7 @@ onUnmounted(() => {
 
             <div>
               <label class="text-xs text-muted-foreground">{{ t('queueInhouseMmrDiffTiers') }}</label>
+              <p class="text-[11px] text-muted-foreground/70 mt-0.5">{{ t('queueInhouseMmrDiffTiersHint') }}</p>
               <div class="flex flex-col gap-1.5 mt-1">
                 <div v-for="(tier, i) in form.mmr_diff_tiers" :key="i" class="grid grid-cols-12 gap-2 items-center">
                   <input type="number" class="input-field col-span-3" v-model.number="tier.min" :placeholder="t('queueInhouseMmrDiffMin')" />

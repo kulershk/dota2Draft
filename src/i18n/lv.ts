@@ -2073,6 +2073,7 @@ export default {
   queueInhouseWinPoints: 'Uzvaras punkti',
   queueInhouseLossPoints: 'Zaudējuma punkti',
   queueInhouseMmrDiffTiers: 'Underdog MMR-starpības bonusu līmeņi',
+  queueInhouseMmrDiffTiersHint: 'Handikaps pēc komandu MMR starpības. Zemākā MMR komanda iegūst bonusu, augstākā MMR komanda to zaudē — attiecas uz visiem, neatkarīgi no rezultāta.',
   queueInhouseMmrDiffMin: 'Min starpība',
   queueInhouseMmrDiffMax: 'Max starpība',
   queueInhouseTierBonus: 'Bonuss',

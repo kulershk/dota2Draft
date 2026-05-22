@@ -2073,6 +2073,7 @@ export default {
   queueInhouseWinPoints: 'Pergalės taškai',
   queueInhouseLossPoints: 'Pralaimėjimo taškai',
   queueInhouseMmrDiffTiers: 'Underdog MMR skirtumo premijų lygiai',
+  queueInhouseMmrDiffTiersHint: 'Handikapas pagal komandų MMR skirtumą. Žemesnio MMR komanda gauna premiją, aukštesnio MMR komanda ją praranda — taikoma visiems, nepriklausomai nuo rezultato.',
   queueInhouseMmrDiffMin: 'Min skirt.',
   queueInhouseMmrDiffMax: 'Maks skirt.',
   queueInhouseTierBonus: 'Premija',

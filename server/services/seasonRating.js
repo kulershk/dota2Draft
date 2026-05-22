@@ -58,20 +58,25 @@ export function teamAvgMmr(playerMmrs) {
 }
 
 // ─── Inhouse bonuses (pure) ──────────────────────────────────
-// Underdog bonus: when an outmatched team wins they earn a tier-based bump;
-// when a favoured team loses they take a symmetric extra hit. The favoured-
-// side win and underdog-side loss earn nothing extra — base ELO already
-// accounts for the expected outcome. tiers: [{min,max,bonus}].
-export function mmrDiffBonus({ myAvgMmr, oppAvgMmr, won, tiers }) {
+// Underdog MMR-diff handicap: a tier-based correction for team MMR imbalance,
+// applied to EVERY player regardless of the result. The lower-MMR (underdog)
+// team always gains the tier bonus and the higher-MMR (favoured) team always
+// loses it — the gap itself is what we're correcting, not who won. So a
+// heavily-favoured team that wins as expected still sheds the diff, and an
+// underdog that loses is cushioned by it. `won` is intentionally ignored now
+// (call sites still pass it; the extra property is harmless).
+// tiers: [{min,max,bonus}].
+export function mmrDiffBonus({ myAvgMmr, oppAvgMmr, tiers }) {
   if (!Array.isArray(tiers) || !tiers.length) return 0
-  const diff = Math.abs(Number(oppAvgMmr) - Number(myAvgMmr))
+  const my = Number(myAvgMmr)
+  const opp = Number(oppAvgMmr)
+  // Dead-even (or unknown) MMR: no underdog, no handicap.
+  if (!Number.isFinite(my) || !Number.isFinite(opp) || my === opp) return 0
+  const diff = Math.abs(opp - my)
   const tier = tiers.find(t => diff >= Number(t.min) && diff <= Number(t.max))
   if (!tier) return 0
-  const amIUnderdog = Number(myAvgMmr) < Number(oppAvgMmr)
   const bonus = Math.abs(Number(tier.bonus) || 0)
-  if (amIUnderdog && won) return bonus
-  if (!amIUnderdog && !won) return -bonus
-  return 0
+  return my < opp ? bonus : -bonus
 }
 
 // Winstreak bonus: highest matching tier wins (so 8+ caps at the top tier).
