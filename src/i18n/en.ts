@@ -96,6 +96,7 @@ export default {
   slotsAuto: 'Auto',
   slotsAutoStop: 'Stop auto',
   slotsAutoRemaining: '{n} left',
+  slotsAutoPaused: 'Auto-spin paused — gamble or collect to continue',
   apply: 'Apply',
   friends: 'Friends',
   friendsPendingTooltip: '{n} new friend request(s)',

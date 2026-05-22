@@ -96,6 +96,7 @@ export default {
   slotsAuto: 'Auto',
   slotsAutoStop: 'Stabdyti auto',
   slotsAutoRemaining: 'liko {n}',
+  slotsAutoPaused: 'Auto sukimas pristabdytas — rizikuok arba atsiimk, kad tęstum',
   apply: 'Taikyti',
   friends: 'Draugai',
   friendsPendingTooltip: '{n} nauji draugystės prašymai',

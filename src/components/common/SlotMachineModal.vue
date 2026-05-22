@@ -59,11 +59,14 @@ const pendingWin = ref(0)
 const gamble = ref<{ steps: number; canGamble: boolean; flipping: boolean; card: string | null; result: string | null }>({ steps: 0, canGamble: false, flipping: false, card: null, result: null })
 const collected = ref<number | null>(null)
 
-// Auto-spin: spins repeatedly and banks each win (never gambles). -1 = ∞.
+// Auto-spin: spins repeatedly and banks each normal win. Bonus (free-spins)
+// wins pause the run so the player can choose to gamble or collect. -1 = ∞.
 const AUTO_PRESETS = [10, 25, 50, -1]
 const autoCount = ref(25)
 const autoSpinning = ref(false)
 const autoRemaining = ref(0)
+const autoPaused = ref(false)            // suspended awaiting a gamble/collect decision on a bonus win
+let autoResume: (() => void) | null = null
 
 const balance = computed(() => store.currentUser.value?.gcoins ?? 0)
 const busy = computed(() => spinning.value || bonusPlaying.value)
@@ -269,11 +272,25 @@ async function doCollect() {
   gamble.value = { steps: 0, canGamble: false, flipping: false, card: null, result: null }
 }
 
-function stopAuto() { autoSpinning.value = false; autoRemaining.value = 0 }
+function stopAuto() {
+  autoSpinning.value = false
+  autoRemaining.value = 0
+  // Release a paused run (clears autoResume first so the loop's finally → stopAuto
+  // is a no-op). Any uncollected pending win stays for manual collect/gamble.
+  if (autoResume) { const r = autoResume; autoResume = null; autoPaused.value = false; r() }
+}
 
-// Auto-spin loop: spins, banks each win immediately (auto-collect — never
-// gambles), and stops on count exhausted / Stop / not enough gcoins / spin
-// error / leaving the queue.
+// While an auto-run is paused for a bonus-win decision, resume once the pending
+// win is settled — collected, or gambled away.
+watch(pendingWin, (v) => {
+  if (v === 0 && autoPaused.value && autoResume) {
+    const r = autoResume; autoResume = null; autoPaused.value = false; r()
+  }
+})
+
+// Auto-spin loop: spins, banks each normal win immediately (auto-collect). A
+// bonus win pauses the run for a gamble/collect decision, then resumes. Stops
+// on count exhausted / Stop / not enough gcoins / spin error / leaving the queue.
 async function startAuto() {
   if (autoSpinning.value || busy.value || pendingWin.value > 0) return
   autoSpinning.value = true
@@ -285,7 +302,16 @@ async function startAuto() {
       error.value = null
       await spin()
       if (error.value) break
-      if (pendingWin.value > 0) await doCollect() // bank the win, keep going
+      if (pendingWin.value > 0) {
+        if (lastWin.value?.bonus) {
+          // Bonus win: pause and let the player gamble or collect. Resumes when
+          // the pending win is settled (watch on pendingWin), or on Stop.
+          autoPaused.value = true
+          await new Promise<void>(res => { autoResume = res })
+        } else {
+          await doCollect() // normal win: bank it and keep going
+        }
+      }
       if (autoRemaining.value > 0) autoRemaining.value--
       if (!autoSpinning.value) break
       await sleep(450)
@@ -392,20 +418,17 @@ onUnmounted(() => { stopAuto(); skipBonus.value = true; settleOnExit() })
         <span v-if="error" class="text-destructive">{{ error }}</span>
         <span v-else-if="busy" class="text-primary flex items-center gap-2"><Loader2 class="w-4 h-4 animate-spin" /> {{ t('slotsSpinning') }}</span>
         <span v-else-if="collected !== null && collected > 0" class="text-green-400">{{ t('slotsWon', { n: collected.toLocaleString() }) }}</span>
-        <span v-else-if="pendingWin > 0 && !autoSpinning" class="text-amber-300">{{ t('slotsTotalWin', { n: pendingWin.toLocaleString() }) }}</span>
+        <span v-else-if="pendingWin > 0 && (autoPaused || !autoSpinning)" class="text-amber-300">{{ t('slotsTotalWin', { n: pendingWin.toLocaleString() }) }}</span>
         <span v-else-if="lastWin && lastWin.total === 0" class="text-muted-foreground">{{ t('slotsNoWin') }}</span>
       </div>
 
-      <!-- Auto-spin status -->
-      <div v-if="autoSpinning" class="flex flex-col gap-2 p-3 rounded-lg border border-primary/30 bg-primary/5">
-        <div class="text-center text-xs text-muted-foreground">
-          {{ t('slotsAuto') }}<span v-if="autoRemaining >= 0"> · {{ t('slotsAutoRemaining', { n: autoRemaining }) }}</span>
+      <!-- Gamble panel (a win is pending and not auto-collecting it: manual play,
+           or an auto-run paused on a bonus win) -->
+      <div v-if="pendingWin > 0 && !bonusPlaying && (autoPaused || !autoSpinning)" class="flex flex-col gap-3 p-3 rounded-lg border border-amber-500/30 bg-amber-500/5">
+        <div v-if="autoPaused" class="flex items-center justify-between">
+          <span class="text-[11px] font-semibold text-primary">{{ t('slotsAutoPaused') }}</span>
+          <button class="text-[11px] underline text-muted-foreground hover:text-foreground" @click="stopAuto">{{ t('slotsAutoStop') }}</button>
         </div>
-        <button class="btn-primary w-full py-2.5 text-sm font-extrabold" @click="stopAuto">{{ t('slotsAutoStop') }}</button>
-      </div>
-
-      <!-- Gamble panel (shown while a win is pending) -->
-      <div v-else-if="pendingWin > 0 && !bonusPlaying" class="flex flex-col gap-3 p-3 rounded-lg border border-amber-500/30 bg-amber-500/5">
         <div class="flex items-center justify-between">
           <span class="text-xs uppercase tracking-wide text-amber-300/80">{{ t('slotsGamble') }}</span>
           <span class="text-[11px] font-mono text-muted-foreground">{{ t('slotsGambleStep', { n: gamble.steps, m: gambleCfg.maxSteps }) }}</span>
@@ -424,7 +447,15 @@ onUnmounted(() => { stopAuto(); skipBonus.value = true; settleOnExit() })
         </button>
       </div>
 
-      <!-- Bet + spin (hidden while gambling) -->
+      <!-- Auto-spin status (running; a paused bonus win shows the gamble panel above instead) -->
+      <div v-else-if="autoSpinning" class="flex flex-col gap-2 p-3 rounded-lg border border-primary/30 bg-primary/5">
+        <div class="text-center text-xs text-muted-foreground">
+          {{ t('slotsAuto') }}<span v-if="autoRemaining >= 0"> · {{ t('slotsAutoRemaining', { n: autoRemaining }) }}</span>
+        </div>
+        <button class="btn-primary w-full py-2.5 text-sm font-extrabold" @click="stopAuto">{{ t('slotsAutoStop') }}</button>
+      </div>
+
+      <!-- Bet + spin (hidden while gambling / auto-running) -->
       <template v-else>
         <div>
           <div class="flex items-center justify-between mb-2">
