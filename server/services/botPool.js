@@ -314,8 +314,17 @@ class BotPool {
     // "waiting" on every cache update, and a late event can race against
     // _onGameStarted (which sets 'completed') and flip the row back, which
     // then re-arms the rejoin-on-available path below and bans players.
+    //
+    // Also never downgrade an already-'active' lobby back to 'waiting': a RUN
+    // game never reverts to the lobby room, so an out-of-order/late "waiting"
+    // is always spurious. (Belt-and-suspenders alongside the bot-side fix that
+    // makes per-cache-update sends report the real state.) players_joined and
+    // updated_at still refresh so the roster stays in sync.
     await execute(
-      `UPDATE match_lobbies SET status = $1, players_joined = $2, updated_at = NOW()
+      `UPDATE match_lobbies
+          SET status = CASE WHEN status = 'active' AND $1 = 'waiting' THEN status ELSE $1 END,
+              players_joined = $2,
+              updated_at = NOW()
        WHERE id = $3 AND status NOT IN ('completed', 'error', 'cancelled')`,
       [data.status, JSON.stringify(data.playersJoined || []), lobbyId]
     )

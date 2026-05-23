@@ -682,9 +682,21 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 			})
 		}
 	}
+	// Report the *current* lobby state, not a hardcoded "waiting". This handler
+	// runs on every SO-cache update — including during SERVERSETUP and RUN — so
+	// hardcoding "waiting" clobbered the real cointoss/active status back to
+	// "waiting" on every in-game cache tick, making the status flip-flop while
+	// the game was actually running.
+	lobbyStatus := "waiting"
+	switch newLobby.GetState() {
+	case gcccm.CSODOTALobby_SERVERSETUP:
+		lobbyStatus = "cointoss"
+	case gcccm.CSODOTALobby_RUN:
+		lobbyStatus = "active"
+	}
 	b.send("lobby_status", protocol.LobbyStatusEvent{
 		LobbyID:       b.activeLobbyID,
-		Status:        "waiting",
+		Status:        lobbyStatus,
 		PlayersJoined: joinedPlayers,
 	})
 
@@ -717,22 +729,9 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 
 	b.log(fmt.Sprintf("  State: %s → %s (matchID: %d)", oldState.String(), lobbyState.String(), matchID))
 
-	// Report state changes to Node so frontend can track lobby phase
-	if lobbyState != oldState && b.activeLobbyID != "" {
-		statusName := ""
-		switch lobbyState {
-		case gcccm.CSODOTALobby_SERVERSETUP:
-			statusName = "cointoss"
-		case gcccm.CSODOTALobby_RUN:
-			statusName = "active"
-		}
-		if statusName != "" {
-			b.send("lobby_status", protocol.LobbyStatusEvent{
-				LobbyID: b.activeLobbyID,
-				Status:  statusName,
-			})
-		}
-	}
+	// Lobby status (cointoss/active/waiting) is reported from the per-cache-update
+	// send above, which already derives it from the current state — no separate
+	// transition-only send needed (and a duplicate one would just race it).
 
 	// Detect match ID assigned
 	if matchID != 0 && (oldLobby == nil || oldLobby.GetMatchId() == 0) {
