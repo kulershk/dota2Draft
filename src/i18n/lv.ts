@@ -1869,6 +1869,8 @@ export default {
   noMatches: 'Vēl nav nospēlētu spēļu',
   jobNextRun: 'Nākamā izpilde',
   queueAdminRetryLobbyHint: 'Piespiest botu pūlu mēģināt izveidot lobiju vēlreiz ar citu botu',
+  queueAdminCheckResult: 'Pārbaudīt rezultātu',
+  queueAdminCheckResultHint: 'Piespiest tūlītēju pārbaudi, vai Dota spēle ir beigusies, un ierakstīt uzvarētāju — palaiž fetch_match_stats darbu uzreiz, negaidot nākamo pārbaudi.',
   queueAdminMatchInProgress: 'Spēle jau sākusies — bots pametis lobiju',
   queueAdminForceComplete: 'Piespiest pabeigt',
   queueAdminForceCompleteHint: 'Atzīmē šo spēli kā pabeigtu un atbrīvo tās spēlētājus no aktīvās spēles bloka. Izmanto, kad Dota spēle beigusies, bet sistēma nav reģistrējusi uzvarētāju.',

@@ -368,6 +368,26 @@ async function retryLobby(id: number) {
   }
 }
 
+// Force an immediate match-result check (runs the fetch_match_stats job now).
+// Non-destructive; on success we flash a checkmark and refresh — the winner
+// resolves a few seconds later once the worker picks up the bumped job.
+const checkingResult = ref<number | null>(null)
+const checkedResult = ref<number | null>(null)
+async function checkResult(id: number) {
+  if (checkingResult.value) return
+  checkingResult.value = id
+  try {
+    await api.checkQueueMatchResult(id)
+    checkedResult.value = id
+    setTimeout(() => { if (checkedResult.value === id) checkedResult.value = null }, 2000)
+    await fetchActiveMatches()
+  } catch (e: any) {
+    console.error('[checkResult]', e?.message || e)
+  } finally {
+    checkingResult.value = null
+  }
+}
+
 function statusLabel(status: string) {
   switch (status) {
     case 'picking': return t('queueStatusPicking')
@@ -521,6 +541,18 @@ onUnmounted(() => {
                 @click="retryLobby(qm.id)"
               >
                 <RefreshCw class="w-3.5 h-3.5" :class="retryingLobby === qm.id ? 'animate-spin' : ''" /> {{ t('queueAdminRetryLobby') }}
+              </button>
+              <button
+                v-if="qm.match_id"
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-cyan-500 hover:bg-cyan-500/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                :title="t('queueAdminCheckResultHint')"
+                :disabled="checkingResult === qm.id"
+                @click="checkResult(qm.id)"
+              >
+                <Loader2 v-if="checkingResult === qm.id" class="w-3.5 h-3.5 animate-spin" />
+                <Check v-else-if="checkedResult === qm.id" class="w-3.5 h-3.5 text-green-400" />
+                <Search v-else class="w-3.5 h-3.5" />
+                {{ t('queueAdminCheckResult') }}
               </button>
               <button
                 class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"

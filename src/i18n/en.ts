@@ -1880,6 +1880,8 @@ export default {
   noMatches: 'No matches played yet',
   jobNextRun: 'Next Run',
   queueAdminRetryLobbyHint: 'Force the bot pool to try creating the lobby again with a different bot',
+  queueAdminCheckResult: 'Check result',
+  queueAdminCheckResultHint: 'Force an immediate check of whether the Dota game has ended and record the winner — runs the fetch_match_stats job now instead of waiting for the next poll.',
   queueAdminMatchInProgress: 'Match already started — bot has left the lobby',
   queueAdminForceComplete: 'Force complete',
   queueAdminForceCompleteHint: 'Mark this match completed and free its players from the in-match lock. Use when the Dota game ended but the system did not record a winner.',

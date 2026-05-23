@@ -985,6 +985,74 @@ export default function createQueueRouter(io) {
     }
   })
 
+  // ── Admin: force an immediate match-result check ──
+  // Bumps the per-game fetch_match_stats poll to run NOW instead of waiting for
+  // its next 60s cadence — for when an admin knows the Dota game just ended and
+  // wants the winner resolved right away. Mirrors botPool._pollUnresolvedGames,
+  // scoped to this one queue match's games.
+  router.post('/api/admin/queue/matches/:id/check-result', async (req, res) => {
+    const scope = await getQueueAdminScope(req, res)
+    if (!scope) return
+    const qmId = Number(req.params.id)
+    try {
+      const qm = await queryOne('SELECT match_id, pool_id FROM queue_matches WHERE id = $1', [qmId])
+      if (!qm) return res.status(404).json({ error: 'Queue match not found' })
+      if (!scope.canManageAll && !scope.ownedPoolIds.has(qm.pool_id)) {
+        return res.status(403).json({ error: 'Permission denied — match is not in a pool you own' })
+      }
+      if (!qm.match_id) return res.status(400).json({ error: 'No match row linked to this queue match yet' })
+
+      // Only unresolved games that already have a Dota match id can be resolved.
+      const games = await query(
+        `SELECT id, match_id, game_number, dotabuff_id
+           FROM match_games
+          WHERE match_id = $1
+            AND dotabuff_id IS NOT NULL AND dotabuff_id != ''
+            AND winner_captain_id IS NULL
+          ORDER BY game_number ASC`,
+        [qm.match_id]
+      )
+      if (games.length === 0) {
+        return res.json({ ok: true, queued: 0, message: 'Nothing to check — no in-progress game with a Dota match id' })
+      }
+
+      const { enqueueJob } = await import('../services/jobs.js')
+      let queued = 0
+      for (const g of games) {
+        // Prefer bumping an already-pending poll to NOW so we don't stack
+        // duplicates; if one is mid-run, leave it; otherwise enqueue fresh.
+        const pending = await queryOne(
+          `SELECT id FROM jobs
+             WHERE type = 'fetch_match_stats' AND status = 'pending'
+               AND payload->>'matchGameId' = $1
+             ORDER BY id LIMIT 1`,
+          [String(g.id)]
+        )
+        if (pending) {
+          await execute(`UPDATE jobs SET run_at = NOW() WHERE id = $1`, [pending.id])
+          queued++
+          continue
+        }
+        const running = await queryOne(
+          `SELECT 1 FROM jobs WHERE type = 'fetch_match_stats' AND status = 'running'
+             AND payload->>'matchGameId' = $1 LIMIT 1`,
+          [String(g.id)]
+        )
+        if (running) { queued++; continue }
+        await enqueueJob({
+          type: 'fetch_match_stats',
+          payload: { matchGameId: g.id, dotabuffId: g.dotabuff_id, matchId: g.match_id, gameNumber: g.game_number },
+          maxAttempts: 999,
+        })
+        queued++
+      }
+      res.json({ ok: true, queued })
+    } catch (e) {
+      console.error('[Queue] Admin check-result failed:', e.message)
+      res.status(500).json({ error: e.message })
+    }
+  })
+
   // ── Admin: list currently queued players across all pools ──
   router.get('/api/admin/queue/players', async (req, res) => {
     const scope = await getQueueAdminScope(req, res)

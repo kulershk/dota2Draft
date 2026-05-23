@@ -3756,6 +3756,22 @@
           }
         }
       },
+      "/api/admin/queue/matches/{id}/check-result": {
+        "post": {
+          "tags": ["Queue"],
+          "summary": "Force an immediate match-result check",
+          "description": "Admin-only (queue-admin scope). For each unresolved game of this queue match that already has a Dota match id, bumps its pending fetch_match_stats poll to run immediately (or enqueues one if none is pending) instead of waiting for the 60s cadence. Resolves the winner as soon as the GC/Steam has the match. Returns { ok, queued } where queued is the number of games (re)checked (0 if there is nothing in progress to check).",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+          "responses": {
+            "200": { "description": "{ ok, queued, message? } — checks dispatched (queued may be 0)" },
+            "400": { "description": "No match row linked to this queue match yet" },
+            "403": { "description": "Match is not in a pool you own" },
+            "404": { "description": "Queue match not found" },
+            "500": { "description": "Dispatch failed" }
+          }
+        }
+      },
       "/api/competitions/{compId}/tournament/repair-advancement": {
         "post": {
           "tags": ["Tournament"],

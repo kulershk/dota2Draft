@@ -1869,6 +1869,8 @@ export default {
   noMatches: 'Dar nežaidė jokių rungtynių',
   jobNextRun: 'Kitas paleidimas',
   queueAdminRetryLobbyHint: 'Priverstinai kurti lobį iš naujo su kitu botu',
+  queueAdminCheckResult: 'Tikrinti rezultatą',
+  queueAdminCheckResultHint: 'Priverstinai iškart patikrinti, ar Dota žaidimas baigėsi, ir įrašyti nugalėtoją — paleidžia fetch_match_stats darbą dabar, nelaukiant kito tikrinimo.',
   queueAdminMatchInProgress: 'Rungtynės jau prasidėjo — botas paliko lobį',
   queueAdminForceComplete: 'Priverstinai užbaigti',
   queueAdminForceCompleteHint: 'Pažymi šias rungtynes kaip užbaigtas ir atlaisvina jų žaidėjus nuo aktyvių rungtynių užrakto. Naudoti, kai Dota žaidimas baigėsi, bet sistema neužregistravo nugalėtojo.',
