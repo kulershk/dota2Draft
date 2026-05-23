@@ -1,9 +1,10 @@
 <script setup lang="ts">
-// Modal for filing an inhouse toxic or grief report against a specific
-// player. Replaces the prior prompt()/alert() flow per the CLAUDE.md UI
-// dialogs rule. Parent controls visibility via the `show` prop and
-// supplies the target player + queue match id; the dialog owns the
-// comment input, submit state and error display.
+// Modal for filing an inhouse report against a specific player. The reporter
+// picks the report type (toxic or grief) inside the modal; grief requires a
+// comment, toxic's is optional. Replaces the prior prompt()/alert() flow per
+// the CLAUDE.md UI dialogs rule. Parent controls visibility via the `show`
+// prop and supplies the target player + queue match id; the dialog owns the
+// type choice, comment input, submit state and error display.
 import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { AlertTriangle, Loader2, Check } from 'lucide-vue-next'
@@ -18,7 +19,6 @@ interface ReportablePlayer {
 
 const props = defineProps<{
   show: boolean
-  kind: 'toxic' | 'grief'
   player: ReportablePlayer | null
   queueMatchId: number | null
 }>()
@@ -30,15 +30,17 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const api = useApi()
 
+const kind = ref<'toxic' | 'grief'>('toxic')
 const comment = ref('')
 const submitting = ref(false)
 const errorText = ref<string | null>(null)
 const successFlash = ref(false)
 
-// Reset every time the dialog opens — never leak state from a prior
-// report against a different player.
+// Reset every time the dialog opens — never leak state (type or comment)
+// from a prior report against a different player.
 watch(() => props.show, (open) => {
   if (open) {
+    kind.value = 'toxic'
     comment.value = ''
     submitting.value = false
     errorText.value = null
@@ -46,7 +48,7 @@ watch(() => props.show, (open) => {
   }
 })
 
-const commentRequired = computed(() => props.kind === 'grief')
+const commentRequired = computed(() => kind.value === 'grief')
 const canSubmit = computed(() => {
   if (submitting.value) return false
   if (!props.player || !props.queueMatchId) return false
@@ -54,12 +56,17 @@ const canSubmit = computed(() => {
   return true
 })
 
+function selectKind(k: 'toxic' | 'grief') {
+  if (submitting.value || successFlash.value) return
+  kind.value = k
+}
+
 async function submit() {
   if (!canSubmit.value || !props.player || !props.queueMatchId) return
   submitting.value = true
   errorText.value = null
   try {
-    if (props.kind === 'toxic') {
+    if (kind.value === 'toxic') {
       await api.reportToxic({
         queue_match_id: props.queueMatchId,
         reported_player_id: props.player.id,
@@ -95,9 +102,7 @@ async function submit() {
         <AlertTriangle class="w-5 h-5" :class="kind === 'toxic' ? 'text-amber-400' : 'text-rose-400'" />
       </div>
       <div class="min-w-0">
-        <h2 class="text-base font-semibold">
-          {{ kind === 'toxic' ? t('inhouseReportToxicTitle') : t('inhouseReportGriefTitle') }}
-        </h2>
+        <h2 class="text-base font-semibold">{{ t('inhouseReportTitle') }}</h2>
         <p v-if="player" class="text-xs text-muted-foreground mt-0.5">
           {{ t('inhouseReportAgainst', { name: player.name }) }}
         </p>
@@ -105,6 +110,29 @@ async function submit() {
     </div>
 
     <div class="px-6 py-5 flex flex-col gap-3">
+      <!-- Report type selector -->
+      <label class="text-xs font-medium text-muted-foreground">{{ t('inhouseReportTypeLabel') }}</label>
+      <div class="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          class="px-3 py-2 rounded-md border text-sm font-medium transition-colors"
+          :class="kind === 'toxic'
+            ? 'border-amber-500/50 bg-amber-500/10 text-amber-400'
+            : 'border-border text-muted-foreground hover:bg-muted/50'"
+          :disabled="submitting || successFlash"
+          @click="selectKind('toxic')"
+        >{{ t('inhouseReportKindToxic') }}</button>
+        <button
+          type="button"
+          class="px-3 py-2 rounded-md border text-sm font-medium transition-colors"
+          :class="kind === 'grief'
+            ? 'border-rose-500/50 bg-rose-500/10 text-rose-400'
+            : 'border-border text-muted-foreground hover:bg-muted/50'"
+          :disabled="submitting || successFlash"
+          @click="selectKind('grief')"
+        >{{ t('inhouseReportKindGrief') }}</button>
+      </div>
+
       <label class="text-xs font-medium text-muted-foreground">
         {{ commentRequired ? t('inhouseReportCommentRequired') : t('inhouseReportCommentOptional') }}
       </label>

@@ -182,31 +182,28 @@ onMounted(async () => {
   loading.value = false
 })
 
-// Inhouse reports. Buttons only render when the match's pool has
-// inhouse_enabled. Authoritative gating still lives on the server
-// (participation, captain-of-team, report_window_minutes) — UI just
-// avoids showing dead buttons.
+// Inhouse reports. The Report button only renders when the match's pool has
+// inhouse_enabled and you played in it. Authoritative gating still lives on
+// the server (participation, report_window_minutes) — UI just avoids showing
+// a dead button.
 const isInhouseMatch = computed(() => !!match.value?.pool_inhouse_enabled)
 const iAmInMatch = computed(() => {
   const uid = currentUserId.value
   if (!uid) return false
   return [...team1.value, ...team2.value].some((p: any) => p.playerId === uid)
 })
-function canReportToxic(playerId: number): boolean {
+// Any participant of an inhouse match can report any other participant. The
+// report type (toxic / grief) is chosen inside the dialog.
+function canReport(playerId: number): boolean {
   if (!isInhouseMatch.value || !iAmInMatch.value) return false
   return playerId !== currentUserId.value
 }
-// Grief uses the same gating as toxic: any participant of an inhouse match
-// can report any other participant. (Previously captain-only + own team.)
-function canReportGrief(playerId: number): boolean {
-  return canReportToxic(playerId)
-}
 
-const reportDialog = ref<{ open: boolean; kind: 'toxic' | 'grief'; player: { id: number; name: string } | null }>({
-  open: false, kind: 'toxic', player: null,
+const reportDialog = ref<{ open: boolean; player: { id: number; name: string } | null }>({
+  open: false, player: null,
 })
-function openReport(kind: 'toxic' | 'grief', playerId: number, name: string) {
-  reportDialog.value = { open: true, kind, player: { id: playerId, name } }
+function openReport(playerId: number, name: string) {
+  reportDialog.value = { open: true, player: { id: playerId, name } }
 }
 function closeReport() {
   reportDialog.value = { ...reportDialog.value, open: false }
@@ -292,14 +289,9 @@ function closeReport() {
             }))"
           >
             <template #row-action="{ player }">
-              <button v-if="canReportToxic(player.id)"
-                class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 shrink-0"
-                :title="t('inhouseReportToxic')"
-                @click="openReport('toxic', player.id, player.name)">!</button>
-              <button v-if="canReportGrief(player.id)"
-                class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 shrink-0"
-                :title="t('inhouseReportGrief')"
-                @click="openReport('grief', player.id, player.name)">G</button>
+              <button v-if="canReport(player.id)"
+                class="text-[10px] px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 shrink-0"
+                @click="openReport(player.id, player.name)">{{ t('inhouseReportButton') }}</button>
             </template>
           </TeamRosterTable>
           <TeamRosterTable
@@ -319,14 +311,9 @@ function closeReport() {
             }))"
           >
             <template #row-action="{ player }">
-              <button v-if="canReportToxic(player.id)"
-                class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 shrink-0"
-                :title="t('inhouseReportToxic')"
-                @click="openReport('toxic', player.id, player.name)">!</button>
-              <button v-if="canReportGrief(player.id)"
-                class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 shrink-0"
-                :title="t('inhouseReportGrief')"
-                @click="openReport('grief', player.id, player.name)">G</button>
+              <button v-if="canReport(player.id)"
+                class="text-[10px] px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 shrink-0"
+                @click="openReport(player.id, player.name)">{{ t('inhouseReportButton') }}</button>
             </template>
           </TeamRosterTable>
         </div>
@@ -405,7 +392,6 @@ function closeReport() {
 
     <ReportPlayerDialog
       :show="reportDialog.open"
-      :kind="reportDialog.kind"
       :player="reportDialog.player"
       :queue-match-id="match?.id || null"
       @close="closeReport"
