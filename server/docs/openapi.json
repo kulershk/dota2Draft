@@ -4166,8 +4166,8 @@
       "/api/inhouse/reports/grief": {
         "post": {
           "tags": ["Inhouse"],
-          "summary": "Captain-only grief report against a teammate",
-          "description": "Reporter must be the team's captain (captain1 or captain2 of the queue match). The match must either still be active or have completed within `pool.report_window_minutes` (default 15). Reported player must be on the reporter's team. Comment is mandatory. Inserts a pending report — strikes only apply on admin approval.",
+          "summary": "File a grief report against a match participant",
+          "description": "Reporter must be a participant of the queue match (any player, not just captains). Inhouse-pool only. The match must either still be active (picking/lobby_creating/live) or have completed within `pool.report_window_minutes` (default 15). Comment is mandatory. The unique-on-(reporter,reported,match) constraint prevents duplicates (409 on retry). Inserts a pending report — strikes only apply on admin approval.",
           "security": [{ "bearerAuth": [] }],
           "requestBody": {
             "required": true,
@@ -4183,8 +4183,9 @@
           },
           "responses": {
             "201": { "description": "{ ok, reportId, status: 'pending' }" },
-            "400": { "description": "Comment missing / not inhouse / player not on team" },
-            "403": { "description": "Reporter is not a captain or not on same team" }
+            "400": { "description": "Comment missing / not inhouse / reported player not in match / can't report yourself" },
+            "403": { "description": "Reporter not in match / report window expired / cancelled match" },
+            "409": { "description": "Already reported this player for this match" }
           }
         }
       },

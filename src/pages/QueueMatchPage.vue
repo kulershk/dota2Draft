@@ -192,27 +192,14 @@ const iAmInMatch = computed(() => {
   if (!uid) return false
   return [...team1.value, ...team2.value].some((p: any) => p.playerId === uid)
 })
-const myTeam = computed<1 | 2 | null>(() => {
-  const uid = currentUserId.value
-  if (!uid) return null
-  if (team1.value.some((p: any) => p.playerId === uid)) return 1
-  if (team2.value.some((p: any) => p.playerId === uid)) return 2
-  return null
-})
-const iAmCaptain = computed(() => {
-  const uid = currentUserId.value
-  if (!uid || !match.value) return false
-  return match.value.captain1_player_id === uid || match.value.captain2_player_id === uid
-})
-
 function canReportToxic(playerId: number): boolean {
   if (!isInhouseMatch.value || !iAmInMatch.value) return false
   return playerId !== currentUserId.value
 }
-function canReportGrief(playerId: number, side: 1 | 2): boolean {
-  if (!isInhouseMatch.value || !iAmCaptain.value) return false
-  if (playerId === currentUserId.value) return false
-  return side === myTeam.value
+// Grief uses the same gating as toxic: any participant of an inhouse match
+// can report any other participant. (Previously captain-only + own team.)
+function canReportGrief(playerId: number): boolean {
+  return canReportToxic(playerId)
 }
 
 const reportDialog = ref<{ open: boolean; kind: 'toxic' | 'grief'; player: { id: number; name: string } | null }>({
@@ -309,7 +296,7 @@ function closeReport() {
                 class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 shrink-0"
                 :title="t('inhouseReportToxic')"
                 @click="openReport('toxic', player.id, player.name)">!</button>
-              <button v-if="canReportGrief(player.id, 1)"
+              <button v-if="canReportGrief(player.id)"
                 class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 shrink-0"
                 :title="t('inhouseReportGrief')"
                 @click="openReport('grief', player.id, player.name)">G</button>
@@ -336,7 +323,7 @@ function closeReport() {
                 class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 shrink-0"
                 :title="t('inhouseReportToxic')"
                 @click="openReport('toxic', player.id, player.name)">!</button>
-              <button v-if="canReportGrief(player.id, 2)"
+              <button v-if="canReportGrief(player.id)"
                 class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 shrink-0"
                 :title="t('inhouseReportGrief')"
                 @click="openReport('grief', player.id, player.name)">G</button>

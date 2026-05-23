@@ -1152,8 +1152,8 @@ export async function initDb() {
   }
   try { await execute(`CREATE INDEX IF NOT EXISTS inhouse_toxic_reports_status_idx ON inhouse_toxic_reports (status, created_at DESC)`) } catch {}
 
-  // Grief reports: captain-only at the route level. Pending until an admin
-  // approves or rejects.
+  // Grief reports: any match participant at the route level (same as toxic).
+  // Pending until an admin approves or rejects.
   await execute(`
     CREATE TABLE IF NOT EXISTS inhouse_grief_reports (
       id                   SERIAL PRIMARY KEY,
@@ -1169,6 +1169,9 @@ export async function initDb() {
       created_at           TIMESTAMP NOT NULL DEFAULT NOW()
     )
   `)
+  // One grief report per (reporter, reported, match) — mirrors the toxic
+  // dedup index so opening reports to all participants can't be spammed.
+  try { await execute(`CREATE UNIQUE INDEX IF NOT EXISTS inhouse_grief_reports_unique ON inhouse_grief_reports (reporter_player_id, reported_player_id, queue_match_id)`) } catch {}
   try { await execute(`CREATE INDEX IF NOT EXISTS inhouse_grief_reports_status_idx ON inhouse_grief_reports (status, created_at DESC)`) } catch {}
   try { await execute(`CREATE INDEX IF NOT EXISTS inhouse_grief_reports_target_idx ON inhouse_grief_reports (reported_player_id, created_at DESC)`) } catch {}
 

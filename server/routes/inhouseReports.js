@@ -5,9 +5,10 @@
 // at configured tiers insert a row into queue_bans (the existing ban-
 // enforcement at queue:join applies the cooldown for free).
 //
-// Grief: captain-only, requires comment, admin-reviewed. On approval, a
-// grief_strikes increment + cooldown via the parallel grief-cooldowns
-// config. If the reported player was in the captain pool, they lose it.
+// Grief: any match participant can report any other (same gating as toxic),
+// requires comment, admin-reviewed. On approval, a grief_strikes increment +
+// cooldown via the parallel grief-cooldowns config. If the reported player was
+// in the captain pool, they lose it.
 //
 // Both flows emit socket notifications via the per-user `user:${id}` room.
 
@@ -50,13 +51,6 @@ function _isWithinReportWindow(qm, pool) {
     }
   }
   return { ok: true }
-}
-
-// Returns 1, 2, or null — which team a player ended up on for this match.
-function _teamOf(qm, playerId) {
-  for (const p of (qm.team1_players || [])) if (Number(p.playerId) === Number(playerId)) return 1
-  for (const p of (qm.team2_players || [])) if (Number(p.playerId) === Number(playerId)) return 2
-  return null
 }
 
 // Look up the matching cooldown rule for a given strike count. Rules are
@@ -160,7 +154,7 @@ export default function createInhouseReportsRouter(io) {
     }
   })
 
-  // ── User (captain only): file a grief report against a TEAMMATE ──
+  // ── User: file a grief report against any match participant ──
   router.post('/api/inhouse/reports/grief', async (req, res) => {
     const reporter = await getAuthPlayer(req)
     if (!reporter) return res.status(401).json({ error: 'Not authenticated' })
@@ -176,13 +170,11 @@ export default function createInhouseReportsRouter(io) {
     if (error) return res.status(status).json({ error })
     if (!pool?.inhouse_enabled) return res.status(400).json({ error: 'Reports only available on inhouse matches' })
 
-    if (qm.captain1_player_id !== reporter.id && qm.captain2_player_id !== reporter.id) {
-      return res.status(403).json({ error: 'Only captains can file grief reports' })
-    }
-    const reporterTeam = _teamOf(qm, reporter.id)
-    const reportedTeam = _teamOf(qm, reportedId)
-    if (!reporterTeam || !reportedTeam) return res.status(400).json({ error: 'Player not on a team in this match' })
-    if (reporterTeam !== reportedTeam) return res.status(403).json({ error: 'Captains can only report their own team' })
+    // Any match participant can file a grief report against any other
+    // participant (was captain-only + same-team).
+    const allIds = _allPlayerIds(qm)
+    if (!allIds.includes(reporter.id)) return res.status(403).json({ error: 'You were not in this match' })
+    if (!allIds.includes(reportedId))  return res.status(400).json({ error: 'Reported player was not in this match' })
 
     // Window: same rule as toxic — reportable until pool.report_window_minutes
     // after completion.
@@ -190,11 +182,17 @@ export default function createInhouseReportsRouter(io) {
     if (!windowCheck.ok) return res.status(403).json({ error: windowCheck.error })
 
     try {
-      const inserted = await queryOne(
-        `INSERT INTO inhouse_grief_reports (reporter_player_id, reported_player_id, queue_match_id, pool_id, comment)
-         VALUES ($1, $2, $3, $4, $5) RETURNING id, created_at`,
-        [reporter.id, reportedId, queueMatchId, qm.pool_id, comment]
-      )
+      let inserted
+      try {
+        inserted = await queryOne(
+          `INSERT INTO inhouse_grief_reports (reporter_player_id, reported_player_id, queue_match_id, pool_id, comment)
+           VALUES ($1, $2, $3, $4, $5) RETURNING id, created_at`,
+          [reporter.id, reportedId, queueMatchId, qm.pool_id, comment]
+        )
+      } catch (e) {
+        if (e.code === '23505') return res.status(409).json({ error: 'You already reported this player for this match' })
+        throw e
+      }
       io.to(`user:${reporter.id}`).emit('inhouse:reportFiled', { kind: 'grief', queueMatchId, reportedPlayerId: reportedId })
       res.status(201).json({ ok: true, reportId: inserted.id, status: 'pending' })
     } catch (e) {
