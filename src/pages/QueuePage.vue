@@ -938,7 +938,9 @@ onUnmounted(() => {
                     class="px-4 py-2.5 flex items-center gap-3 border-b border-border/20 last:border-b-0"
                     :class="[
                       isInLobby(p.steamId) ? '' : 'opacity-80',
-                    ]">
+                    ]"
+                    :style="tileBorderStyle(p)"
+                    :title="tileBorderTitle(p) || undefined">
                     <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-8 h-8 rounded-full" :class="idx === 0 ? 'ring-2 ring-red-500/40' : ''" />
                     <div class="flex-1 min-w-0">
                       <div class="flex items-center gap-2">
