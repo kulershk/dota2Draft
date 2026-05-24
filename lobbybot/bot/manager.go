@@ -116,6 +116,22 @@ func (m *Manager) ResendAllLobbyState() {
 	}
 }
 
+// ResendAllBotStatus re-emits every bot's current status to Node. Wired to
+// OnConnect so Node recovers accurate bot statuses after a WS reconnect instead
+// of holding stale values until the next status change (which previously
+// required a manual disconnect-all / connect-all to clear).
+func (m *Manager) ResendAllBotStatus() {
+	m.mu.RLock()
+	bots := make([]*Bot, 0, len(m.bots))
+	for _, b := range m.bots {
+		bots = append(bots, b)
+	}
+	m.mu.RUnlock()
+	for _, b := range bots {
+		b.ResendStatus()
+	}
+}
+
 func (m *Manager) RemoveBot(botID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

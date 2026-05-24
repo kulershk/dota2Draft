@@ -927,6 +927,16 @@ func (b *Bot) ResendLobbyState() {
 	}
 }
 
+// ResendStatus re-emits the bot's current status to Node — used on WS
+// (re)connect so Node's DB recovers the true status after the link drops,
+// instead of holding a stale "available"/"busy" that no longer matches reality.
+func (b *Bot) ResendStatus() {
+	b.mu.Lock()
+	status := b.Status
+	b.mu.Unlock()
+	b.send("bot_status", protocol.BotStatusEvent{BotID: b.ID, Status: status})
+}
+
 func (b *Bot) SetBusy(busy bool) {
 	b.mu.Lock()
 	if busy {

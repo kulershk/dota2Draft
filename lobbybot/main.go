@@ -133,8 +133,14 @@ func main() {
 	// On every (re)connect, push any lobby state Node may have lost across
 	// the disconnect — most importantly server_steam_id, which the live-stats
 	// poller needs and which otherwise required manual admin injection after
-	// every deploy.
-	wsClient.OnConnect = botMgr.ResendAllLobbyState
+	// every deploy. Also re-report every bot's current status: a WS reconnect
+	// otherwise left Node holding stale statuses (bots showing "available"/
+	// "busy" that no longer matched reality), which made Retry Lobby fail with
+	// a confusing "bot offline" until an admin manually reconnected the bots.
+	wsClient.OnConnect = func() {
+		botMgr.ResendAllLobbyState()
+		botMgr.ResendAllBotStatus()
+	}
 
 	log.Printf("Connecting to Node.js at %s", cfg.WSURL)
 	go wsClient.Run() // runs reconnect loop in background
