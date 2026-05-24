@@ -49,7 +49,7 @@ export default function createSeasonsRouter(io) {
       const seasons = await query(`
         SELECT s.id, s.name, s.slug, s.description, s.starts_at, s.ends_at, s.is_active, s.verified_mmr_only, s.settings, s.created_at,
           (SELECT COUNT(*)::int FROM season_rankings WHERE season_id = s.id)            AS player_count,
-          (SELECT COUNT(*)::int FROM season_match_log WHERE season_id = s.id AND queue_match_id IS NOT NULL) AS match_count
+          (SELECT COUNT(DISTINCT queue_match_id)::int FROM season_match_log WHERE season_id = s.id AND queue_match_id IS NOT NULL) AS match_count
         FROM seasons s
         WHERE s.is_active = TRUE OR s.ends_at IS NULL OR s.ends_at > NOW() - INTERVAL '30 days'
         ORDER BY s.is_active DESC, COALESCE(s.starts_at, s.created_at) DESC
@@ -66,7 +66,7 @@ export default function createSeasonsRouter(io) {
       const s = await queryOne(`
         SELECT s.*,
           (SELECT COUNT(*)::int FROM season_rankings WHERE season_id = s.id)            AS player_count,
-          (SELECT COUNT(*)::int FROM season_match_log WHERE season_id = s.id AND queue_match_id IS NOT NULL) AS match_count
+          (SELECT COUNT(DISTINCT queue_match_id)::int FROM season_match_log WHERE season_id = s.id AND queue_match_id IS NOT NULL) AS match_count
         FROM seasons s WHERE s.slug = $1
       `, [req.params.slug])
       if (!s) return res.status(404).json({ error: 'Season not found' })
@@ -300,7 +300,7 @@ export default function createSeasonsRouter(io) {
         SELECT s.*,
           (SELECT COUNT(*)::int FROM queue_pools     WHERE season_id = s.id) AS pool_count,
           (SELECT COUNT(*)::int FROM season_rankings WHERE season_id = s.id) AS player_count,
-          (SELECT COUNT(*)::int FROM season_match_log WHERE season_id = s.id AND queue_match_id IS NOT NULL) AS match_count
+          (SELECT COUNT(DISTINCT queue_match_id)::int FROM season_match_log WHERE season_id = s.id AND queue_match_id IS NOT NULL) AS match_count
         FROM seasons s
         ${where}
         ORDER BY s.is_active DESC, COALESCE(s.starts_at, s.created_at) DESC
