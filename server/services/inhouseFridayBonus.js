@@ -1,9 +1,9 @@
 // Inhouse Friday top-3 daily aggregator.
 //
 // At the end of every Friday window (Europe/Riga, configured per inhouse pool —
-// see services/fridayWindow.js), the players who earned the most net points
-// across that window's inhouse matches collect a flat bonus on top of their
-// normal per-match deltas:
+// see services/fridayWindow.js), the players with the best wins − losses record
+// across that window's inhouse matches (ties broken by net MMR gained) collect a
+// flat bonus on top of their normal per-match deltas:
 //
 //   1st place — pool.friday_top1_bonus (default 12)
 //   2nd place — pool.friday_top2_bonus (default  6)
@@ -53,26 +53,28 @@ export async function applyFridayBonusForSeason(seasonId, fridayDate /* YYYY-MM-
       return { skipped: 'window open', fridayDate }
     }
 
-    // Sum net delta per player from match-derived rows inside this Friday's
-    // window only. Exclude prior friday_top_bonus rows (synthetic) — those are
-    // the bonus itself, not ranking input.
+    // Rank players inside this Friday's window by wins − losses (net_wins),
+    // tiebroken by net MMR delta (net_points). Exclude prior friday_top_bonus
+    // rows (synthetic) — those are the bonus itself, not ranking input.
     const windowExpr = fridayWindowSql('created_at', startHour, endHour)
     const rows = (await client.query(`
-      SELECT player_id, SUM(delta)::float8 AS net_points
+      SELECT player_id,
+             SUM(delta)::float8 AS net_points,
+             (COUNT(*) FILTER (WHERE won IS TRUE) - COUNT(*) FILTER (WHERE won IS FALSE))::int AS net_wins
         FROM season_match_log
        WHERE season_id = $1
          AND queue_match_id IS NOT NULL
          AND (${windowExpr}) = $2::date
        GROUP BY player_id
-       HAVING SUM(delta) > 0
-       ORDER BY SUM(delta) DESC
+       HAVING (COUNT(*) FILTER (WHERE won IS TRUE) - COUNT(*) FILTER (WHERE won IS FALSE)) > 0
+       ORDER BY net_wins DESC, net_points DESC
     `, [seasonId, fridayDate])).rows
 
     if (!rows.length) { await client.query('COMMIT'); return { applied: 0, fridayDate } }
 
-    // Walk the sorted list and bucket players into slot 1 / 2 / 3 by net
-    // points. Ties at a slot pool that slot's prize with the next, and split
-    // equally across all tied players.
+    // Walk the sorted list and bucket players into slot 1 / 2 / 3 by net wins
+    // (MMR delta breaks ties). Players identical on BOTH net_wins and net_points
+    // share a slot — pool that slot's prize with the next and split it equally.
     const slots = [
       { name: 1, prize: Number(inhousePool.friday_top1_bonus ?? 12) },
       { name: 2, prize: Number(inhousePool.friday_top2_bonus ?? 6)  },
@@ -82,9 +84,10 @@ export async function applyFridayBonusForSeason(seasonId, fridayDate /* YYYY-MM-
     let slotIdx = 0
     let i = 0
     while (slotIdx < slots.length && i < rows.length) {
-      const tiedAt = rows[i].net_points
+      const tiedWins = rows[i].net_wins
+      const tiedPoints = rows[i].net_points
       const tied = []
-      while (i < rows.length && rows[i].net_points === tiedAt) {
+      while (i < rows.length && rows[i].net_wins === tiedWins && rows[i].net_points === tiedPoints) {
         tied.push(rows[i]); i++
       }
       const slotsConsumed = Math.min(tied.length, slots.length - slotIdx)

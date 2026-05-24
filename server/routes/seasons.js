@@ -129,10 +129,11 @@ export default function createSeasonsRouter(io) {
 
   // ── Public: per-Friday inhouse standings ("Friday top") ──
   // Only meaningful when the season has an inhouse-enabled pool: inhouse runs a
-  // special Friday with a top-3 net-points bonus. For each Friday window that
-  // had matches we rank players by net season points earned in that window
-  // (the pool's configurable Europe/Riga window, see services/fridayWindow.js)
-  // and re-derive the podium + bonus with the same slot/tie rule the Friday
+  // special Friday with a top-3 bonus. For each Friday window that had matches
+  // we rank players by wins − losses in that window, tiebroken by net season
+  // points (MMR) earned (the pool's configurable Europe/Riga window, see
+  // services/fridayWindow.js), and re-derive the podium + bonus with the same
+  // slot/tie rule the Friday
   // aggregator uses. Re-deriving (rather than reading the synthetic
   // friday_top_bonus rows) is deliberate: it works even before the aggregator
   // has finalised the window.
@@ -163,6 +164,7 @@ export default function createSeasonsRouter(io) {
           COALESCE(p.display_name, p.name) AS display_name,
           p.name, p.avatar_url, p.mmr, p.mmr_verified_at,
           SUM(sml.delta)::float8 AS net_points,
+          (COUNT(*) FILTER (WHERE sml.won IS TRUE) - COUNT(*) FILTER (WHERE sml.won IS FALSE))::int AS net_wins,
           COUNT(*)::int                                 AS games,
           COUNT(*) FILTER (WHERE sml.won IS TRUE)::int  AS wins,
           COUNT(*) FILTER (WHERE sml.won IS FALSE)::int AS losses
@@ -172,7 +174,7 @@ export default function createSeasonsRouter(io) {
           AND sml.queue_match_id IS NOT NULL
           AND (${windowExpr}) IS NOT NULL
         GROUP BY date, sml.player_id, display_name, p.name, p.avatar_url, p.mmr, p.mmr_verified_at
-        ORDER BY date DESC, net_points DESC, display_name ASC
+        ORDER BY date DESC, net_wins DESC, net_points DESC, display_name ASC
       `, [s.id])
 
       // friday_topN_bonus slot prizes, in order.
@@ -194,6 +196,7 @@ export default function createSeasonsRouter(io) {
           mmr: r.mmr,
           mmr_verified_at: r.mmr_verified_at,
           net_points: r.net_points,
+          net_wins: r.net_wins,
           games: r.games,
           wins: r.wins,
           losses: r.losses,
@@ -202,19 +205,22 @@ export default function createSeasonsRouter(io) {
         })
       }
 
-      // Re-derive the podium per day. Only net>0 players are eligible; ties at a
-      // slot pool that slot's prize with the next and split it equally (mirrors
-      // inhouseFridayBonus.applyFridayBonusForSeason).
+      // Re-derive the podium per day. Ranking is wins − losses (net_wins),
+      // tiebroken by MMR gained (net_points). Only players with a positive
+      // net-win record are eligible; players identical on BOTH net_wins and
+      // net_points share a slot — pool that slot's prize with the next and
+      // split it equally (mirrors inhouseFridayBonus.applyFridayBonusForSeason).
       const fridays = []
       for (const [date, players] of byDate) {
-        const eligible = players.filter(pl => pl.net_points > 0)
+        const eligible = players.filter(pl => pl.net_wins > 0)
         let slotIdx = 0
         let i = 0
         while (slotIdx < slots.length && i < eligible.length) {
           const place = slotIdx + 1
-          const tiedAt = eligible[i].net_points
+          const tiedWins = eligible[i].net_wins
+          const tiedPoints = eligible[i].net_points
           const tied = []
-          while (i < eligible.length && eligible[i].net_points === tiedAt) { tied.push(eligible[i]); i++ }
+          while (i < eligible.length && eligible[i].net_wins === tiedWins && eligible[i].net_points === tiedPoints) { tied.push(eligible[i]); i++ }
           const consumed = Math.min(tied.length, slots.length - slotIdx)
           let combined = 0
           for (let k = 0; k < consumed; k++) combined += slots[slotIdx + k]
