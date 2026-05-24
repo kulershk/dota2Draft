@@ -79,10 +79,15 @@ const hasShadowPlayersInQueue = computed(() =>
 // Border style for a player tile — the highest-priority group's colour.
 // Server already orders the array, so we just take the first entry.
 // boxShadow inset trick lets us render an arbitrary hex colour where a
-// Tailwind ring/border class can't.
-function tileBorderStyle(p: QueuePlayer): Record<string, string> {
+// Tailwind ring/border class can't. On a team tile the colour shows as a
+// single vertical bar on the team's outer side — left for Radiant, right for
+// Dire — instead of wrapping the whole card. Neutral tiles (queue list,
+// available pool) pass no side and keep the full inset border.
+function tileBorderStyle(p: QueuePlayer, side?: 'radiant' | 'dire'): Record<string, string> {
   const top = (p.groups || [])[0]
   if (!top) return {}
+  if (side === 'radiant') return { boxShadow: `inset 4px 0 0 0 ${top.border_color}` }
+  if (side === 'dire')    return { boxShadow: `inset -4px 0 0 0 ${top.border_color}` }
   return { boxShadow: `inset 0 0 0 2px ${top.border_color}` }
 }
 function tileBorderTitle(p: QueuePlayer): string {
@@ -892,7 +897,7 @@ onUnmounted(() => {
                     :class="[
                       isInLobby(p.steamId) ? '' : 'opacity-80',
                     ]"
-                    :style="tileBorderStyle(p)"
+                    :style="tileBorderStyle(p, 'radiant')"
                     :title="tileBorderTitle(p) || undefined">
                     <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-8 h-8 rounded-full" :class="idx === 0 ? 'ring-2 ring-cyan-500/40' : ''" />
                     <div class="flex-1 min-w-0">
@@ -939,7 +944,7 @@ onUnmounted(() => {
                     :class="[
                       isInLobby(p.steamId) ? '' : 'opacity-80',
                     ]"
-                    :style="tileBorderStyle(p)"
+                    :style="tileBorderStyle(p, 'dire')"
                     :title="tileBorderTitle(p) || undefined">
                     <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-8 h-8 rounded-full" :class="idx === 0 ? 'ring-2 ring-red-500/40' : ''" />
                     <div class="flex-1 min-w-0">
