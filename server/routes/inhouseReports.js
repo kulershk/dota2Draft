@@ -355,8 +355,17 @@ export default function createInhouseReportsRouter(io) {
           const reasonText = `Toxic strike ${newStrikes}${cooldownRule.hours ? ` (${cooldownRule.hours}h cooldown)` : (cooldownRule.action === 'ban' ? ' (banned)' : ' (warning)')}`
           banUntil = await _applyCooldown(client, report.reported_player_id, report.pool_id, cooldownRule, reasonText, admin.id)
         }
-        // Notify the reported player — bell badge + sidebar entry.
-        const bodyLines = [`You received a toxic strike (now at ${newStrikes}).`]
+      }
+
+      // Notify the reported player on EVERY approval — they should know a report
+      // against them was upheld even when it didn't cross a strike threshold.
+      // Deliberately omits who reported and who reviewed (created_by is never
+      // exposed by the player-facing /api/notifications endpoint either).
+      const bodyLines = ['A report of toxic behaviour against you was reviewed and upheld.']
+      let notifTitle = 'Toxic report upheld'
+      if (strikeDelta > 0) {
+        notifTitle = `Toxic strike +${strikeDelta}`
+        bodyLines.push(`You're now at ${newStrikes} toxic strike${newStrikes === 1 ? '' : 's'}.`)
         if (banUntil) {
           bodyLines.push(`Queue cooldown until ${new Date(banUntil).toLocaleString()}.`)
         } else if (cooldownRule?.action === 'ban') {
@@ -364,15 +373,15 @@ export default function createInhouseReportsRouter(io) {
         } else if (cooldownRule?.action === 'warn') {
           bodyLines.push('This is a warning — no cooldown yet.')
         }
-        notificationId = await _insertStrikeNotification(client, {
-          playerId: report.reported_player_id,
-          type: 'inhouse_strike_toxic',
-          title: `Toxic strike +${strikeDelta}`,
-          body: bodyLines.join(' '),
-          link: '/queue',
-          byAdminId: admin.id,
-        })
       }
+      notificationId = await _insertStrikeNotification(client, {
+        playerId: report.reported_player_id,
+        type: 'inhouse_strike_toxic',
+        title: notifTitle,
+        body: bodyLines.join(' '),
+        link: '/queue',
+        byAdminId: admin.id,
+      })
 
       await client.query('COMMIT')
 
@@ -535,8 +544,8 @@ export default function createInhouseReportsRouter(io) {
         captainRevoked = true
       }
 
-      // Notify the reported player.
-      const bodyLines = [`A grief report was upheld. You now have ${newStrikes} grief strike${newStrikes === 1 ? '' : 's'}.`]
+      // Notify the reported player (omits who reported / who reviewed).
+      const bodyLines = [`A report of griefing against you was reviewed and upheld. You now have ${newStrikes} grief strike${newStrikes === 1 ? '' : 's'}.`]
       if (banUntil) {
         bodyLines.push(`Queue cooldown until ${new Date(banUntil).toLocaleString()}.`)
       } else if (cooldown?.action === 'ban') {
