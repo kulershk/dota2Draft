@@ -8,7 +8,7 @@ import {
 } from './state.js'
 import { registerAuctionHandlers } from './auction.js'
 import { registerMatchReadyHandlers } from './matchReady.js'
-import { registerQueueHandlers } from './queue.js'
+import { registerQueueHandlers, cancelQueueDrop } from './queue.js'
 import { registerPresenceIo, broadcastPresence } from './presence.js'
 import { logSocketEvent } from '../middleware/requestLogger.js'
 
@@ -64,6 +64,9 @@ export function initSocket(io) {
       const player = await queryOne('SELECT id, is_banned, is_admin FROM players WHERE id = $1', [playerId])
       if (!player) return null
       socketPlayers.set(socket.id, player.id)
+      // Reconnected (page reopen / refresh / network blip) — cancel any pending
+      // queue-drop grace timer so they keep their place in the queue.
+      cancelQueueDrop(player.id)
       // Per-user room so server routes can emit private events (friend
       // requests, etc.) without scanning socketPlayers.
       socket.join(`user:${player.id}`)

@@ -13,6 +13,13 @@ import { broadcastPresence } from './presence.js'
 import { isInFridayWindow } from '../services/fridayWindow.js'
 import { autoCollectPending } from '../routes/slots.js'
 
+// How long a queued player can be disconnected (page close / refresh / network
+// blip) before they're dropped from the queue. A reconnect within this window
+// (socket auth → cancelQueueDrop) keeps their exact spot. Ready-check players
+// aren't in playerInQueue, so they're unaffected (that path rehydrates).
+const QUEUE_DROP_GRACE_MS = 2 * 60 * 1000
+const queueDropTimers = new Map() // playerId -> setTimeout handle
+
 // Generate pick order for a given pool + team size.
 // When pool.pick_order is a valid CSV of "1"/"2" with the right per-captain
 // totals, use it verbatim — this is how inhouse encodes patterns like
@@ -669,11 +676,14 @@ export function registerQueueHandlers(socket, io) {
     const hasOther = [...socketPlayers.entries()].some(([sid, p]) => p === playerId && sid !== socket.id)
     if (hasOther) return
 
-    // Remove from queue if queued
+    // Don't drop a queued player immediately — closing the tab, refreshing, or a
+    // brief network blip all disconnect the socket. Hold their queue spot for
+    // QUEUE_DROP_GRACE_MS; a reconnect within that window keeps their position,
+    // otherwise the timer removes them. (Ready-check players aren't in
+    // playerInQueue, so this doesn't touch them — that path rehydrates instead.)
     const poolId = playerInQueue.get(playerId)
     if (poolId) {
-      removeFromQueue(playerId, poolId, socket)
-      broadcastQueueUpdate(io, poolId)
+      scheduleQueueDrop(playerId, poolId, io)
     }
 
     // Do NOT cancel the match when a player disconnects during the pick
@@ -695,6 +705,31 @@ function removeFromQueue(playerId, poolId, socket) {
   // never forfeited (idempotent; no-op if nothing pending).
   autoCollectPending(playerId)
   broadcastPresence(playerId)
+}
+
+// Defer a queued player's removal until they've been offline for
+// QUEUE_DROP_GRACE_MS. Reconnecting cancels it (cancelQueueDrop, called from the
+// socket auth path). Replaces any existing timer for the player.
+function scheduleQueueDrop(playerId, poolId, io) {
+  cancelQueueDrop(playerId)
+  const timer = setTimeout(() => {
+    queueDropTimers.delete(playerId)
+    // Reconnected on any socket? Keep them queued.
+    for (const pid of socketPlayers.values()) if (pid === playerId) return
+    // Still queued in the same pool → drop them now.
+    if (playerInQueue.get(playerId) === poolId) {
+      removeFromQueue(playerId, poolId, null)
+      broadcastQueueUpdate(io, poolId)
+      console.log(`[queue] dropped player ${playerId} from pool ${poolId} (offline > ${QUEUE_DROP_GRACE_MS / 1000}s)`)
+    }
+  }, QUEUE_DROP_GRACE_MS)
+  queueDropTimers.set(playerId, timer)
+}
+
+// Cancel a pending queue-drop — player reconnected within the grace window.
+export function cancelQueueDrop(playerId) {
+  const timer = queueDropTimers.get(playerId)
+  if (timer) { clearTimeout(timer); queueDropTimers.delete(playerId) }
 }
 
 export function broadcastQueueUpdate(io, poolId) {
