@@ -163,15 +163,26 @@ function fmtRange(s: Season): string {
   const b = s.ends_at   ? new Date(s.ends_at  ).toLocaleDateString() : '—'
   return `${a} → ${b}`
 }
-// Avatar ring colour comes from the player's highest-priority custom
-// group on this season (server already orders them captains_drawn_from
-// DESC > min_per_match DESC > id ASC). We use boxShadow inset to render
-// the colour since border_color is a per-row arbitrary CSS colour and
-// Tailwind ring-* utilities can't express that dynamically.
+// Avatar ring shows EVERY custom group the player belongs to this season,
+// as equal coloured arcs (a conic-gradient ring) — one group = a solid
+// ring, N groups = N equal arcs. Returned as a style for a 2px-padded
+// wrapper around the avatar (border_color is an arbitrary per-row CSS
+// colour, which Tailwind ring-* utilities can't express dynamically).
+// Groups arrive pre-ordered (captains_drawn_from DESC > min_per_match DESC
+// > id ASC), so the first arc is the highest-priority group.
 function avatarRingStyle(row: LeaderRow): Record<string, string> {
-  const top = (row.groups || [])[0]
-  if (!top) return {}
-  return { boxShadow: `0 0 0 2px ${top.border_color}` }
+  const colors = (row.groups || []).map(g => g.border_color).filter(Boolean)
+  if (colors.length === 0) return {}
+  const base: Record<string, string> = { padding: '2px', borderRadius: '9999px' }
+  if (colors.length === 1) {
+    base.background = colors[0]
+    return base
+  }
+  const seg = 100 / colors.length
+  base.background = `conic-gradient(${colors
+    .map((c, i) => `${c} ${(seg * i).toFixed(3)}% ${(seg * (i + 1)).toFixed(3)}%`)
+    .join(', ')})`
+  return base
 }
 function avatarRingTitle(row: LeaderRow): string {
   return (row.groups || []).map(g => g.name).join(', ')
@@ -287,19 +298,18 @@ onUnmounted(detachSocket)
                 <td class="px-4 py-2.5 text-right font-mono tabular-nums" :class="i < 3 ? 'text-amber-400 font-bold' : 'text-muted-foreground'">{{ i + 1 }}</td>
                 <td class="px-4 py-2.5">
                   <div class="flex items-center gap-2">
-                    <img
-                      v-if="row.avatar_url"
-                      :src="row.avatar_url"
-                      class="w-7 h-7 rounded-full object-cover"
+                    <span
+                      class="inline-flex shrink-0 rounded-full"
                       :style="avatarRingStyle(row)"
                       :title="avatarRingTitle(row) || undefined"
-                    />
-                    <div
-                      v-else
-                      class="w-7 h-7 rounded-full bg-accent"
-                      :style="avatarRingStyle(row)"
-                      :title="avatarRingTitle(row) || undefined"
-                    />
+                    >
+                      <img
+                        v-if="row.avatar_url"
+                        :src="row.avatar_url"
+                        class="w-7 h-7 rounded-full object-cover"
+                      />
+                      <div v-else class="w-7 h-7 rounded-full bg-accent" />
+                    </span>
                     <span class="font-semibold">{{ row.display_name }}</span>
                     <BadgeCheck v-if="row.mmr_verified_at" class="w-4 h-4 text-cyan-400 shrink-0" :title="t('mmrVerifiedTooltip')" />
                     <span class="text-[11px] text-muted-foreground font-mono tabular-nums">{{ row.mmr }} MMR</span>
