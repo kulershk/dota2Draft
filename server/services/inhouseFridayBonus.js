@@ -12,10 +12,11 @@
 //
 // Rewards are NOT split: everyone sharing a place (same W−L tier) collects the
 // full prize for that place — e.g. 20 players tied for 3rd each get the full
-// 3rd-place bonus. Idempotent via the season_match_log unique
-// partial index on (season_id, player_id, DATE(created_at)) WHERE
-// reason='friday_top_bonus'. The scheduler runs only on the Saturday a window
-// ends, so DATE(created_at) is stable per Friday and can't double-apply.
+// 3rd-place bonus. Idempotent via the season_match_log unique partial index on
+// (season_id, player_id, DATE(created_at)) WHERE reason='friday_top_bonus':
+// each synthetic row is dated to ITS Friday (noon), so the scheduler, the admin
+// manual trigger, and the recompute rebuild all key on the actual Friday and
+// can't double-apply no matter which day they run.
 
 import pool, { query } from '../db.js'
 import { clampPoints, withDefaults } from './seasonRating.js'
@@ -110,16 +111,19 @@ export async function applyFridayBonusForSeason(seasonId, fridayDate /* YYYY-MM-
       const peak = Math.max(rk ? Number(rk.peak_points) : cfg.starting_points, after)
 
       // The unique partial index blocks a duplicate insert; ON CONFLICT DO
-      // NOTHING lets us treat that as a no-op (idempotent re-run).
+      // NOTHING lets us treat that as a no-op (idempotent re-run). Date the row
+      // to its Friday (noon) — NOT NOW() — so DATE(created_at) is the Friday
+      // itself, keeping every code path (scheduler / manual trigger / recompute)
+      // idempotent on the same key regardless of which day it runs.
       const inserted = await client.query(`
         INSERT INTO season_match_log (
           season_id, queue_match_id, player_id, team, won,
           points_before, points_after, delta,
           reason, friday_bonus_applied, created_at
-        ) VALUES ($1, NULL, $2, NULL, NULL, $3, $4, $5, 'friday_top_bonus', $6, NOW())
+        ) VALUES ($1, NULL, $2, NULL, NULL, $3, $4, $5, 'friday_top_bonus', $6, $7::timestamp)
         ON CONFLICT DO NOTHING
         RETURNING id
-      `, [seasonId, pid, before, after, realDelta, Math.round(bonus)])
+      `, [seasonId, pid, before, after, realDelta, Math.round(bonus), `${fridayDate} 12:00:00`])
       if (!inserted.rows.length) continue // already awarded today
 
       await client.query(`
@@ -162,8 +166,8 @@ export async function applyFridayBonusAll(fridayDate) {
 // In-process scheduler: every 5 minutes, on the Saturday a Friday window ends
 // (Europe/Riga), run the aggregator for that Friday. Each season's apply
 // self-skips until its configured window end_hour has passed, and the insert
-// is idempotent, so repeated ticks (and restarts) cost nothing. Running only
-// on Saturday keeps DATE(created_at) — the idempotency key — stable per Friday.
+// is idempotent (rows are keyed on their Friday date, not the run day), so
+// repeated ticks, restarts, and a later recompute rebuild all cost nothing.
 let _interval = null
 export function startFridayBonusScheduler() {
   if (_interval) return

@@ -3609,11 +3609,11 @@
       "post": {
         "tags": ["Seasons"],
         "summary": "Admin: rebuild rankings by replaying every match + manual adjust",
-        "description": "Wipes season_rankings and matches' audit-log rows, then replays every completed queue_match in this season under the current settings. Manual-adjust rows are preserved by timestamp and re-applied in order. Use after editing settings or to clean up corrupted state.",
+        "description": "Wipes season_rankings and matches' audit-log rows, then replays every completed queue_match in this season under the current settings. Genuine manual-adjust rows are preserved by timestamp and re-applied in order. The Friday top-3 podium bonuses are re-derived from the rebuilt match history under current logic (stale ones are NOT replayed); each closed Friday is recomputed, the still-open current Friday is left for the Saturday scheduler. Use after editing settings or Friday-bonus rules, or to clean up corrupted state.",
         "security": [{ "bearerAuth": [] }],
         "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
         "responses": {
-          "200": { "description": "{ ok: true, players, events }" },
+          "200": { "description": "{ ok: true, players, events, fridaysApplied }" },
           "404": { "description": "Not found" }
         }
       }
@@ -3626,7 +3626,7 @@
         "security": [{ "bearerAuth": [] }],
         "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
         "responses": {
-          "200": { "description": "{ ok: true, claimed, players, events }" },
+          "200": { "description": "{ ok: true, claimed, players, events, fridaysApplied }" },
           "404": { "description": "Not found" }
         }
       }

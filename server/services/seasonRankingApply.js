@@ -10,7 +10,8 @@
 
 import pool, { query, queryOne, execute } from '../db.js'
 import { computeDelta, clampPoints, teamAvgMmr, withDefaults, mmrDiffBonus, winstreakBonus } from './seasonRating.js'
-import { isInFridayWindow } from './fridayWindow.js'
+import { isInFridayWindow, fridayWindowSql, clampHour } from './fridayWindow.js'
+import { applyFridayBonusForSeason } from './inhouseFridayBonus.js'
 
 export async function applyMatchToSeason({
   queueMatchId,
@@ -351,11 +352,15 @@ export async function recomputeSeasonFromHistory(seasonId) {
     ORDER BY qm.completed_at ASC NULLS LAST, qm.id ASC
   `, [seasonId])
 
-  // Wipe match-derived audit rows; preserve manual adjusts and re-insert in order.
+  // Wipe match-derived audit rows; preserve genuine manual adjusts and re-insert
+  // in order. Friday top-3 bonus rows are EXCLUDED here on purpose — they are
+  // re-derived from the rebuilt match history below under current logic, never
+  // replayed at their stale stored delta.
   const manualAdjusts = await query(`
     SELECT id, player_id, delta, reason, created_at, created_by
     FROM season_match_log
     WHERE season_id = $1 AND queue_match_id IS NULL
+      AND reason IS DISTINCT FROM 'friday_top_bonus'
     ORDER BY created_at ASC, id ASC
   `, [seasonId])
   await execute('DELETE FROM season_match_log WHERE season_id = $1', [seasonId])
@@ -500,7 +505,36 @@ export async function recomputeSeasonFromHistory(seasonId) {
     `, [seasonId, pid, pts, st.peak, st.games, st.wins, st.losses, getStreak(pid), peakStreaks.get(pid) || 0])
   }
 
-  return { players: points.size, events: events.length }
+  // Re-derive the Friday top-3 podium bonuses from the freshly-rebuilt match
+  // rows. Recompute owns these rows (the blanket delete above cleared the stale
+  // ones, and they were excluded from the replayed adjusts), so this is the one
+  // place they get recomputed under current logic. applyFridayBonusForSeason
+  // reads season_rankings (just upserted) + the match rows, inserts the
+  // synthetic bonus rows dated to their Friday, and bumps points/peak. Called
+  // WITHOUT force, so it self-skips any Friday whose window is still open — that
+  // one stays for the Saturday scheduler.
+  let fridaysApplied = 0
+  const inhousePool = await queryOne(
+    `SELECT friday_window_start_hour, friday_window_end_hour
+       FROM queue_pools WHERE season_id = $1 AND inhouse_enabled = TRUE ORDER BY id LIMIT 1`,
+    [seasonId]
+  )
+  if (inhousePool) {
+    const windowExpr = fridayWindowSql('created_at',
+      clampHour(inhousePool.friday_window_start_hour), clampHour(inhousePool.friday_window_end_hour))
+    const fdates = await query(`
+      SELECT DISTINCT to_char(${windowExpr}, 'YYYY-MM-DD') AS fdate
+        FROM season_match_log
+       WHERE season_id = $1 AND queue_match_id IS NOT NULL AND (${windowExpr}) IS NOT NULL
+       ORDER BY fdate ASC
+    `, [seasonId])
+    for (const { fdate } of fdates) {
+      const r = await applyFridayBonusForSeason(seasonId, fdate)
+      if (r && typeof r.applied === 'number') fridaysApplied += r.applied
+    }
+  }
+
+  return { players: points.size, events: events.length, fridaysApplied }
 }
 
 // Claim past completed queue matches in pools assigned to this season.
