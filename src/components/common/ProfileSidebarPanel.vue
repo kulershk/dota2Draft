@@ -6,14 +6,17 @@ import { User, X, Settings, Shield, LogOut, ChevronRight, BadgeCheck, Sun, Moon 
 import { useDraftStore } from '@/composables/useDraftStore'
 import { useSidePanels } from '@/composables/useSidePanels'
 import { useTheme } from '@/composables/useTheme'
+import { useCosmetics } from '@/composables/useCosmetics'
 
 const { t } = useI18n()
 const router = useRouter()
 const store = useDraftStore()
 const panels = useSidePanels()
 const theme = useTheme()
+const cosmetics = useCosmetics()
 
 const user = computed(() => store.currentUser.value)
+const deco = computed(() => cosmetics.decorationFor(user.value?.id))
 const initial = computed(() => {
   const n = user.value?.display_name || user.value?.name || user.value?.steam_name || '?'
   return n.charAt(0).toUpperCase()
@@ -74,6 +77,7 @@ function logout() {
           >
             <img v-if="user.avatar_url" :src="user.avatar_url" class="w-full h-full rounded-full object-cover" />
             <span v-else class="text-white text-[36px] font-extrabold">{{ initial }}</span>
+            <img v-if="deco" :src="deco" aria-hidden="true" class="pointer-events-none select-none absolute inset-0 w-full h-full object-contain" />
             <span
               class="absolute right-[2px] bottom-[2px] w-[14px] h-[14px] rounded-full"
               style="background:#22C55E;box-shadow:inset 0 0 0 2px #0F172A"
