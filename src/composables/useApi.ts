@@ -478,7 +478,7 @@ export function useApi() {
       if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || 'Create failed')
       return res.json()
     },
-    updateAvatarDecoration: (id: number, body: { name?: string; category?: string | null; is_active?: boolean; sort_order?: number }) =>
+    updateAvatarDecoration: (id: number, body: { name?: string; category?: string | null; is_active?: boolean; sort_order?: number; offset_x?: number; offset_y?: number }) =>
       request(`/api/admin/avatar-decorations/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
     uploadAvatarDecorationImage: async (id: number, file: File): Promise<{ image_url: string }> => {
       const form = new FormData()

@@ -130,13 +130,15 @@ async function removeBanner() {
 // The overlay shown on this profile's avatar comes from the shared cosmetics
 // store (so it matches what everyone else sees); the picker is owner-only.
 const profileDecoration = computed(() => cosmetics.decorationFor(profile.value?.id))
+const profileDecorationStyle = computed(() =>
+  profileDecoration.value ? { transform: `translate(${profileDecoration.value.x}%, ${profileDecoration.value.y}%)` } : {})
 const canEditDecoration = computed(() =>
   store.currentUser.value?.id === profile.value?.id &&
   store.currentUser.value?.subscription?.perks?.avatar_decoration === true,
 )
 const currentDecorationId = computed(() => store.currentUser.value?.avatar_decoration_id ?? null)
 const showDecorationPicker = ref(false)
-const decorations = ref<Array<{ id: number; name: string; category: string | null; image_url: string }>>([])
+const decorations = ref<Array<{ id: number; name: string; category: string | null; image_url: string; offset_x: number; offset_y: number }>>([])
 const decorationBusy = ref(false)
 async function openDecorationPicker() {
   showDecorationPicker.value = true
@@ -149,8 +151,8 @@ async function chooseDecoration(id: number | null) {
   try {
     await api.setAvatarDecoration(id)
     if (store.currentUser.value) store.currentUser.value.avatar_decoration_id = id
-    const url = id ? (decorations.value.find(d => d.id === id)?.image_url ?? null) : null
-    if (profile.value) cosmetics.setLocal(profile.value.id, url)
+    const d = id ? decorations.value.find(x => x.id === id) : null
+    if (profile.value) cosmetics.setLocal(profile.value.id, d ? { url: d.image_url, x: d.offset_x || 0, y: d.offset_y || 0 } : null)
     showDecorationPicker.value = false
   } catch { /* best-effort */ } finally {
     decorationBusy.value = false
@@ -358,7 +360,7 @@ const streakBadge = computed(() => {
               </div>
             </div>
             <!-- Avatar decoration overlay (sits over the avatar, inside the ring) -->
-            <img v-if="profileDecoration" :src="profileDecoration" aria-hidden="true"
+            <img v-if="profileDecoration" :src="profileDecoration.url" :style="profileDecorationStyle" aria-hidden="true"
               class="pointer-events-none select-none absolute inset-1 object-contain" />
             <!-- Owner picker trigger -->
             <button v-if="canEditDecoration"
@@ -1013,7 +1015,7 @@ const streakBadge = computed(() => {
             :disabled="decorationBusy" @click="chooseDecoration(d.id)">
             <div class="relative w-14 h-14">
               <div class="w-14 h-14 rounded-full bg-gradient-to-br from-primary/30 to-purple-500/30"></div>
-              <img :src="d.image_url" :alt="d.name" class="absolute inset-0 w-full h-full object-contain pointer-events-none" />
+              <img :src="d.image_url" :alt="d.name" :style="{ transform: `translate(${d.offset_x || 0}%, ${d.offset_y || 0}%)` }" class="absolute inset-0 w-full h-full object-contain pointer-events-none" />
             </div>
             <span class="text-[11px] text-foreground truncate w-full text-center">{{ d.name }}</span>
           </button>

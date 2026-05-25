@@ -2011,6 +2011,8 @@ export default {
   avatarDecorationSort: 'Rūšiavimas',
   avatarDecorationActive: 'Aktyvus',
   avatarDecorationInactive: 'Neaktyvus',
+  avatarDecorationOffsetX: 'Horizontalus poslinkis',
+  avatarDecorationOffsetY: 'Vertikalus poslinkis',
   avatarDecorationWornCount: 'Nešioja {n}',
   avatarDecorationNameRequired: 'Pavadinimas privalomas',
   avatarDecorationImageRequired: 'Reikalingas paveikslėlis',

@@ -17,12 +17,14 @@ const props = withDefaults(defineProps<{
 }>(), { avatarUrl: null, playerId: null, decorationUrl: null, size: 40, rounded: true, alt: '' })
 
 const cosmetics = useCosmetics()
-// undefined override → fall back to the store; explicit null → show none.
+// A string override has no offsets; otherwise resolve the worn decoration
+// (url + positioning offsets) from the store by player id.
 const deco = computed(() =>
-  props.decorationUrl !== undefined && props.decorationUrl !== null
-    ? props.decorationUrl
+  props.decorationUrl
+    ? { url: props.decorationUrl, x: 0, y: 0 }
     : cosmetics.decorationFor(props.playerId),
 )
+const decoStyle = computed(() => (deco.value ? { transform: `translate(${deco.value.x}%, ${deco.value.y}%)` } : {}))
 const dim = computed(() => `${props.size}px`)
 const radius = computed(() => (props.rounded ? 'rounded-full' : 'rounded'))
 </script>
@@ -35,7 +37,8 @@ const radius = computed(() => (props.rounded ? 'rounded-full' : 'rounded'))
     </span>
     <img
       v-if="deco"
-      :src="deco"
+      :src="deco.url"
+      :style="decoStyle"
       alt=""
       aria-hidden="true"
       class="pointer-events-none select-none absolute inset-0 w-full h-full object-contain"

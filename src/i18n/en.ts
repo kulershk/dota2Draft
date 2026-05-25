@@ -2022,6 +2022,8 @@ export default {
   avatarDecorationSort: 'Sort',
   avatarDecorationActive: 'Active',
   avatarDecorationInactive: 'Inactive',
+  avatarDecorationOffsetX: 'Horizontal offset',
+  avatarDecorationOffsetY: 'Vertical offset',
   avatarDecorationWornCount: 'Worn by {n}',
   avatarDecorationNameRequired: 'Name is required',
   avatarDecorationImageRequired: 'An image is required',

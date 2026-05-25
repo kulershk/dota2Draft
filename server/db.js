@@ -1382,9 +1382,15 @@ export async function initDb() {
       image_url   TEXT NOT NULL,
       is_active   BOOLEAN NOT NULL DEFAULT TRUE,
       sort_order  INTEGER NOT NULL DEFAULT 0,
+      offset_x    INTEGER NOT NULL DEFAULT 0,
+      offset_y    INTEGER NOT NULL DEFAULT 0,
       created_at  TIMESTAMP NOT NULL DEFAULT NOW()
     );
   `)
+  // Positioning offsets (percent of the avatar size, from center) so an admin
+  // can nudge e.g. a crown up; migration for tables created before these existed.
+  try { await execute(`ALTER TABLE avatar_decorations ADD COLUMN offset_x INTEGER NOT NULL DEFAULT 0`) } catch {}
+  try { await execute(`ALTER TABLE avatar_decorations ADD COLUMN offset_y INTEGER NOT NULL DEFAULT 0`) } catch {}
 
   // Persistent per-player flag for the auto_requeue perk. The match-end hook
   // reads this together with hasPerk('auto_requeue') and re-queues the player

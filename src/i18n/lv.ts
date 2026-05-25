@@ -2011,6 +2011,8 @@ export default {
   avatarDecorationSort: 'Kārtošana',
   avatarDecorationActive: 'Aktīvs',
   avatarDecorationInactive: 'Neaktīvs',
+  avatarDecorationOffsetX: 'Horizontālā nobīde',
+  avatarDecorationOffsetY: 'Vertikālā nobīde',
   avatarDecorationWornCount: 'Nēsā {n}',
   avatarDecorationNameRequired: 'Nosaukums ir obligāts',
   avatarDecorationImageRequired: 'Attēls ir obligāts',

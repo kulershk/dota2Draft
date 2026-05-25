@@ -17,6 +17,7 @@ const cosmetics = useCosmetics()
 
 const user = computed(() => store.currentUser.value)
 const deco = computed(() => cosmetics.decorationFor(user.value?.id))
+const decoStyle = computed(() => (deco.value ? { transform: `translate(${deco.value.x}%, ${deco.value.y}%)` } : {}))
 const initial = computed(() => {
   const n = user.value?.display_name || user.value?.name || user.value?.steam_name || '?'
   return n.charAt(0).toUpperCase()
@@ -77,7 +78,7 @@ function logout() {
           >
             <img v-if="user.avatar_url" :src="user.avatar_url" class="w-full h-full rounded-full object-cover" />
             <span v-else class="text-white text-[36px] font-extrabold">{{ initial }}</span>
-            <img v-if="deco" :src="deco" aria-hidden="true" class="pointer-events-none select-none absolute inset-0 w-full h-full object-contain" />
+            <img v-if="deco" :src="deco.url" :style="decoStyle" aria-hidden="true" class="pointer-events-none select-none absolute inset-0 w-full h-full object-contain" />
             <span
               class="absolute right-[2px] bottom-[2px] w-[14px] h-[14px] rounded-full"
               style="background:#22C55E;box-shadow:inset 0 0 0 2px #0F172A"

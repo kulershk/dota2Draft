@@ -32,13 +32,20 @@ function unlinkPublic(url) {
   try { if (fs.existsSync(p)) fs.unlinkSync(p) } catch {}
 }
 
+// Clamp a positioning offset (percent from center) to a sane nudge range.
+function clampOffset(v) {
+  const n = Math.round(Number(v))
+  if (!Number.isFinite(n)) return 0
+  return Math.max(-100, Math.min(100, n))
+}
+
 export default function createAvatarDecorationsRouter() {
   const router = Router()
 
   // Public list of active decorations — powers the player picker.
   router.get('/api/avatar-decorations', async (_req, res) => {
     const rows = await query(
-      `SELECT id, name, category, image_url, sort_order
+      `SELECT id, name, category, image_url, sort_order, offset_x, offset_y
          FROM avatar_decorations
         WHERE is_active = TRUE
         ORDER BY sort_order ASC, id ASC`
@@ -51,7 +58,7 @@ export default function createAvatarDecorationsRouter() {
   // opted-in subscribers); the client caches it and overlays by player id.
   router.get('/api/avatar-decorations/worn', async (_req, res) => {
     const rows = await query(
-      `SELECT p.id AS player_id, d.image_url
+      `SELECT p.id AS player_id, d.image_url, d.offset_x, d.offset_y
          FROM players p
          JOIN avatar_decorations d ON d.id = p.avatar_decoration_id AND d.is_active = TRUE
          JOIN user_subscriptions us ON us.player_id = p.id AND us.status = 'active'
@@ -91,7 +98,8 @@ export default function createAvatarDecorationsRouter() {
     const admin = await requirePermission(req, res, 'manage_subscription_plans')
     if (!admin) return
     const rows = await query(
-      `SELECT d.id, d.name, d.category, d.image_url, d.is_active, d.sort_order, d.created_at,
+      `SELECT d.id, d.name, d.category, d.image_url, d.is_active, d.sort_order,
+              d.offset_x, d.offset_y, d.created_at,
               COALESCE(c.cnt, 0)::int AS worn_count
          FROM avatar_decorations d
          LEFT JOIN (
@@ -108,7 +116,7 @@ export default function createAvatarDecorationsRouter() {
   router.post('/api/admin/avatar-decorations', upload.single('image'), async (req, res) => {
     const admin = await requirePermission(req, res, 'manage_subscription_plans')
     if (!admin) { if (req.file) { try { fs.unlinkSync(req.file.path) } catch {} } return }
-    const { name, category, is_active, sort_order } = req.body || {}
+    const { name, category, is_active, sort_order, offset_x, offset_y } = req.body || {}
     if (!name || !String(name).trim()) {
       if (req.file) { try { fs.unlinkSync(req.file.path) } catch {} }
       return res.status(400).json({ error: 'name is required' })
@@ -117,9 +125,9 @@ export default function createAvatarDecorationsRouter() {
     const sortOrder = Number.isFinite(Number(sort_order)) ? Math.floor(Number(sort_order)) : 0
     // Insert first to get the id, then attach the processed image.
     const row = await queryOne(
-      `INSERT INTO avatar_decorations (name, category, image_url, is_active, sort_order)
-       VALUES ($1, $2, '', $3, $4) RETURNING *`,
-      [String(name).trim(), category ? String(category).trim() : null, is_active !== 'false' && is_active !== false, sortOrder]
+      `INSERT INTO avatar_decorations (name, category, image_url, is_active, sort_order, offset_x, offset_y)
+       VALUES ($1, $2, '', $3, $4, $5, $6) RETURNING *`,
+      [String(name).trim(), category ? String(category).trim() : null, is_active !== 'false' && is_active !== false, sortOrder, clampOffset(offset_x), clampOffset(offset_y)]
     )
     const imageUrl = await processDecorationImage(req.file, row.id)
     await execute('UPDATE avatar_decorations SET image_url = $1 WHERE id = $2', [imageUrl, row.id])
@@ -133,18 +141,20 @@ export default function createAvatarDecorationsRouter() {
     if (!admin) return
     const existing = await queryOne('SELECT * FROM avatar_decorations WHERE id = $1', [id])
     if (!existing) return res.status(404).json({ error: 'decoration not found' })
-    const { name, category, is_active, sort_order } = req.body || {}
+    const { name, category, is_active, sort_order, offset_x, offset_y } = req.body || {}
     const newName = name !== undefined ? String(name).trim() : existing.name
     if (!newName) return res.status(400).json({ error: 'name is required' })
     await execute(
       `UPDATE avatar_decorations
-          SET name = $1, category = $2, is_active = $3, sort_order = $4
-        WHERE id = $5`,
+          SET name = $1, category = $2, is_active = $3, sort_order = $4, offset_x = $5, offset_y = $6
+        WHERE id = $7`,
       [
         newName,
         category !== undefined ? (category ? String(category).trim() : null) : existing.category,
         is_active !== undefined ? !!is_active : existing.is_active,
         sort_order !== undefined && Number.isFinite(Number(sort_order)) ? Math.floor(Number(sort_order)) : existing.sort_order,
+        offset_x !== undefined ? clampOffset(offset_x) : existing.offset_x,
+        offset_y !== undefined ? clampOffset(offset_y) : existing.offset_y,
         id,
       ]
     )

@@ -12,6 +12,8 @@ interface Decoration {
   image_url: string
   is_active: boolean
   sort_order: number
+  offset_x: number
+  offset_y: number
   worn_count: number
 }
 
@@ -23,7 +25,7 @@ const loading = ref(true)
 
 const showModal = ref(false)
 const editing = ref<Decoration | null>(null)
-const form = ref({ name: '', category: '', sort_order: 0, is_active: true })
+const form = ref({ name: '', category: '', sort_order: 0, is_active: true, offset_x: 0, offset_y: 0 })
 const imageFile = ref<File | null>(null)
 const imagePreview = ref<string | null>(null)
 const error = ref('')
@@ -48,7 +50,7 @@ function nextSort(): number {
 
 function openCreate() {
   editing.value = null
-  form.value = { name: '', category: '', sort_order: nextSort(), is_active: true }
+  form.value = { name: '', category: '', sort_order: nextSort(), is_active: true, offset_x: 0, offset_y: 0 }
   imageFile.value = null
   imagePreview.value = null
   error.value = ''
@@ -57,7 +59,7 @@ function openCreate() {
 
 function openEdit(d: Decoration) {
   editing.value = d
-  form.value = { name: d.name, category: d.category || '', sort_order: d.sort_order, is_active: d.is_active }
+  form.value = { name: d.name, category: d.category || '', sort_order: d.sort_order, is_active: d.is_active, offset_x: d.offset_x || 0, offset_y: d.offset_y || 0 }
   imageFile.value = null
   imagePreview.value = d.image_url
   error.value = ''
@@ -83,6 +85,8 @@ async function save() {
         category: form.value.category.trim() || null,
         is_active: form.value.is_active,
         sort_order: Math.floor(Number(form.value.sort_order) || 0),
+        offset_x: Math.round(Number(form.value.offset_x) || 0),
+        offset_y: Math.round(Number(form.value.offset_y) || 0),
       })
       if (imageFile.value) await api.uploadAvatarDecorationImage(editing.value.id, imageFile.value)
     } else {
@@ -92,6 +96,8 @@ async function save() {
       if (form.value.category.trim()) fd.append('category', form.value.category.trim())
       fd.append('is_active', String(form.value.is_active))
       fd.append('sort_order', String(Math.floor(Number(form.value.sort_order) || 0)))
+      fd.append('offset_x', String(Math.round(Number(form.value.offset_x) || 0)))
+      fd.append('offset_y', String(Math.round(Number(form.value.offset_y) || 0)))
       await api.createAvatarDecoration(fd)
     }
     showModal.value = false
@@ -133,7 +139,7 @@ async function doDelete() {
           <!-- preview over a sample avatar circle -->
           <div class="relative w-16 h-16">
             <div class="w-16 h-16 rounded-full bg-gradient-to-br from-primary/30 to-purple-500/30"></div>
-            <img :src="d.image_url" :alt="d.name" class="absolute inset-0 w-full h-full object-contain pointer-events-none" />
+            <img :src="d.image_url" :alt="d.name" :style="{ transform: `translate(${d.offset_x || 0}%, ${d.offset_y || 0}%)` }" class="absolute inset-0 w-full h-full object-contain pointer-events-none" />
           </div>
           <div class="text-center min-w-0 w-full">
             <div class="text-sm font-medium text-foreground truncate">{{ d.name }}</div>
@@ -159,15 +165,31 @@ async function doDelete() {
         <h2 class="text-lg font-bold text-foreground">{{ editing ? t('avatarDecorationEdit') : t('avatarDecorationAdd') }}</h2>
 
         <div class="flex items-center gap-3">
-          <div class="relative w-16 h-16 shrink-0">
-            <div class="w-16 h-16 rounded-full bg-gradient-to-br from-primary/30 to-purple-500/30 flex items-center justify-center">
+          <!-- Live preview over a sample avatar; reflects the offsets below -->
+          <div class="relative w-20 h-20 shrink-0">
+            <div class="w-20 h-20 rounded-full bg-gradient-to-br from-primary/30 to-purple-500/30 flex items-center justify-center">
               <Crown v-if="!imagePreview" class="w-6 h-6 text-muted-foreground" />
             </div>
-            <img v-if="imagePreview" :src="imagePreview" class="absolute inset-0 w-full h-full object-contain pointer-events-none" />
+            <img v-if="imagePreview" :src="imagePreview"
+              :style="{ transform: `translate(${form.offset_x || 0}%, ${form.offset_y || 0}%)` }"
+              class="absolute inset-0 w-full h-full object-contain pointer-events-none" />
           </div>
           <input type="file" accept="image/*"
             class="text-xs file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-primary file:text-[#0A0F1C] file:font-semibold file:cursor-pointer hover:file:brightness-110"
             @change="onPickImage" />
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <label class="flex flex-col gap-1">
+            <span class="text-[11px] uppercase tracking-wide text-muted-foreground">{{ t('avatarDecorationOffsetX') }}</span>
+            <input v-model.number="form.offset_x" type="range" min="-100" max="100" class="accent-primary" />
+            <span class="text-[11px] text-muted-foreground tabular-nums text-center">{{ form.offset_x }}%</span>
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-[11px] uppercase tracking-wide text-muted-foreground">{{ t('avatarDecorationOffsetY') }}</span>
+            <input v-model.number="form.offset_y" type="range" min="-100" max="100" class="accent-primary" />
+            <span class="text-[11px] text-muted-foreground tabular-nums text-center">{{ form.offset_y }}%</span>
+          </label>
         </div>
 
         <label class="flex flex-col gap-1">

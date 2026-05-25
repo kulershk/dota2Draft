@@ -18,6 +18,7 @@ const props = defineProps<{
 const { t } = useI18n()
 const cosmetics = useCosmetics()
 const deco = computed(() => cosmetics.decorationFor(props.id))
+const decoStyle = computed(() => (deco.value ? { transform: `translate(${deco.value.x}%, ${deco.value.y}%)` } : {}))
 
 const avatarClass: Record<string, string> = {
   xs: 'w-4 h-4 text-[8px]',
@@ -58,7 +59,7 @@ const verifiedClass: Record<string, string> = {
         <span v-else>{{ name.charAt(0).toUpperCase() }}</span>
       </div>
       <!-- Avatar decoration overlay (avatar_decoration perk), resolved by player id -->
-      <img v-if="deco" :src="deco" aria-hidden="true"
+      <img v-if="deco" :src="deco.url" :style="decoStyle" aria-hidden="true"
         class="pointer-events-none select-none absolute inset-0 w-full h-full object-contain" />
     </div>
     <span class="font-medium text-foreground truncate transition-colors" :class="[textClass[size || 'md'], noLink ? '' : 'group-hover:!text-primary']"><slot>{{ name }}</slot></span>

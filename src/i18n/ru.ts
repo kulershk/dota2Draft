@@ -1940,6 +1940,8 @@ export default {
   avatarDecorationSort: 'Порядок',
   avatarDecorationActive: 'Активно',
   avatarDecorationInactive: 'Неактивно',
+  avatarDecorationOffsetX: 'Смещение по горизонтали',
+  avatarDecorationOffsetY: 'Смещение по вертикали',
   avatarDecorationWornCount: 'Носят: {n}',
   avatarDecorationNameRequired: 'Название обязательно',
   avatarDecorationImageRequired: 'Требуется изображение',

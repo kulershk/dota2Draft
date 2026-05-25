@@ -2025,8 +2025,8 @@
         "tags": ["Avatar Decorations"],
         "summary": "Create a decoration (with image)",
         "security": [{ "bearerAuth": [] }],
-        "description": "Requires manage_subscription_plans. Multipart/form-data with `image` (required), `name` (required), optional `category`, `is_active`, `sort_order`. Image resized to 256×256 transparent PNG (contain).",
-        "requestBody": { "required": true, "content": { "multipart/form-data": { "schema": { "type": "object", "required": ["image", "name"], "properties": { "image": { "type": "string", "format": "binary" }, "name": { "type": "string" }, "category": { "type": "string" }, "is_active": { "type": "boolean" }, "sort_order": { "type": "integer" } } } } } },
+        "description": "Requires manage_subscription_plans. Multipart/form-data with `image` (required), `name` (required), optional `category`, `is_active`, `sort_order`, and `offset_x`/`offset_y` (percent from center, -100..100, for nudging the overlay). Image resized to 256×256 transparent PNG (contain).",
+        "requestBody": { "required": true, "content": { "multipart/form-data": { "schema": { "type": "object", "required": ["image", "name"], "properties": { "image": { "type": "string", "format": "binary" }, "name": { "type": "string" }, "category": { "type": "string" }, "is_active": { "type": "boolean" }, "sort_order": { "type": "integer" }, "offset_x": { "type": "integer" }, "offset_y": { "type": "integer" } } } } } },
         "responses": { "201": { "description": "Created" }, "400": { "description": "name/image required" } }
       }
     },
@@ -2035,7 +2035,7 @@
         "tags": ["Avatar Decorations"],
         "summary": "Update decoration metadata",
         "security": [{ "bearerAuth": [] }],
-        "description": "Requires manage_subscription_plans. Updates name/category/is_active/sort_order (not the image).",
+        "description": "Requires manage_subscription_plans. Updates name/category/is_active/sort_order/offset_x/offset_y (not the image).",
         "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
         "responses": { "200": { "description": "Updated" }, "404": { "description": "Not found" } }
       },
