@@ -1573,7 +1573,7 @@ export default {
   seasonWhen: 'When',
   seasonManual: 'Manual',
   seasonAuditEmpty: 'No rating changes yet.',
-  seasonAuditPlayerFilter: 'Player ID',
+  seasonAuditPlayerFilter: 'Search player by name…',
   seasonLeaderboardEmpty: 'No-one has played enough games yet.',
   seasonTabOverall: 'Overall',
   seasonTabFridays: 'Fridays',

@@ -1565,7 +1565,7 @@ export default {
   seasonWhen: 'Kad',
   seasonManual: 'Manuāli',
   seasonAuditEmpty: 'Pagaidām nav reitinga izmaiņu.',
-  seasonAuditPlayerFilter: 'Spēlētāja ID',
+  seasonAuditPlayerFilter: 'Meklēt spēlētāju pēc vārda…',
   seasonLeaderboardEmpty: 'Pagaidām neviens nav nospēlējis pietiekami spēļu.',
   seasonTabOverall: 'Kopvērtējums',
   seasonTabFridays: 'Piektdienas',

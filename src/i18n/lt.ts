@@ -1565,7 +1565,7 @@ export default {
   seasonWhen: 'Kada',
   seasonManual: 'Rankinis',
   seasonAuditEmpty: 'Kol kas nėra reitingo pakeitimų.',
-  seasonAuditPlayerFilter: 'Žaidėjo ID',
+  seasonAuditPlayerFilter: 'Ieškoti žaidėjo pagal vardą…',
   seasonLeaderboardEmpty: 'Dar niekas nesužaidė pakankamai rungtynių.',
   seasonTabOverall: 'Bendra',
   seasonTabFridays: 'Penktadieniai',

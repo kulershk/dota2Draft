@@ -3577,7 +3577,7 @@
           { "name": "offset",   "in": "query", "schema": { "type": "integer", "default": 0 } },
           { "name": "playerId", "in": "query", "schema": { "type": "integer" } }
         ],
-        "responses": { "200": { "description": "Audit rows newest-first" } }
+        "responses": { "200": { "description": "{ rows, total } — rows are newest-first (paginated by limit/offset); total is the full count for the same filter, for page-number pagination" } }
       }
     },
     "/api/admin/seasons/{id}/adjust": {

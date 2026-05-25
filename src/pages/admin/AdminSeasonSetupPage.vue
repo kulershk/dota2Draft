@@ -2,7 +2,7 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ArrowLeft, Save, RotateCcw, Trophy, Pencil, History, Medal } from 'lucide-vue-next'
+import { ArrowLeft, Save, RotateCcw, Trophy, Pencil, History, Medal, Search, ChevronLeft, ChevronRight } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { toLocalDatetime, localDatetimeToISO } from '@/utils/format'
 
@@ -96,7 +96,15 @@ const leaderLoading = ref(false)
 // Audit
 const audit = ref<AuditRow[]>([])
 const auditLoading = ref(false)
-const auditPlayerFilter = ref('')
+const auditTotal = ref(0)
+const auditPage = ref(0)
+const AUDIT_PAGE_SIZE = 50
+// Player name search (server-side autocomplete), like the groups member search.
+const auditSearchQuery = ref('')
+const auditSearchResults = ref<Array<{ id: number; name: string; display_name?: string | null; avatar_url?: string | null; mmr?: number }>>([])
+const auditPlayerId = ref<number | null>(null)
+const auditPlayerLabel = ref('')
+let auditSearchTimer: ReturnType<typeof setTimeout> | undefined
 
 // Adjust modal
 const adjustOpen = ref(false)
@@ -278,11 +286,53 @@ async function loadLeader() {
 async function loadAudit() {
   auditLoading.value = true
   try {
-    const playerId = auditPlayerFilter.value ? Number(auditPlayerFilter.value) : undefined
-    audit.value = await api.getAdminSeasonAudit(seasonId.value, { playerId, limit: 200 })
+    const res: any = await api.getAdminSeasonAudit(seasonId.value, {
+      playerId: auditPlayerId.value ?? undefined,
+      limit: AUDIT_PAGE_SIZE,
+      offset: auditPage.value * AUDIT_PAGE_SIZE,
+    })
+    audit.value = res?.rows ?? []
+    auditTotal.value = res?.total ?? 0
   } finally {
     auditLoading.value = false
   }
+}
+
+function onAuditSearchInput() {
+  if (auditSearchTimer) clearTimeout(auditSearchTimer)
+  const q = auditSearchQuery.value.trim()
+  if (q.length < 2) { auditSearchResults.value = []; return }
+  auditSearchTimer = setTimeout(async () => {
+    try {
+      const res: any = await api.searchPlayers(q)
+      auditSearchResults.value = Array.isArray(res) ? res : (res?.players || [])
+    } catch {
+      auditSearchResults.value = []
+    }
+  }, 200)
+}
+
+function selectAuditPlayer(p: { id: number; name: string; display_name?: string | null }) {
+  auditPlayerId.value = p.id
+  auditPlayerLabel.value = p.display_name || p.name
+  auditSearchQuery.value = ''
+  auditSearchResults.value = []
+  auditPage.value = 0
+  loadAudit()
+}
+
+function clearAuditPlayer() {
+  auditPlayerId.value = null
+  auditPlayerLabel.value = ''
+  auditPage.value = 0
+  loadAudit()
+}
+
+function auditGoPage(delta: number) {
+  const next = auditPage.value + delta
+  if (next < 0 || next * AUDIT_PAGE_SIZE >= auditTotal.value) return
+  auditPage.value = next
+  loadAudit()
 }
 
 watch(tab, (newTab) => {
@@ -615,14 +665,35 @@ onMounted(load)
 
     <!-- Audit tab -->
     <div v-else-if="tab === 'audit'" class="card overflow-hidden">
-      <div class="px-4 py-3 border-b border-border/40 flex items-center gap-2">
-        <input
-          v-model="auditPlayerFilter"
-          type="number"
-          :placeholder="t('seasonAuditPlayerFilter')"
-          class="w-48 bg-accent/40 border border-border/40 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-primary/40"
-        />
-        <button type="button" class="px-3 py-1.5 text-xs rounded-md bg-accent/40 hover:bg-accent" @click="loadAudit">{{ t('apply') }}</button>
+      <div class="px-4 py-3 border-b border-border/40 flex items-center gap-2 flex-wrap">
+        <span v-if="auditPlayerId" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-accent/40 text-xs">
+          {{ auditPlayerLabel }}
+          <button type="button" class="text-muted-foreground hover:text-foreground" :aria-label="t('cancel')" @click="clearAuditPlayer">✕</button>
+        </span>
+        <div v-else class="relative w-64">
+          <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+          <input
+            v-model="auditSearchQuery"
+            type="text"
+            :placeholder="t('seasonAuditPlayerFilter')"
+            class="w-full bg-accent/40 border border-border/40 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary/40"
+            @input="onAuditSearchInput"
+          />
+          <div v-if="auditSearchResults.length" class="absolute z-20 mt-1 w-full flex flex-col border border-border/30 rounded-lg overflow-hidden bg-card shadow-lg">
+            <button
+              v-for="p in auditSearchResults" :key="p.id"
+              type="button"
+              class="px-3 py-1.5 flex items-center gap-2 text-left hover:bg-accent/40 transition-colors"
+              @click="selectAuditPlayer(p)"
+            >
+              <img v-if="p.avatar_url" :src="p.avatar_url" class="w-5 h-5 rounded-full" />
+              <div v-else class="w-5 h-5 rounded-full bg-accent" />
+              <span class="text-xs flex-1 truncate">{{ p.display_name || p.name }}</span>
+              <span class="text-[10px] text-muted-foreground">{{ p.mmr ?? 0 }} MMR</span>
+            </button>
+          </div>
+        </div>
+        <span class="text-[11px] text-muted-foreground ml-auto">{{ auditTotal }} {{ t('entries') }}</span>
       </div>
       <div v-if="auditLoading" class="text-sm text-muted-foreground p-4">{{ t('loading') }}…</div>
       <div v-else-if="audit.length === 0" class="text-center text-muted-foreground py-10 text-sm">{{ t('seasonAuditEmpty') }}</div>
@@ -663,6 +734,15 @@ onMounted(load)
           </tr>
         </tbody>
       </table>
+      <div v-if="auditTotal > AUDIT_PAGE_SIZE" class="flex items-center justify-center gap-3 px-4 py-3 border-t border-border/40">
+        <button type="button" class="px-2 py-1 rounded-md bg-accent/40 hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed" :disabled="auditPage === 0" @click="auditGoPage(-1)">
+          <ChevronLeft class="w-4 h-4" />
+        </button>
+        <span class="text-xs text-muted-foreground tabular-nums">{{ auditPage + 1 }} / {{ Math.ceil(auditTotal / AUDIT_PAGE_SIZE) }}</span>
+        <button type="button" class="px-2 py-1 rounded-md bg-accent/40 hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed" :disabled="(auditPage + 1) * AUDIT_PAGE_SIZE >= auditTotal" @click="auditGoPage(1)">
+          <ChevronRight class="w-4 h-4" />
+        </button>
+      </div>
     </div>
 
     <!-- Groups tab — per-season custom player groups with matchmaking rules -->

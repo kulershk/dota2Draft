@@ -437,13 +437,14 @@ export default function createSeasonsRouter(io) {
       const limit = Math.min(Number(req.query.limit) || 100, 500)
       const offset = Number(req.query.offset) || 0
       const playerId = req.query.playerId ? Number(req.query.playerId) : null
-      const params = [req.params.id]
+      const filterParams = [req.params.id]
       let where = 'season_id = $1'
       if (playerId) {
-        params.push(playerId)
-        where += ` AND player_id = $${params.length}`
+        filterParams.push(playerId)
+        where += ` AND player_id = $${filterParams.length}`
       }
-      params.push(limit, offset)
+      const totalRows = await query(`SELECT COUNT(*)::int AS total FROM season_match_log WHERE ${where}`, filterParams)
+      const total = totalRows[0]?.total || 0
       const rows = await query(`
         SELECT sml.*,
           p.name AS player_name, COALESCE(p.display_name, p.name) AS player_display_name, p.avatar_url
@@ -451,9 +452,9 @@ export default function createSeasonsRouter(io) {
         JOIN players p ON p.id = sml.player_id
         WHERE ${where}
         ORDER BY sml.created_at DESC
-        LIMIT $${params.length - 1} OFFSET $${params.length}
-      `, params)
-      res.json(rows)
+        LIMIT $${filterParams.length + 1} OFFSET $${filterParams.length + 2}
+      `, [...filterParams, limit, offset])
+      res.json({ rows, total })
     } catch (e) {
       res.status(500).json({ error: e.message })
     }

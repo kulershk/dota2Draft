@@ -1506,7 +1506,7 @@ export default {
   seasonWhen: 'Когда',
   seasonManual: 'Вручную',
   seasonAuditEmpty: 'Изменений рейтинга пока нет.',
-  seasonAuditPlayerFilter: 'ID игрока',
+  seasonAuditPlayerFilter: 'Поиск игрока по имени…',
   seasonLeaderboardEmpty: 'Никто ещё не сыграл достаточно игр.',
   seasonTabOverall: 'Общий',
   seasonTabFridays: 'Пятницы',
