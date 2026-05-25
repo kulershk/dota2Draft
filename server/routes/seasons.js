@@ -205,27 +205,26 @@ export default function createSeasonsRouter(io) {
         })
       }
 
-      // Re-derive the podium per day. Ranking is wins − losses (net_wins)
-      // ONLY — players with equal net_wins are tied regardless of MMR. Only
-      // players with a positive net-win record are eligible; a tie group shares
-      // its slot(s) — pool the combined prize and split it equally (mirrors
-      // inhouseFridayBonus.applyFridayBonusForSeason).
+      // Re-derive the podium per day. Rank is wins − losses (net_wins) only —
+      // players with equal net_wins are tied regardless of MMR. Place = rank of
+      // the net_wins tier (best W−L = 1st, next = 2nd, next = 3rd); only the top
+      // 3 tiers are eligible, and everyone in a tier gets the FULL prize for
+      // that place — no splitting (mirrors inhouseFridayBonus).
       const fridays = []
       for (const [date, players] of byDate) {
         const eligible = players.filter(pl => pl.net_wins > 0)
-        let slotIdx = 0
+        let place = 0 // 0-based index into slots
         let i = 0
-        while (slotIdx < slots.length && i < eligible.length) {
-          const place = slotIdx + 1
+        while (place < slots.length && i < eligible.length) {
+          const prize = slots[place]
+          const placeNum = place + 1
           const tiedWins = eligible[i].net_wins
-          const tied = []
-          while (i < eligible.length && eligible[i].net_wins === tiedWins) { tied.push(eligible[i]); i++ }
-          const consumed = Math.min(tied.length, slots.length - slotIdx)
-          let combined = 0
-          for (let k = 0; k < consumed; k++) combined += slots[slotIdx + k]
-          const perPlayer = tied.length ? Math.round(combined / tied.length) : 0
-          for (const pl of tied) { pl.place = place; pl.bonus = perPlayer }
-          slotIdx += tied.length
+          while (i < eligible.length && eligible[i].net_wins === tiedWins) {
+            eligible[i].place = placeNum
+            eligible[i].bonus = prize
+            i++
+          }
+          place++
         }
         fridays.push({ date, players })
       }

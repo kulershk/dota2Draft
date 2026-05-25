@@ -10,8 +10,9 @@
 //   2nd place — pool.friday_top2_bonus (default  6)
 //   3rd place — pool.friday_top3_bonus (default  6)
 //
-// Ties at a boundary split the combined bonus across the tied players, per
-// spec "punkti dalās vienādi". Idempotent via the season_match_log unique
+// Rewards are NOT split: everyone sharing a place (same W−L tier) collects the
+// full prize for that place — e.g. 20 players tied for 3rd each get the full
+// 3rd-place bonus. Idempotent via the season_match_log unique
 // partial index on (season_id, player_id, DATE(created_at)) WHERE
 // reason='friday_top_bonus'. The scheduler runs only on the Saturday a window
 // ends, so DATE(created_at) is stable per Friday and can't double-apply.
@@ -74,29 +75,26 @@ export async function applyFridayBonusForSeason(seasonId, fridayDate /* YYYY-MM-
 
     if (!rows.length) { await client.query('COMMIT'); return { applied: 0, fridayDate } }
 
-    // Walk the sorted list and bucket players into slot 1 / 2 / 3 by net wins.
-    // Everyone with the same net_wins is one tie group regardless of MMR — the
-    // group shares its slot(s); pool the combined prize and split it equally.
+    // Award by place, where place = the rank of a player's net_wins among the
+    // distinct W−L tiers: best W−L = 1st, next = 2nd, next = 3rd. Everyone in a
+    // tier collects the FULL prize for that place (no splitting); tiers past the
+    // 3rd get nothing. Rows are pre-sorted net_wins DESC, so equal-net_wins rows
+    // are contiguous.
     const slots = [
-      { name: 1, prize: Number(inhousePool.friday_top1_bonus ?? 12) },
-      { name: 2, prize: Number(inhousePool.friday_top2_bonus ?? 6)  },
-      { name: 3, prize: Number(inhousePool.friday_top3_bonus ?? 6)  },
+      Number(inhousePool.friday_top1_bonus ?? 12),
+      Number(inhousePool.friday_top2_bonus ?? 6),
+      Number(inhousePool.friday_top3_bonus ?? 6),
     ]
     const awards = new Map() // pid -> bonus
-    let slotIdx = 0
+    let place = 0 // 0-based index into slots
     let i = 0
-    while (slotIdx < slots.length && i < rows.length) {
+    while (place < slots.length && i < rows.length) {
+      const prize = slots[place]
       const tiedWins = rows[i].net_wins
-      const tied = []
       while (i < rows.length && rows[i].net_wins === tiedWins) {
-        tied.push(rows[i]); i++
+        awards.set(rows[i].player_id, prize); i++
       }
-      const slotsConsumed = Math.min(tied.length, slots.length - slotIdx)
-      let combined = 0
-      for (let k = 0; k < slotsConsumed; k++) combined += slots[slotIdx + k].prize
-      const perPlayer = tied.length ? (combined / tied.length) : 0
-      for (const r of tied) awards.set(r.player_id, perPlayer)
-      slotIdx += tied.length
+      place++
     }
 
     let appliedCount = 0
