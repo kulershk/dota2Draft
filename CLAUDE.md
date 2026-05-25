@@ -150,6 +150,49 @@ Competitions use soft delete: `competitions.deleted_at TIMESTAMP NULL`. `DELETE 
 
 There is no admin "show deleted" view; restoring requires `UPDATE competitions SET deleted_at = NULL WHERE id = N` against the DB. Treat soft delete as a tombstone — don't leak deleted comps via new joins.
 
+## Notifications
+
+The in-app bell badge + the notifications tab in the Friends side panel. Two tables (`server/db.js`), served by `server/routes/notifications.js` (mounted via `createNotificationsRouter(io)`):
+
+- `notifications (id, recipient_id NULL, type DEFAULT 'announcement', title, body NULL, link NULL, created_by NULL, created_at)` — **`recipient_id NULL` = broadcast** (every logged-in user sees it); **non-null = targeted** (only that player sees it).
+- `notification_reads (notification_id, player_id, read_at, PK(notification_id, player_id))` — per-user read state, so one broadcast row serves everyone without duplication.
+
+### Sending a notification to a player (targeted)
+
+There is **no shared helper** — the canonical pattern is: insert a row with `recipient_id = <playerId>`, then emit `notification:new` to **only that player's** socket room (`user:${playerId}`, joined on connect) so their bell updates live. Copy `notifyFriendAccepted()` in `server/routes/friends.js`:
+
+```js
+const row = await queryOne(
+  `INSERT INTO notifications (recipient_id, type, title, body, link, created_by)
+   VALUES ($1, $2, $3, $4, $5, $6)
+   RETURNING id`,
+  [playerId, 'friend_accepted', `${name} accepted your friend request`, null, `/player/${actorId}`, actorId],
+)
+io?.to(`user:${playerId}`).emit('notification:new', { id: row.id })
+```
+
+- `type` is a free string for your own use (`friend_accepted`, `inhouse_strike_toxic`, `inhouse_strike_lifted`, …); the bell/badge logic ignores it.
+- `title` is required; `body` and `link` are optional. `link` is the in-app path opened on click (e.g. `/queue`, `/player/123`).
+- `created_by` records who triggered it but is **never exposed** to the recipient (`GET /api/notifications` doesn't select it) — so don't reveal sensitive "who reported you" info there; put player-facing detail in `body`.
+- **Inside a transaction?** Insert the row within the txn, but emit `notification:new` **after COMMIT** — the client refetches on the event and the row must already be visible. See `_insertStrikeNotification()` + the post-commit emit in `server/routes/inhouseReports.js`.
+
+### Broadcasting to everyone
+
+`POST /api/admin/notifications {title, body?, link?}` (admin or `manage_notifications`) inserts a `recipient_id NULL` row and `io.emit('notification:new', { id })` to all sockets. Composer/history UI: `/admin/announcements`.
+
+### Read state & badge
+
+- `GET /api/notifications` → `{ rows, unread }` (broadcasts + my targeted rows joined with my reads). `POST /api/notifications/:id/read` and `POST /api/notifications/read-all` insert into `notification_reads` (`ON CONFLICT DO NOTHING`).
+- `/api/auth/me` (and `PUT /me`) ship an `unread_notifications` count for the initial badge.
+- Frontend: `useNotificationStore` (`loadAll`, `markRead`, `markAllRead`, `unreadCount`) refetches on `notification:new` / `notification:removed`; the bell badge binds to `notifStore.unreadCount`.
+
+### Socket events
+
+- `notification:new { id }` — server→client. Broadcast via `io.emit` (announcements) or targeted via `io.to(\`user:${id}\`)` (per-player). The client just refetches `GET /api/notifications`.
+- `notification:removed { id }` — server→client, emitted by `DELETE /api/admin/notifications/:id`.
+
+Per the API Documentation Rules above, a new notification **route** needs an `openapi.json` update and a new/changed **socket event** needs `asyncapi.json` — but simply *sending* a notification from existing code (insert + `notification:new`) needs neither.
+
 ## Stack
 
 - **Frontend**: Vue 3 + TypeScript + Tailwind CSS + Vue I18n
