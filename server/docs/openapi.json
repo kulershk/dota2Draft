@@ -1982,6 +1982,46 @@
         }
       }
     },
+    "/api/me/profile-banner": {
+      "post": {
+        "tags": ["Users"],
+        "summary": "Upload my profile banner (profile_banner perk)",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Self-serve. Requires an active subscription whose plan grants the `profile_banner` perk (403 otherwise). Multipart/form-data with field `banner`. PNG / JPG / GIF / WebP up to 5 MB. Server resizes to 1200×300 PNG (cover/center) and replaces any existing banner file.",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["banner"],
+                "properties": {
+                  "banner": { "type": "string", "format": "binary" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Uploaded",
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "profile_banner_url": { "type": "string" } } } } }
+          },
+          "400": { "description": "No file uploaded" },
+          "401": { "description": "Not authenticated" },
+          "403": { "description": "Subscription does not include a profile banner" }
+        }
+      },
+      "delete": {
+        "tags": ["Users"],
+        "summary": "Remove my profile banner",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Unlinks the file and clears profile_banner_url for the authenticated player.",
+        "responses": {
+          "200": { "description": "Removed" },
+          "401": { "description": "Not authenticated" }
+        }
+      }
+    },
     "/api/players/{id}/profile": {
       "get": {
         "tags": ["Users"],

@@ -23,6 +23,10 @@ export const DRAFT_EVENTS = {
   MATCH_ENDED: 'matchEnded',
   /** Admin-triggered tournament announce (POST /api/competitions/:id/discord-announce). */
   TOURNAMENT_ANNOUNCE: 'tournamentAnnounce',
+  /** Fired when a player's site subscription is activated or cancelled, so the
+   *  bot can grant/remove the Subscriber role. Server resolves the Discord id
+   *  before emitting (no DB lookup needed bot-side). */
+  SUBSCRIPTION_CHANGED: 'subscriptionChanged',
 } as const
 
 export type DraftEventName = (typeof DRAFT_EVENTS)[keyof typeof DRAFT_EVENTS]
@@ -47,6 +51,16 @@ export interface MatchEndedPayload {
   /** True when the match ended via cancellation — voice cleanup runs without
    *  the configured delay. */
   immediate?: boolean
+}
+
+export interface SubscriptionChangedPayload {
+  /** Discord snowflake of the affected player (resolved server-side). */
+  discordId: string
+  /** true = the player now has an active subscription (grant Subscriber role);
+   *  false = no active subscription remains (remove it). */
+  active: boolean
+  /** Plan name, for logging only — role gating is plan-agnostic. */
+  planName?: string | null
 }
 
 export interface TournamentAnnouncePayload {

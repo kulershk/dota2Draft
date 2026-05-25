@@ -9,6 +9,7 @@ import { getCompetition, parseCompSettings } from '../helpers/competition.js'
 import { applyMatchToSeason } from './seasonRankingApply.js'
 import { startPolling as startLivePolling, stopPolling as stopLivePolling, updateServerSteamId as updateLivePollerServerSteamId } from './liveMatchPoller.js'
 import { discordBot } from './discordBotClient.js'
+import { getGcoinMultipliers } from '../helpers/subscription.js'
 import SteamCommunity from 'steamcommunity'
 import { LoginSession, EAuthTokenPlatformType } from 'steam-session'
 
@@ -1163,22 +1164,39 @@ class BotPool {
         // (live poller already stopped at the top of _autoFillGameWinner)
 
         // ── gcoins: queue match payout ──
-        // Winners get GCOIN_QUEUE_WIN, losers GCOIN_QUEUE_LOSS. Each player gets
-        // a gcoin_transactions audit row and a live balance push so the in-queue
-        // slot machine reflects the new total without a reload.
+        // Winners get GCOIN_QUEUE_WIN, losers GCOIN_QUEUE_LOSS. Subscribers on a
+        // plan with the gcoin_multiplier perk earn `base × multiplier` (e.g. 5×);
+        // everyone else earns the base. Each player gets a gcoin_transactions
+        // audit row and a live balance push so the in-queue slot machine reflects
+        // the new total without a reload.
         if (justCompleted > 0) {
-          const payout = async (ids, delta, label) => {
+          // One batched lookup for the whole match, then group each side's ids by
+          // their effective multiplier so a single UPDATE serves each tier.
+          const multById = await getGcoinMultipliers([...(winIds || []), ...(loseIds || [])])
+          const payout = async (ids, baseDelta, label) => {
             if (!ids?.length) return
-            const updated = await query(
-              'UPDATE players SET gcoins = gcoins + $1 WHERE id = ANY($2::int[]) RETURNING id, gcoins',
-              [delta, ids]
-            )
-            await execute(
-              'INSERT INTO gcoin_transactions (player_id, delta, reason) SELECT unnest($1::int[]), $2, $3',
-              [ids, delta, `Queue ${label} (${queueMatchXp.pool_name})`]
-            )
-            for (const row of updated) {
-              this.io?.to(`user:${row.id}`).emit('gcoins:balance', { gcoins: row.gcoins, delta, reason: `queue_${label}` })
+            const byMult = new Map() // multiplier -> ids[]
+            for (const id of ids) {
+              const m = multById.get(id) || 1
+              if (!byMult.has(m)) byMult.set(m, [])
+              byMult.get(m).push(id)
+            }
+            for (const [m, gids] of byMult) {
+              const delta = baseDelta * m
+              const updated = await query(
+                'UPDATE players SET gcoins = gcoins + $1 WHERE id = ANY($2::int[]) RETURNING id, gcoins',
+                [delta, gids]
+              )
+              const reason = m > 1
+                ? `Queue ${label} ${m}× (${queueMatchXp.pool_name})`
+                : `Queue ${label} (${queueMatchXp.pool_name})`
+              await execute(
+                'INSERT INTO gcoin_transactions (player_id, delta, reason) SELECT unnest($1::int[]), $2, $3',
+                [gids, delta, reason]
+              )
+              for (const row of updated) {
+                this.io?.to(`user:${row.id}`).emit('gcoins:balance', { gcoins: row.gcoins, delta, reason: `queue_${label}` })
+              }
             }
           }
           try {

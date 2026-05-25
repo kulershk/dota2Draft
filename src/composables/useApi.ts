@@ -451,6 +451,19 @@ export function useApi() {
     // Streamers (public)
     getStreamers: () => request('/api/streamers'),
 
+    // Profile banner (profile_banner subscription perk) — self-serve upload/remove
+    uploadProfileBanner: async (file: File): Promise<{ profile_banner_url: string }> => {
+      const form = new FormData()
+      form.append('banner', file)
+      const headers: Record<string, string> = {}
+      const tok = (typeof localStorage !== 'undefined') ? localStorage.getItem('draft_auth_token') : null
+      if (tok) headers['Authorization'] = `Bearer ${tok}`
+      const res = await fetch('/api/me/profile-banner', { method: 'POST', body: form, headers })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || 'Upload failed')
+      return res.json()
+    },
+    deleteProfileBanner: () => request('/api/me/profile-banner', { method: 'DELETE' }),
+
     // Users (global)
     getPlayerProfile: (id: number) => request(`/api/players/${id}/profile`),
     getPlayerXpLog: (id: number) => request(`/api/players/${id}/xp-log`),

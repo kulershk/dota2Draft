@@ -10,6 +10,7 @@ import { Settings } from './settings.js'
 export const ROLE_KEYS = {
   Verified: 'Verified',
   Caster: 'Caster',
+  Subscriber: 'Subscriber',
 } as const
 
 export type RoleKey = (typeof ROLE_KEYS)[keyof typeof ROLE_KEYS]
@@ -17,11 +18,13 @@ export type RoleKey = (typeof ROLE_KEYS)[keyof typeof ROLE_KEYS]
 const ENV_FALLBACK: Record<RoleKey, string> = {
   Verified: env.ROLE_ID_VERIFIED,
   Caster: env.ROLE_ID_CASTER,
+  Subscriber: env.ROLE_ID_SUBSCRIBER,
 }
 
 const NAME_FALLBACK: Record<RoleKey, string> = {
   Verified: 'Verified',
   Caster: 'Caster',
+  Subscriber: 'Subscriber',
 }
 
 function configuredId(key: RoleKey): string {

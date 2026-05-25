@@ -34,4 +34,5 @@ export const env = {
   // Optional role IDs (env-based fallback if DB-backed settings are empty).
   ROLE_ID_VERIFIED: process.env.ROLE_ID_VERIFIED ?? '',
   ROLE_ID_CASTER: process.env.ROLE_ID_CASTER ?? '',
+  ROLE_ID_SUBSCRIBER: process.env.ROLE_ID_SUBSCRIBER ?? '',
 }

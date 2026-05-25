@@ -163,6 +163,7 @@ export interface CurrentUser {
     perks: Record<string, boolean>
   } | null
   auto_requeue_enabled: boolean
+  profile_banner_url: string | null
 }
 
 export interface CompetitionUser {

@@ -23,10 +23,12 @@ interface Plan {
 }
 
 // Hardcoded perk catalogue. Adding a new perk = add a row here + a backend
-// consumer that calls hasPerk('the_key'). The plan's perks JSONB stores
-// boolean flags keyed by perk_key.
-const PERK_OPTIONS: { key: string; labelKey: string; descKey: string }[] = [
-  { key: 'auto_requeue', labelKey: 'perkAutoRequeue', descKey: 'perkAutoRequeueDesc' },
+// consumer that calls hasPerk('the_key') (bool) or reads the number. The plan's
+// perks JSONB stores either boolean flags or numbers keyed by perk_key.
+const PERK_OPTIONS: { key: string; labelKey: string; descKey: string; type: 'bool' | 'number'; min?: number; max?: number; default?: number }[] = [
+  { key: 'auto_requeue', labelKey: 'perkAutoRequeue', descKey: 'perkAutoRequeueDesc', type: 'bool' },
+  { key: 'profile_banner', labelKey: 'perkProfileBanner', descKey: 'perkProfileBannerDesc', type: 'bool' },
+  { key: 'gcoin_multiplier', labelKey: 'perkGcoinMultiplier', descKey: 'perkGcoinMultiplierDesc', type: 'number', min: 1, max: 100, default: 1 },
 ]
 interface Subscriber {
   id: number
@@ -74,7 +76,7 @@ const planForm = ref({
   currency: 'EUR',
   is_active: true,
   sort_order: 0,
-  perks: {} as Record<string, boolean>,
+  perks: {} as Record<string, boolean | number>,
 })
 const badgeFile = ref<File | null>(null)
 const badgePreviewUrl = ref<string | null>(null)
@@ -116,9 +118,20 @@ async function load() {
   }
 }
 
+// Build the editable perk map, defaulting numbers to their no-op value so the
+// number inputs always have a value. `plan` omitted = blank (create) form.
+function perksToForm(plan?: Plan): Record<string, boolean | number> {
+  const m: Record<string, boolean | number> = {}
+  for (const opt of PERK_OPTIONS) {
+    if (opt.type === 'number') m[opt.key] = Number(plan?.perks?.[opt.key]) || (opt.default ?? 1)
+    else m[opt.key] = !!(plan?.perks && plan.perks[opt.key])
+  }
+  return m
+}
+
 function openCreate() {
   editingPlan.value = null
-  planForm.value = { name: '', slug: '', description: '', price_cents: 0, currency: 'EUR', is_active: true, sort_order: nextSortOrder(), perks: {} }
+  planForm.value = { name: '', slug: '', description: '', price_cents: 0, currency: 'EUR', is_active: true, sort_order: nextSortOrder(), perks: perksToForm() }
   badgeFile.value = null
   badgePreviewUrl.value = null
   error.value = ''
@@ -132,10 +145,8 @@ function nextSortOrder(): number {
 
 function openEdit(plan: Plan) {
   editingPlan.value = plan
-  // Coerce server perks JSONB into a flat boolean map for the checkboxes,
-  // ignoring any unknown keys (forward-compatible with future perks).
-  const perksMap: Record<string, boolean> = {}
-  for (const opt of PERK_OPTIONS) perksMap[opt.key] = !!(plan.perks && plan.perks[opt.key])
+  // Coerce server perks JSONB into the editable form map (bools → checkboxes,
+  // numbers → inputs), ignoring unknown keys (forward-compatible).
   planForm.value = {
     name: plan.name,
     slug: plan.slug,
@@ -144,7 +155,7 @@ function openEdit(plan: Plan) {
     currency: plan.currency,
     is_active: plan.is_active,
     sort_order: plan.sort_order,
-    perks: perksMap,
+    perks: perksToForm(plan),
   }
   badgeFile.value = null
   badgePreviewUrl.value = plan.badge_url
@@ -178,9 +189,18 @@ async function removeBadge() {
 async function savePlan() {
   error.value = ''
   if (!planForm.value.name.trim()) { error.value = t('subscriptionPlanNameRequired'); return }
-  // Strip false keys so the perks JSONB doesn't accumulate dead flags over time.
-  const perks: Record<string, boolean> = {}
-  for (const [k, v] of Object.entries(planForm.value.perks)) if (v) perks[k] = true
+  // Persist only meaningful perks so the JSONB doesn't accumulate dead flags:
+  // booleans only when true; numbers only when above their no-op default.
+  const perks: Record<string, boolean | number> = {}
+  for (const opt of PERK_OPTIONS) {
+    const v = planForm.value.perks[opt.key]
+    if (opt.type === 'number') {
+      const n = Math.floor(Number(v) || 0)
+      if (n > (opt.default ?? 1)) perks[opt.key] = n
+    } else if (v) {
+      perks[opt.key] = true
+    }
+  }
 
   const payload = {
     name: planForm.value.name.trim(),
@@ -493,13 +513,26 @@ onUnmounted(() => {
         <div class="flex flex-col gap-1.5">
           <label class="label-text">{{ t('subscriptionPlanPerks') }}</label>
           <div class="flex flex-col gap-2 rounded border border-border p-3 bg-accent/10">
-            <label v-for="opt in PERK_OPTIONS" :key="opt.key" class="flex items-start gap-2 cursor-pointer">
-              <input type="checkbox" class="mt-0.5 w-4 h-4 accent-primary" v-model="planForm.perks[opt.key]" />
-              <div class="flex flex-col">
-                <span class="text-sm text-foreground font-medium">{{ t(opt.labelKey) }}</span>
-                <span class="text-[11px] text-muted-foreground">{{ t(opt.descKey) }}</span>
+            <template v-for="opt in PERK_OPTIONS" :key="opt.key">
+              <!-- Numeric perk (e.g. gcoins multiplier): number input -->
+              <div v-if="opt.type === 'number'" class="flex items-start gap-2">
+                <input type="number" :min="opt.min ?? 1" :max="opt.max ?? 100"
+                  class="mt-0.5 w-16 px-2 py-1 rounded border border-border bg-background text-sm tabular-nums"
+                  v-model.number="planForm.perks[opt.key]" />
+                <div class="flex flex-col">
+                  <span class="text-sm text-foreground font-medium">{{ t(opt.labelKey) }}</span>
+                  <span class="text-[11px] text-muted-foreground">{{ t(opt.descKey) }}</span>
+                </div>
               </div>
-            </label>
+              <!-- Boolean perk: checkbox -->
+              <label v-else class="flex items-start gap-2 cursor-pointer">
+                <input type="checkbox" class="mt-0.5 w-4 h-4 accent-primary" v-model="planForm.perks[opt.key]" />
+                <div class="flex flex-col">
+                  <span class="text-sm text-foreground font-medium">{{ t(opt.labelKey) }}</span>
+                  <span class="text-[11px] text-muted-foreground">{{ t(opt.descKey) }}</span>
+                </div>
+              </label>
+            </template>
           </div>
         </div>
 

@@ -6,6 +6,14 @@ import { query, queryOne, execute } from '../db.js'
 import { getAuthPlayer } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/permissions.js'
 import { upload, uploadsDir } from '../middleware/upload.js'
+import { discordBot } from '../services/discordBotClient.js'
+
+// Fire-and-forget: tell the Discord bot to grant/remove the Subscriber role.
+// No-op when the player hasn't linked Discord; the bot client swallows outages.
+function syncDiscordSubscriberRole(discordId, active, planName) {
+  if (!discordId) return
+  discordBot.emit('subscriptionChanged', { discordId, active, planName: planName || null })
+}
 
 function slugify(s) {
   return String(s)
@@ -209,14 +217,14 @@ export default function createSubscriptionPlansRouter() {
     const admin = await requirePermission(req, res, 'manage_subscription_plans')
     if (!admin) return
 
-    const plan = await queryOne('SELECT id FROM subscription_plans WHERE id = $1', [id])
+    const plan = await queryOne('SELECT id, name FROM subscription_plans WHERE id = $1', [id])
     if (!plan) return res.status(404).json({ error: 'plan not found' })
 
     const { player_id, expires_at } = req.body || {}
     const playerId = Number(player_id)
     if (!playerId) return res.status(400).json({ error: 'player_id is required' })
 
-    const player = await queryOne('SELECT id FROM players WHERE id = $1', [playerId])
+    const player = await queryOne('SELECT id, discord_id FROM players WHERE id = $1', [playerId])
     if (!player) return res.status(404).json({ error: 'player not found' })
 
     const expiresAt = expires_at ? new Date(expires_at) : null
@@ -239,6 +247,9 @@ export default function createSubscriptionPlansRouter() {
          VALUES ($1, $2, 'active', 'manual', $3) RETURNING *`,
         [playerId, id, expiresAt]
       )
+      // Now active → grant the Subscriber Discord role. A prior plan was just
+      // cancelled above, but the role is plan-agnostic so re-granting is a no-op.
+      syncDiscordSubscriberRole(player.discord_id, true, plan.name)
       res.status(201).json(row)
     } catch (e) {
       if (e.code === '23505') return res.status(409).json({ error: 'player already has an active subscription' })
@@ -257,7 +268,7 @@ export default function createSubscriptionPlansRouter() {
     if (!admin) return
 
     const sub = await queryOne(
-      'SELECT id, plan_id, status FROM user_subscriptions WHERE id = $1',
+      'SELECT id, plan_id, player_id, status FROM user_subscriptions WHERE id = $1',
       [subscriptionId]
     )
     if (!sub) return res.status(404).json({ error: 'subscription not found' })
@@ -269,6 +280,20 @@ export default function createSubscriptionPlansRouter() {
         WHERE id = $1`,
       [subscriptionId]
     )
+
+    // Only strip the Discord role if the player has no other active subscription
+    // (defensive — the partial unique index allows one, but stay correct).
+    const stillActive = await queryOne(
+      `SELECT 1 FROM user_subscriptions
+        WHERE player_id = $1 AND status = 'active'
+          AND (expires_at IS NULL OR expires_at > NOW())
+        LIMIT 1`,
+      [sub.player_id]
+    )
+    if (!stillActive) {
+      const player = await queryOne('SELECT discord_id FROM players WHERE id = $1', [sub.player_id])
+      syncDiscordSubscriberRole(player?.discord_id, false)
+    }
     res.json({ ok: true })
   })
 

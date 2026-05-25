@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { User, Trophy, Swords, Tv, Medal, MessageCircle, Star, ChevronLeft, ChevronRight, Percent, Target, Flame, Clock, Award, Zap, Check, X, Flag, Users, BadgeCheck, Ban, UserPlus, UserMinus, ShieldOff } from 'lucide-vue-next'
+import { User, Trophy, Swords, Tv, Medal, MessageCircle, Star, ChevronLeft, ChevronRight, Percent, Target, Flame, Clock, Award, Zap, Check, X, Flag, Users, BadgeCheck, Ban, UserPlus, UserMinus, ShieldOff, ImagePlus, Loader2 } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -87,6 +87,42 @@ const profile = ref<any>(null)
 const xpLog = ref<any[]>([])
 const loading = ref(true)
 const error = ref(false)
+
+// ── Profile banner (profile_banner subscription perk) ──
+const bannerInput = ref<HTMLInputElement | null>(null)
+const bannerBusy = ref(false)
+const bannerError = ref('')
+// Own profile + an active plan granting profile_banner → can upload/remove.
+const canEditBanner = computed(() =>
+  store.currentUser.value?.id === profile.value?.id &&
+  store.currentUser.value?.subscription?.perks?.profile_banner === true,
+)
+async function onBannerPicked(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  bannerError.value = ''
+  bannerBusy.value = true
+  try {
+    const r = await api.uploadProfileBanner(file)
+    if (profile.value) profile.value.profile_banner_url = r.profile_banner_url
+    if (store.currentUser.value) store.currentUser.value.profile_banner_url = r.profile_banner_url
+  } catch (err: any) {
+    bannerError.value = err?.message || t('profileBannerUploadFailed')
+  } finally {
+    bannerBusy.value = false
+    if (bannerInput.value) bannerInput.value.value = ''
+  }
+}
+async function removeBanner() {
+  bannerBusy.value = true
+  try {
+    await api.deleteProfileBanner()
+    if (profile.value) profile.value.profile_banner_url = null
+    if (store.currentUser.value) store.currentUser.value.profile_banner_url = null
+  } catch { /* best-effort */ } finally {
+    bannerBusy.value = false
+  }
+}
 
 const PAGE_SIZE = 5
 const MATCH_PAGE_SIZE = 10
@@ -259,6 +295,26 @@ const streakBadge = computed(() => {
     <template v-else-if="profile">
       <!-- Hero strip: avatar + name/bio/mmr blocks -->
       <div class="card p-5 md:p-6 relative overflow-hidden">
+        <!-- Subscriber profile banner (perk-gated): bleeds to the card edges -->
+        <div v-if="profile.profile_banner_url || canEditBanner" class="-mx-5 -mt-5 md:-mx-6 md:-mt-6 mb-5 relative">
+          <img v-if="profile.profile_banner_url" :src="profile.profile_banner_url" :alt="t('profileBanner')" class="w-full h-28 md:h-40 object-cover" />
+          <div v-else class="w-full h-28 md:h-40 bg-gradient-to-r from-primary/10 via-purple-500/10 to-primary/10 flex items-center justify-center">
+            <span class="text-xs text-muted-foreground">{{ t('profileBannerEmpty') }}</span>
+          </div>
+          <div v-if="canEditBanner" class="absolute top-2 right-2 flex items-center gap-1.5">
+            <input ref="bannerInput" type="file" accept="image/*" class="hidden" @change="onBannerPicked" />
+            <button class="px-2 py-1 rounded-md bg-black/50 hover:bg-black/70 text-white text-[11px] font-semibold flex items-center gap-1 disabled:opacity-50"
+                    :disabled="bannerBusy" @click="bannerInput?.click()">
+              <Loader2 v-if="bannerBusy" class="w-3.5 h-3.5 animate-spin" /><ImagePlus v-else class="w-3.5 h-3.5" />
+              {{ profile.profile_banner_url ? t('profileBannerChange') : t('profileBannerUpload') }}
+            </button>
+            <button v-if="profile.profile_banner_url" class="p-1 rounded-md bg-black/50 hover:bg-red-600/80 text-white disabled:opacity-50"
+                    :disabled="bannerBusy" :title="t('profileBannerRemove')" @click="removeBanner">
+              <X class="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div v-if="bannerError" class="absolute bottom-2 left-2 text-[11px] text-red-300 bg-black/60 px-2 py-0.5 rounded">{{ bannerError }}</div>
+        </div>
         <div class="flex flex-col sm:flex-row items-start sm:items-center gap-5">
           <!-- Gradient-ring avatar -->
           <div class="shrink-0 relative">

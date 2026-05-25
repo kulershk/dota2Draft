@@ -1377,6 +1377,12 @@ export async function initDb() {
   // match) so the preference survives across matches and server restarts.
   try { await execute(`ALTER TABLE players ADD COLUMN auto_requeue_enabled BOOLEAN NOT NULL DEFAULT false`) } catch {}
 
+  // Subscriber-uploaded profile banner (the profile_banner perk). The URL is
+  // stored unconditionally, but read paths only surface it while the player has
+  // an active plan granting the perk — so a lapsed sub hides the banner without
+  // losing the uploaded file.
+  try { await execute(`ALTER TABLE players ADD COLUMN profile_banner_url TEXT NULL`) } catch {}
+
   // In-site currency ("dotacoins") that admins can grant/deduct. There is no
   // user-facing spending mechanism yet — this just sets up the balance + a
   // full audit log so every change is attributable.

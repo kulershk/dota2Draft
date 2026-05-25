@@ -1,9 +1,13 @@
 import { Router } from 'express'
+import fs from 'fs'
+import { join } from 'path'
+import sharp from 'sharp'
 import { query, queryOne, execute } from '../db.js'
 import { createSession, getAuthPlayer } from '../middleware/auth.js'
 import { requirePermission, getPlayerPermissions, hasPermission } from '../middleware/permissions.js'
 import { fetchSteamProfile, fetchSteamProfiles, parseSteamIds } from '../helpers/steam.js'
-import { getActiveSubscription } from '../helpers/subscription.js'
+import { getActiveSubscription, hasPerk, PERK } from '../helpers/subscription.js'
+import { upload, uploadsDir } from '../middleware/upload.js'
 import { socketPlayers, getOnlinePlayerIds, getPlayerActivities } from '../socket/state.js'
 
 const router = Router()
@@ -210,10 +214,54 @@ router.get('/api/players/search', async (req, res) => {
   res.json(results)
 })
 
+// ── Profile banner (profile_banner subscription perk) ──────────────────
+// Self-serve: the authed player uploads/removes their own banner. Gated on an
+// active plan granting profile_banner. Resized to a fixed 1200×300 PNG so the
+// profile header layout is identical regardless of the source image.
+router.post('/api/me/profile-banner', upload.single('banner'), async (req, res) => {
+  const player = await getAuthPlayer(req)
+  if (!player) return res.status(401).json({ error: 'Not authenticated' })
+  if (!(await hasPerk(player.id, PERK.PROFILE_BANNER))) {
+    if (req.file) { try { fs.unlinkSync(req.file.path) } catch {} }
+    return res.status(403).json({ error: 'Your subscription does not include a profile banner' })
+  }
+  if (!req.file) return res.status(400).json({ error: 'no file uploaded' })
+
+  const current = await queryOne('SELECT profile_banner_url FROM players WHERE id = $1', [player.id])
+  const resizedFilename = `profile_banner_${player.id}_${Date.now()}.png`
+  const resizedPath = join(uploadsDir, resizedFilename)
+  await sharp(req.file.path)
+    .resize(1200, 300, { fit: 'cover', position: 'center' })
+    .png()
+    .toFile(resizedPath)
+  if (req.file.path !== resizedPath) { try { fs.unlinkSync(req.file.path) } catch {} }
+
+  if (current?.profile_banner_url) {
+    const oldPath = join(uploadsDir, current.profile_banner_url.replace('/uploads/', ''))
+    try { if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath) } catch {}
+  }
+
+  const bannerUrl = `/uploads/${resizedFilename}`
+  await execute('UPDATE players SET profile_banner_url = $1 WHERE id = $2', [bannerUrl, player.id])
+  res.json({ profile_banner_url: bannerUrl })
+})
+
+router.delete('/api/me/profile-banner', async (req, res) => {
+  const player = await getAuthPlayer(req)
+  if (!player) return res.status(401).json({ error: 'Not authenticated' })
+  const current = await queryOne('SELECT profile_banner_url FROM players WHERE id = $1', [player.id])
+  if (current?.profile_banner_url) {
+    const oldPath = join(uploadsDir, current.profile_banner_url.replace('/uploads/', ''))
+    try { if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath) } catch {}
+  }
+  await execute('UPDATE players SET profile_banner_url = NULL WHERE id = $1', [player.id])
+  res.json({ ok: true })
+})
+
 // Public player profile
 router.get('/api/players/:id/profile', async (req, res) => {
   const playerId = Number(req.params.id)
-  const player = await queryOne('SELECT id, name, display_name, steam_id, avatar_url, roles, mmr, mmr_verified_at, info, twitch_username, discord_username, total_xp, is_admin, is_banned, favorite_position, created_at FROM players WHERE id = $1', [playerId])
+  const player = await queryOne('SELECT id, name, display_name, steam_id, avatar_url, roles, mmr, mmr_verified_at, info, twitch_username, discord_username, total_xp, is_admin, is_banned, favorite_position, profile_banner_url, created_at FROM players WHERE id = $1', [playerId])
   if (!player) return res.status(404).json({ error: 'Player not found' })
 
   // Get all competitions this player participated in (as player or captain)
@@ -502,6 +550,10 @@ router.get('/api/players/:id/profile', async (req, res) => {
       plan_slug: sub.plan_slug,
       badge_url: sub.plan_badge_url,
     } : null,
+    // Only surfaced while the active plan grants the perk, so a lapsed sub
+    // hides the banner without deleting the uploaded file.
+    profile_banner_url: (sub && sub.plan_perks && sub.plan_perks.profile_banner === true)
+      ? (player.profile_banner_url || null) : null,
     level_progress: (player.total_xp || 0) % 1000,
     twitch_username: player.twitch_username || null,
     is_admin: !!player.is_admin,

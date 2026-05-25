@@ -161,6 +161,10 @@ router.get('/api/auth/me', async (req, res) => {
     // Player-level perk preferences. Persisted across sessions; perk gating
     // is checked separately on every server-side use site.
     auto_requeue_enabled: !!player.auto_requeue_enabled,
+    // Raw banner URL so the owner can preview/manage it; the profile_banner
+    // perk in `subscription.perks` controls whether the upload UI is offered
+    // and whether the banner is shown to other viewers.
+    profile_banner_url: player.profile_banner_url || null,
   })
 })
 
