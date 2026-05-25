@@ -2,7 +2,7 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ArrowLeft, Save, RotateCcw, Trophy, Pencil, History } from 'lucide-vue-next'
+import { ArrowLeft, Save, RotateCcw, Trophy, Pencil, History, Medal } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { toLocalDatetime, localDatetimeToISO } from '@/utils/format'
 
@@ -341,6 +341,44 @@ async function handleBackfill() {
   }
 }
 
+// ── Manual Friday top-3 bonus trigger ──
+const fridayBonusOpen = ref(false)
+const fridayBonusDate = ref('')
+const fridayBonusBusy = ref(false)
+const fridayBonusMsg = ref('')
+
+// Most recent Friday as a local YYYY-MM-DD (the common default to award).
+function lastFridayISO(): string {
+  const d = new Date()
+  d.setDate(d.getDate() - ((d.getDay() - 5 + 7) % 7)) // getDay: Fri = 5
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+function openFridayBonus() {
+  fridayBonusDate.value = lastFridayISO()
+  fridayBonusMsg.value = ''
+  fridayBonusOpen.value = true
+}
+
+async function submitFridayBonus() {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fridayBonusDate.value)) { fridayBonusMsg.value = t('seasonFridayBonusBadDate'); return }
+  fridayBonusBusy.value = true
+  fridayBonusMsg.value = ''
+  try {
+    const res: any = await api.triggerFridayBonus(seasonId.value, fridayBonusDate.value)
+    if (typeof res?.applied === 'number') fridayBonusMsg.value = t('seasonFridayBonusDone', { n: res.applied })
+    else if (res?.skipped) fridayBonusMsg.value = t('seasonFridayBonusSkipped', { reason: res.skipped })
+    else fridayBonusMsg.value = t('seasonFridayBonusDone', { n: 0 })
+    if (tab.value === 'leaderboard') await loadLeader()
+    if (tab.value === 'audit') await loadAudit()
+  } catch (e: any) {
+    fridayBonusMsg.value = e.message || 'Failed'
+  } finally {
+    fridayBonusBusy.value = false
+  }
+}
+
 function openAdjust(row: LeaderRow) {
   adjustPlayer.value = row
   adjustDelta.value = 0
@@ -509,6 +547,10 @@ onMounted(load)
           <button type="button" class="px-3 py-2 text-sm rounded-md bg-accent/40 hover:bg-accent flex items-center gap-2" @click="handleRecompute">
             <RotateCcw class="w-4 h-4" />
             {{ t('seasonRecompute') }}
+          </button>
+          <button type="button" class="px-3 py-2 text-sm rounded-md bg-accent/40 hover:bg-accent flex items-center gap-2" @click="openFridayBonus" :title="t('seasonFridayBonusHint')">
+            <Medal class="w-4 h-4" />
+            {{ t('seasonFridayBonus') }}
           </button>
         </div>
         <div class="flex items-center gap-3">
@@ -804,6 +846,25 @@ onMounted(load)
           <button type="button" class="px-3 py-2 text-sm rounded-md hover:bg-accent" @click="adjustOpen = false">{{ t('cancel') }}</button>
           <button type="button" class="btn-primary px-3 py-2 text-sm" :disabled="!adjustDelta || adjustSaving" @click="submitAdjust">
             {{ adjustSaving ? `${t('saving')}…` : t('apply') }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Friday top-3 bonus modal -->
+    <div v-if="fridayBonusOpen" class="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" @click.self="fridayBonusOpen = false">
+      <div class="card w-full max-w-md p-6">
+        <h2 class="text-lg font-bold mb-1">{{ t('seasonFridayBonus') }}</h2>
+        <p class="text-xs text-muted-foreground mb-4">{{ t('seasonFridayBonusDesc') }}</p>
+        <label class="block">
+          <span class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{{ t('seasonFridayBonusDate') }}</span>
+          <input v-model="fridayBonusDate" type="date" class="mt-1 w-full bg-accent/40 border border-border/40 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-primary/40" />
+        </label>
+        <p v-if="fridayBonusMsg" class="text-xs mt-3 text-foreground">{{ fridayBonusMsg }}</p>
+        <div class="flex justify-end gap-2 mt-5">
+          <button type="button" class="px-3 py-2 text-sm rounded-md hover:bg-accent" @click="fridayBonusOpen = false">{{ t('cancel') }}</button>
+          <button type="button" class="btn-primary px-3 py-2 text-sm" :disabled="fridayBonusBusy" @click="submitFridayBonus">
+            {{ fridayBonusBusy ? `${t('saving')}…` : t('apply') }}
           </button>
         </div>
       </div>
