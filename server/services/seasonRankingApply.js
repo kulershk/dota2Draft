@@ -13,6 +13,38 @@ import { computeDelta, clampPoints, teamAvgMmr, withDefaults, mmrDiffBonus, wins
 import { isInFridayWindow, fridayWindowSql, clampHour } from './fridayWindow.js'
 import { applyFridayBonusForSeason } from './inhouseFridayBonus.js'
 
+// Human-readable breakdown of how a per-match delta was computed, stored in
+// season_match_log.reason so the audit log can show the math (base ± bonuses =
+// total). Amounts are rounded for display; `realDelta` (the stored total) is
+// authoritative, and a `(clamped)` tag appears when min/max points capped it.
+function fmtDeltaReason({
+  leaverPenalty = null, base = null, staticBase = null, expected = null, kUsed = null,
+  mmrDiff = 0, winstreak = 0, winRun = 0, friday = 0, cushion = false,
+  rawDelta = 0, realDelta = 0,
+}) {
+  const sign = (n) => `${n >= 0 ? '+' : ''}${Math.round(n)}`
+  const parts = []
+  if (leaverPenalty != null) {
+    parts.push(`Leaver penalty ${sign(leaverPenalty)}`)
+  } else {
+    if (staticBase != null) {
+      parts.push(`Base ${sign(staticBase)}`)
+    } else if (base != null) {
+      const meta = []
+      if (kUsed != null) meta.push(`K${Math.round(kUsed)}`)
+      if (expected != null) meta.push(`exp ${Math.round(expected * 100)}%`)
+      parts.push(`ELO ${sign(base)}${meta.length ? ` (${meta.join(', ')})` : ''}`)
+    }
+    if (mmrDiff) parts.push(`MMR-diff ${sign(mmrDiff)}`)
+    if (winstreak) parts.push(`streak ${sign(winstreak)} (run ${winRun})`)
+    if (friday) parts.push(`Friday ${sign(friday)}`)
+    if (cushion) parts.push('teammate cushion ×0.5')
+  }
+  let s = `${parts.join(' · ')} = ${sign(realDelta)}`
+  if (Math.round(realDelta) !== Math.round(rawDelta)) s += ' (clamped)'
+  return s
+}
+
 export async function applyMatchToSeason({
   queueMatchId,
   seasonId,
@@ -136,25 +168,32 @@ export async function applyMatchToSeason({
         let rawDelta
         let expected = null, kUsed = null
         let fridayBonusAccrued = 0
+        // Captured for the audit-log breakdown (fmtDeltaReason); no effect on math.
+        let baseAmt = null, staticBaseAmt = null, mmrDiffAmt = 0, winstreakAmt = 0
+        let cushionApplied = false, leaverPenaltyAmt = null
         if (inhouse && isLeaver) {
           // Leaver penalty overrides the entire delta per spec.
           rawDelta = Number(inhousePool.leaver_penalty ?? -50)
+          leaverPenaltyAmt = rawDelta
         } else if (inhouse && inhousePool.use_static_points) {
           // Static-points mode: skip ELO entirely. The flat win/loss
           // numbers become the base, and the same MMR-diff / winstreak /
           // Friday / teammate-cushion bonuses stack on top below.
-          rawDelta = won
+          staticBaseAmt = won
             ? Number(inhousePool.inhouse_win_points ?? 21)
             : -Number(inhousePool.inhouse_loss_points ?? 19)
+          rawDelta = staticBaseAmt
           if (inhouse) {
-            rawDelta += mmrDiffBonus({
+            mmrDiffAmt = mmrDiffBonus({
               myAvgMmr: teamAvg,
               oppAvgMmr: oppAvg,
               won,
               tiers: inhousePool.mmr_diff_tiers || [],
             })
+            rawDelta += mmrDiffAmt
             if (won) {
-              rawDelta += winstreakBonus(winRun, inhousePool.winstreak_tiers || [])
+              winstreakAmt = winstreakBonus(winRun, inhousePool.winstreak_tiers || [])
+              rawDelta += winstreakAmt
               if (isFriday) {
                 const fwb = Number(inhousePool.friday_win_bonus ?? 5)
                 rawDelta += fwb
@@ -162,6 +201,7 @@ export async function applyMatchToSeason({
               }
             } else if (teamHadEarlyLeaver) {
               rawDelta = Math.round(rawDelta * 0.5)
+              cushionApplied = true
             }
           }
         } else {
@@ -173,16 +213,19 @@ export async function applyMatchToSeason({
           })
           expected = base.expected
           kUsed = base.kUsed
+          baseAmt = base.delta
           rawDelta = base.delta
           if (inhouse) {
-            rawDelta += mmrDiffBonus({
+            mmrDiffAmt = mmrDiffBonus({
               myAvgMmr: teamAvg,
               oppAvgMmr: oppAvg,
               won,
               tiers: inhousePool.mmr_diff_tiers || [],
             })
+            rawDelta += mmrDiffAmt
             if (won) {
-              rawDelta += winstreakBonus(winRun, inhousePool.winstreak_tiers || [])
+              winstreakAmt = winstreakBonus(winRun, inhousePool.winstreak_tiers || [])
+              rawDelta += winstreakAmt
               if (isFriday) {
                 const fwb = Number(inhousePool.friday_win_bonus ?? 5)
                 rawDelta += fwb
@@ -193,6 +236,7 @@ export async function applyMatchToSeason({
               // leaver only takes half the hit. Wins or leavers themselves
               // are unaffected.
               rawDelta = Math.round(rawDelta * 0.5)
+              cushionApplied = true
             }
           }
         }
@@ -235,6 +279,11 @@ export async function applyMatchToSeason({
           wasLeaver: isLeaver,
           leaveMinute,
           fridayBonusApplied: fridayBonusAccrued,
+          reason: fmtDeltaReason({
+            leaverPenalty: leaverPenaltyAmt, base: baseAmt, staticBase: staticBaseAmt,
+            expected, kUsed, mmrDiff: mmrDiffAmt, winstreak: winstreakAmt, winRun,
+            friday: fridayBonusAccrued, cushion: cushionApplied, rawDelta, realDelta,
+          }),
         })
       }
     }
@@ -277,13 +326,13 @@ export async function applyMatchToSeason({
           season_id, queue_match_id, player_id, team, won,
           points_before, points_after, delta,
           team_avg_mmr, opponent_avg_mmr, expected_win, k_used,
-          was_leaver, leave_minute, friday_bonus_applied
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+          was_leaver, leave_minute, friday_bonus_applied, reason
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
       `, [
         seasonId, queueMatchId, l.pid, l.team, l.won,
         l.before, l.after, l.delta,
         l.teamAvg, l.oppAvg, l.expected, l.kUsed,
-        !!l.wasLeaver, l.leaveMinute, l.fridayBonusApplied || 0,
+        !!l.wasLeaver, l.leaveMinute, l.fridayBonusApplied || 0, l.reason || null,
       ])
     }
 
@@ -436,44 +485,38 @@ export async function recomputeSeasonFromHistory(seasonId) {
         }
         return computeDelta({ teamAvgMmr: teamAvg, oppAvgMmr: oppAvg, won, settings: cfg })
       }
-      for (const pid of t1) {
+      // Score one side. Captures the per-component breakdown into reason so the
+      // audit log shows the math (recompute can't replay leaver penalty/cushion
+      // — see note above — so those never appear here).
+      const isStatic = inhouseHere && !!m.use_static_points
+      async function scoreSide(pid, team, teamAvg, oppAvg, won) {
         const before = getPts(pid)
-        const { delta, expected, kUsed } = basePart(t1Avg, t2Avg, team1Won)
-        let bonus = 0
+        const { delta, expected, kUsed } = basePart(teamAvg, oppAvg, won)
+        const winRun = getStreak(pid) >= 0 ? getStreak(pid) + 1 : 1
+        let mmrDiffAmt = 0, winstreakAmt = 0, fridayAmt = 0
         if (inhouseHere) {
-          bonus += mmrDiffBonus({ myAvgMmr: t1Avg, oppAvgMmr: t2Avg, won: team1Won, tiers: m.mmr_diff_tiers || [] })
-          if (team1Won) {
-            bonus += winstreakBonus(getStreak(pid) >= 0 ? getStreak(pid) + 1 : 1, m.winstreak_tiers || [])
-            if (matchIsFriday) bonus += Number(m.friday_win_bonus ?? 5)
+          mmrDiffAmt = mmrDiffBonus({ myAvgMmr: teamAvg, oppAvgMmr: oppAvg, won, tiers: m.mmr_diff_tiers || [] })
+          if (won) {
+            winstreakAmt = winstreakBonus(winRun, m.winstreak_tiers || [])
+            if (matchIsFriday) fridayAmt = Number(m.friday_win_bonus ?? 5)
           }
         }
+        const bonus = mmrDiffAmt + winstreakAmt + fridayAmt
         const after = clampPoints(before + delta + bonus, cfg)
-        points.set(pid, after); bumpStats(pid, team1Won, after)
+        points.set(pid, after); bumpStats(pid, won, after)
+        const reason = fmtDeltaReason({
+          base: isStatic ? null : delta, staticBase: isStatic ? delta : null,
+          expected, kUsed, mmrDiff: mmrDiffAmt, winstreak: winstreakAmt, winRun,
+          friday: fridayAmt, rawDelta: before + delta + bonus - before, realDelta: after - before,
+        })
         await execute(`
           INSERT INTO season_match_log (season_id, queue_match_id, player_id, team, won,
-            points_before, points_after, delta, team_avg_mmr, opponent_avg_mmr, expected_win, k_used, created_at)
-          VALUES ($1,$2,$3,1,$4,$5,$6,$7,$8,$9,$10,$11, COALESCE($12, NOW()))
-        `, [seasonId, m.id, pid, team1Won, before, after, after - before, t1Avg, t2Avg, expected, kUsed, m.completed_at])
+            points_before, points_after, delta, team_avg_mmr, opponent_avg_mmr, expected_win, k_used, reason, created_at)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, COALESCE($14, NOW()))
+        `, [seasonId, m.id, pid, team, won, before, after, after - before, teamAvg, oppAvg, expected, kUsed, reason, m.completed_at])
       }
-      for (const pid of t2) {
-        const before = getPts(pid)
-        const { delta, expected, kUsed } = basePart(t2Avg, t1Avg, team2Won)
-        let bonus = 0
-        if (inhouseHere) {
-          bonus += mmrDiffBonus({ myAvgMmr: t2Avg, oppAvgMmr: t1Avg, won: team2Won, tiers: m.mmr_diff_tiers || [] })
-          if (team2Won) {
-            bonus += winstreakBonus(getStreak(pid) >= 0 ? getStreak(pid) + 1 : 1, m.winstreak_tiers || [])
-            if (matchIsFriday) bonus += Number(m.friday_win_bonus ?? 5)
-          }
-        }
-        const after = clampPoints(before + delta + bonus, cfg)
-        points.set(pid, after); bumpStats(pid, team2Won, after)
-        await execute(`
-          INSERT INTO season_match_log (season_id, queue_match_id, player_id, team, won,
-            points_before, points_after, delta, team_avg_mmr, opponent_avg_mmr, expected_win, k_used, created_at)
-          VALUES ($1,$2,$3,2,$4,$5,$6,$7,$8,$9,$10,$11, COALESCE($12, NOW()))
-        `, [seasonId, m.id, pid, team2Won, before, after, after - before, t2Avg, t1Avg, expected, kUsed, m.completed_at])
-      }
+      for (const pid of t1) await scoreSide(pid, 1, t1Avg, t2Avg, team1Won)
+      for (const pid of t2) await scoreSide(pid, 2, t2Avg, t1Avg, team2Won)
     } else {
       const a = ev.data
       const pid = a.player_id

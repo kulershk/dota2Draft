@@ -3582,6 +3582,7 @@
       "get": {
         "tags": ["Seasons"],
         "summary": "Admin: rating-change audit log",
+        "description": "Each row's `reason` carries a human-readable breakdown of how the delta was computed for match rows (e.g. \"ELO +18 (K30, exp 42%) · MMR-diff +3 · streak +5 (run 3) · Friday +5 = +31\"), written by both the live scorer and recompute; synthetic rows (manual adjust, friday_top_bonus) use it for their own note.",
         "security": [{ "bearerAuth": [] }],
         "parameters": [
           { "name": "id",       "in": "path",  "required": true, "schema": { "type": "integer" } },
