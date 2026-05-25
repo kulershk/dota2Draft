@@ -8,7 +8,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { Check, X, Loader2, AlertTriangle, Flag } from 'lucide-vue-next'
+import { Check, X, Loader2, AlertTriangle, Flag, Users } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 
@@ -61,7 +61,7 @@ interface ToxicReport {
 interface StrikeLogRow {
   id: number
   player_id: number
-  kind: 'toxic' | 'grief' | 'toxic_decay' | 'captain_revoked'
+  kind: 'toxic' | 'grief' | 'toxic_decay' | 'captain_revoked' | 'admin_lift'
   delta: number
   reason: string | null
   source_report_id: number | null
@@ -78,7 +78,18 @@ const { t } = useI18n()
 const api = useApi()
 const router = useRouter()
 
-type Tab = 'toxic' | 'grief' | 'strikes'
+interface StrikePlayer {
+  id: number
+  name: string
+  display_name: string
+  avatar_url: string | null
+  toxic_strikes: number
+  grief_strikes: number
+  toxic_reports_received: number
+  is_banned: boolean
+}
+
+type Tab = 'toxic' | 'grief' | 'strikes' | 'players'
 const tab = ref<Tab>('toxic')
 const griefStatus = ref<'pending' | 'approved' | 'rejected'>('pending')
 const toxicStatus = ref<'pending' | 'approved' | 'rejected'>('pending')
@@ -86,9 +97,17 @@ const toxicStatus = ref<'pending' | 'approved' | 'rejected'>('pending')
 const toxicRows = ref<ToxicReport[]>([])
 const griefRows = ref<GriefReport[]>([])
 const strikeRows = ref<StrikeLogRow[]>([])
+const playerRows = ref<StrikePlayer[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
 const acting = ref<number | null>(null)
+
+// Lift-strikes confirmation modal.
+const liftModal = ref<{ open: boolean; player: StrikePlayer | null; kind: 'toxic' | 'grief'; clear: boolean }>({
+  open: false, player: null, kind: 'toxic', clear: false,
+})
+const liftSubmitting = ref(false)
+const liftError = ref<string | null>(null)
 
 // Single review modal shared by toxic + grief, both now go through admin
 // approval. Replaces window.prompt/confirm per CLAUDE.md.
@@ -109,9 +128,10 @@ async function load() {
   loading.value = true
   error.value = null
   try {
-    if (tab.value === 'toxic')      toxicRows.value  = await api.getAdminToxicReports({ status: toxicStatus.value, limit: 200 })
-    else if (tab.value === 'grief') griefRows.value  = await api.getAdminGriefReports(griefStatus.value)
-    else                            strikeRows.value = await api.getAdminStrikeLog({ limit: 200 })
+    if (tab.value === 'toxic')        toxicRows.value  = await api.getAdminToxicReports({ status: toxicStatus.value, limit: 200 })
+    else if (tab.value === 'grief')   griefRows.value  = await api.getAdminGriefReports(griefStatus.value)
+    else if (tab.value === 'players') playerRows.value = await api.getStrikePlayers()
+    else                              strikeRows.value = await api.getAdminStrikeLog({ limit: 200 })
   } catch (e: any) {
     error.value = e.message || 'Failed to load'
   } finally {
@@ -170,6 +190,31 @@ async function submitReview() {
 const pendingGriefCount = computed(() => griefRows.value.filter(r => r.status === 'pending').length)
 const pendingToxicCount = computed(() => toxicRows.value.filter(r => r.status === 'pending').length)
 
+function openLift(player: StrikePlayer, kind: 'toxic' | 'grief', clear: boolean) {
+  liftModal.value = { open: true, player, kind, clear }
+  liftError.value = null
+}
+function closeLift() {
+  liftModal.value = { ...liftModal.value, open: false }
+}
+const liftKindWord = computed(() =>
+  liftModal.value.kind === 'toxic' ? t('reportsKindToxic') : t('reportsKindGrief'))
+async function submitLift() {
+  const m = liftModal.value
+  if (!m.player || liftSubmitting.value) return
+  liftSubmitting.value = true
+  liftError.value = null
+  try {
+    await api.liftStrikes(m.player.id, { kind: m.kind, clear: m.clear, amount: m.clear ? undefined : 1 })
+    closeLift()
+    await load()
+  } catch (e: any) {
+    liftError.value = e?.message || 'Action failed'
+  } finally {
+    liftSubmitting.value = false
+  }
+}
+
 function fmtTime(iso: string | null): string {
   if (!iso) return '—'
   return new Date(iso).toLocaleString()
@@ -185,6 +230,7 @@ function strikeKindPill(kind: string): string {
   if (kind === 'toxic')           return 'bg-amber-500/15 text-amber-400'
   if (kind === 'grief')           return 'bg-rose-500/15 text-rose-400'
   if (kind === 'toxic_decay')     return 'bg-green-500/15 text-green-500'
+  if (kind === 'admin_lift')      return 'bg-green-500/15 text-green-500'
   if (kind === 'captain_revoked') return 'bg-purple-500/15 text-purple-400'
   return 'bg-accent/40 text-muted-foreground'
 }
@@ -207,7 +253,7 @@ onMounted(load)
     <!-- Top tabs: kind of record -->
     <div class="flex items-center gap-1 border-b border-border/40">
       <button
-        v-for="t_ in (['toxic', 'grief', 'strikes'] as const)" :key="t_"
+        v-for="t_ in (['toxic', 'grief', 'strikes', 'players'] as const)" :key="t_"
         type="button"
         class="px-4 py-2 text-sm border-b-2 transition-colors flex items-center gap-1.5"
         :class="tab === t_ ? 'border-primary text-foreground font-semibold' : 'border-transparent text-muted-foreground hover:text-foreground'"
@@ -215,6 +261,7 @@ onMounted(load)
       >
         <Flag v-if="t_ === 'toxic'" class="w-3.5 h-3.5" />
         <AlertTriangle v-else-if="t_ === 'grief'" class="w-3.5 h-3.5" />
+        <Users v-else-if="t_ === 'players'" class="w-3.5 h-3.5" />
         <span v-else class="w-3.5 h-3.5 inline-flex items-center justify-center text-xs">±</span>
         {{ t('reportsTab_' + t_) }}
       </button>
@@ -435,6 +482,52 @@ onMounted(load)
       </div>
     </template>
 
+    <!-- ── Players with strikes ── -->
+    <template v-else-if="tab === 'players'">
+      <div v-if="playerRows.length === 0" class="card p-8 text-center text-muted-foreground text-sm">
+        {{ t('reportsStrikePlayersEmpty') }}
+      </div>
+      <div v-else class="card overflow-hidden">
+        <div class="px-4 py-2 grid items-center text-[10px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border/30"
+             style="grid-template-columns: 1fr 72px 72px 80px 80px 230px;">
+          <span>{{ t('reportsColPlayer') }}</span>
+          <span class="text-center">{{ t('reportsColToxicStrikes') }}</span>
+          <span class="text-center">{{ t('reportsColGriefStrikes') }}</span>
+          <span class="text-center">{{ t('reportsColReports') }}</span>
+          <span class="text-center">{{ t('reportsColQueue') }}</span>
+          <span class="text-right">{{ t('reportsLiftTitle') }}</span>
+        </div>
+        <div v-for="p in playerRows" :key="p.id"
+             class="px-4 py-2 grid items-center border-b border-border/20 last:border-b-0 hover:bg-accent/15 transition-colors"
+             style="grid-template-columns: 1fr 72px 72px 80px 80px 230px;">
+          <div class="flex items-center gap-2 min-w-0">
+            <img v-if="p.avatar_url" :src="p.avatar_url" class="w-7 h-7 rounded-full" />
+            <div v-else class="w-7 h-7 rounded-full bg-accent" />
+            <span class="text-sm truncate">{{ p.display_name }}</span>
+          </div>
+          <span class="text-center text-sm font-mono font-bold tabular-nums" :class="p.toxic_strikes > 0 ? 'text-amber-400' : 'text-muted-foreground'">{{ p.toxic_strikes }}</span>
+          <span class="text-center text-sm font-mono font-bold tabular-nums" :class="p.grief_strikes > 0 ? 'text-rose-400' : 'text-muted-foreground'">{{ p.grief_strikes }}</span>
+          <span class="text-center text-xs font-mono tabular-nums text-muted-foreground">{{ p.toxic_reports_received }}</span>
+          <span class="text-center">
+            <span v-if="p.is_banned" class="px-1.5 py-0.5 rounded bg-red-500/15 text-red-500 text-[10px] font-bold uppercase tracking-wider">{{ t('reportsBanned') }}</span>
+            <span v-else class="text-muted-foreground text-xs">—</span>
+          </span>
+          <div class="flex items-center justify-end gap-1 flex-wrap">
+            <template v-if="p.toxic_strikes > 0">
+              <span class="text-[10px] text-amber-400 font-bold">T</span>
+              <button type="button" class="px-2 py-1 rounded-md text-xs bg-accent/40 hover:bg-accent" @click="openLift(p, 'toxic', false)">{{ t('reportsLiftMinusOne') }}</button>
+              <button type="button" class="px-2 py-1 rounded-md text-xs bg-accent/40 hover:bg-accent" @click="openLift(p, 'toxic', true)">{{ t('reportsLiftClear') }}</button>
+            </template>
+            <template v-if="p.grief_strikes > 0">
+              <span class="text-[10px] text-rose-400 font-bold ml-1">G</span>
+              <button type="button" class="px-2 py-1 rounded-md text-xs bg-accent/40 hover:bg-accent" @click="openLift(p, 'grief', false)">{{ t('reportsLiftMinusOne') }}</button>
+              <button type="button" class="px-2 py-1 rounded-md text-xs bg-accent/40 hover:bg-accent" @click="openLift(p, 'grief', true)">{{ t('reportsLiftClear') }}</button>
+            </template>
+          </div>
+        </div>
+      </div>
+    </template>
+
     <!-- Review modal — shared by toxic + grief -->
     <ModalOverlay :show="reviewModal.open" @close="closeReview">
       <div class="px-6 py-5 border-b border-border">
@@ -470,6 +563,28 @@ onMounted(load)
         >
           <Loader2 v-if="reviewSubmitting" class="w-3.5 h-3.5 animate-spin" />
           {{ reviewModal.action === 'approve' ? t('griefApprove') : t('griefReject') }}
+        </button>
+      </div>
+    </ModalOverlay>
+
+    <!-- Lift-strikes confirmation -->
+    <ModalOverlay :show="liftModal.open" @close="closeLift">
+      <div class="px-6 py-5 border-b border-border">
+        <h2 class="text-base font-semibold">{{ t('reportsLiftTitle') }}</h2>
+      </div>
+      <div class="px-6 py-5 flex flex-col gap-3">
+        <p class="text-sm">
+          {{ liftModal.clear
+            ? t('reportsLiftConfirmClear', { name: liftModal.player?.display_name, kind: liftKindWord })
+            : t('reportsLiftConfirmOne', { name: liftModal.player?.display_name, kind: liftKindWord }) }}
+        </p>
+        <div v-if="liftError" class="text-xs text-destructive bg-destructive/10 border border-destructive/30 rounded-md px-3 py-2">{{ liftError }}</div>
+      </div>
+      <div class="px-6 py-4 border-t border-border flex justify-end gap-2">
+        <button type="button" class="btn-outline" :disabled="liftSubmitting" @click="closeLift">{{ t('cancel') }}</button>
+        <button type="button" class="btn-primary flex items-center gap-2" :disabled="liftSubmitting" @click="submitLift">
+          <Loader2 v-if="liftSubmitting" class="w-3.5 h-3.5 animate-spin" />
+          {{ t('reportsLiftAction') }}
         </button>
       </div>
     </ModalOverlay>

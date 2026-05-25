@@ -1457,7 +1457,7 @@
     },
     "inhouse:strikeApplied": {
       "subscribe": {
-        "summary": "A toxic or grief strike was added to the receiving player (PRIVATE — sent only to the reported player's `user:${id}` room). May include a `banUntil` ISO string if a cooldown was applied, and `captainRevoked` when the strike caused loss of captain status.",
+        "summary": "A toxic or grief strike count changed for the receiving player (PRIVATE — sent only to that player's `user:${id}` room). `strikeDelta` is positive when a strike was added (report approved) and negative when an admin lifted strikes. May include a `banUntil` ISO string if a cooldown was applied, and `captainRevoked` when the strike caused loss of captain status.",
         "message": {
           "payload": {
             "type": "object",

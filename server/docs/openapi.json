@@ -4235,7 +4235,7 @@
         "post": {
           "tags": ["Inhouse"],
           "summary": "Approve a toxic report",
-          "description": "Marks the report approved, increments `players.toxic_reports_received`, fires any newly-crossed threshold (adding the configured `strike_delta`), and applies a queue_bans cooldown if the resulting strike count matches a pool toxic_strike_cooldowns rule. Requires `review_grief_reports`.",
+          "description": "Marks the report approved, increments `players.toxic_reports_received`, fires any newly-crossed threshold (adding the configured `strike_delta`), and applies a queue_bans cooldown if the resulting strike count matches a pool toxic_strike_cooldowns rule. One count per game: if another approved toxic report already exists for the same player in the same match, this approval is recorded but does NOT add to toxic_reports_received (so multiple reporters in one game add at most one). Requires `review_grief_reports`.",
           "security": [{ "bearerAuth": [] }],
           "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
           "requestBody": {
@@ -4276,6 +4276,41 @@
           "responses": { "200": { "description": "Array of strike-log rows with player + applied_by denormalised names." } }
         }
       },
+      "/api/admin/inhouse/strike-players": {
+        "get": {
+          "tags": ["Inhouse"],
+          "summary": "List players who currently hold strikes",
+          "description": "Returns every player with toxic_strikes > 0 or grief_strikes > 0, with their counts, lifetime toxic_reports_received, and whether they're currently queue-banned (is_banned). Ordered by total strikes desc. Requires `review_grief_reports`.",
+          "security": [{ "bearerAuth": [] }],
+          "responses": { "200": { "description": "Array of { id, name, display_name, avatar_url, toxic_strikes, grief_strikes, toxic_reports_received, is_banned }" } }
+        }
+      },
+      "/api/admin/inhouse/players/{id}/lift-strikes": {
+        "post": {
+          "tags": ["Inhouse"],
+          "summary": "Lift (reduce or clear) a player's strikes",
+          "description": "Reduces the chosen strike counter (toxic or grief), never below 0, logs the change to inhouse_strike_log with a negative delta (kind 'admin_lift'), and notifies the player. `clear: true` removes all of that kind; otherwise `amount` (default 1) is subtracted. Does not touch queue bans, the toxic threshold-fired history, or report rows. Requires `review_grief_reports`.",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+          "requestBody": {
+            "required": true,
+            "content": { "application/json": { "schema": {
+              "type": "object",
+              "required": ["kind"],
+              "properties": {
+                "kind": { "type": "string", "enum": ["toxic", "grief"] },
+                "clear": { "type": "boolean", "default": false },
+                "amount": { "type": "integer", "minimum": 1, "default": 1 }
+              }
+            } } }
+          },
+          "responses": {
+            "200": { "description": "{ ok, kind, newStrikes, removed }" },
+            "400": { "description": "kind must be toxic or grief" },
+            "404": { "description": "Player not found" }
+          }
+        }
+      },
       "/api/admin/inhouse/grief-reports": {
         "get": {
           "tags": ["Inhouse"],
@@ -4292,7 +4327,7 @@
         "post": {
           "tags": ["Inhouse"],
           "summary": "Approve a grief report",
-          "description": "Increments `grief_strikes` on the reported player, applies a queue ban per the pool's grief cooldown rules, and removes the player from the season's captains_drawn_from group (if any) when the report ends in approval.",
+          "description": "Increments `grief_strikes` on the reported player, applies a queue ban per the pool's grief cooldown rules, and removes the player from the season's captains_drawn_from group (if any) when the report ends in approval. One strike per game: if a grief strike was already applied for the same player in the same match, this approval is recorded but adds no second strike / cooldown / captain-revoke (response carries alreadyStruck: true).",
           "security": [{ "bearerAuth": [] }],
           "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
           "requestBody": {

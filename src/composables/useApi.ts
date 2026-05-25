@@ -762,6 +762,9 @@ export function useApi() {
       request(`/api/admin/inhouse/grief-reports/${id}/approve`, { method: 'POST', body: JSON.stringify({ review_note }) }),
     rejectGriefReport: (id: number, review_note?: string) =>
       request(`/api/admin/inhouse/grief-reports/${id}/reject`, { method: 'POST', body: JSON.stringify({ review_note }) }),
+    getStrikePlayers: () => request('/api/admin/inhouse/strike-players'),
+    liftStrikes: (playerId: number, data: { kind: 'toxic' | 'grief'; clear?: boolean; amount?: number }) =>
+      request(`/api/admin/inhouse/players/${playerId}/lift-strikes`, { method: 'POST', body: JSON.stringify(data) }),
     triggerFridayBonus: (seasonId: number, friday_date: string) =>
       request(`/api/admin/seasons/${seasonId}/friday-bonus`, { method: 'POST', body: JSON.stringify({ friday_date }) }),
 

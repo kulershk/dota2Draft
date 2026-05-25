@@ -311,13 +311,28 @@ export default function createInhouseReportsRouter(io) {
         [admin.id, note, reportId]
       )
 
-      const updated = (await client.query(
-        `UPDATE players
-            SET toxic_reports_received = toxic_reports_received + 1
-          WHERE id = $1
-          RETURNING toxic_reports_received, toxic_strikes, toxic_thresholds_fired`,
-        [report.reported_player_id]
-      )).rows[0]
+      // One count per game: if another approved toxic report already exists for
+      // this player in this match, record this approval but do NOT add to
+      // toxic_reports_received (multiple reporters in one game = at most one
+      // count). Matches with no queue_match_id can't be deduped, so they count.
+      const alreadyCounted = report.queue_match_id ? !!(await client.query(
+        `SELECT 1 FROM inhouse_toxic_reports
+          WHERE reported_player_id = $1 AND queue_match_id = $2 AND status = 'approved' AND id <> $3 LIMIT 1`,
+        [report.reported_player_id, report.queue_match_id, reportId]
+      )).rows[0] : false
+
+      const updated = alreadyCounted
+        ? (await client.query(
+            `SELECT toxic_reports_received, toxic_strikes, toxic_thresholds_fired FROM players WHERE id = $1`,
+            [report.reported_player_id]
+          )).rows[0]
+        : (await client.query(
+            `UPDATE players
+                SET toxic_reports_received = toxic_reports_received + 1
+              WHERE id = $1
+              RETURNING toxic_reports_received, toxic_strikes, toxic_thresholds_fired`,
+            [report.reported_player_id]
+          )).rows[0]
       const newReportCount = updated.toxic_reports_received
       const firedRaw = Array.isArray(updated.toxic_thresholds_fired) ? updated.toxic_thresholds_fired : []
       const fired = new Set(firedRaw.map(n => Number(n)))
@@ -325,13 +340,15 @@ export default function createInhouseReportsRouter(io) {
 
       let strikeDelta = 0
       const newlyFired = []
-      for (const t of thresholds) {
-        const n = Number(t.reports)
-        if (!Number.isFinite(n)) continue
-        if (fired.has(n)) continue
-        if (newReportCount < n) continue
-        strikeDelta += Number(t.strike_delta) || 0
-        newlyFired.push(n)
+      if (!alreadyCounted) {
+        for (const t of thresholds) {
+          const n = Number(t.reports)
+          if (!Number.isFinite(n)) continue
+          if (fired.has(n)) continue
+          if (newReportCount < n) continue
+          strikeDelta += Number(t.strike_delta) || 0
+          newlyFired.push(n)
+        }
       }
 
       let newStrikes = Number(updated.toxic_strikes)
@@ -363,6 +380,7 @@ export default function createInhouseReportsRouter(io) {
       // exposed by the player-facing /api/notifications endpoint either).
       const bodyLines = ['A report of toxic behaviour against you was reviewed and upheld.']
       let notifTitle = 'Toxic report upheld'
+      if (alreadyCounted) bodyLines.push('Another report for the same game already counted — no extra strike was added.')
       if (strikeDelta > 0) {
         notifTitle = `Toxic strike +${strikeDelta}`
         bodyLines.push(`You're now at ${newStrikes} toxic strike${newStrikes === 1 ? '' : 's'}.`)
@@ -493,59 +511,73 @@ export default function createInhouseReportsRouter(io) {
         [admin.id, note, reportId]
       )
 
-      const reportedRow = (await client.query(
-        `UPDATE players SET grief_strikes = grief_strikes + 1 WHERE id = $1 RETURNING grief_strikes`,
-        [report.reported_player_id]
-      )).rows[0]
-      const newStrikes = reportedRow.grief_strikes
-      // Captain status is now per-season membership in a captains_drawn_from
-      // group. Find the matching group + membership row in one query so the
-      // revocation step can target the right (group, player) pair.
-      const captainGroupRow = pool?.season_id
-        ? (await client.query(
-            `SELECT g.id FROM season_player_groups g
-               JOIN season_player_group_members m ON m.group_id = g.id
-              WHERE g.season_id = $1
-                AND g.captains_drawn_from = TRUE
-                AND m.player_id = $2
-              ORDER BY g.id ASC LIMIT 1`,
-            [pool.season_id, report.reported_player_id]
-          )).rows[0]
-        : null
-      const wasCaptain = !!captainGroupRow
-      await client.query(
-        `INSERT INTO inhouse_strike_log (player_id, kind, delta, reason, source_report_id, source_queue_match_id, applied_by)
-         VALUES ($1, 'grief', 1, $2, $3, $4, $5)`,
-        [report.reported_player_id, 'Grief report approved', reportId, report.queue_match_id, admin.id]
-      )
+      // One strike per game: if a grief strike was already applied for this
+      // player in this match, record this approval but don't add a second
+      // strike / cooldown / captain-revoke. Multiple reporters in one game can
+      // all file & be approved, yet the player takes at most one grief strike.
+      const alreadyStruck = report.queue_match_id ? !!(await client.query(
+        `SELECT 1 FROM inhouse_strike_log
+          WHERE player_id = $1 AND source_queue_match_id = $2 AND kind = 'grief' AND delta > 0 LIMIT 1`,
+        [report.reported_player_id, report.queue_match_id]
+      )).rows[0] : false
 
-      const cooldown = _cooldownFor(newStrikes, pool?.grief_strike_cooldowns)
+      let newStrikes
       let banUntil = null
-      if (cooldown) {
-        const reasonText = `Grief strike ${newStrikes}${cooldown.hours ? ` (${cooldown.hours}h cooldown)` : (cooldown.action === 'ban' ? ' (banned)' : ' (warning)')}`
-        banUntil = await _applyCooldown(client, report.reported_player_id, report.pool_id, cooldown, reasonText, admin.id)
-      }
-
-      // Captain who griefs loses their captain status per spec — scoped
-      // to this report's season so they keep captain flags they may hold
-      // in unrelated seasons. We remove their membership in the
-      // captains_drawn_from group rather than touching any global flag.
+      let cooldown = null
       let captainRevoked = false
-      if (wasCaptain && captainGroupRow) {
+      if (alreadyStruck) {
+        newStrikes = (await client.query(
+          `SELECT grief_strikes FROM players WHERE id = $1`, [report.reported_player_id]
+        )).rows[0].grief_strikes
+      } else {
+        newStrikes = (await client.query(
+          `UPDATE players SET grief_strikes = grief_strikes + 1 WHERE id = $1 RETURNING grief_strikes`,
+          [report.reported_player_id]
+        )).rows[0].grief_strikes
+        // Captain status is now per-season membership in a captains_drawn_from
+        // group. Find the matching group + membership row so the revocation
+        // step can target the right (group, player) pair.
+        const captainGroupRow = pool?.season_id
+          ? (await client.query(
+              `SELECT g.id FROM season_player_groups g
+                 JOIN season_player_group_members m ON m.group_id = g.id
+                WHERE g.season_id = $1
+                  AND g.captains_drawn_from = TRUE
+                  AND m.player_id = $2
+                ORDER BY g.id ASC LIMIT 1`,
+              [pool.season_id, report.reported_player_id]
+            )).rows[0]
+          : null
         await client.query(
-          `DELETE FROM season_player_group_members WHERE group_id = $1 AND player_id = $2`,
-          [captainGroupRow.id, report.reported_player_id]
+          `INSERT INTO inhouse_strike_log (player_id, kind, delta, reason, source_report_id, source_queue_match_id, applied_by)
+           VALUES ($1, 'grief', 1, $2, $3, $4, $5)`,
+          [report.reported_player_id, 'Grief report approved', reportId, report.queue_match_id, admin.id]
         )
-        await client.query(
-          `INSERT INTO inhouse_strike_log (player_id, kind, delta, reason, source_report_id, applied_by)
-           VALUES ($1, 'captain_revoked', 0, 'Lost captain status due to approved grief report', $2, $3)`,
-          [report.reported_player_id, reportId, admin.id]
-        )
-        captainRevoked = true
+        cooldown = _cooldownFor(newStrikes, pool?.grief_strike_cooldowns)
+        if (cooldown) {
+          const reasonText = `Grief strike ${newStrikes}${cooldown.hours ? ` (${cooldown.hours}h cooldown)` : (cooldown.action === 'ban' ? ' (banned)' : ' (warning)')}`
+          banUntil = await _applyCooldown(client, report.reported_player_id, report.pool_id, cooldown, reasonText, admin.id)
+        }
+        // Captain who griefs loses captain status — scoped to this report's
+        // season so flags in unrelated seasons survive.
+        if (captainGroupRow) {
+          await client.query(
+            `DELETE FROM season_player_group_members WHERE group_id = $1 AND player_id = $2`,
+            [captainGroupRow.id, report.reported_player_id]
+          )
+          await client.query(
+            `INSERT INTO inhouse_strike_log (player_id, kind, delta, reason, source_report_id, applied_by)
+             VALUES ($1, 'captain_revoked', 0, 'Lost captain status due to approved grief report', $2, $3)`,
+            [report.reported_player_id, reportId, admin.id]
+          )
+          captainRevoked = true
+        }
       }
 
       // Notify the reported player (omits who reported / who reviewed).
-      const bodyLines = [`A report of griefing against you was reviewed and upheld. You now have ${newStrikes} grief strike${newStrikes === 1 ? '' : 's'}.`]
+      const bodyLines = alreadyStruck
+        ? [`A report of griefing against you was reviewed and upheld. No extra strike was added — you were already struck for that game. You have ${newStrikes} grief strike${newStrikes === 1 ? '' : 's'}.`]
+        : [`A report of griefing against you was reviewed and upheld. You now have ${newStrikes} grief strike${newStrikes === 1 ? '' : 's'}.`]
       if (banUntil) {
         bodyLines.push(`Queue cooldown until ${new Date(banUntil).toLocaleString()}.`)
       } else if (cooldown?.action === 'ban') {
@@ -557,7 +589,7 @@ export default function createInhouseReportsRouter(io) {
       const notificationId = await _insertStrikeNotification(client, {
         playerId: report.reported_player_id,
         type: 'inhouse_strike_grief',
-        title: 'Grief strike +1',
+        title: alreadyStruck ? 'Grief report upheld' : 'Grief strike +1',
         body: bodyLines.join(' '),
         link: '/queue',
         byAdminId: admin.id,
@@ -565,17 +597,19 @@ export default function createInhouseReportsRouter(io) {
 
       await client.query('COMMIT')
 
-      io.to(`user:${report.reported_player_id}`).emit('inhouse:strikeApplied', {
-        kind: 'grief',
-        newStrikes,
-        strikeDelta: 1,
-        banUntil: banUntil ? new Date(banUntil).toISOString() : null,
-        captainRevoked,
-      })
+      if (!alreadyStruck) {
+        io.to(`user:${report.reported_player_id}`).emit('inhouse:strikeApplied', {
+          kind: 'grief',
+          newStrikes,
+          strikeDelta: 1,
+          banUntil: banUntil ? new Date(banUntil).toISOString() : null,
+          captainRevoked,
+        })
+      }
       io.to(`user:${report.reported_player_id}`).emit('notification:new', { id: notificationId })
       io.to(`user:${report.reporter_player_id}`).emit('inhouse:griefReviewed', { reportId, status: 'approved' })
       io.to(`user:${report.reported_player_id}`).emit('inhouse:griefReviewed', { reportId, status: 'approved' })
-      res.json({ ok: true, newStrikes, banUntil, captainRevoked })
+      res.json({ ok: true, newStrikes, banUntil, captainRevoked, alreadyStruck })
     } catch (e) {
       try { await client.query('ROLLBACK') } catch {}
       console.error('[inhouse grief approve]', e)
@@ -608,6 +642,86 @@ export default function createInhouseReportsRouter(io) {
     } catch (e) {
       console.error('[inhouse grief reject]', e)
       res.status(500).json({ error: e.message })
+    }
+  })
+
+  // ── Admin: players who currently hold strikes ──
+  router.get('/api/admin/inhouse/strike-players', async (req, res) => {
+    const admin = await getAuthPlayer(req)
+    if (!admin) return res.status(401).json({ error: 'Not authenticated' })
+    const allowed = admin.is_admin || await hasPermission(admin, 'review_grief_reports')
+    if (!allowed) return res.status(403).json({ error: 'Permission denied' })
+    try {
+      const rows = await query(`
+        SELECT p.id, p.name, COALESCE(p.display_name, p.name) AS display_name, p.avatar_url,
+               p.toxic_strikes, p.grief_strikes, p.toxic_reports_received,
+               EXISTS (
+                 SELECT 1 FROM queue_bans qb
+                  WHERE qb.player_id = p.id
+                    AND (qb.banned_until IS NULL OR qb.banned_until > NOW())
+               ) AS is_banned
+          FROM players p
+         WHERE p.toxic_strikes > 0 OR p.grief_strikes > 0
+         ORDER BY (p.toxic_strikes + p.grief_strikes) DESC, p.toxic_reports_received DESC, p.id ASC
+      `)
+      res.json(rows)
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  // ── Admin: lift (reduce / clear) a player's strikes ──
+  // body: { kind: 'toxic'|'grief', clear?: boolean, amount?: number }
+  // Reduces the chosen strike counter (never below 0), logs the change with a
+  // negative delta, and notifies the player. Does NOT touch queue bans, the
+  // toxic threshold-fired history, or report rows — it only adjusts the live
+  // count (so past fired thresholds won't re-fire and re-strike).
+  router.post('/api/admin/inhouse/players/:id/lift-strikes', async (req, res) => {
+    const admin = await getAuthPlayer(req)
+    if (!admin) return res.status(401).json({ error: 'Not authenticated' })
+    const allowed = admin.is_admin || await hasPermission(admin, 'review_grief_reports')
+    if (!allowed) return res.status(403).json({ error: 'Permission denied' })
+    const playerId = Number(req.params.id)
+    const kind = (req.body?.kind || '').toString()
+    if (kind !== 'toxic' && kind !== 'grief') return res.status(400).json({ error: "kind must be 'toxic' or 'grief'" })
+    const clear = req.body?.clear === true
+    const amount = Math.max(1, Math.trunc(Number(req.body?.amount) || 1))
+    const col = kind === 'toxic' ? 'toxic_strikes' : 'grief_strikes'
+
+    const client = await pgPool.connect()
+    try {
+      await client.query('BEGIN')
+      const player = (await client.query(`SELECT id, ${col} AS strikes FROM players WHERE id = $1 FOR UPDATE`, [playerId])).rows[0]
+      if (!player) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Player not found' }) }
+      const cur = Number(player.strikes) || 0
+      if (cur <= 0) { await client.query('ROLLBACK'); return res.json({ ok: true, kind, newStrikes: 0, removed: 0 }) }
+      const removeBy = clear ? cur : Math.min(amount, cur)
+      const newStrikes = cur - removeBy
+      await client.query(`UPDATE players SET ${col} = $1 WHERE id = $2`, [newStrikes, playerId])
+      await client.query(
+        `INSERT INTO inhouse_strike_log (player_id, kind, delta, reason, applied_by)
+         VALUES ($1, 'admin_lift', $2, $3, $4)`,
+        [playerId, -removeBy, `Admin lifted ${removeBy} ${kind} strike${removeBy === 1 ? '' : 's'} (${newStrikes} remaining)`, admin.id]
+      )
+      const notificationId = await _insertStrikeNotification(client, {
+        playerId,
+        type: 'inhouse_strike_lifted',
+        title: `${kind === 'toxic' ? 'Toxic' : 'Grief'} strikes reduced`,
+        body: `An admin reduced your ${kind} strikes by ${removeBy}. You now have ${newStrikes} ${kind} strike${newStrikes === 1 ? '' : 's'}.`,
+        link: '/queue',
+        byAdminId: admin.id,
+      })
+      await client.query('COMMIT')
+
+      io.to(`user:${playerId}`).emit('inhouse:strikeApplied', { kind, newStrikes, strikeDelta: -removeBy })
+      io.to(`user:${playerId}`).emit('notification:new', { id: notificationId })
+      res.json({ ok: true, kind, newStrikes, removed: removeBy })
+    } catch (e) {
+      try { await client.query('ROLLBACK') } catch {}
+      console.error('[inhouse lift-strikes]', e)
+      res.status(500).json({ error: e.message })
+    } finally {
+      client.release()
     }
   })
 

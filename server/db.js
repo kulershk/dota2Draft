@@ -1180,7 +1180,7 @@ export async function initDb() {
     CREATE TABLE IF NOT EXISTS inhouse_strike_log (
       id                      SERIAL PRIMARY KEY,
       player_id               INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-      kind                    TEXT NOT NULL CHECK (kind IN ('toxic','grief','toxic_decay','captain_revoked')),
+      kind                    TEXT NOT NULL CHECK (kind IN ('toxic','grief','toxic_decay','captain_revoked','admin_lift')),
       delta                   INTEGER NOT NULL,
       reason                  TEXT NULL,
       source_report_id        INTEGER NULL,
@@ -1190,6 +1190,11 @@ export async function initDb() {
     )
   `)
   try { await execute(`CREATE INDEX IF NOT EXISTS inhouse_strike_log_player_idx ON inhouse_strike_log (player_id, created_at DESC)`) } catch {}
+  // Widen the kind CHECK on existing DBs to allow admin manual strike lifts.
+  try {
+    await execute(`ALTER TABLE inhouse_strike_log DROP CONSTRAINT IF EXISTS inhouse_strike_log_kind_check`)
+    await execute(`ALTER TABLE inhouse_strike_log ADD CONSTRAINT inhouse_strike_log_kind_check CHECK (kind IN ('toxic','grief','toxic_decay','captain_revoked','admin_lift'))`)
+  } catch (e) { console.warn('[db] inhouse_strike_log kind check:', e.message) }
 
   // The earlier season_player_flags table held captain_pool / shadow_pool
   // as well-known booleans. Both are now expressible via custom groups
