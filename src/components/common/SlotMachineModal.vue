@@ -102,6 +102,12 @@ function nameFor(key: string): string {
   return dota.heroName(heroIdByKey.value[key]) || key
 }
 
+// Paytable amounts shown as the real gcoins you'd win at the selected bet, not
+// the raw multiplier. Line wins pay `mult × lineStake`; the Aegis scatter pays
+// anywhere on `mult × totalBet`. Both recompute when the bet tier changes.
+function linePay(mult: number): string { return (mult * lineStake.value).toLocaleString() }
+function scatterPay(mult: number): string { return (mult * selectedBet.value).toLocaleString() }
+
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
 const nextFrame = () => new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())))
 
@@ -507,13 +513,15 @@ onUnmounted(() => { stopAuto(); skipBonus.value = true; settleOnExit() })
           <div v-for="s in paytable" :key="s.key" class="flex items-center gap-2">
             <img v-if="imgFor(s.key)" :src="imgFor(s.key)" :alt="nameFor(s.key)" class="w-8 h-5 rounded object-cover shrink-0" />
             <span class="font-mono font-bold text-amber-300 ml-auto whitespace-nowrap">
-              <template v-if="s.pay['2']">2:{{ s.pay['2'] }} · </template>3:{{ s.pay['3'] }} · 4:{{ s.pay['4'] }} · 5:{{ s.pay['5'] }}
+              <template v-if="s.pay['2']">2:{{ linePay(s.pay['2']) }} · </template>3:{{ linePay(s.pay['3']) }} · 4:{{ linePay(s.pay['4']) }} · 5:{{ linePay(s.pay['5']) }}
             </span>
           </div>
           <div class="flex items-center gap-2 col-span-2 mt-1 pt-1 border-t border-border/30">
             <img v-if="imgFor(AEGIS)" :src="imgFor(AEGIS)" :alt="aegisCfg.name" class="w-8 h-5 rounded object-cover shrink-0 ring-1 ring-amber-400/70" />
             <span class="text-amber-300/90 truncate">{{ aegisCfg.name }} — {{ t('slotsWild') }} · {{ t('slotsScatter') }}</span>
-            <span class="font-mono text-amber-300 ml-auto whitespace-nowrap">3+ → {{ aegisCfg.freeSpins }} {{ t('slotsFreeSpins') }}</span>
+            <span class="font-mono text-amber-300 ml-auto whitespace-nowrap">
+              <template v-if="aegisCfg.scatter['3']">3:{{ scatterPay(aegisCfg.scatter['3']) }} · </template><template v-if="aegisCfg.scatter['4']">4:{{ scatterPay(aegisCfg.scatter['4']) }} · </template><template v-if="aegisCfg.scatter['5']">5:{{ scatterPay(aegisCfg.scatter['5']) }} · </template>3+ → {{ aegisCfg.freeSpins }} {{ t('slotsFreeSpins') }}
+            </span>
           </div>
         </div>
       </div>
