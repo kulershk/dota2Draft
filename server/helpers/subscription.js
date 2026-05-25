@@ -10,6 +10,7 @@ export const PERK = {
   AUTO_REQUEUE: 'auto_requeue',
   PROFILE_BANNER: 'profile_banner',
   GCOIN_MULTIPLIER: 'gcoin_multiplier',
+  AVATAR_DECORATION: 'avatar_decoration',
 }
 
 // TODO: when payment integration lands, also gate by `expires_at IS NULL OR

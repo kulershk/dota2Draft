@@ -34,6 +34,7 @@ import createMessagesRouter from './routes/messages.js'
 import createNewsRouter from './routes/news.js'
 import createLeaguesRouter from './routes/leagues.js'
 import createSubscriptionPlansRouter from './routes/subscriptionPlans.js'
+import createAvatarDecorationsRouter from './routes/avatarDecorations.js'
 import templateRoutes from './routes/templates.js'
 import createQueueRouter from './routes/queue.js'
 import createSeasonsRouter from './routes/seasons.js'
@@ -157,6 +158,7 @@ app.use(createMessagesRouter(io))
 app.use(createNewsRouter(io))
 app.use(createLeaguesRouter())
 app.use(createSubscriptionPlansRouter())
+app.use(createAvatarDecorationsRouter())
 app.use(templateRoutes)
 app.use(createQueueRouter(io))
 app.use(createSeasonsRouter(io))

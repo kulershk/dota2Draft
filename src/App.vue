@@ -8,6 +8,7 @@ import { useQueueStore } from '@/composables/useQueueStore'
 import { useFriendStore } from '@/composables/useFriendStore'
 import { useNotificationStore } from '@/composables/useNotificationStore'
 import { useMessageStore } from '@/composables/useMessageStore'
+import { useCosmetics } from '@/composables/useCosmetics'
 import { useSidePanels } from '@/composables/useSidePanels'
 import { useApi, onBannedAction } from '@/composables/useApi'
 import { useNavStore, type NavItem, type NavRoot } from '@/composables/useNavStore'
@@ -38,6 +39,7 @@ const queue = useQueueStore()
 const friendStore = useFriendStore()
 const notifStore = useNotificationStore()
 const messageStore = useMessageStore()
+const cosmetics = useCosmetics()
 const panels = useSidePanels()
 const navStore = useNavStore()
 navStore.load().catch(() => {})
@@ -154,6 +156,8 @@ function switchLang(code: string) {
 
 onMounted(async () => {
   store.initSocket()
+  // Public worn-decoration map — needed to overlay avatars even for logged-out viewers.
+  cosmetics.loadWorn()
   // Don't fetch the full competitions list here — it's slow (per-comp status
   // sync + large JSONB fields). Pages that need the list (CompetitionsPage,
   // AdminCompetitionsPage, AdminFantasyPage) fetch on their own mount.

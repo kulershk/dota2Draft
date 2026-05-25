@@ -1371,6 +1371,21 @@ export async function initDb() {
   // Migration for DBs that already have the table without badge_url.
   try { await execute(`ALTER TABLE subscription_plans ADD COLUMN badge_url TEXT NULL`) } catch {}
 
+  // Admin-managed catalogue of avatar decorations (crowns, sunglasses, …) that
+  // subscribers with the avatar_decoration perk can wear on their avatar. The
+  // image is a square transparent PNG overlaid on top of the avatar.
+  await execute(`
+    CREATE TABLE IF NOT EXISTS avatar_decorations (
+      id          SERIAL PRIMARY KEY,
+      name        TEXT NOT NULL,
+      category    TEXT NULL,
+      image_url   TEXT NOT NULL,
+      is_active   BOOLEAN NOT NULL DEFAULT TRUE,
+      sort_order  INTEGER NOT NULL DEFAULT 0,
+      created_at  TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+  `)
+
   // Persistent per-player flag for the auto_requeue perk. The match-end hook
   // reads this together with hasPerk('auto_requeue') and re-queues the player
   // into the same pool when both are true. Stored on players (not on a queue
@@ -1382,6 +1397,13 @@ export async function initDb() {
   // an active plan granting the perk — so a lapsed sub hides the banner without
   // losing the uploaded file.
   try { await execute(`ALTER TABLE players ADD COLUMN profile_banner_url TEXT NULL`) } catch {}
+
+  // Chosen avatar decoration (the avatar_decoration perk) — a raw id into
+  // avatar_decorations, NOT an FK (mirrors how lobbyLeagueId stores a raw id),
+  // so a decoration can be deleted without breaking this column; the delete
+  // route nulls out referencing players. Surfaced in reads only while the perk
+  // is active.
+  try { await execute(`ALTER TABLE players ADD COLUMN avatar_decoration_id INTEGER NULL`) } catch {}
 
   // In-site currency ("dotacoins") that admins can grant/deduct. There is no
   // user-facing spending mechanism yet — this just sets up the balance + a

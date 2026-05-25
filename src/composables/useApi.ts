@@ -464,6 +464,34 @@ export function useApi() {
     },
     deleteProfileBanner: () => request('/api/me/profile-banner', { method: 'DELETE' }),
 
+    // Avatar decorations (avatar_decoration perk + admin catalogue)
+    getAvatarDecorations: () => request('/api/avatar-decorations'),
+    getWornAvatarDecorations: () => request('/api/avatar-decorations/worn'),
+    setAvatarDecoration: (decorationId: number | null) =>
+      request('/api/me/avatar-decoration', { method: 'PUT', body: JSON.stringify({ decoration_id: decorationId }) }),
+    adminListAvatarDecorations: () => request('/api/admin/avatar-decorations'),
+    createAvatarDecoration: async (form: FormData) => {
+      const headers: Record<string, string> = {}
+      const tok = (typeof localStorage !== 'undefined') ? localStorage.getItem('draft_auth_token') : null
+      if (tok) headers['Authorization'] = `Bearer ${tok}`
+      const res = await fetch('/api/admin/avatar-decorations', { method: 'POST', body: form, headers })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || 'Create failed')
+      return res.json()
+    },
+    updateAvatarDecoration: (id: number, body: { name?: string; category?: string | null; is_active?: boolean; sort_order?: number }) =>
+      request(`/api/admin/avatar-decorations/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+    uploadAvatarDecorationImage: async (id: number, file: File): Promise<{ image_url: string }> => {
+      const form = new FormData()
+      form.append('image', file)
+      const headers: Record<string, string> = {}
+      const tok = (typeof localStorage !== 'undefined') ? localStorage.getItem('draft_auth_token') : null
+      if (tok) headers['Authorization'] = `Bearer ${tok}`
+      const res = await fetch(`/api/admin/avatar-decorations/${id}/image`, { method: 'POST', body: form, headers })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || 'Upload failed')
+      return res.json()
+    },
+    deleteAvatarDecoration: (id: number) => request(`/api/admin/avatar-decorations/${id}`, { method: 'DELETE' }),
+
     // Users (global)
     getPlayerProfile: (id: number) => request(`/api/players/${id}/profile`),
     getPlayerXpLog: (id: number) => request(`/api/players/${id}/xp-log`),

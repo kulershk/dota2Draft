@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { User, Trophy, Swords, Tv, Medal, MessageCircle, Star, ChevronLeft, ChevronRight, Percent, Target, Flame, Clock, Award, Zap, Check, X, Flag, Users, BadgeCheck, Ban, UserPlus, UserMinus, ShieldOff, ImagePlus, Loader2 } from 'lucide-vue-next'
+import { User, Trophy, Swords, Tv, Medal, MessageCircle, Star, ChevronLeft, ChevronRight, Percent, Target, Flame, Clock, Award, Zap, Check, X, Flag, Users, BadgeCheck, Ban, UserPlus, UserMinus, ShieldOff, ImagePlus, Loader2, Sparkles } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -7,6 +7,7 @@ import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { useFriendStore } from '@/composables/useFriendStore'
 import { useDotaConstants } from '@/composables/useDotaConstants'
+import { useCosmetics } from '@/composables/useCosmetics'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 import RoleBadge from '@/components/common/RoleBadge.vue'
 import MmrDisplay from '@/components/common/MmrDisplay.vue'
@@ -24,6 +25,7 @@ const api = useApi()
 const store = useDraftStore()
 const friendStore = useFriendStore()
 const dota = useDotaConstants()
+const cosmetics = useCosmetics()
 
 async function refreshProfileAndFriends() {
   const id = playerId.value
@@ -121,6 +123,37 @@ async function removeBanner() {
     if (store.currentUser.value) store.currentUser.value.profile_banner_url = null
   } catch { /* best-effort */ } finally {
     bannerBusy.value = false
+  }
+}
+
+// ── Avatar decoration (avatar_decoration subscription perk) ──
+// The overlay shown on this profile's avatar comes from the shared cosmetics
+// store (so it matches what everyone else sees); the picker is owner-only.
+const profileDecoration = computed(() => cosmetics.decorationFor(profile.value?.id))
+const canEditDecoration = computed(() =>
+  store.currentUser.value?.id === profile.value?.id &&
+  store.currentUser.value?.subscription?.perks?.avatar_decoration === true,
+)
+const currentDecorationId = computed(() => store.currentUser.value?.avatar_decoration_id ?? null)
+const showDecorationPicker = ref(false)
+const decorations = ref<Array<{ id: number; name: string; category: string | null; image_url: string }>>([])
+const decorationBusy = ref(false)
+async function openDecorationPicker() {
+  showDecorationPicker.value = true
+  if (!decorations.value.length) {
+    try { decorations.value = await api.getAvatarDecorations() } catch { /* */ }
+  }
+}
+async function chooseDecoration(id: number | null) {
+  decorationBusy.value = true
+  try {
+    await api.setAvatarDecoration(id)
+    if (store.currentUser.value) store.currentUser.value.avatar_decoration_id = id
+    const url = id ? (decorations.value.find(d => d.id === id)?.image_url ?? null) : null
+    if (profile.value) cosmetics.setLocal(profile.value.id, url)
+    showDecorationPicker.value = false
+  } catch { /* best-effort */ } finally {
+    decorationBusy.value = false
   }
 }
 
@@ -324,6 +357,15 @@ const streakBadge = computed(() => {
                 <User class="w-10 h-10 text-primary" />
               </div>
             </div>
+            <!-- Avatar decoration overlay (sits over the avatar, inside the ring) -->
+            <img v-if="profileDecoration" :src="profileDecoration" aria-hidden="true"
+              class="pointer-events-none select-none absolute inset-1 object-contain" />
+            <!-- Owner picker trigger -->
+            <button v-if="canEditDecoration"
+              class="absolute bottom-0 right-0 p-1.5 rounded-full bg-primary text-[#0A0F1C] shadow hover:brightness-110"
+              :title="t('avatarDecorationChoose')" @click="openDecorationPicker">
+              <Sparkles class="w-4 h-4" />
+            </button>
           </div>
 
           <!-- Info column -->
@@ -947,6 +989,36 @@ const streakBadge = computed(() => {
         >
           {{ confirmBusy ? `${t('saving')}…` : (confirmAction === 'block' ? t('blockUser') : t('removeFriend')) }}
         </button>
+      </div>
+    </ModalOverlay>
+
+    <!-- Avatar decoration picker (owner + avatar_decoration perk) -->
+    <ModalOverlay :show="showDecorationPicker" @close="showDecorationPicker = false">
+      <div class="p-5 flex flex-col gap-4 w-[min(92vw,460px)]">
+        <h2 class="text-lg font-bold text-foreground">{{ t('avatarDecorationChoose') }}</h2>
+        <div class="grid grid-cols-3 sm:grid-cols-4 gap-3">
+          <!-- None -->
+          <button
+            class="flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 transition-colors disabled:opacity-50"
+            :class="currentDecorationId === null ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/40'"
+            :disabled="decorationBusy" @click="chooseDecoration(null)">
+            <div class="relative w-14 h-14 rounded-full bg-gradient-to-br from-primary/30 to-purple-500/30 flex items-center justify-center">
+              <X class="w-5 h-5 text-muted-foreground" />
+            </div>
+            <span class="text-[11px] text-muted-foreground">{{ t('avatarDecorationNone') }}</span>
+          </button>
+          <button v-for="d in decorations" :key="d.id"
+            class="flex flex-col items-center gap-1.5 p-2 rounded-lg border-2 transition-colors disabled:opacity-50"
+            :class="currentDecorationId === d.id ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/40'"
+            :disabled="decorationBusy" @click="chooseDecoration(d.id)">
+            <div class="relative w-14 h-14">
+              <div class="w-14 h-14 rounded-full bg-gradient-to-br from-primary/30 to-purple-500/30"></div>
+              <img :src="d.image_url" :alt="d.name" class="absolute inset-0 w-full h-full object-contain pointer-events-none" />
+            </div>
+            <span class="text-[11px] text-foreground truncate w-full text-center">{{ d.name }}</span>
+          </button>
+        </div>
+        <p v-if="!decorations.length" class="text-sm text-muted-foreground text-center">{{ t('avatarDecorationsEmpty') }}</p>
       </div>
     </ModalOverlay>
   </div>

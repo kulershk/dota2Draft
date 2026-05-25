@@ -1982,6 +1982,83 @@
         }
       }
     },
+    "/api/avatar-decorations": {
+      "get": {
+        "tags": ["Avatar Decorations"],
+        "summary": "List active avatar decorations (picker)",
+        "description": "Public list of active decorations for the player picker.",
+        "responses": { "200": { "description": "Active decorations" } }
+      }
+    },
+    "/api/avatar-decorations/worn": {
+      "get": {
+        "tags": ["Avatar Decorations"],
+        "summary": "Map of player_id → decoration image_url currently worn",
+        "description": "Returns one row per player wearing a decoration whose active plan still grants the avatar_decoration perk. The client caches this and overlays decorations by player id.",
+        "responses": { "200": { "description": "Worn decorations" } }
+      }
+    },
+    "/api/me/avatar-decoration": {
+      "put": {
+        "tags": ["Avatar Decorations"],
+        "summary": "Set or clear my avatar decoration (avatar_decoration perk)",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires an active subscription whose plan grants the `avatar_decoration` perk (403 otherwise). Body `{ decoration_id }` (null/omitted clears it). Validates the decoration exists and is active.",
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "decoration_id": { "type": "integer", "nullable": true } } } } } },
+        "responses": {
+          "200": { "description": "Updated", "content": { "application/json": { "schema": { "type": "object", "properties": { "avatar_decoration_id": { "type": "integer", "nullable": true } } } } } },
+          "401": { "description": "Not authenticated" },
+          "403": { "description": "Subscription does not include avatar decorations" },
+          "404": { "description": "Decoration not found" }
+        }
+      }
+    },
+    "/api/admin/avatar-decorations": {
+      "get": {
+        "tags": ["Avatar Decorations"],
+        "summary": "List all decorations (incl. inactive) with worn counts",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_subscription_plans.",
+        "responses": { "200": { "description": "Decoration list" } }
+      },
+      "post": {
+        "tags": ["Avatar Decorations"],
+        "summary": "Create a decoration (with image)",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_subscription_plans. Multipart/form-data with `image` (required), `name` (required), optional `category`, `is_active`, `sort_order`. Image resized to 256×256 transparent PNG (contain).",
+        "requestBody": { "required": true, "content": { "multipart/form-data": { "schema": { "type": "object", "required": ["image", "name"], "properties": { "image": { "type": "string", "format": "binary" }, "name": { "type": "string" }, "category": { "type": "string" }, "is_active": { "type": "boolean" }, "sort_order": { "type": "integer" } } } } } },
+        "responses": { "201": { "description": "Created" }, "400": { "description": "name/image required" } }
+      }
+    },
+    "/api/admin/avatar-decorations/{id}": {
+      "put": {
+        "tags": ["Avatar Decorations"],
+        "summary": "Update decoration metadata",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_subscription_plans. Updates name/category/is_active/sort_order (not the image).",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Updated" }, "404": { "description": "Not found" } }
+      },
+      "delete": {
+        "tags": ["Avatar Decorations"],
+        "summary": "Delete a decoration",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_subscription_plans. Unlinks the image, clears it off any player wearing it, and deletes the row.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Deleted" }, "404": { "description": "Not found" } }
+      }
+    },
+    "/api/admin/avatar-decorations/{id}/image": {
+      "post": {
+        "tags": ["Avatar Decorations"],
+        "summary": "Replace a decoration's image",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_subscription_plans. Multipart/form-data field `image`. Resized to 256×256 transparent PNG; old file unlinked.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": { "required": true, "content": { "multipart/form-data": { "schema": { "type": "object", "required": ["image"], "properties": { "image": { "type": "string", "format": "binary" } } } } } },
+        "responses": { "200": { "description": "Replaced", "content": { "application/json": { "schema": { "type": "object", "properties": { "image_url": { "type": "string" } } } } } }, "404": { "description": "Not found" } }
+      }
+    },
     "/api/me/profile-banner": {
       "post": {
         "tags": ["Users"],

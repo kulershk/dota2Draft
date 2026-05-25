@@ -165,6 +165,8 @@ router.get('/api/auth/me', async (req, res) => {
     // perk in `subscription.perks` controls whether the upload UI is offered
     // and whether the banner is shown to other viewers.
     profile_banner_url: player.profile_banner_url || null,
+    // Chosen avatar decoration id (the avatar_decoration perk gates the picker).
+    avatar_decoration_id: player.avatar_decoration_id || null,
   })
 })
 

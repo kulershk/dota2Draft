@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { Crown, BadgeCheck } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
+import { useCosmetics } from '@/composables/useCosmetics'
 
-defineProps<{
+const props = defineProps<{
   id: number
   name: string
   avatarUrl?: string | null
@@ -14,6 +16,8 @@ defineProps<{
 }>()
 
 const { t } = useI18n()
+const cosmetics = useCosmetics()
+const deco = computed(() => cosmetics.decorationFor(props.id))
 
 const avatarClass: Record<string, string> = {
   xs: 'w-4 h-4 text-[8px]',
@@ -53,6 +57,9 @@ const verifiedClass: Record<string, string> = {
         <img v-if="avatarUrl" :src="avatarUrl" class="w-full h-full object-cover" />
         <span v-else>{{ name.charAt(0).toUpperCase() }}</span>
       </div>
+      <!-- Avatar decoration overlay (avatar_decoration perk), resolved by player id -->
+      <img v-if="deco" :src="deco" aria-hidden="true"
+        class="pointer-events-none select-none absolute inset-0 w-full h-full object-contain" />
     </div>
     <span class="font-medium text-foreground truncate transition-colors" :class="[textClass[size || 'md'], noLink ? '' : 'group-hover:!text-primary']"><slot>{{ name }}</slot></span>
     <BadgeCheck

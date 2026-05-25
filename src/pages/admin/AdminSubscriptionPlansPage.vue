@@ -28,6 +28,7 @@ interface Plan {
 const PERK_OPTIONS: { key: string; labelKey: string; descKey: string; type: 'bool' | 'number'; min?: number; max?: number; default?: number }[] = [
   { key: 'auto_requeue', labelKey: 'perkAutoRequeue', descKey: 'perkAutoRequeueDesc', type: 'bool' },
   { key: 'profile_banner', labelKey: 'perkProfileBanner', descKey: 'perkProfileBannerDesc', type: 'bool' },
+  { key: 'avatar_decoration', labelKey: 'perkAvatarDecoration', descKey: 'perkAvatarDecorationDesc', type: 'bool' },
   { key: 'gcoin_multiplier', labelKey: 'perkGcoinMultiplier', descKey: 'perkGcoinMultiplierDesc', type: 'number', min: 1, max: 100, default: 1 },
 ]
 interface Subscriber {
