@@ -376,8 +376,9 @@ export default function createInhouseReportsRouter(io) {
 
       // Notify the reported player on EVERY approval — they should know a report
       // against them was upheld even when it didn't cross a strike threshold.
-      // Deliberately omits who reported and who reviewed (created_by is never
-      // exposed by the player-facing /api/notifications endpoint either).
+      // Includes the admin's review note (if any) so the player sees why, but
+      // still omits WHO reported / reviewed (those identities are never exposed
+      // by the player-facing /api/notifications endpoint either).
       const bodyLines = ['A report of toxic behaviour against you was reviewed and upheld.']
       let notifTitle = 'Toxic report upheld'
       if (alreadyCounted) bodyLines.push('Another report for the same game already counted — no extra strike was added.')
@@ -392,6 +393,7 @@ export default function createInhouseReportsRouter(io) {
           bodyLines.push('This is a warning — no cooldown yet.')
         }
       }
+      if (note) bodyLines.push(`Admin note: "${note}"`)
       notificationId = await _insertStrikeNotification(client, {
         playerId: report.reported_player_id,
         type: 'inhouse_strike_toxic',
@@ -574,7 +576,8 @@ export default function createInhouseReportsRouter(io) {
         }
       }
 
-      // Notify the reported player (omits who reported / who reviewed).
+      // Notify the reported player. Includes the admin's review note (if any)
+      // so they see why; still omits who reported / who reviewed.
       const bodyLines = alreadyStruck
         ? [`A report of griefing against you was reviewed and upheld. No extra strike was added — you were already struck for that game. You have ${newStrikes} grief strike${newStrikes === 1 ? '' : 's'}.`]
         : [`A report of griefing against you was reviewed and upheld. You now have ${newStrikes} grief strike${newStrikes === 1 ? '' : 's'}.`]
@@ -586,6 +589,7 @@ export default function createInhouseReportsRouter(io) {
         bodyLines.push('This is a warning — no cooldown yet.')
       }
       if (captainRevoked) bodyLines.push('Captain status revoked.')
+      if (note) bodyLines.push(`Admin note: "${note}"`)
       const notificationId = await _insertStrikeNotification(client, {
         playerId: report.reported_player_id,
         type: 'inhouse_strike_grief',
