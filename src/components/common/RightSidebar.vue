@@ -7,6 +7,7 @@ import { useFriendStore } from '@/composables/useFriendStore'
 import { useNotificationStore } from '@/composables/useNotificationStore'
 import { useMessageStore } from '@/composables/useMessageStore'
 import { useQueueStore } from '@/composables/useQueueStore'
+import { useCosmetics } from '@/composables/useCosmetics'
 import { useSidePanels } from '@/composables/useSidePanels'
 
 const panels = useSidePanels()
@@ -15,6 +16,7 @@ const friendStore = useFriendStore()
 const notifStore = useNotificationStore()
 const messageStore = useMessageStore()
 const queueStore = useQueueStore()
+const cosmetics = useCosmetics()
 
 const FRIEND_GRADIENTS = [
   'linear-gradient(135deg,#F59E0B,#EF4444)',
@@ -25,18 +27,23 @@ const FRIEND_GRADIENTS = [
 function gradientFor(playerId: number): string {
   return FRIEND_GRADIENTS[playerId % FRIEND_GRADIENTS.length]
 }
-function initialFor(entry: any): string {
-  const n = entry?.player?.display_name || entry?.player?.name || '?'
-  return n.charAt(0).toUpperCase()
+function peerInitial(peer: { display_name: string | null; name: string }): string {
+  return (peer.display_name || peer.name || '?').charAt(0).toUpperCase()
 }
 
-// Friend presence: in_match wins over in_queue, both imply online. Returns
-// null when the friend is offline (no dot rendered).
-function friendStatus(f: any): { color: string; label: string; pulse: boolean } | null {
-  if (f.in_match) return { color: '#A855F7', label: t('presenceInMatch'), pulse: false }
-  if (f.in_queue) return { color: '#F59E0B', label: t('presenceInQueue'), pulse: true }
-  if (f.online) return { color: '#22C55E', label: t('presenceOnline'), pulse: false }
-  return null
+// Last 5 DM conversation partners (threads are ordered most-recent-first), with
+// their worn avatar decoration resolved for the overlay.
+const recentChats = computed(() =>
+  messageStore.threads.value.slice(0, 5).map(thr => ({
+    peer: thr.peer,
+    unread: thr.unread || 0,
+    deco: cosmetics.decorationFor(thr.peer.id),
+  })),
+)
+
+function openChatWith(peer: any) {
+  messageStore.openThread(peer)
+  if (panels.active.value !== 'chats') panels.openChats()
 }
 
 const { t } = useI18n()
@@ -206,24 +213,32 @@ const queueElapsed = computed(() => {
       >{{ messageStore.unreadCount.value }}</span>
     </button>
 
-    <!-- Friend tiles (first 2 friends) -->
-    <router-link
-      v-for="f in friendStore.friends.value.slice(0, 2)"
-      :key="f.id"
-      :to="{ name: 'player-profile', params: { id: f.player.id } }"
+    <!-- Recent message partners (last 5 conversations) — click opens the chat -->
+    <button
+      v-for="c in recentChats"
+      :key="c.peer.id"
       class="relative w-[38px] h-[38px] rounded-full flex items-center justify-center"
-      :style="{ background: gradientFor(f.player.id) }"
-      :title="friendStatus(f) ? `${f.player.display_name || f.player.name} · ${friendStatus(f)!.label}` : (f.player.display_name || f.player.name)"
+      :style="{ background: gradientFor(c.peer.id) }"
+      :title="c.peer.display_name || c.peer.name"
+      @click="openChatWith(c.peer)"
     >
-      <img v-if="f.player.avatar_url" :src="f.player.avatar_url" class="w-full h-full rounded-full object-cover" />
-      <span v-else class="text-white text-[15px] font-extrabold">{{ initialFor(f) }}</span>
-      <span
-        v-if="friendStatus(f)"
-        class="absolute right-[-2px] bottom-[-2px] w-[10px] h-[10px] rounded-full"
-        :class="{ 'animate-pulse': friendStatus(f)!.pulse }"
-        :style="{ background: friendStatus(f)!.color, boxShadow: 'inset 0 0 0 2px #0A0F1C' }"
+      <img v-if="c.peer.avatar_url" :src="c.peer.avatar_url" class="w-full h-full rounded-full object-cover" />
+      <span v-else class="text-white text-[15px] font-extrabold">{{ peerInitial(c.peer) }}</span>
+      <!-- Avatar decoration overlay (avatar_decoration perk) -->
+      <img
+        v-if="c.deco"
+        :src="c.deco.url"
+        :style="{ transform: `translate(${c.deco.x}%, ${c.deco.y}%)` }"
+        aria-hidden="true"
+        class="pointer-events-none select-none absolute inset-0 w-full h-full object-contain"
       />
-    </router-link>
+      <!-- Unread badge -->
+      <span
+        v-if="c.unread > 0"
+        class="absolute inline-flex items-center justify-center text-[9px] font-black px-[3px] rounded-full text-white"
+        style="right:-2px;bottom:-2px;min-width:14px;height:14px;background:#EF4444;box-shadow:inset 0 0 0 2px #0A0F1C"
+      >{{ c.unread }}</span>
+    </button>
 
   </aside>
 </template>
