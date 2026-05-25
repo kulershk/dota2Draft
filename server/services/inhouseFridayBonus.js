@@ -2,8 +2,9 @@
 //
 // At the end of every Friday window (Europe/Riga, configured per inhouse pool —
 // see services/fridayWindow.js), the players with the best wins − losses record
-// across that window's inhouse matches (ties broken by net MMR gained) collect a
-// flat bonus on top of their normal per-match deltas:
+// across that window's inhouse matches collect a flat bonus on top of their
+// normal per-match deltas. Rank is wins − losses ONLY — players with the same
+// W−L are tied regardless of MMR gained:
 //
 //   1st place — pool.friday_top1_bonus (default 12)
 //   2nd place — pool.friday_top2_bonus (default  6)
@@ -53,9 +54,10 @@ export async function applyFridayBonusForSeason(seasonId, fridayDate /* YYYY-MM-
       return { skipped: 'window open', fridayDate }
     }
 
-    // Rank players inside this Friday's window by wins − losses (net_wins),
-    // tiebroken by net MMR delta (net_points). Exclude prior friday_top_bonus
-    // rows (synthetic) — those are the bonus itself, not ranking input.
+    // Rank players inside this Friday's window by wins − losses (net_wins)
+    // ONLY — players with equal net_wins are tied regardless of MMR. net_points
+    // is selected for the bonus-vs-points display, not as a rank tiebreaker.
+    // Exclude prior friday_top_bonus rows (synthetic) — bonus, not ranking input.
     const windowExpr = fridayWindowSql('created_at', startHour, endHour)
     const rows = (await client.query(`
       SELECT player_id,
@@ -72,9 +74,9 @@ export async function applyFridayBonusForSeason(seasonId, fridayDate /* YYYY-MM-
 
     if (!rows.length) { await client.query('COMMIT'); return { applied: 0, fridayDate } }
 
-    // Walk the sorted list and bucket players into slot 1 / 2 / 3 by net wins
-    // (MMR delta breaks ties). Players identical on BOTH net_wins and net_points
-    // share a slot — pool that slot's prize with the next and split it equally.
+    // Walk the sorted list and bucket players into slot 1 / 2 / 3 by net wins.
+    // Everyone with the same net_wins is one tie group regardless of MMR — the
+    // group shares its slot(s); pool the combined prize and split it equally.
     const slots = [
       { name: 1, prize: Number(inhousePool.friday_top1_bonus ?? 12) },
       { name: 2, prize: Number(inhousePool.friday_top2_bonus ?? 6)  },
@@ -85,9 +87,8 @@ export async function applyFridayBonusForSeason(seasonId, fridayDate /* YYYY-MM-
     let i = 0
     while (slotIdx < slots.length && i < rows.length) {
       const tiedWins = rows[i].net_wins
-      const tiedPoints = rows[i].net_points
       const tied = []
-      while (i < rows.length && rows[i].net_wins === tiedWins && rows[i].net_points === tiedPoints) {
+      while (i < rows.length && rows[i].net_wins === tiedWins) {
         tied.push(rows[i]); i++
       }
       const slotsConsumed = Math.min(tied.length, slots.length - slotIdx)

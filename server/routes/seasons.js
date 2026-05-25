@@ -205,11 +205,11 @@ export default function createSeasonsRouter(io) {
         })
       }
 
-      // Re-derive the podium per day. Ranking is wins − losses (net_wins),
-      // tiebroken by MMR gained (net_points). Only players with a positive
-      // net-win record are eligible; players identical on BOTH net_wins and
-      // net_points share a slot — pool that slot's prize with the next and
-      // split it equally (mirrors inhouseFridayBonus.applyFridayBonusForSeason).
+      // Re-derive the podium per day. Ranking is wins − losses (net_wins)
+      // ONLY — players with equal net_wins are tied regardless of MMR. Only
+      // players with a positive net-win record are eligible; a tie group shares
+      // its slot(s) — pool the combined prize and split it equally (mirrors
+      // inhouseFridayBonus.applyFridayBonusForSeason).
       const fridays = []
       for (const [date, players] of byDate) {
         const eligible = players.filter(pl => pl.net_wins > 0)
@@ -218,9 +218,8 @@ export default function createSeasonsRouter(io) {
         while (slotIdx < slots.length && i < eligible.length) {
           const place = slotIdx + 1
           const tiedWins = eligible[i].net_wins
-          const tiedPoints = eligible[i].net_points
           const tied = []
-          while (i < eligible.length && eligible[i].net_wins === tiedWins && eligible[i].net_points === tiedPoints) { tied.push(eligible[i]); i++ }
+          while (i < eligible.length && eligible[i].net_wins === tiedWins) { tied.push(eligible[i]); i++ }
           const consumed = Math.min(tied.length, slots.length - slotIdx)
           let combined = 0
           for (let k = 0; k < consumed; k++) combined += slots[slotIdx + k]
