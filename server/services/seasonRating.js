@@ -16,6 +16,9 @@ export const SEASON_DEFAULTS = Object.freeze({
   // 'points' — team strength = avg of season_rankings.points (self-contained;
   //            new players use starting_points until they have a rating)
   strength_basis: 'mmr',
+  // Overall-leaderboard prize tiers: [{ from, to, prize }] by finishing place
+  // (free text, informational — not auto-paid). Edited in season setup.
+  prizes: [],
 })
 
 export function withDefaults(settings) {

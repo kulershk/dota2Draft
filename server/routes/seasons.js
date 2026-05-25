@@ -37,6 +37,20 @@ function sanitizeSettings(input) {
   if (input.strength_basis && STRENGTH_BASIS_VALUES.includes(input.strength_basis)) {
     out.strength_basis = input.strength_basis
   }
+  // Overall-leaderboard prize tiers: [{ from, to, prize }] by finishing place.
+  // Free-text prize (informational, not auto-paid). Drop invalid rows; cap count.
+  if (Array.isArray(input.prizes)) {
+    out.prizes = input.prizes
+      .map(p => {
+        const from = Math.trunc(Number(p?.from))
+        const to = Math.trunc(Number(p?.to))
+        const prize = String(p?.prize ?? '').trim().slice(0, 120)
+        if (!Number.isFinite(from) || !Number.isFinite(to) || from < 1 || to < from || !prize) return null
+        return { from, to, prize }
+      })
+      .filter(Boolean)
+      .slice(0, 50)
+  }
   return out
 }
 

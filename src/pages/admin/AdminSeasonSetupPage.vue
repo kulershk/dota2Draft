@@ -89,6 +89,13 @@ const form = ref({
 const saving = ref(false)
 const saveMsg = ref<string | null>(null)
 
+// Overall-leaderboard prize tiers (free text). Kept separate from the typed
+// settings form; merged into the settings payload on save.
+interface PrizeTier { from: number | null; to: number | null; prize: string }
+const prizeTiers = ref<PrizeTier[]>([])
+function addPrizeTier() { prizeTiers.value.push({ from: null, to: null, prize: '' }) }
+function removePrizeTier(i: number) { prizeTiers.value.splice(i, 1) }
+
 // Leaderboard
 const leader = ref<LeaderRow[]>([])
 const leaderLoading = ref(false)
@@ -267,6 +274,9 @@ async function load() {
     form.value.verified_mmr_only = !!s.verified_mmr_only
     form.value.settings = { ...SETTING_DEFAULTS, ...(s.settings || {}) }
     if (form.value.settings.max_points == null) form.value.settings.max_points = ''
+    prizeTiers.value = Array.isArray(s.settings?.prizes)
+      ? s.settings.prizes.map((p: any) => ({ from: p.from ?? null, to: p.to ?? null, prize: String(p.prize ?? '') }))
+      : []
   } catch (e: any) {
     error.value = e.message || 'Failed to load season'
   } finally {
@@ -356,6 +366,9 @@ async function handleSave() {
       settings: { ...form.value.settings },
     }
     if (payload.settings.max_points === '') payload.settings.max_points = null
+    payload.settings.prizes = prizeTiers.value
+      .filter(p => p.from != null && p.to != null && String(p.prize).trim())
+      .map(p => ({ from: Number(p.from), to: Number(p.to), prize: String(p.prize).trim() }))
     await api.updateSeason(seasonId.value, payload)
     saveMsg.value = t('saved')
     setTimeout(() => { saveMsg.value = null }, 2000)
@@ -586,6 +599,25 @@ onMounted(load)
             {{ p.name }}
           </span>
         </div>
+      </div>
+
+      <!-- Overall prize tiers -->
+      <div class="border-t border-border/40 pt-4">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-sm font-bold">{{ t('seasonPrizes') }}</h3>
+          <button type="button" class="px-2.5 py-1 text-xs rounded-md bg-accent/40 hover:bg-accent" @click="addPrizeTier">+ {{ t('seasonAddPrizeTier') }}</button>
+        </div>
+        <p class="text-[11px] text-muted-foreground mb-3">{{ t('seasonPrizesHint') }}</p>
+        <div v-if="prizeTiers.length" class="flex flex-col gap-2">
+          <div v-for="(tier, i) in prizeTiers" :key="i" class="flex items-center gap-2">
+            <input v-model.number="tier.from" type="number" min="1" :placeholder="t('seasonPrizeFrom')" class="w-20 bg-accent/40 border border-border/40 rounded-lg px-2 py-1.5 text-sm font-mono text-center focus:outline-none focus:ring-1 focus:ring-primary/40" />
+            <span class="text-muted-foreground text-sm">–</span>
+            <input v-model.number="tier.to" type="number" min="1" :placeholder="t('seasonPrizeTo')" class="w-20 bg-accent/40 border border-border/40 rounded-lg px-2 py-1.5 text-sm font-mono text-center focus:outline-none focus:ring-1 focus:ring-primary/40" />
+            <input v-model="tier.prize" type="text" :placeholder="t('seasonPrizeRewardPlaceholder')" class="flex-1 bg-accent/40 border border-border/40 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40" />
+            <button type="button" class="px-2 py-1.5 text-xs rounded-md text-red-400 hover:bg-red-500/10" :title="t('cancel')" @click="removePrizeTier(i)">✕</button>
+          </div>
+        </div>
+        <p v-else class="text-xs text-muted-foreground italic">{{ t('seasonPrizesEmpty') }}</p>
       </div>
 
       <div class="flex items-center justify-between border-t border-border/40 pt-4 flex-wrap gap-3">

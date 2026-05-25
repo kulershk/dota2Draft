@@ -3493,7 +3493,7 @@
       "post": {
         "tags": ["Seasons"],
         "summary": "Admin: create a season",
-        "description": "Slug auto-generated from name if omitted. Settings JSON accepts: starting_points (default 1000), k_win (30), k_loss (15), mmr_scale (1500), min_points (0), max_points (null), min_games_for_leaderboard (5), strength_basis ('mmr' default — team strength = avg Dota MMR; or 'points' — team strength = avg season points). Requires manage_seasons.",
+        "description": "Slug auto-generated from name if omitted. Settings JSON accepts: starting_points (default 1000), k_win (30), k_loss (15), mmr_scale (1500), min_points (0), max_points (null), min_games_for_leaderboard (5), strength_basis ('mmr' default — team strength = avg Dota MMR; or 'points' — team strength = avg season points), prizes (array of { from, to, prize } place-range tiers shown on the Overall leaderboard — free text, not auto-paid; invalid rows dropped, max 50). Requires manage_seasons.",
         "security": [{ "bearerAuth": [] }],
         "requestBody": {
           "required": true,
@@ -3518,7 +3518,19 @@
                   "min_points":                { "type": "number" },
                   "max_points":                { "type": "number", "nullable": true },
                   "min_games_for_leaderboard": { "type": "integer" },
-                  "strength_basis":            { "type": "string", "enum": ["mmr", "points"], "default": "mmr" }
+                  "strength_basis":            { "type": "string", "enum": ["mmr", "points"], "default": "mmr" },
+                  "prizes": {
+                    "type": "array",
+                    "description": "Overall-leaderboard prize tiers by finishing place (free text, informational). Invalid rows dropped server-side; max 50.",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "from":  { "type": "integer", "minimum": 1, "description": "First place in the range" },
+                        "to":    { "type": "integer", "minimum": 1, "description": "Last place in the range (>= from)" },
+                        "prize": { "type": "string", "maxLength": 120 }
+                      }
+                    }
+                  }
                 }
               }
             }
