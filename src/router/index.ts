@@ -1,5 +1,49 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useDraftStore } from '@/composables/useDraftStore'
+
+// Admin child routes. Kept as a named const so the /admin redirect below can
+// derive the landing page from the same source of truth that gates each page,
+// instead of a separate hardcoded section list that drifts out of sync.
+const adminChildren: RouteRecordRaw[] = [
+  { path: 'competitions', name: 'admin-competitions', meta: { permissions: ['manage_competitions', 'manage_own_competitions', '_helps_competition'] }, component: () => import('@/pages/admin/AdminCompetitionsPage.vue') },
+  { path: 'competitions/:compId', name: 'admin-competition-setup', meta: { permissions: ['manage_competitions', 'manage_own_competitions', '_helps_competition'] }, component: () => import('@/pages/admin/AdminCompetitionSetupPage.vue') },
+  { path: 'users', name: 'admin-users', meta: { permissions: ['manage_users'] }, component: () => import('@/pages/admin/AdminUsersPage.vue') },
+  { path: 'dotacoins', name: 'admin-dotacoins', meta: { permissions: ['manage_dotacoins', 'manage_gcoins'] }, component: () => import('@/pages/admin/AdminDotacoinsPage.vue') },
+  { path: 'news', name: 'admin-news', meta: { permissions: ['manage_news'] }, component: () => import('@/pages/admin/AdminNewsPage.vue') },
+  { path: 'announcements', name: 'admin-announcements', meta: { permissions: ['manage_notifications'] }, component: () => import('@/pages/admin/AdminAnnouncementsPage.vue') },
+  { path: 'settings', name: 'admin-settings', meta: { permissions: ['manage_site_settings'] }, component: () => import('@/pages/admin/AdminSiteSettingsPage.vue') },
+  { path: 'discord', name: 'admin-discord', meta: { permissions: ['manage_discord_settings'] }, component: () => import('@/pages/admin/AdminDiscordSettingsPage.vue') },
+  { path: 'permissions', name: 'admin-permissions', meta: { permissions: ['manage_permissions'] }, component: () => import('@/pages/admin/AdminPermissionsPage.vue') },
+  { path: 'bots', name: 'admin-bots', meta: { permissions: ['manage_bots'] }, component: () => import('@/pages/admin/AdminBotsPage.vue') },
+  { path: 'games', name: 'admin-games', meta: { permissions: ['manage_games'] }, component: () => import('@/pages/admin/AdminGamesPage.vue') },
+  { path: 'fantasy', name: 'admin-fantasy', meta: { permissions: ['manage_fantasy'] }, component: () => import('@/pages/admin/AdminFantasyPage.vue') },
+  { path: 'xp-log', name: 'admin-xp-log', meta: { permissions: ['manage_xp_log'] }, component: () => import('@/pages/admin/AdminXpLogPage.vue') },
+  { path: 'queue', name: 'admin-queue', meta: { permissions: ['manage_queue_pools', 'manage_own_queue_pools'] }, component: () => import('@/pages/admin/AdminQueuePage.vue') },
+  { path: 'seasons', name: 'admin-seasons', meta: { permissions: ['manage_seasons', 'manage_own_seasons'] }, component: () => import('@/pages/admin/AdminSeasonsPage.vue') },
+  { path: 'seasons/:id', name: 'admin-season-setup', meta: { permissions: ['manage_seasons', 'manage_own_seasons'] }, component: () => import('@/pages/admin/AdminSeasonSetupPage.vue') },
+  { path: 'mmr-verifications', name: 'admin-mmr-verifications', meta: { permissions: ['manage_mmr_verifications'] }, component: () => import('@/pages/admin/AdminMmrVerificationsPage.vue') },
+  { path: 'reports', name: 'admin-reports', meta: { permissions: ['review_grief_reports'] }, component: () => import('@/pages/admin/AdminReportsPage.vue') },
+  // Back-compat: legacy /admin/grief-reports route still renders the new combined page.
+  { path: 'grief-reports', redirect: { name: 'admin-reports' } },
+  { path: 'jobs', name: 'admin-jobs', meta: { permissions: ['manage_jobs'] }, component: () => import('@/pages/admin/AdminJobsPage.vue') },
+  { path: 'request-stats', name: 'admin-request-stats', meta: { permissions: ['view_request_stats'] }, component: () => import('@/pages/admin/AdminRequestStatsPage.vue') },
+  { path: 'menu', name: 'admin-menu', meta: { permissions: ['manage_menu'] }, component: () => import('@/pages/admin/AdminMenuPage.vue') },
+  { path: 'leagues', name: 'admin-leagues', meta: { permissions: ['manage_leagues', 'manage_own_leagues'] }, component: () => import('@/pages/admin/AdminLeaguesPage.vue') },
+  { path: 'subscription-plans', name: 'admin-subscription-plans', meta: { permissions: ['manage_subscription_plans'] }, component: () => import('@/pages/admin/AdminSubscriptionPlansPage.vue') },
+  { path: 'users/:id/multi-account', name: 'admin-multi-account', meta: { permissions: ['view_request_stats'] }, component: () => import('@/pages/admin/AdminMultiAccountPage.vue') },
+]
+
+// First admin section the current user can actually open. Skips param/redirect
+// routes (no standalone landing target) and returns null if nothing matches.
+function firstAccessibleAdminPath(): string | null {
+  const store = useDraftStore()
+  const target = adminChildren.find(c => {
+    if (c.path.includes(':') || !c.meta?.permissions) return false
+    const perms = c.meta.permissions as string[]
+    return perms.some(p => store.hasPerm(p))
+  })
+  return target ? `/admin/${target.path}` : null
+}
 
 const router = createRouter({
   history: createWebHistory(),
@@ -37,48 +81,10 @@ const router = createRouter({
     {
       path: '/admin',
       component: () => import('@/pages/admin/AdminLayout.vue'),
+      // Bare /admin has no landing of its own; the guard below redirects it to
+      // the first section the user can open (resolved after auth is ready).
       meta: { requiresAdmin: true },
-      redirect: () => {
-        const store = useDraftStore()
-        const sections = [
-          { path: '/admin/competitions', perms: ['manage_competitions', 'manage_own_competitions'] },
-          { path: '/admin/users', perms: ['manage_users'] },
-          { path: '/admin/news', perms: ['manage_news'] },
-          { path: '/admin/settings', perms: ['manage_site_settings'] },
-          { path: '/admin/permissions', perms: ['manage_permissions'] },
-          { path: '/admin/jobs', perms: ['manage_jobs'] },
-        ]
-        const first = sections.find(s => s.perms.some(p => store.hasPerm(p)))
-        return first?.path || '/admin/competitions'
-      },
-      children: [
-        { path: 'competitions', name: 'admin-competitions', meta: { permissions: ['manage_competitions', 'manage_own_competitions', '_helps_competition'] }, component: () => import('@/pages/admin/AdminCompetitionsPage.vue') },
-        { path: 'competitions/:compId', name: 'admin-competition-setup', meta: { permissions: ['manage_competitions', 'manage_own_competitions', '_helps_competition'] }, component: () => import('@/pages/admin/AdminCompetitionSetupPage.vue') },
-        { path: 'users', name: 'admin-users', meta: { permissions: ['manage_users'] }, component: () => import('@/pages/admin/AdminUsersPage.vue') },
-        { path: 'dotacoins', name: 'admin-dotacoins', meta: { permissions: ['manage_dotacoins', 'manage_gcoins'] }, component: () => import('@/pages/admin/AdminDotacoinsPage.vue') },
-        { path: 'news', name: 'admin-news', meta: { permissions: ['manage_news'] }, component: () => import('@/pages/admin/AdminNewsPage.vue') },
-        { path: 'announcements', name: 'admin-announcements', meta: { permissions: ['manage_notifications'] }, component: () => import('@/pages/admin/AdminAnnouncementsPage.vue') },
-        { path: 'settings', name: 'admin-settings', meta: { permissions: ['manage_site_settings'] }, component: () => import('@/pages/admin/AdminSiteSettingsPage.vue') },
-        { path: 'discord', name: 'admin-discord', meta: { permissions: ['manage_discord_settings'] }, component: () => import('@/pages/admin/AdminDiscordSettingsPage.vue') },
-        { path: 'permissions', name: 'admin-permissions', meta: { permissions: ['manage_permissions'] }, component: () => import('@/pages/admin/AdminPermissionsPage.vue') },
-        { path: 'bots', name: 'admin-bots', meta: { permissions: ['manage_bots'] }, component: () => import('@/pages/admin/AdminBotsPage.vue') },
-        { path: 'games', name: 'admin-games', meta: { permissions: ['manage_games'] }, component: () => import('@/pages/admin/AdminGamesPage.vue') },
-        { path: 'fantasy', name: 'admin-fantasy', meta: { permissions: ['manage_fantasy'] }, component: () => import('@/pages/admin/AdminFantasyPage.vue') },
-        { path: 'xp-log', name: 'admin-xp-log', meta: { permissions: ['manage_xp_log'] }, component: () => import('@/pages/admin/AdminXpLogPage.vue') },
-        { path: 'queue', name: 'admin-queue', meta: { permissions: ['manage_queue_pools', 'manage_own_queue_pools'] }, component: () => import('@/pages/admin/AdminQueuePage.vue') },
-        { path: 'seasons', name: 'admin-seasons', meta: { permissions: ['manage_seasons', 'manage_own_seasons'] }, component: () => import('@/pages/admin/AdminSeasonsPage.vue') },
-        { path: 'seasons/:id', name: 'admin-season-setup', meta: { permissions: ['manage_seasons', 'manage_own_seasons'] }, component: () => import('@/pages/admin/AdminSeasonSetupPage.vue') },
-        { path: 'mmr-verifications', name: 'admin-mmr-verifications', meta: { permissions: ['manage_mmr_verifications'] }, component: () => import('@/pages/admin/AdminMmrVerificationsPage.vue') },
-        { path: 'reports', name: 'admin-reports', meta: { permissions: ['review_grief_reports'] }, component: () => import('@/pages/admin/AdminReportsPage.vue') },
-        // Back-compat: legacy /admin/grief-reports route still renders the new combined page.
-        { path: 'grief-reports', redirect: { name: 'admin-reports' } },
-        { path: 'jobs', name: 'admin-jobs', meta: { permissions: ['manage_jobs'] }, component: () => import('@/pages/admin/AdminJobsPage.vue') },
-        { path: 'request-stats', name: 'admin-request-stats', meta: { permissions: ['view_request_stats'] }, component: () => import('@/pages/admin/AdminRequestStatsPage.vue') },
-        { path: 'menu', name: 'admin-menu', meta: { permissions: ['manage_menu'] }, component: () => import('@/pages/admin/AdminMenuPage.vue') },
-        { path: 'leagues', name: 'admin-leagues', meta: { permissions: ['manage_leagues', 'manage_own_leagues'] }, component: () => import('@/pages/admin/AdminLeaguesPage.vue') },
-        { path: 'subscription-plans', name: 'admin-subscription-plans', meta: { permissions: ['manage_subscription_plans'] }, component: () => import('@/pages/admin/AdminSubscriptionPlansPage.vue') },
-        { path: 'users/:id/multi-account', name: 'admin-multi-account', meta: { permissions: ['view_request_stats'] }, component: () => import('@/pages/admin/AdminMultiAccountPage.vue') },
-      ],
+      children: adminChildren,
     },
     // Catch-all 404 — must be last so all named routes match first.
     { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('@/pages/NotFoundPage.vue') },
@@ -91,6 +97,12 @@ router.beforeEach(async (to) => {
     await store.authReady
     if (!store.canAccessAdmin.value) {
       return { name: 'home' }
+    }
+    // Bare /admin → first section this user can actually open. Computed here
+    // (not as a route-record redirect) so it runs after authReady, otherwise a
+    // cold load races permission resolution and falls through to home.
+    if (to.path === '/admin' || to.path === '/admin/') {
+      return firstAccessibleAdminPath() || { name: 'home' }
     }
     const perms = to.meta.permissions as string[] | undefined
     if (perms && !perms.some(p => store.hasPerm(p))) {
