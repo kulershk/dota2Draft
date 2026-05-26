@@ -9,6 +9,7 @@ import { useFriendStore } from '@/composables/useFriendStore'
 import { useDotaConstants } from '@/composables/useDotaConstants'
 import { useCosmetics } from '@/composables/useCosmetics'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
+import ImageCropper from '@/components/common/ImageCropper.vue'
 import RoleBadge from '@/components/common/RoleBadge.vue'
 import MmrDisplay from '@/components/common/MmrDisplay.vue'
 import LevelBadge from '@/components/common/LevelBadge.vue'
@@ -94,15 +95,27 @@ const error = ref(false)
 const bannerInput = ref<HTMLInputElement | null>(null)
 const bannerBusy = ref(false)
 const bannerError = ref('')
+// Crop step before upload: the banner renders at a fixed 1200×300 (4:1), so the
+// user picks which slice of their image to keep — like the news cover upload.
+const showBannerCropper = ref(false)
+const bannerCropFile = ref<File | null>(null)
 // Own profile + an active plan granting profile_banner → can upload/remove.
 const canEditBanner = computed(() =>
   store.currentUser.value?.id === profile.value?.id &&
   store.currentUser.value?.subscription?.perks?.profile_banner === true,
 )
-async function onBannerPicked(e: Event) {
-  const file = (e.target as HTMLInputElement).files?.[0]
+function onBannerPicked(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = '' // allow re-picking the same file later
   if (!file) return
   bannerError.value = ''
+  bannerCropFile.value = file
+  showBannerCropper.value = true
+}
+async function handleBannerCrop(blob: Blob) {
+  showBannerCropper.value = false
+  const file = new File([blob], 'profile-banner.png', { type: 'image/png' })
   bannerBusy.value = true
   try {
     const r = await api.uploadProfileBanner(file)
@@ -112,7 +125,6 @@ async function onBannerPicked(e: Event) {
     bannerError.value = err?.message || t('profileBannerUploadFailed')
   } finally {
     bannerBusy.value = false
-    if (bannerInput.value) bannerInput.value.value = ''
   }
 }
 async function removeBanner() {
@@ -1023,5 +1035,16 @@ const streakBadge = computed(() => {
         <p v-if="!decorations.length" class="text-sm text-muted-foreground text-center">{{ t('avatarDecorationsEmpty') }}</p>
       </div>
     </ModalOverlay>
+
+    <!-- Profile banner crop step (1200×300, 4:1) -->
+    <ImageCropper
+      :show="showBannerCropper"
+      :image-file="bannerCropFile"
+      :aspect-ratio="1200 / 300"
+      :output-width="1200"
+      :output-height="300"
+      @crop="handleBannerCrop"
+      @close="showBannerCropper = false"
+    />
   </div>
 </template>
