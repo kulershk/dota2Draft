@@ -1178,7 +1178,9 @@ onUnmounted(() => {
                 <!-- List -->
                 <div class="p-4 flex flex-col gap-2.5 flex-1">
                   <!-- Captain -->
-                  <div class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-background border-l-2 border-cyan-500">
+                  <div class="relative isolate overflow-hidden flex items-center gap-3 px-3 py-2.5 rounded-lg bg-background border-l-2 border-cyan-500">
+                    <div v-if="queue.activeMatch.value.captain1.profileBannerUrl" class="draft-tile-banner"
+                      :style="{ backgroundImage: `url(${queue.activeMatch.value.captain1.profileBannerUrl})` }" />
                     <img v-if="queue.activeMatch.value.captain1.avatarUrl" :src="queue.activeMatch.value.captain1.avatarUrl"
                       class="w-9 h-9 rounded-full object-cover ring-1 ring-cyan-500" />
                     <div v-else class="w-9 h-9 rounded-full bg-cyan-500/20 ring-1 ring-cyan-500 flex items-center justify-center shrink-0">
@@ -1206,7 +1208,9 @@ onUnmounted(() => {
 
                   <!-- Picked players -->
                   <div v-for="p in queue.pickState.value.captain1Picks" :key="p.playerId"
-                    class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-background border-l-2 border-cyan-500">
+                    class="relative isolate overflow-hidden flex items-center gap-3 px-3 py-2.5 rounded-lg bg-background border-l-2 border-cyan-500">
+                    <div v-if="p.profileBannerUrl" class="draft-tile-banner"
+                      :style="{ backgroundImage: `url(${p.profileBannerUrl})` }" />
                     <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-9 h-9 rounded-full object-cover ring-1 ring-cyan-500/40" />
                     <div v-else class="w-9 h-9 rounded-full bg-cyan-500/20 ring-1 ring-cyan-500/40 flex items-center justify-center shrink-0">
                       <span class="text-cyan-400 text-sm font-bold">{{ (p.name || '?')[0].toUpperCase() }}</span>
@@ -1275,13 +1279,16 @@ onUnmounted(() => {
                     {{ t('queueNoPlayersInFilter') }}
                   </div>
                   <div v-for="(p, i) in queue.pickState.value.availablePlayers" :key="p.playerId"
-                    class="rounded-xl bg-background border-2 flex items-center gap-3 px-3.5 py-2.5 transition-all"
+                    class="relative isolate overflow-hidden rounded-xl bg-background border-2 flex items-center gap-3 px-3.5 py-2.5 transition-all"
                     :class="[
                       isMyTurn && i === 0 ? 'border-cyan-500/30' : 'border-border',
                       isMyTurn && i === 0 ? 'pool-card--highlight' : ''
                     ]"
                     :style="tileBorderStyle(p)"
                     :title="tileBorderTitle(p) || undefined">
+                    <!-- Subscriber profile banner, faded behind the tile -->
+                    <div v-if="p.profileBannerUrl" class="draft-tile-banner"
+                      :style="{ backgroundImage: `url(${p.profileBannerUrl})` }" />
                     <!-- Avatar (36px) -->
                     <img v-if="p.avatarUrl" :src="p.avatarUrl"
                       class="w-9 h-9 rounded-full object-cover shrink-0"
@@ -1375,7 +1382,9 @@ onUnmounted(() => {
                 <!-- List -->
                 <div class="p-4 flex flex-col gap-2.5 flex-1">
                   <!-- Captain -->
-                  <div class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-background border-l-2 border-red-500">
+                  <div class="relative isolate overflow-hidden flex items-center gap-3 px-3 py-2.5 rounded-lg bg-background border-l-2 border-red-500">
+                    <div v-if="queue.activeMatch.value.captain2.profileBannerUrl" class="draft-tile-banner"
+                      :style="{ backgroundImage: `url(${queue.activeMatch.value.captain2.profileBannerUrl})` }" />
                     <img v-if="queue.activeMatch.value.captain2.avatarUrl" :src="queue.activeMatch.value.captain2.avatarUrl"
                       class="w-9 h-9 rounded-full object-cover ring-1 ring-red-500" />
                     <div v-else class="w-9 h-9 rounded-full bg-red-500/20 ring-1 ring-red-500 flex items-center justify-center shrink-0">
@@ -1403,7 +1412,9 @@ onUnmounted(() => {
 
                   <!-- Picked players -->
                   <div v-for="p in queue.pickState.value.captain2Picks" :key="p.playerId"
-                    class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-background border-l-2 border-red-500">
+                    class="relative isolate overflow-hidden flex items-center gap-3 px-3 py-2.5 rounded-lg bg-background border-l-2 border-red-500">
+                    <div v-if="p.profileBannerUrl" class="draft-tile-banner"
+                      :style="{ backgroundImage: `url(${p.profileBannerUrl})` }" />
                     <img v-if="p.avatarUrl" :src="p.avatarUrl" class="w-9 h-9 rounded-full object-cover ring-1 ring-red-500/40" />
                     <div v-else class="w-9 h-9 rounded-full bg-red-500/20 ring-1 ring-red-500/40 flex items-center justify-center shrink-0">
                       <span class="text-red-400 text-sm font-bold">{{ (p.name || '?')[0].toUpperCase() }}</span>
@@ -1841,6 +1852,23 @@ onUnmounted(() => {
 }
 .pool-card--highlight {
   box-shadow: 0 0 16px rgba(34, 211, 238, 0.15);
+}
+/* Subscriber profile banner painted behind a draft tile. Parent must be
+   `relative isolate overflow-hidden`: isolate gives the negative z-index its
+   own stacking context (banner sits above the tile's solid background but
+   below the avatar/name/stats), overflow-hidden clips it to the rounded edge.
+   Kept faint and faded toward the right so the name and pick button stay
+   readable over any uploaded image. */
+.draft-tile-banner {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-size: cover;
+  background-position: center;
+  opacity: 0.3;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(90deg, #000 0%, rgba(0, 0, 0, 0.55) 60%, transparent 100%);
+          mask-image: linear-gradient(90deg, #000 0%, rgba(0, 0, 0, 0.55) 60%, transparent 100%);
 }
 .pool-pick-btn {
   background: linear-gradient(180deg, #22D3EE 0%, #0EA5E9 100%);

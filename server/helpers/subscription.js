@@ -69,6 +69,28 @@ export async function getGcoinMultipliers(playerIds) {
   return out
 }
 
+// Batch lookup of which players currently have the profile_banner perk active,
+// used by the queue draft enrichment (server/socket/queue.js) so the draft
+// board can render each subscriber's uploaded banner as a tile background
+// without one perk query per player. Returns a Set<playerId> containing only
+// players whose active plan sets profile_banner = true — callers treat a
+// missing id as "no banner" (same gating the profile page applies).
+export async function getProfileBannerPlayers(playerIds) {
+  const out = new Set()
+  if (!playerIds?.length) return out
+  const rows = await query(`
+    SELECT us.player_id
+      FROM user_subscriptions us
+      JOIN subscription_plans sp ON sp.id = us.plan_id
+     WHERE us.player_id = ANY($1::int[])
+       AND us.status = 'active'
+       AND (us.expires_at IS NULL OR us.expires_at > NOW())
+       AND sp.perks->>'profile_banner' = 'true'
+  `, [playerIds])
+  for (const r of rows) out.add(r.player_id)
+  return out
+}
+
 // Lightweight projection of just the badge for embedding in player rows
 // returned to the client. Returns null when the player has no active sub or
 // the plan has no badge image uploaded.

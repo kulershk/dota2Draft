@@ -21,6 +21,11 @@ export interface QueuePlayer {
    * to colour the avatar border. Server includes this with every queue
    * entry so the client doesn't need an extra metadata fetch. */
   groups?: Array<{ id: number; name: string; border_color: string; captains_drawn_from: boolean }>
+  /** Uploaded profile banner URL, present only for players whose active
+   * subscription grants the profile_banner perk. Set by the server when a
+   * draft starts (startQueueMatch) and rendered as a faint background behind
+   * the player's tile on the draft board. */
+  profileBannerUrl?: string | null
 }
 
 export interface QueuePool {

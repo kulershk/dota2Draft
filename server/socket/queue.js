@@ -8,7 +8,7 @@ import {
 } from './queueState.js'
 import { botPool } from '../services/botPool.js'
 import { discordBot } from '../services/discordBotClient.js'
-import { hasPerk, PERK } from '../helpers/subscription.js'
+import { hasPerk, PERK, getProfileBannerPlayers } from '../helpers/subscription.js'
 import { broadcastPresence } from './presence.js'
 import { isInFridayWindow } from '../services/fridayWindow.js'
 import { autoCollectPending } from '../routes/slots.js'
@@ -1044,11 +1044,20 @@ async function startQueueMatch(poolId, io, preselectedPlayers = null, preselecte
     const ids = players.map(p => p.playerId)
     if (ids.length) {
       const prefRows = await query(
-        'SELECT id, preferred_roles FROM players WHERE id = ANY($1::int[])',
+        'SELECT id, preferred_roles, profile_banner_url FROM players WHERE id = ANY($1::int[])',
         [ids]
       )
       const prefById = Object.fromEntries(prefRows.map(r => [r.id, r.preferred_roles || []]))
+      // Surface each subscriber's uploaded banner so the draft board can paint
+      // it behind their tile. Gated by the active profile_banner perk — same
+      // rule the profile page uses — so a lapsed sub hides the banner without
+      // deleting the file. Non-subscribers get null and render the plain tile.
+      const bannerById = Object.fromEntries(prefRows.map(r => [r.id, r.profile_banner_url || null]))
+      const bannerPerk = await getProfileBannerPlayers(ids)
       for (const p of players) p.preferredRoles = sanitizeRoles(prefById[p.playerId] || [])
+      for (const p of players) {
+        p.profileBannerUrl = bannerPerk.has(p.playerId) ? bannerById[p.playerId] : null
+      }
       if (pool?.season_id) {
         const ptsRows = await query(
           'SELECT player_id, points FROM season_rankings WHERE season_id = $1 AND player_id = ANY($2::int[])',
