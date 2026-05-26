@@ -2191,6 +2191,7 @@ export default {
   reportsStrikeKind_toxic: 'Toksisks',
   reportsStrikeKind_grief: 'Grief',
   reportsStrikeKind_toxic_decay: 'Noņemts',
+  reportsStrikeKind_grief_decay: 'Noņemts',
   reportsStrikeKind_captain_revoked: 'Zaudēts kapteinis',
   reportsStrikeKind_admin_lift: 'Atcelts',
   reportsTab_players: 'Spēlētāji',

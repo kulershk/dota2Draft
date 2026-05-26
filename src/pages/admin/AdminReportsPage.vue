@@ -61,7 +61,7 @@ interface ToxicReport {
 interface StrikeLogRow {
   id: number
   player_id: number
-  kind: 'toxic' | 'grief' | 'toxic_decay' | 'captain_revoked' | 'admin_lift'
+  kind: 'toxic' | 'grief' | 'toxic_decay' | 'grief_decay' | 'captain_revoked' | 'admin_lift'
   delta: number
   reason: string | null
   source_report_id: number | null
@@ -230,6 +230,7 @@ function strikeKindPill(kind: string): string {
   if (kind === 'toxic')           return 'bg-amber-500/15 text-amber-400'
   if (kind === 'grief')           return 'bg-rose-500/15 text-rose-400'
   if (kind === 'toxic_decay')     return 'bg-green-500/15 text-green-500'
+  if (kind === 'grief_decay')     return 'bg-green-500/15 text-green-500'
   if (kind === 'admin_lift')      return 'bg-green-500/15 text-green-500'
   if (kind === 'captain_revoked') return 'bg-purple-500/15 text-purple-400'
   return 'bg-accent/40 text-muted-foreground'

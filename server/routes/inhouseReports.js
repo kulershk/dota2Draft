@@ -533,7 +533,7 @@ export default function createInhouseReportsRouter(io) {
         )).rows[0].grief_strikes
       } else {
         newStrikes = (await client.query(
-          `UPDATE players SET grief_strikes = grief_strikes + 1 WHERE id = $1 RETURNING grief_strikes`,
+          `UPDATE players SET grief_strikes = grief_strikes + 1, grief_clean_games_since_last_strike = 0 WHERE id = $1 RETURNING grief_strikes`,
           [report.reported_player_id]
         )).rows[0].grief_strikes
         // Captain status is now per-season membership in a captains_drawn_from

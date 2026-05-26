@@ -2191,6 +2191,7 @@ export default {
   reportsStrikeKind_toxic: 'Toks',
   reportsStrikeKind_grief: 'Grief',
   reportsStrikeKind_toxic_decay: 'Nuimta',
+  reportsStrikeKind_grief_decay: 'Nuimta',
   reportsStrikeKind_captain_revoked: 'Prarado kapitoną',
   reportsStrikeKind_admin_lift: 'Panaikinta',
   reportsTab_players: 'Žaidėjai',

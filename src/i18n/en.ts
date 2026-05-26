@@ -2202,6 +2202,7 @@ export default {
   reportsStrikeKind_toxic: 'Toxic',
   reportsStrikeKind_grief: 'Grief',
   reportsStrikeKind_toxic_decay: 'Decay',
+  reportsStrikeKind_grief_decay: 'Decay',
   reportsStrikeKind_captain_revoked: 'Captain lost',
   reportsStrikeKind_admin_lift: 'Lifted',
   reportsTab_players: 'Players',

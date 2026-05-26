@@ -109,7 +109,7 @@ export async function applyMatchToSeason({
     // Pull MMR + winstreak for everyone in both teams.
     const allIds = [...new Set([...team1PlayerIds, ...team2PlayerIds])]
     const playerRows = (await client.query(
-      'SELECT id, mmr, toxic_strikes, toxic_clean_games_since_last_strike FROM players WHERE id = ANY($1::int[])',
+      'SELECT id, mmr, toxic_strikes, toxic_clean_games_since_last_strike, grief_strikes, grief_clean_games_since_last_strike FROM players WHERE id = ANY($1::int[])',
       [allIds]
     )).rows
     const mmrById = Object.fromEntries(playerRows.map(r => [r.id, Number(r.mmr) || 0]))
@@ -336,32 +336,40 @@ export async function applyMatchToSeason({
       ])
     }
 
-    // Inhouse clean-games decay: a player serving toxic strikes shaves one
-    // off after `clean_games_to_decay_strike` strike-free matches in a row.
-    // Leavers don't count as "clean". The counter lives on players (not
-    // season-scoped) since strikes themselves are global.
+    // Inhouse clean-games decay: a player serving strikes shaves one off after
+    // `clean_games_to_decay_strike` strike-free matches in a row. Toxic and
+    // grief strikes decay independently, each with its own clean-games counter.
+    // Leavers don't count as "clean". Counters live on players (not
+    // season-scoped) since strikes themselves are global. Column names below
+    // are a fixed all-list, never user input — safe to interpolate.
     if (inhouse) {
       const decayN = Math.max(1, Number(inhousePool.clean_games_to_decay_strike ?? 5))
+      const DECAY_KINDS = [
+        { strikes: 'toxic_strikes', clean: 'toxic_clean_games_since_last_strike', logKind: 'toxic_decay' },
+        { strikes: 'grief_strikes', clean: 'grief_clean_games_since_last_strike', logKind: 'grief_decay' },
+      ]
       for (const u of updates) {
-        const pr = playerById[u.pid]
-        if (!pr || (pr.toxic_strikes | 0) <= 0) continue
         if (u.isLeaver) continue
-        const prevCount = pr.toxic_clean_games_since_last_strike | 0
-        const nextCount = prevCount + 1
-        if (nextCount >= decayN) {
-          await client.query(
-            `UPDATE players SET toxic_strikes = GREATEST(0, toxic_strikes - 1), toxic_clean_games_since_last_strike = 0 WHERE id = $1`,
-            [u.pid]
-          )
-          await client.query(
-            `INSERT INTO inhouse_strike_log (player_id, kind, delta, reason, source_queue_match_id) VALUES ($1, 'toxic_decay', -1, $2, $3)`,
-            [u.pid, `Decayed after ${decayN} clean games`, queueMatchId]
-          )
-        } else {
-          await client.query(
-            `UPDATE players SET toxic_clean_games_since_last_strike = $1 WHERE id = $2`,
-            [nextCount, u.pid]
-          )
+        const pr = playerById[u.pid]
+        if (!pr) continue
+        for (const k of DECAY_KINDS) {
+          if ((pr[k.strikes] | 0) <= 0) continue
+          const nextCount = (pr[k.clean] | 0) + 1
+          if (nextCount >= decayN) {
+            await client.query(
+              `UPDATE players SET ${k.strikes} = GREATEST(0, ${k.strikes} - 1), ${k.clean} = 0 WHERE id = $1`,
+              [u.pid]
+            )
+            await client.query(
+              `INSERT INTO inhouse_strike_log (player_id, kind, delta, reason, source_queue_match_id) VALUES ($1, $2, -1, $3, $4)`,
+              [u.pid, k.logKind, `Decayed after ${decayN} clean games`, queueMatchId]
+            )
+          } else {
+            await client.query(
+              `UPDATE players SET ${k.clean} = $1 WHERE id = $2`,
+              [nextCount, u.pid]
+            )
+          }
         }
       }
     }

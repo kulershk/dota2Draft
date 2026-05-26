@@ -1041,6 +1041,7 @@ export async function initDb() {
     ['toxic_strikes',                       'INTEGER NOT NULL DEFAULT 0'],
     ['toxic_clean_games_since_last_strike', 'INTEGER NOT NULL DEFAULT 0'],
     ['grief_strikes',                       'INTEGER NOT NULL DEFAULT 0'],
+    ['grief_clean_games_since_last_strike', 'INTEGER NOT NULL DEFAULT 0'],
     ['toxic_thresholds_fired',              `JSONB NOT NULL DEFAULT '[]'::jsonb`],
   ]) {
     const has = await queryOne(
@@ -1180,7 +1181,7 @@ export async function initDb() {
     CREATE TABLE IF NOT EXISTS inhouse_strike_log (
       id                      SERIAL PRIMARY KEY,
       player_id               INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-      kind                    TEXT NOT NULL CHECK (kind IN ('toxic','grief','toxic_decay','captain_revoked','admin_lift')),
+      kind                    TEXT NOT NULL CHECK (kind IN ('toxic','grief','toxic_decay','grief_decay','captain_revoked','admin_lift')),
       delta                   INTEGER NOT NULL,
       reason                  TEXT NULL,
       source_report_id        INTEGER NULL,
@@ -1193,7 +1194,7 @@ export async function initDb() {
   // Widen the kind CHECK on existing DBs to allow admin manual strike lifts.
   try {
     await execute(`ALTER TABLE inhouse_strike_log DROP CONSTRAINT IF EXISTS inhouse_strike_log_kind_check`)
-    await execute(`ALTER TABLE inhouse_strike_log ADD CONSTRAINT inhouse_strike_log_kind_check CHECK (kind IN ('toxic','grief','toxic_decay','captain_revoked','admin_lift'))`)
+    await execute(`ALTER TABLE inhouse_strike_log ADD CONSTRAINT inhouse_strike_log_kind_check CHECK (kind IN ('toxic','grief','toxic_decay','grief_decay','captain_revoked','admin_lift'))`)
   } catch (e) { console.warn('[db] inhouse_strike_log kind check:', e.message) }
 
   // The earlier season_player_flags table held captain_pool / shadow_pool
