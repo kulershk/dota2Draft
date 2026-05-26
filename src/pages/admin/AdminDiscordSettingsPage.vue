@@ -14,6 +14,7 @@ interface PluginDto { name: string; description: string; class: string; enabled:
 const guildId = ref('')
 const roleVerifiedId = ref('')
 const roleCasterId = ref('')
+const roleSubscriberId = ref('')
 const welcomeChannelId = ref('')
 const tournamentChannelId = ref('')
 const inhouseVoiceId = ref('')
@@ -104,6 +105,7 @@ onMounted(async () => {
     guildId.value = settings.discord_guild_id || ''
     roleVerifiedId.value = settings.discord_role_id_verified || ''
     roleCasterId.value = settings.discord_role_id_caster || ''
+    roleSubscriberId.value = settings.discord_role_id_subscriber || ''
     welcomeChannelId.value = settings.discord_welcome_channel_id || ''
     tournamentChannelId.value = settings.discord_tournament_channel_id || ''
     inhouseVoiceId.value = settings.discord_inhouse_voice_id || ''
@@ -132,6 +134,7 @@ async function save() {
       discord_guild_id: guildId.value,
       discord_role_id_verified: roleVerifiedId.value,
       discord_role_id_caster: roleCasterId.value,
+      discord_role_id_subscriber: roleSubscriberId.value,
       discord_welcome_channel_id: welcomeChannelId.value,
       discord_tournament_channel_id: tournamentChannelId.value,
       discord_inhouse_voice_id: inhouseVoiceId.value,
@@ -273,6 +276,16 @@ async function save() {
                   </option>
                 </select>
                 <p class="text-[11px] text-muted-foreground mt-1">{{ t('discordRoleCasterHint') }}</p>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('discordRoleSubscriber') }}</label>
+                <select v-model="roleSubscriberId" class="input-field w-full">
+                  <option value="">{{ t('discordRoleNone') }}</option>
+                  <option v-for="r in roles" :key="r.id" :value="r.id" :disabled="r.managed">
+                    {{ r.name }} {{ r.managed ? '(managed)' : '' }}
+                  </option>
+                </select>
+                <p class="text-[11px] text-muted-foreground mt-1">{{ t('discordRoleSubscriberHint') }}</p>
               </div>
             </div>
           </div>

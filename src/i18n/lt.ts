@@ -688,6 +688,8 @@ export default {
   discordRoleVerifiedHint: 'Suteikiamas automatiškai naujam nariui su susietu Steam, ir per /verify komandą.',
   discordRoleCaster: 'Komentatoriaus vaidmuo',
   discordRoleCasterHint: 'Suteikia administratorius rankiniu būdu per /grant-caster.',
+  discordRoleSubscriber: 'Prenumeratoriaus vaidmuo',
+  discordRoleSubscriberHint: 'Automatiškai suteikiamas žaidėjams su aktyvia prenumerata; pašalinamas ją atšaukus.',
   discordRoleNone: '— nėra —',
   discordChannelsSection: 'Kanalai',
   discordWelcomeChannel: 'Pasveikinimo kanalas',

@@ -688,6 +688,8 @@ export default {
   discordRoleVerifiedHint: 'Tiek piešķirta automātiski jaunam dalībniekam ar saistītu Steam kontu, kā arī ar komandu /verify.',
   discordRoleCaster: 'Komentētāja loma',
   discordRoleCasterHint: 'Piešķir administrators manuāli ar komandu /grant-caster.',
+  discordRoleSubscriber: 'Abonenta loma',
+  discordRoleSubscriberHint: 'Automātiski piešķirta spēlētājiem ar aktīvu abonementu; noņemta, kad tas tiek atcelts.',
   discordRoleNone: '— nav —',
   discordChannelsSection: 'Kanāli',
   discordWelcomeChannel: 'Sveiciena kanāls',

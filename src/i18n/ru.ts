@@ -1113,6 +1113,8 @@ export default {
   discordRoleVerifiedHint: 'Выдаётся автоматически, когда участник присоединяется со связанным Steam-аккаунтом, и через команду /verify.',
   discordRoleCaster: 'Роль кастера',
   discordRoleCasterHint: 'Выдаётся вручную админом через /grant-caster.',
+  discordRoleSubscriber: 'Роль подписчика',
+  discordRoleSubscriberHint: 'Автоматически выдаётся игрокам с активной подпиской; снимается при её отмене.',
   discordRoleNone: '— нет —',
   discordChannelsSection: 'Каналы',
   discordWelcomeChannel: 'Канал приветствия',

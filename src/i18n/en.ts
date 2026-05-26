@@ -689,6 +689,8 @@ export default {
   discordRoleVerifiedHint: 'Granted automatically when a member joins with a linked Steam account, and via the /verify command.',
   discordRoleCaster: 'Caster role',
   discordRoleCasterHint: 'Granted manually by an admin via /grant-caster.',
+  discordRoleSubscriber: 'Subscriber role',
+  discordRoleSubscriberHint: 'Auto-granted to players with an active subscription; removed when it is cancelled.',
   discordRoleNone: '— none —',
   discordChannelsSection: 'Channels',
   discordWelcomeChannel: 'Welcome channel',
