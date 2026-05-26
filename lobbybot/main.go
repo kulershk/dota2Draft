@@ -67,6 +67,11 @@ func main() {
 			json.Unmarshal(data, &cmd)
 			botMgr.DisconnectBot(cmd.BotID)
 
+		case "list_bots":
+			// Report every bot's live status so Node can reconcile its DB
+			// before picking a bot for a lobby.
+			sendFn("bots_list", protocol.BotsListEvent{Bots: botMgr.ListBots()})
+
 		case "steam_guard":
 			var cmd protocol.SteamGuardCmd
 			json.Unmarshal(data, &cmd)

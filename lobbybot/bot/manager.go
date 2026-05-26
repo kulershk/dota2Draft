@@ -3,6 +3,8 @@ package bot
 import (
 	"fmt"
 	"sync"
+
+	"lobbybot/protocol"
 )
 
 // SendFunc is used to send events back to Node.js
@@ -88,6 +90,25 @@ func (m *Manager) GetBot(botID string) *Bot {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.bots[botID]
+}
+
+// ListBots returns a snapshot of every bot's live status so Node can reconcile
+// its DB before assigning a bot to a lobby. Bot pointers are gathered under the
+// manager lock, then each status is read under that bot's own lock.
+func (m *Manager) ListBots() []protocol.BotInfo {
+	m.mu.RLock()
+	bots := make([]*Bot, 0, len(m.bots))
+	for _, b := range m.bots {
+		bots = append(bots, b)
+	}
+	m.mu.RUnlock()
+	out := make([]protocol.BotInfo, 0, len(bots))
+	for _, b := range bots {
+		b.mu.Lock()
+		out = append(out, protocol.BotInfo{BotID: b.ID, Status: b.Status})
+		b.mu.Unlock()
+	}
+	return out
 }
 
 func (m *Manager) FindAvailable() *Bot {

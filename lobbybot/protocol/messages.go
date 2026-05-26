@@ -135,6 +135,10 @@ type SyncCmd struct {
 	Lobbies []CreateLobbyCmd `json:"lobbies"`
 }
 
+// ListBotsCmd asks Go to report every bot's live status so Node can reconcile
+// its DB before picking a bot for a lobby (avoids assigning a stale/offline one).
+type ListBotsCmd struct{}
+
 // Events (Go → Node)
 type BotStatusEvent struct {
 	BotID        string `json:"botId"`
@@ -196,4 +200,15 @@ type LobbyTeamIdsEvent struct {
 type LobbyErrorEvent struct {
 	LobbyID string `json:"lobbyId"`
 	Error   string `json:"error"`
+}
+
+// BotInfo / BotsListEvent are the response to ListBotsCmd: the live status of
+// every bot the Go service currently holds.
+type BotInfo struct {
+	BotID  string `json:"botId"`
+	Status string `json:"status"`
+}
+
+type BotsListEvent struct {
+	Bots []BotInfo `json:"bots"`
 }

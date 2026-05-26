@@ -27,6 +27,7 @@ class BotPool {
     this.botLogs = new Map() // botId -> [{ time, message }]
     this.lobbyTeamIds = new Map() // lobbyId -> { radiant, dire }
     this._matchDetailsPending = new Map() // matchId -> { resolve, reject, timer }
+    this._botsListPending = null // single resolver for an in-flight list_bots request
   }
 
   async init(io, wss) {
@@ -96,6 +97,10 @@ class BotPool {
 
         case 'bot_status':
           await this._onBotStatus(data)
+          break
+
+        case 'bots_list':
+          this._onBotsList(data)
           break
 
         case 'bot_log':
@@ -258,6 +263,51 @@ class BotPool {
         console.error(`[Bot ${botId}] Failed to re-sync lobbies:`, e.message)
       }
     }
+  }
+
+  // Response to a list_bots request — resolve the pending sync promise.
+  _onBotsList(data) {
+    const resolve = this._botsListPending
+    this._botsListPending = null
+    if (resolve) resolve(Array.isArray(data?.bots) ? data.bots : [])
+  }
+
+  // Ask Go for every bot's LIVE status and write it into lobby_bots, so the
+  // DB can't hand out a bot Go can't actually host. Routed through _onBotStatus
+  // so the busy-with-active-lobby guard still applies (no double-booking).
+  // Best-effort: if Go is unreachable or slow, we fall back to the cached DB.
+  async _syncBotStatusesFromGo() {
+    if (!this.goWs || this.goWs.readyState !== 1) return
+    const bots = await new Promise((resolve) => {
+      const timer = setTimeout(() => { this._botsListPending = null; resolve(null) }, 3000)
+      this._botsListPending = (list) => { clearTimeout(timer); resolve(list) }
+      try {
+        this._sendToGo('list_bots', {})
+      } catch {
+        clearTimeout(timer); this._botsListPending = null; resolve(null)
+      }
+    })
+    if (!Array.isArray(bots)) return
+    for (const b of bots) {
+      try { await this._onBotStatus({ botId: b.botId, status: b.status }) } catch {}
+    }
+  }
+
+  // Pick a live-available bot id, reconciling against Go first so we never
+  // assign a stale/offline bot. If none are available, kick a reconnect of any
+  // offline/errored bots ("restart") and fail this attempt with a clear message
+  // — the next attempt picks them up once they're back.
+  async _findAvailableBotId({ excludeBotId = null } = {}) {
+    await this._syncBotStatusesFromGo().catch(() => {})
+    const row = excludeBotId
+      ? await queryOne("SELECT id FROM lobby_bots WHERE status = 'available' AND id <> $1 ORDER BY last_used_at NULLS FIRST LIMIT 1", [excludeBotId])
+      : await queryOne("SELECT id FROM lobby_bots WHERE status = 'available' ORDER BY last_used_at NULLS FIRST LIMIT 1")
+    if (row) return row.id
+    let restarted = 0
+    try { restarted = (await this.connectAllBots()).count } catch {}
+    throw new Error(restarted > 0
+      ? `No bots available — restarting ${restarted} offline bot(s), try again in a moment`
+      : 'No bots available')
   }
 
   _onMatchDetails(data) {
@@ -1618,9 +1668,10 @@ class BotPool {
       [matchId, gameNumber]
     )
 
-    // Find available bot
-    const availableBot = await queryOne("SELECT id FROM lobby_bots WHERE status = 'available' ORDER BY last_used_at NULLS FIRST LIMIT 1")
-    if (!availableBot) throw new Error('No available bots')
+    // Pick a bot from Go's LIVE state (reconciles the DB first so we never
+    // assign a stale/offline bot; restarts offline bots if none are available).
+    // Keep the { id } shape so the rest of the flow is unchanged.
+    const availableBot = { id: await this._findAvailableBotId() }
 
     // Resolve players
     const match = await queryOne(`
@@ -1779,9 +1830,10 @@ class BotPool {
       [matchId, gameNumber]
     )
 
-    // Find available bot
-    const availableBot = await queryOne("SELECT id FROM lobby_bots WHERE status = 'available' ORDER BY last_used_at NULLS FIRST LIMIT 1")
-    if (!availableBot) throw new Error('No available bots')
+    // Pick a bot from Go's LIVE state (reconciles the DB first so we never
+    // assign a stale/offline bot; restarts offline bots if none are available).
+    // Keep the { id } shape so the rest of the flow is unchanged.
+    const availableBot = { id: await this._findAvailableBotId() }
 
     // Get pool settings
     const pool = await queryOne('SELECT * FROM queue_pools WHERE id = $1', [poolId])
