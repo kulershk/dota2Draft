@@ -339,12 +339,23 @@ function closeReport() {
                   <span v-if="game.duration_minutes" class="text-xs text-muted-foreground flex items-center gap-1">
                     <Clock class="w-3 h-3" /> {{ game.duration_minutes }}m
                   </span>
-                  <a v-if="game.dotabuff_id"
-                    :href="`https://www.opendota.com/matches/${game.dotabuff_id}`"
-                    target="_blank" @click.stop
-                    class="flex items-center gap-1 text-xs text-primary hover:underline">
-                    OpenDota <ExternalLink class="w-3 h-3" />
-                  </a>
+                  <div v-if="game.dotabuff_id" class="flex items-center gap-3">
+                    <a :href="`https://www.dotabuff.com/matches/${game.dotabuff_id}`"
+                      target="_blank" rel="noopener noreferrer" @click.stop
+                      class="flex items-center gap-1 text-xs text-primary hover:underline">
+                      Dotabuff <ExternalLink class="w-3 h-3" />
+                    </a>
+                    <a :href="`https://www.opendota.com/matches/${game.dotabuff_id}`"
+                      target="_blank" rel="noopener noreferrer" @click.stop
+                      class="flex items-center gap-1 text-xs text-primary hover:underline">
+                      OpenDota <ExternalLink class="w-3 h-3" />
+                    </a>
+                    <a :href="`https://stratz.com/matches/${game.dotabuff_id}`"
+                      target="_blank" rel="noopener noreferrer" @click.stop
+                      class="flex items-center gap-1 text-xs text-primary hover:underline">
+                      Stratz <ExternalLink class="w-3 h-3" />
+                    </a>
+                  </div>
                   <ChevronDown v-if="game.has_stats || game.dotabuff_id" class="w-4 h-4 text-muted-foreground transition-transform" :class="expandedGame === game.game_number ? 'rotate-180' : ''" />
                 </div>
               </button>
