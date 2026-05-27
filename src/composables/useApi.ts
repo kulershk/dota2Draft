@@ -660,14 +660,22 @@ export function useApi() {
     getAdminSubscriptionPlans: () => request('/api/admin/subscription-plans'),
     createSubscriptionPlan: (data: {
       name: string; slug?: string; description?: string | null;
-      price_cents?: number; currency?: string; perks?: any;
+      price_cents?: number; currency?: string;
+      price_dotacoins?: number; duration_days?: number; perks?: any;
       is_active?: boolean; sort_order?: number;
     }) => request('/api/admin/subscription-plans', { method: 'POST', body: JSON.stringify(data) }),
     updateSubscriptionPlan: (id: number, data: {
       name?: string; slug?: string; description?: string | null;
-      price_cents?: number; currency?: string; perks?: any;
+      price_cents?: number; currency?: string;
+      price_dotacoins?: number; duration_days?: number; perks?: any;
       is_active?: boolean; sort_order?: number;
     }) => request(`/api/admin/subscription-plans/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+    // Self-serve subscription (dotacoins): the /subscription page
+    getMySubscription: () => request('/api/me/subscription'),
+    subscribeWithDotacoins: (planId: number) =>
+      request('/api/me/subscription', { method: 'POST', body: JSON.stringify({ plan_id: planId }) }),
+    cancelMySubscription: () => request('/api/me/subscription', { method: 'DELETE' }),
     deleteSubscriptionPlan: (id: number) =>
       request(`/api/admin/subscription-plans/${id}`, { method: 'DELETE' }),
     getSubscriptionPlanSubscribers: (id: number) =>

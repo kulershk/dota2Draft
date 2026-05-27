@@ -13,6 +13,8 @@ interface Plan {
   description: string | null
   price_cents: number
   currency: string
+  price_dotacoins: number
+  duration_days: number
   perks: Record<string, any>
   badge_url: string | null
   is_active: boolean
@@ -75,6 +77,8 @@ const planForm = ref({
   description: '',
   price_cents: 0,
   currency: 'EUR',
+  price_dotacoins: 0,
+  duration_days: 30,
   is_active: true,
   sort_order: 0,
   perks: {} as Record<string, boolean | number>,
@@ -132,7 +136,7 @@ function perksToForm(plan?: Plan): Record<string, boolean | number> {
 
 function openCreate() {
   editingPlan.value = null
-  planForm.value = { name: '', slug: '', description: '', price_cents: 0, currency: 'EUR', is_active: true, sort_order: nextSortOrder(), perks: perksToForm() }
+  planForm.value = { name: '', slug: '', description: '', price_cents: 0, currency: 'EUR', price_dotacoins: 0, duration_days: 30, is_active: true, sort_order: nextSortOrder(), perks: perksToForm() }
   badgeFile.value = null
   badgePreviewUrl.value = null
   error.value = ''
@@ -154,6 +158,8 @@ function openEdit(plan: Plan) {
     description: plan.description || '',
     price_cents: plan.price_cents,
     currency: plan.currency,
+    price_dotacoins: plan.price_dotacoins || 0,
+    duration_days: plan.duration_days || 30,
     is_active: plan.is_active,
     sort_order: plan.sort_order,
     perks: perksToForm(plan),
@@ -209,6 +215,8 @@ async function savePlan() {
     description: planForm.value.description.trim() || null,
     price_cents: Math.max(0, Math.floor(Number(planForm.value.price_cents) || 0)),
     currency: planForm.value.currency.trim() || 'EUR',
+    price_dotacoins: Math.max(0, Math.floor(Number(planForm.value.price_dotacoins) || 0)),
+    duration_days: Math.max(1, Math.floor(Number(planForm.value.duration_days) || 30)),
     is_active: planForm.value.is_active,
     sort_order: Math.floor(Number(planForm.value.sort_order) || 0),
     perks,
@@ -372,6 +380,9 @@ onUnmounted(() => {
                 <span class="text-sm font-semibold text-foreground">{{ plan.name }}</span>
                 <span class="text-xs text-muted-foreground font-mono">{{ plan.slug }}</span>
                 <span class="text-xs font-mono text-cyan-400">{{ fmtPrice(plan.price_cents, plan.currency) }}</span>
+                <span v-if="plan.price_dotacoins > 0" class="text-xs font-mono text-amber-400">
+                  {{ plan.price_dotacoins.toLocaleString() }} {{ t('dotacoins') }} / {{ plan.duration_days }}d
+                </span>
                 <span class="text-xs font-mono text-muted-foreground">{{ t('subscriptionPlanSort') }}: {{ plan.sort_order }}</span>
                 <span v-if="!plan.is_active" class="text-xs px-1.5 py-0.5 rounded bg-muted/40 text-muted-foreground uppercase font-mono">{{ t('subscriptionPlanInactive') }}</span>
                 <button
@@ -482,6 +493,22 @@ onUnmounted(() => {
             :model-value="planForm.currency"
             placeholder="EUR"
             @update:model-value="planForm.currency = $event"
+          />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <InputGroup
+            :label="t('subscriptionPlanPriceDotacoins')"
+            type="number"
+            :model-value="String(planForm.price_dotacoins)"
+            :hint="t('subscriptionPlanPriceDotacoinsHint')"
+            @update:model-value="planForm.price_dotacoins = Number($event) || 0"
+          />
+          <InputGroup
+            :label="t('subscriptionPlanDurationDays')"
+            type="number"
+            :model-value="String(planForm.duration_days)"
+            :hint="t('subscriptionPlanDurationDaysHint')"
+            @update:model-value="planForm.duration_days = Number($event) || 30"
           />
         </div>
         <InputGroup

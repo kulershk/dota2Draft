@@ -56,6 +56,7 @@ import { queryOne } from './db.js'
 import { initSocket, setSocketsEnabled } from './socket/index.js'
 import { setLivePollerIo, resumeActiveMatches as resumeLivePolling } from './services/liveMatchPoller.js'
 import { startFridayBonusScheduler } from './services/inhouseFridayBonus.js'
+import { runDotacoinRenewals } from './services/subscriptionRenewal.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -244,6 +245,14 @@ initDb().then(async () => {
     return { ok: true }
   })
   registerSchedule('cleanup_stuck_connecting_bots', { everyMs: 60_000 })
+
+  // Re-charge dotacoins-funded subscriptions whose period has ended, and lapse
+  // the ones that ran out of auto-renew or balance. Hourly is plenty for a
+  // 30-day cadence; the job only acts on subs already past expires_at.
+  registerHandler('renew_dotacoin_subscriptions', async () => {
+    return await runDotacoinRenewals(io)
+  })
+  registerSchedule('renew_dotacoin_subscriptions', { everyMs: 60 * 60_000 })
 
   // ── Per-game stat fetching with tiered polling ──
   // Phase 1 (fetch_match_stats): GC every 60s until winner resolved

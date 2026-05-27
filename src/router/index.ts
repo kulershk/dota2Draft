@@ -54,6 +54,7 @@ const router = createRouter({
     { path: '/matches', name: 'matches', component: () => import('@/pages/MatchesPage.vue') },
     { path: '/how-it-works', name: 'how-it-works', component: () => import('@/pages/HowItWorksPage.vue') },
     { path: '/settings', name: 'settings', component: () => import('@/pages/SettingsPage.vue') },
+    { path: '/subscription', name: 'subscription', component: () => import('@/pages/SubscriptionPage.vue') },
     { path: '/news', name: 'news', component: () => import('@/pages/NewsPage.vue') },
     { path: '/news/:id', name: 'news-post', component: () => import('@/pages/NewsPostPage.vue') },
     { path: '/queue', name: 'queue', component: () => import('@/pages/QueuePage.vue') },

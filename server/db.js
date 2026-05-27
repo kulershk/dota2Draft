@@ -28,6 +28,27 @@ export async function execute(sql, params = []) {
   return await pool.query(sql, params)
 }
 
+// Run `fn` inside a single transaction on one dedicated pooled client.
+// Use this (NOT bare execute('BEGIN')/execute('COMMIT')) whenever multiple
+// writes must be atomic: query()/queryOne()/execute() each check out a
+// *different* client from the pool, so a BEGIN/COMMIT spread across them is
+// not actually one transaction. `fn` receives the client — run every
+// statement of the unit of work through it (client.query(...)).
+export async function withTransaction(fn) {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const result = await fn(client)
+    await client.query('COMMIT')
+    return result
+  } catch (e) {
+    try { await client.query('ROLLBACK') } catch {}
+    throw e
+  } finally {
+    client.release()
+  }
+}
+
 export async function initDb() {
   // ─── Core tables ───────────────────────────────────────
   await pool.query(`
@@ -1372,6 +1393,14 @@ export async function initDb() {
   // Migration for DBs that already have the table without badge_url.
   try { await execute(`ALTER TABLE subscription_plans ADD COLUMN badge_url TEXT NULL`) } catch {}
 
+  // Self-serve purchase with the in-site "dotacoins" currency. A plan is
+  // offered on the player-facing /subscription page when is_active = TRUE AND
+  // price_dotacoins > 0; leaving price at 0 keeps the plan admin-assign-only.
+  // duration_days is the auto-renew cadence — the renew_dotacoin_subscriptions
+  // job re-charges price_dotacoins every duration_days for auto-renewing subs.
+  try { await execute(`ALTER TABLE subscription_plans ADD COLUMN price_dotacoins INTEGER NOT NULL DEFAULT 0`) } catch {}
+  try { await execute(`ALTER TABLE subscription_plans ADD COLUMN duration_days INTEGER NOT NULL DEFAULT 30`) } catch {}
+
   // Admin-managed catalogue of avatar decorations (crowns, sunglasses, …) that
   // subscribers with the avatar_decoration perk can wear on their avatar. The
   // image is a square transparent PNG overlaid on top of the avatar.
@@ -1543,6 +1572,14 @@ export async function initDb() {
   }
   try { await execute(`CREATE INDEX IF NOT EXISTS user_subscriptions_plan_idx ON user_subscriptions (plan_id)`) } catch {}
   try { await execute(`CREATE INDEX IF NOT EXISTS user_subscriptions_player_idx ON user_subscriptions (player_id)`) } catch {}
+
+  // Auto-renew flag — TRUE only on dotacoins-funded subs bought via
+  // POST /api/me/subscription. The renew_dotacoin_subscriptions job re-charges
+  // the plan's price_dotacoins each period for these; cancelling via
+  // DELETE /api/me/subscription flips it FALSE so the sub simply lapses (status
+  // -> 'expired') once expires_at passes. Manual admin rows keep the FALSE
+  // default so the renewal job never touches them.
+  try { await execute(`ALTER TABLE user_subscriptions ADD COLUMN auto_renew BOOLEAN NOT NULL DEFAULT FALSE`) } catch {}
 }
 
 async function createFreshCompetitionTables() {

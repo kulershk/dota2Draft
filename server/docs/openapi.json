@@ -1748,6 +1748,8 @@
                       "description": { "type": "string", "nullable": true },
                       "price_cents": { "type": "integer" },
                       "currency": { "type": "string" },
+                      "price_dotacoins": { "type": "integer", "description": "Cost per period in dotacoins; >0 means buyable on /subscription" },
+                      "duration_days": { "type": "integer", "description": "Auto-renew period length in days" },
                       "perks": { "type": "object" },
                       "sort_order": { "type": "integer" }
                     }
@@ -1756,6 +1758,94 @@
               }
             }
           }
+        }
+      }
+    },
+    "/api/me/subscription": {
+      "get": {
+        "tags": ["Subscription Plans"],
+        "summary": "Get my active subscription + dotacoins balance",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Self-serve. Returns the caller's active subscription (with auto_renew, expires_at, and the plan's price_dotacoins/duration_days) or null, plus their current dotacoins balance.",
+        "responses": {
+          "200": {
+            "description": "Active subscription summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "subscription": { "type": "object", "nullable": true },
+                    "dotacoins": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Not authenticated" }
+        }
+      },
+      "post": {
+        "tags": ["Subscription Plans"],
+        "summary": "Subscribe to a plan with dotacoins",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Self-serve. Charges the plan's price_dotacoins up front (atomic, audited in dotacoin_transactions), cancels any prior active subscription, and inserts a new auto-renewing row (source='dotacoins', expires_at=NOW()+duration_days). Grants the Subscriber Discord role.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["plan_id"],
+                "properties": { "plan_id": { "type": "integer" } }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Subscribed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "dotacoins": { "type": "integer", "description": "New balance after the charge" },
+                    "subscription": { "type": "object" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "plan_id missing, plan not purchasable with dotacoins, or insufficient dotacoins" },
+          "401": { "description": "Not authenticated" },
+          "404": { "description": "Plan not available" },
+          "409": { "description": "Already subscribed to this plan" }
+        }
+      },
+      "delete": {
+        "tags": ["Subscription Plans"],
+        "summary": "Cancel auto-renew on my subscription",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Self-serve. Turns off auto_renew on the caller's active dotacoins subscription; access (and perks) continue until the current period's expires_at, after which the renewal job lapses it. No refund.",
+        "responses": {
+          "200": {
+            "description": "Auto-renew disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "expires_at": { "type": "string", "format": "date-time", "nullable": true }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Not authenticated" },
+          "404": { "description": "No active dotacoins subscription to cancel" },
+          "409": { "description": "Auto-renew is already off" }
         }
       }
     },
@@ -1784,6 +1874,8 @@
                   "description": { "type": "string", "nullable": true },
                   "price_cents": { "type": "integer", "default": 0 },
                   "currency": { "type": "string", "default": "EUR" },
+                  "price_dotacoins": { "type": "integer", "default": 0, "description": "Dotacoins charged per period; >0 makes the plan self-purchasable" },
+                  "duration_days": { "type": "integer", "default": 30, "description": "Auto-renew period length in days (min 1)" },
                   "perks": { "type": "object", "default": {} },
                   "is_active": { "type": "boolean", "default": true },
                   "sort_order": { "type": "integer", "default": 0 }
@@ -1816,6 +1908,8 @@
                   "description": { "type": "string", "nullable": true },
                   "price_cents": { "type": "integer" },
                   "currency": { "type": "string" },
+                  "price_dotacoins": { "type": "integer" },
+                  "duration_days": { "type": "integer" },
                   "perks": { "type": "object" },
                   "is_active": { "type": "boolean" },
                   "sort_order": { "type": "integer" }

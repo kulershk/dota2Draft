@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { User, X, Settings, Shield, LogOut, ChevronRight, BadgeCheck, Sun, Moon } from 'lucide-vue-next'
+import { User, X, Settings, Shield, LogOut, ChevronRight, BadgeCheck, Sun, Moon, Crown } from 'lucide-vue-next'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { useSidePanels } from '@/composables/useSidePanels'
 import { useTheme } from '@/composables/useTheme'
@@ -119,6 +119,19 @@ function logout() {
               <Settings class="w-[14px] h-[14px]" style="color:#22D3EE" />
             </span>
             <span class="flex-1 text-left text-[13px] font-semibold" style="color:#F1F5F9">{{ t('settingsTitle') }}</span>
+            <ChevronRight class="w-3.5 h-3.5" style="color:#475569" />
+          </button>
+
+          <button class="profile-row" @click="go('/subscription')">
+            <span class="profile-row-icon">
+              <Crown class="w-[14px] h-[14px]" style="color:#FACC15" />
+            </span>
+            <span class="flex-1 text-left text-[13px] font-semibold" style="color:#F1F5F9">{{ t('subscriptionMenu') }}</span>
+            <span
+              v-if="user.subscription"
+              class="text-[10px] font-bold px-1.5 py-0.5 rounded mr-1"
+              style="background:rgba(250,204,21,0.15);color:#FACC15"
+            >{{ user.subscription.plan_name }}</span>
             <ChevronRight class="w-3.5 h-3.5" style="color:#475569" />
           </button>
 
