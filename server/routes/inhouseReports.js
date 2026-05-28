@@ -729,5 +729,61 @@ export default function createInhouseReportsRouter(io) {
     }
   })
 
+  // ── Admin: manually add a strike to a player (with a reason) ──
+  // body: { kind: 'toxic'|'grief', amount?: number (default 1), reason: string }
+  // Bumps the chosen strike counter, resets that kind's clean-games-since-last-
+  // strike (so a freshly-added strike doesn't immediately decay), logs the
+  // change to inhouse_strike_log with a positive delta + the admin's reason, and
+  // notifies the player. Unlike report approval this does NOT insert a queue ban
+  // (use the queue ban tools for that) or touch the toxic threshold-fired
+  // history — it's a direct, manual strike outside the report/threshold flow.
+  router.post('/api/admin/inhouse/players/:id/add-strike', async (req, res) => {
+    const admin = await getAuthPlayer(req)
+    if (!admin) return res.status(401).json({ error: 'Not authenticated' })
+    const allowed = admin.is_admin || await hasPermission(admin, 'review_grief_reports')
+    if (!allowed) return res.status(403).json({ error: 'Permission denied' })
+    const playerId = Number(req.params.id)
+    const kind = (req.body?.kind || '').toString()
+    if (kind !== 'toxic' && kind !== 'grief') return res.status(400).json({ error: "kind must be 'toxic' or 'grief'" })
+    const amount = Math.max(1, Math.min(100, Math.trunc(Number(req.body?.amount) || 1)))
+    const reason = (req.body?.reason || '').toString().trim().slice(0, 500)
+    if (!reason) return res.status(400).json({ error: 'A reason is required' })
+    const strikeCol = kind === 'toxic' ? 'toxic_strikes' : 'grief_strikes'
+    const cleanCol = kind === 'toxic' ? 'toxic_clean_games_since_last_strike' : 'grief_clean_games_since_last_strike'
+
+    const client = await pgPool.connect()
+    try {
+      await client.query('BEGIN')
+      const player = (await client.query(`SELECT id, ${strikeCol} AS strikes FROM players WHERE id = $1 FOR UPDATE`, [playerId])).rows[0]
+      if (!player) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Player not found' }) }
+      const newStrikes = (Number(player.strikes) || 0) + amount
+      await client.query(`UPDATE players SET ${strikeCol} = $1, ${cleanCol} = 0 WHERE id = $2`, [newStrikes, playerId])
+      await client.query(
+        `INSERT INTO inhouse_strike_log (player_id, kind, delta, reason, applied_by)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [playerId, kind, amount, reason, admin.id]
+      )
+      const notificationId = await _insertStrikeNotification(client, {
+        playerId,
+        type: kind === 'toxic' ? 'inhouse_strike_toxic' : 'inhouse_strike_grief',
+        title: `${kind === 'toxic' ? 'Toxic' : 'Grief'} strike +${amount}`,
+        body: `An admin added ${amount} ${kind} strike${amount === 1 ? '' : 's'}. You now have ${newStrikes} ${kind} strike${newStrikes === 1 ? '' : 's'}. Reason: "${reason}"`,
+        link: '/queue',
+        byAdminId: admin.id,
+      })
+      await client.query('COMMIT')
+
+      io.to(`user:${playerId}`).emit('inhouse:strikeApplied', { kind, newStrikes, strikeDelta: amount })
+      io.to(`user:${playerId}`).emit('notification:new', { id: notificationId })
+      res.json({ ok: true, kind, newStrikes, added: amount })
+    } catch (e) {
+      try { await client.query('ROLLBACK') } catch {}
+      console.error('[inhouse add-strike]', e)
+      res.status(500).json({ error: e.message })
+    } finally {
+      client.release()
+    }
+  })
+
   return router
 }

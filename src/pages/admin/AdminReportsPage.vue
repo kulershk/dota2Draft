@@ -5,10 +5,10 @@
 //   * Grief reports — captain-filed, with Approve / Reject buttons.
 //   * Strike log — every ±strike including decays.
 // Permission gate: review_grief_reports (matches the original grief page).
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { Check, X, Loader2, AlertTriangle, Flag, Users } from 'lucide-vue-next'
+import { Check, X, Loader2, AlertTriangle, Flag, Users, Plus, Search, BadgeCheck } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 
@@ -215,6 +215,67 @@ async function submitLift() {
   }
 }
 
+// ── Add-strike modal (manual strike with a reason, no report needed) ──
+interface PlayerSearchResult { id: number; name: string; display_name?: string | null; avatar_url?: string | null; steam_id?: string | null }
+const addModal = ref<{ open: boolean; kind: 'toxic' | 'grief'; amount: number; reason: string }>({
+  open: false, kind: 'toxic', amount: 1, reason: '',
+})
+const addPlayerQuery = ref('')
+const addPlayerResults = ref<PlayerSearchResult[]>([])
+const addPlayerSearching = ref(false)
+const addSelectedPlayer = ref<PlayerSearchResult | null>(null)
+const addSubmitting = ref(false)
+const addError = ref<string | null>(null)
+let addSearchTimer: ReturnType<typeof setTimeout> | null = null
+
+function openAddStrike() {
+  addModal.value = { open: true, kind: 'toxic', amount: 1, reason: '' }
+  addPlayerQuery.value = ''
+  addPlayerResults.value = []
+  addSelectedPlayer.value = null
+  addError.value = null
+}
+function closeAddStrike() {
+  addModal.value = { ...addModal.value, open: false }
+}
+watch(addPlayerQuery, (q) => {
+  if (addSearchTimer) clearTimeout(addSearchTimer)
+  if (addSelectedPlayer.value) return
+  if (!q || q.trim().length < 2) { addPlayerResults.value = []; return }
+  addSearchTimer = setTimeout(async () => {
+    addPlayerSearching.value = true
+    try { addPlayerResults.value = await api.searchPlayers(q.trim()) }
+    catch { addPlayerResults.value = [] }
+    finally { addPlayerSearching.value = false }
+  }, 250)
+})
+function selectAddPlayer(p: PlayerSearchResult) {
+  addSelectedPlayer.value = p
+  addPlayerQuery.value = p.display_name || p.name
+  addPlayerResults.value = []
+}
+async function submitAddStrike() {
+  if (addSubmitting.value) return
+  if (!addSelectedPlayer.value) { addError.value = t('reportsAddStrikePickPlayer'); return }
+  const reason = addModal.value.reason.trim()
+  if (!reason) { addError.value = t('reportsAddStrikeReasonRequired'); return }
+  addSubmitting.value = true
+  addError.value = null
+  try {
+    await api.addStrike(addSelectedPlayer.value.id, {
+      kind: addModal.value.kind,
+      amount: Math.max(1, Math.trunc(Number(addModal.value.amount)) || 1),
+      reason,
+    })
+    closeAddStrike()
+    await load()
+  } catch (e: any) {
+    addError.value = e?.message || 'Action failed'
+  } finally {
+    addSubmitting.value = false
+  }
+}
+
 function fmtTime(iso: string | null): string {
   if (!iso) return '—'
   return new Date(iso).toLocaleString()
@@ -242,13 +303,20 @@ function openMatch(queueMatchId: number | null) {
 }
 
 onMounted(load)
+onUnmounted(() => { if (addSearchTimer) clearTimeout(addSearchTimer) })
 </script>
 
 <template>
   <div class="p-4 md:p-8 md:px-10 flex flex-col gap-4 md:gap-6 max-w-[var(--admin-content-max,1200px)] w-full">
-    <div>
-      <h1 class="text-2xl font-semibold text-foreground">{{ t('adminReportsTitle') }}</h1>
-      <p class="text-sm text-muted-foreground mt-1">{{ t('adminReportsDesc') }}</p>
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <h1 class="text-2xl font-semibold text-foreground">{{ t('adminReportsTitle') }}</h1>
+        <p class="text-sm text-muted-foreground mt-1">{{ t('adminReportsDesc') }}</p>
+      </div>
+      <button class="btn-primary text-sm shrink-0" @click="openAddStrike">
+        <Plus class="w-4 h-4" />
+        {{ t('reportsAddStrike') }}
+      </button>
     </div>
 
     <!-- Top tabs: kind of record -->
@@ -586,6 +654,89 @@ onMounted(load)
         <button type="button" class="btn-primary flex items-center gap-2" :disabled="liftSubmitting" @click="submitLift">
           <Loader2 v-if="liftSubmitting" class="w-3.5 h-3.5 animate-spin" />
           {{ t('reportsLiftAction') }}
+        </button>
+      </div>
+    </ModalOverlay>
+
+    <!-- Add-strike modal -->
+    <ModalOverlay :show="addModal.open" @close="closeAddStrike">
+      <div class="px-6 py-5 border-b border-border">
+        <h2 class="text-base font-semibold">{{ t('reportsAddStrikeTitle') }}</h2>
+      </div>
+      <div class="px-6 py-5 flex flex-col gap-4">
+        <!-- Player search -->
+        <div class="flex flex-col gap-1.5 relative">
+          <label class="text-xs font-medium text-muted-foreground">{{ t('reportsAddStrikePlayer') }}</label>
+          <div class="relative">
+            <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <input
+              v-model="addPlayerQuery"
+              type="text"
+              class="input-field pl-8 w-full"
+              :placeholder="t('searchPlayers')"
+              :disabled="addSubmitting"
+              @focus="addSelectedPlayer = null"
+            />
+          </div>
+          <div v-if="addPlayerResults.length && !addSelectedPlayer" class="absolute z-10 left-0 right-0 top-full mt-1 max-h-56 overflow-y-auto rounded border border-border bg-card shadow-lg">
+            <button
+              v-for="p in addPlayerResults" :key="p.id"
+              type="button"
+              class="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-accent/30 transition-colors"
+              @click="selectAddPlayer(p)"
+            >
+              <img v-if="p.avatar_url" :src="p.avatar_url" class="w-6 h-6 rounded-full object-cover" />
+              <div v-else class="w-6 h-6 rounded-full bg-accent" />
+              <span class="text-sm truncate">{{ p.display_name || p.name }}</span>
+              <BadgeCheck v-if="p.steam_id" class="w-3 h-3 text-cyan-400 shrink-0" />
+            </button>
+          </div>
+          <p v-if="addPlayerSearching" class="text-[11px] text-muted-foreground">{{ t('loading') }}…</p>
+        </div>
+
+        <!-- Kind + amount -->
+        <div class="grid grid-cols-2 gap-3">
+          <div class="flex flex-col gap-1.5">
+            <label class="text-xs font-medium text-muted-foreground">{{ t('reportsAddStrikeKind') }}</label>
+            <div class="flex gap-1">
+              <button
+                type="button"
+                class="flex-1 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors"
+                :class="addModal.kind === 'toxic' ? 'bg-amber-500/20 text-amber-400' : 'bg-accent/40 text-muted-foreground hover:text-foreground'"
+                @click="addModal.kind = 'toxic'"
+              >{{ t('reportsKindToxic') }}</button>
+              <button
+                type="button"
+                class="flex-1 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors"
+                :class="addModal.kind === 'grief' ? 'bg-rose-500/20 text-rose-400' : 'bg-accent/40 text-muted-foreground hover:text-foreground'"
+                @click="addModal.kind = 'grief'"
+              >{{ t('reportsKindGrief') }}</button>
+            </div>
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <label class="text-xs font-medium text-muted-foreground">{{ t('reportsAddStrikeAmount') }}</label>
+            <input v-model.number="addModal.amount" type="number" min="1" max="100" class="input-field w-full" :disabled="addSubmitting" />
+          </div>
+        </div>
+
+        <!-- Reason -->
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-medium text-muted-foreground">{{ t('reportsAddStrikeReason') }}</label>
+          <textarea
+            v-model="addModal.reason"
+            class="input-field w-full min-h-[80px] resize-y"
+            :placeholder="t('reportsAddStrikeReasonPlaceholder')"
+            :disabled="addSubmitting"
+          />
+        </div>
+
+        <div v-if="addError" class="text-xs text-destructive bg-destructive/10 border border-destructive/30 rounded-md px-3 py-2">{{ addError }}</div>
+      </div>
+      <div class="px-6 py-4 border-t border-border flex justify-end gap-2">
+        <button type="button" class="btn-outline" :disabled="addSubmitting" @click="closeAddStrike">{{ t('cancel') }}</button>
+        <button type="button" class="btn-primary flex items-center gap-2" :disabled="addSubmitting" @click="submitAddStrike">
+          <Loader2 v-if="addSubmitting" class="w-3.5 h-3.5 animate-spin" />
+          {{ t('reportsAddStrikeSubmit') }}
         </button>
       </div>
     </ModalOverlay>

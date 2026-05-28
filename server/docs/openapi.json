@@ -4523,6 +4523,32 @@
           }
         }
       },
+      "/api/admin/inhouse/players/{id}/add-strike": {
+        "post": {
+          "tags": ["Inhouse"],
+          "summary": "Manually add a strike to a player (with a reason)",
+          "description": "Adds `amount` (default 1) to the chosen strike counter (toxic or grief), resets that kind's clean-games-since-last-strike counter, logs the change to inhouse_strike_log with a positive delta + the supplied reason (kind 'toxic'/'grief'), and notifies the player (the reason is included in the notification). Unlike report approval this does NOT insert a queue ban or touch the toxic threshold-fired history. Requires `review_grief_reports`.",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+          "requestBody": {
+            "required": true,
+            "content": { "application/json": { "schema": {
+              "type": "object",
+              "required": ["kind", "reason"],
+              "properties": {
+                "kind": { "type": "string", "enum": ["toxic", "grief"] },
+                "amount": { "type": "integer", "minimum": 1, "maximum": 100, "default": 1 },
+                "reason": { "type": "string", "maxLength": 500, "description": "Why the strike is added; shown to the player in the notification" }
+              }
+            } } }
+          },
+          "responses": {
+            "200": { "description": "{ ok, kind, newStrikes, added }" },
+            "400": { "description": "kind must be toxic or grief, or reason missing" },
+            "404": { "description": "Player not found" }
+          }
+        }
+      },
       "/api/admin/inhouse/grief-reports": {
         "get": {
           "tags": ["Inhouse"],
