@@ -1906,6 +1906,8 @@ export default {
   queueDeclineBanMinutes: 'Decline ban (minutes)',
   queueAdminBanDisabled: 'disabled',
   queueMatchFound: 'Match Found!',
+  matchFoundNotifyTitle: 'Match found!',
+  matchFoundNotifyBody: 'Click Accept to confirm your match.',
   queueAccept: 'Accept',
   queueAccepted: 'Accepted — waiting for others...',
   queueDecline: 'Decline',

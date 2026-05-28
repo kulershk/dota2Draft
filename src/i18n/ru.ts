@@ -1826,6 +1826,8 @@ export default {
   queueDeclineBanMinutes: 'Бан за отклонение (минуты)',
   queueAdminBanDisabled: 'отключено',
   queueMatchFound: 'Матч найден!',
+  matchFoundNotifyTitle: 'Матч найден!',
+  matchFoundNotifyBody: 'Нажмите «Принять», чтобы подтвердить матч.',
   queueAccept: 'Принять',
   queueAccepted: 'Принято — ожидание остальных...',
   queueDecline: 'Отклонить',

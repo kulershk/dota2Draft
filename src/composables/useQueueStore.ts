@@ -1,6 +1,7 @@
 import { ref, computed, watch } from 'vue'
 import { getSocket } from './useSocket'
 import { useApi } from './useApi'
+import { fireMatchFoundAlert, requestMatchNotifyPermission, unlockMatchAudio } from './useMatchAlert'
 
 export interface QueuePlayer {
   playerId: number
@@ -227,6 +228,10 @@ function initSocket() {
     readyCheckFailed.value = null
     inQueue.value = false
     cancelled.value = null
+    // Desktop notification (when the tab isn't focused) + sound cue so a player
+    // who tabbed away doesn't miss the ~20s accept window. Deduped per ready
+    // check so a reconnect-rehydrate doesn't double-alert.
+    fireMatchFoundAlert(data.readyCheckId)
   })
 
   socket.on('queue:readyCheckUpdate', (data: {
@@ -437,6 +442,10 @@ export function useQueueStore() {
   }
 
   function joinQueue(poolId: number) {
+    // Joining is a user gesture — use it to unlock audio + ask for notification
+    // permission so a later ready check can alert even when the tab is unfocused.
+    requestMatchNotifyPermission()
+    unlockMatchAudio()
     currentPoolId.value = poolId
     const p = pools.value.find(x => x.id === poolId)
     if (p) currentPoolName.value = p.name

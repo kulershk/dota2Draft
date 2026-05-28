@@ -1895,6 +1895,8 @@ export default {
   queueDeclineBanMinutes: 'Atmetimo blokavimas (minutės)',
   queueAdminBanDisabled: 'išjungta',
   queueMatchFound: 'Rungtynės rastos!',
+  matchFoundNotifyTitle: 'Rungtynės rastos!',
+  matchFoundNotifyBody: 'Spustelėk Priimti, kad patvirtintum rungtynes.',
   queueAccept: 'Priimti',
   queueAccepted: 'Priimta — laukiame kitų...',
   queueDecline: 'Atmesti',

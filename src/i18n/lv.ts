@@ -1895,6 +1895,8 @@ export default {
   queueDeclineBanMinutes: 'Atteikuma bans (minūtes)',
   queueAdminBanDisabled: 'izslēgts',
   queueMatchFound: 'Spēle atrasta!',
+  matchFoundNotifyTitle: 'Spēle atrasta!',
+  matchFoundNotifyBody: 'Nospied Pieņemt, lai apstiprinātu spēli.',
   queueAccept: 'Pieņemt',
   queueAccepted: 'Pieņemts — gaidām pārējos...',
   queueDecline: 'Atteikt',
