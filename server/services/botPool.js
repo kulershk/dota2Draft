@@ -1861,13 +1861,20 @@ class BotPool {
   // this match as errored (so _retryQueueLobby's prev-error count works),
   // then dispatches a fresh create via a different bot. Does NOT enforce the
   // 3-attempt cap — the admin is deciding.
-  async adminRetryQueueLobby(matchId) {
-    // Guard: if there's already a non-terminal lobby, don't create another
-    const active = await queryOne(
-      "SELECT 1 FROM match_lobbies WHERE match_id = $1 AND game_number = 1 AND status NOT IN ('completed', 'cancelled', 'error')",
-      [matchId]
-    )
-    if (active) throw new Error('A lobby is already active for this match — wait for it to finish or cancel it first')
+  async adminRetryQueueLobby(matchId, opts = {}) {
+    const force = !!opts.force
+    // Guard: if there's already a non-terminal lobby, don't create another —
+    // UNLESS the admin explicitly forced a remake. A forced remake falls through
+    // to the in-flight drop logic below (cancel_lobby to Go, mark errored, free
+    // the bot), which is exactly how an admin recovers a lobby stuck in
+    // 'waiting'/'creating'/'launching'/'active' that the bot never resolved.
+    if (!force) {
+      const active = await queryOne(
+        "SELECT 1 FROM match_lobbies WHERE match_id = $1 AND game_number = 1 AND status NOT IN ('completed', 'cancelled', 'error')",
+        [matchId]
+      )
+      if (active) throw new Error('A lobby is already active for this match — wait for it to finish or cancel it first')
+    }
 
     const latest = await queryOne(
       "SELECT * FROM match_lobbies WHERE match_id = $1 AND game_number = 1 ORDER BY id DESC LIMIT 1",

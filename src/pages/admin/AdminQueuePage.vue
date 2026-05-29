@@ -33,6 +33,11 @@ const forcing = ref(false)
 const forceError = ref('')
 // Per-row inline error for the retry action (replaces alert()).
 const retryError = ref<{ id: number; message: string } | null>(null)
+// Force-remake confirm modal — destroys an in-flight (stuck) lobby and recreates
+// it on a different bot. Behind a confirm because it drops whatever lobby exists.
+const remakeTarget = ref<any | null>(null)
+const remaking = ref(false)
+const remakeError = ref('')
 const queuedPlayers = ref<any[]>([])
 const bans = ref<any[]>([])
 const banForm = ref<{
@@ -392,17 +397,43 @@ async function confirmForceComplete() {
 }
 
 const retryingLobby = ref<number | null>(null)
-async function retryLobby(id: number) {
+async function retryLobby(id: number, force = false) {
   if (retryingLobby.value) return
   retryingLobby.value = id
   retryError.value = null
   try {
-    await api.adminRetryQueueLobby(id)
+    await api.adminRetryQueueLobby(id, force)
     await fetchActiveMatches()
   } catch (e: any) {
     retryError.value = { id, message: e?.message || 'Failed to retry lobby' }
   } finally {
     retryingLobby.value = null
+  }
+}
+
+// Force-remake — destroys the current (stuck) lobby and recreates on a new bot.
+// Used while a lobby is non-terminal (creating/waiting/launching/active), where
+// a plain retry is refused because a lobby is still nominally active.
+function openForceRemake(qm: any) {
+  remakeError.value = ''
+  remakeTarget.value = qm
+}
+function closeForceRemake() {
+  if (remaking.value) return
+  remakeTarget.value = null
+}
+async function confirmForceRemake() {
+  if (!remakeTarget.value) return
+  remaking.value = true
+  remakeError.value = ''
+  try {
+    await api.adminRetryQueueLobby(remakeTarget.value.id, true)
+    remakeTarget.value = null
+    await fetchActiveMatches()
+  } catch (e: any) {
+    remakeError.value = e?.message || 'Failed to remake lobby'
+  } finally {
+    remaking.value = false
   }
 }
 
@@ -706,7 +737,7 @@ onUnmounted(() => {
             <!-- Primary: the one action this stage calls for (none while the system is just working) -->
             <div class="flex items-center gap-1.5">
               <button
-                v-if="qm._stage.key === 'CREATING_LOBBY' || qm._stage.key === 'LOBBY_FAILED'"
+                v-if="qm._stage.key === 'LOBBY_FAILED'"
                 class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 :title="t('queueAdminRetryLobbyHint')"
                 :disabled="retryingLobby === qm.id"
@@ -726,15 +757,16 @@ onUnmounted(() => {
 
             <!-- Secondary: muted text buttons -->
             <div class="flex items-center gap-1.5">
-              <!-- Retry stays reachable (muted) while waiting for players to join -->
+              <!-- Remake stays reachable while the lobby is in-flight: destroys the
+                   current (possibly stuck) lobby and recreates it on a different bot. -->
               <button
-                v-if="qm._stage.key === 'WAITING_PLAYERS'"
+                v-if="qm._stage.key === 'CREATING_LOBBY' || qm._stage.key === 'WAITING_PLAYERS'"
                 class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-primary hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                :title="t('queueAdminRetryLobbyHint')"
+                :title="t('queueAdminForceRemakeHint')"
                 :disabled="retryingLobby === qm.id"
-                @click="retryLobby(qm.id)"
+                @click="openForceRemake(qm)"
               >
-                <RefreshCw class="w-3.5 h-3.5" :class="retryingLobby === qm.id ? 'animate-spin' : ''" /> {{ t('queueAdminRetryLobby') }}
+                <RefreshCw class="w-3.5 h-3.5" :class="retryingLobby === qm.id ? 'animate-spin' : ''" /> {{ t('queueAdminForceRemake') }}
               </button>
               <button
                 v-if="qm.match_id"
@@ -1571,6 +1603,45 @@ onUnmounted(() => {
           <Loader2 v-if="forcing" class="w-3.5 h-3.5 animate-spin" />
           <CheckSquare v-else class="w-3.5 h-3.5" />
           {{ t('queueAdminForceComplete') }}
+        </button>
+      </div>
+    </ModalOverlay>
+
+    <!-- Force-remake lobby confirmation (destroys the in-flight lobby, recreates on a new bot) -->
+    <ModalOverlay :show="!!remakeTarget" @close="closeForceRemake">
+      <div class="border-b border-border px-6 py-5">
+        <h2 class="text-lg font-bold flex items-center gap-2">
+          <RefreshCw class="w-4 h-4 text-primary" />
+          {{ t('queueAdminForceRemakeTitle') }}
+        </h2>
+        <p class="text-xs text-muted-foreground mt-1">
+          {{ t('queueAdminForceRemakeConfirm') }}
+        </p>
+      </div>
+
+      <div v-if="remakeTarget" class="px-6 py-5 flex flex-col gap-3">
+        <div class="flex items-center gap-2 text-sm flex-wrap">
+          <span class="font-semibold text-muted-foreground">#{{ remakeTarget.id }}</span>
+          <span v-if="remakeTarget.pool_name" class="text-xs text-muted-foreground bg-accent px-2 py-0.5 rounded">{{ remakeTarget.pool_name }}</span>
+          <span class="font-medium">{{ remakeTarget.captain1_display_name || remakeTarget.captain1_name || '—' }}</span>
+          <span class="text-muted-foreground/40 font-bold">vs</span>
+          <span class="font-medium">{{ remakeTarget.captain2_display_name || remakeTarget.captain2_name || '—' }}</span>
+        </div>
+        <div v-if="remakeTarget.lobby_name" class="text-xs text-muted-foreground">
+          {{ t('queueLobbyName') }}: <strong class="text-foreground font-mono">{{ remakeTarget.lobby_name }}</strong>
+          <span v-if="remakeTarget.lobby_bot_id" class="ml-2">bot #{{ remakeTarget.lobby_bot_id }}</span>
+        </div>
+        <p v-if="remakeError" class="text-xs text-destructive bg-destructive/10 border border-destructive/30 rounded-lg px-3 py-2">
+          {{ remakeError }}
+        </p>
+      </div>
+
+      <div class="px-6 py-4 border-t border-border/30 flex justify-end gap-2">
+        <button class="btn-outline" :disabled="remaking" @click="closeForceRemake">{{ t('cancel') }}</button>
+        <button class="btn-primary flex items-center gap-1.5" :disabled="remaking" @click="confirmForceRemake">
+          <Loader2 v-if="remaking" class="w-3.5 h-3.5 animate-spin" />
+          <RefreshCw v-else class="w-3.5 h-3.5" />
+          {{ t('queueAdminForceRemake') }}
         </button>
       </div>
     </ModalOverlay>

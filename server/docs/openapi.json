@@ -3968,15 +3968,28 @@
       "/api/admin/queue/matches/{id}/retry-lobby": {
         "post": {
           "tags": ["Queue"],
-          "summary": "Manually retry lobby creation for a queue match",
-          "description": "Admin-only. Marks any in-flight match_lobbies row for this match as errored, frees its bot, and dispatches a fresh create_lobby on a different available bot. Bypasses the automatic 3-attempt cap. Refuses once the latest match_lobbies row is 'completed' (bot has left the lobby after game_started).",
+          "summary": "Manually retry / remake lobby creation for a queue match",
+          "description": "Admin-only. Dispatches a fresh create_lobby on a different available bot, bypassing the automatic 3-attempt cap. By default refuses if a lobby is still non-terminal (creating/waiting/launching/active). Pass { \"force\": true } to remake anyway: the in-flight lobby is dropped (cancel_lobby sent to the bot), marked errored, its bot freed, and a new lobby created on a different bot — used to recover a lobby the bot left stuck. Always refuses once the latest match_lobbies row is 'completed' (bot has left after game_started), even with force.",
           "security": [{ "bearerAuth": [] }],
           "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+          "requestBody": {
+            "required": false,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "force": { "type": "boolean", "default": false, "description": "Destroy a still-active (non-terminal) lobby and recreate it on a different bot instead of refusing." }
+                  }
+                }
+              }
+            }
+          },
           "responses": {
             "200": { "description": "Retry dispatched" },
             "404": { "description": "Queue match not found" },
             "409": { "description": "Queue match is cancelled/completed, or bot has already left the lobby" },
-            "500": { "description": "No alternate bot available, or dispatch failed" }
+            "500": { "description": "A lobby is already active (when force is not set), no alternate bot available, or dispatch failed" }
           }
         }
       },

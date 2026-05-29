@@ -975,7 +975,12 @@ export default function createQueueRouter(io) {
       if (latestLobby?.status === 'completed') {
         return res.status(409).json({ error: 'Match already started — bot has left the lobby' })
       }
-      await botPool.adminRetryQueueLobby(qm.match_id)
+      // force=true destroys the current in-flight lobby (even non-terminal:
+      // waiting/creating/launching/active) and recreates on a different bot —
+      // for lobbies the bot left stuck. Without it, retry refuses while a
+      // lobby is still nominally active.
+      const force = req.body?.force === true
+      await botPool.adminRetryQueueLobby(qm.match_id, { force })
       // Make sure queue_matches is flagged live so the usual flow resumes
       await execute(`UPDATE queue_matches SET status = 'live' WHERE id = $1 AND status IN ('lobby_creating', 'live')`, [qmId])
       res.json({ ok: true })

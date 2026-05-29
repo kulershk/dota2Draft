@@ -170,8 +170,8 @@ export function useApi() {
     getTournament: (compId: number) => request(`/api/competitions/${compId}/tournament`),
     repairBracketAdvancement: (compId: number) =>
       request(`/api/competitions/${compId}/tournament/repair-advancement`, { method: 'POST' }),
-    adminRetryQueueLobby: (queueMatchId: number) =>
-      request(`/api/admin/queue/matches/${queueMatchId}/retry-lobby`, { method: 'POST' }),
+    adminRetryQueueLobby: (queueMatchId: number, force = false) =>
+      request(`/api/admin/queue/matches/${queueMatchId}/retry-lobby`, { method: 'POST', body: JSON.stringify({ force }) }),
     getUpcomingMatches: () => request('/api/upcoming-matches'),
     getAllMatches: (opts?: { status?: string; limit?: number; offset?: number; search?: string }) => {
       const qs = new URLSearchParams()
