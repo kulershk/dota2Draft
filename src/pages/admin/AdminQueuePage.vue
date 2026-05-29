@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Plus, Trash2, Pencil, X, Check, Ban, RefreshCw, Swords, Loader2, UserX, Clock, Search, CheckSquare } from 'lucide-vue-next'
+import { Plus, Trash2, Pencil, X, Check, Ban, RefreshCw, Swords, Loader2, UserX, Clock, Search, CheckSquare, AlertTriangle } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
@@ -24,6 +24,15 @@ const loadingHistory = ref(false)
 const deleteTarget = ref<any | null>(null)
 const deleting = ref(false)
 const deleteError = ref('')
+// Cancel / force-complete confirm modal state (same rule — no window.confirm/alert).
+const cancelTarget = ref<any | null>(null)
+const cancelling = ref(false)
+const cancelError = ref('')
+const forceTarget = ref<any | null>(null)
+const forcing = ref(false)
+const forceError = ref('')
+// Per-row inline error for the retry action (replaces alert()).
+const retryError = ref<{ id: number; message: string } | null>(null)
 const queuedPlayers = ref<any[]>([])
 const bans = ref<any[]>([])
 const banForm = ref<{
@@ -334,23 +343,51 @@ function formatBanUntil(until: string | null): string {
   return rem > 0 ? `${hours}h ${rem}m` : `${hours}h`
 }
 
-async function cancelMatch(id: number) {
-  if (!confirm(t('queueAdminCancelConfirm'))) return
+// Cancel — opens a styled confirm modal (no window.confirm), errors shown inline.
+function openCancelMatch(qm: any) {
+  cancelError.value = ''
+  cancelTarget.value = qm
+}
+function closeCancelMatch() {
+  if (cancelling.value) return
+  cancelTarget.value = null
+}
+async function confirmCancelMatch() {
+  if (!cancelTarget.value) return
+  cancelling.value = true
+  cancelError.value = ''
   try {
-    await api.cancelQueueMatch(id)
+    await api.cancelQueueMatch(cancelTarget.value.id)
+    cancelTarget.value = null
     await fetchActiveMatches()
   } catch (e: any) {
-    alert(e.message)
+    cancelError.value = e?.message || 'Failed to cancel match'
+  } finally {
+    cancelling.value = false
   }
 }
 
-async function forceComplete(id: number) {
-  if (!confirm(t('queueAdminForceCompleteConfirm'))) return
+// Force-complete — same modal pattern.
+function openForceComplete(qm: any) {
+  forceError.value = ''
+  forceTarget.value = qm
+}
+function closeForceComplete() {
+  if (forcing.value) return
+  forceTarget.value = null
+}
+async function confirmForceComplete() {
+  if (!forceTarget.value) return
+  forcing.value = true
+  forceError.value = ''
   try {
-    await api.forceCompleteQueueMatch(id)
+    await api.forceCompleteQueueMatch(forceTarget.value.id)
+    forceTarget.value = null
     await fetchActiveMatches()
   } catch (e: any) {
-    alert(e.message)
+    forceError.value = e?.message || 'Failed to force-complete match'
+  } finally {
+    forcing.value = false
   }
 }
 
@@ -358,11 +395,12 @@ const retryingLobby = ref<number | null>(null)
 async function retryLobby(id: number) {
   if (retryingLobby.value) return
   retryingLobby.value = id
+  retryError.value = null
   try {
     await api.adminRetryQueueLobby(id)
     await fetchActiveMatches()
   } catch (e: any) {
-    alert(e.message)
+    retryError.value = { id, message: e?.message || 'Failed to retry lobby' }
   } finally {
     retryingLobby.value = null
   }
@@ -409,6 +447,59 @@ function statusColor(status: string) {
     default: return 'bg-accent text-muted-foreground'
   }
 }
+
+// Collapse the two raw statuses (queue_matches.status + match_lobbies.status)
+// into ONE human-readable stage. The confusing case is qm.status='live' +
+// lobby_status='completed' — the Dota game has LAUNCHED and is being played,
+// and we're only waiting for the result to be auto-detected; "completed" there
+// means "the lobby's job is done", NOT "the match is over". Returns ready-made
+// literal class strings (never interpolate Tailwind tokens — JIT purges those).
+type MatchStage = {
+  key: 'DRAFTING' | 'CREATING_LOBBY' | 'WAITING_PLAYERS' | 'LOBBY_FAILED' | 'IN_GAME' | 'UNKNOWN'
+  label: string
+  sublabel: string
+  color: string          // banner bg + text
+  stepIndex: number      // 0 Draft · 1 Lobby · 2 In game · 3 Result
+  stepActiveClass: string // fill for the active stepper node
+  icon: any
+  iconSpin: boolean
+}
+function matchStage(qm: any): MatchStage {
+  const ls = (qm.lobby_status || '').toLowerCase()
+  if (qm.status === 'picking') {
+    return { key: 'DRAFTING', label: t('queueStageDrafting'), sublabel: t('queueStageDraftingSub'),
+      color: 'bg-amber-500/10 text-amber-500', stepIndex: 0, stepActiveClass: 'bg-amber-500 border-amber-500', icon: Swords, iconSpin: false }
+  }
+  if (qm.status === 'live' && ls === 'completed') {
+    return { key: 'IN_GAME', label: t('queueStageInGame'), sublabel: t('queueStageInGameSub'),
+      color: 'bg-green-500/10 text-green-500', stepIndex: 2, stepActiveClass: 'bg-green-500 border-green-500', icon: Swords, iconSpin: false }
+  }
+  if (qm.status === 'live' && ls === 'error') {
+    return { key: 'LOBBY_FAILED', label: t('queueStageLobbyFailed'), sublabel: t('queueStageLobbyFailedSub'),
+      color: 'bg-destructive/10 text-destructive', stepIndex: 1, stepActiveClass: 'bg-destructive border-destructive', icon: AlertTriangle, iconSpin: false }
+  }
+  if (qm.status === 'live' && (ls === 'waiting' || ls === 'launching' || ls === 'active')) {
+    return { key: 'WAITING_PLAYERS', label: t('queueStageWaitingPlayers'), sublabel: t('queueStageWaitingPlayersSub'),
+      color: 'bg-blue-500/10 text-blue-500', stepIndex: 1, stepActiveClass: 'bg-blue-500 border-blue-500', icon: Clock, iconSpin: false }
+  }
+  if (qm.status === 'lobby_creating' || qm.status === 'live') {
+    // lobby_creating, or live with no lobby row yet / still 'creating' — the bot
+    // is making the lobby. Mid-retry stays blue (self-healing); only ls==='error'
+    // (handled above) flips to red.
+    const retrying = (qm.lobby_error_count || 0) > 0
+    return { key: 'CREATING_LOBBY', label: t('queueStageCreatingLobby'),
+      sublabel: retrying ? t('queueStageCreatingLobbyRetrySub') : t('queueStageCreatingLobbySub'),
+      color: 'bg-blue-500/10 text-blue-500', stepIndex: 1, stepActiveClass: 'bg-blue-500 border-blue-500', icon: Loader2, iconSpin: true }
+  }
+  return { key: 'UNKNOWN', label: statusLabel(qm.status), sublabel: '',
+    color: 'bg-accent text-muted-foreground', stepIndex: 0, stepActiveClass: 'bg-muted-foreground border-muted-foreground', icon: Swords, iconSpin: false }
+}
+
+// Pre-compute the stage once per row so the template doesn't call matchStage 5×.
+const activeMatchesWithStage = computed(() =>
+  activeMatches.value.map((qm: any) => ({ ...qm, _stage: matchStage(qm) })))
+
+const STAGE_STEPS = ['queueStepDraft', 'queueStepLobby', 'queueStepInGame', 'queueStepResult'] as const
 
 const SERVER_REGIONS: Record<number, string> = {
   0: 'US West', 1: 'US East', 2: 'Europe', 3: 'Europe East',
@@ -520,67 +611,38 @@ onUnmounted(() => {
       </div>
 
       <div v-else class="flex flex-col gap-3 mb-8">
-        <div v-for="qm in activeMatches" :key="qm.id" class="card overflow-hidden">
-          <div class="px-4 py-3 flex items-center justify-between gap-4">
-            <!-- Left: match info -->
-            <div class="flex items-center gap-3 flex-1 min-w-0">
-              <span class="text-xs px-2 py-0.5 rounded font-semibold" :class="statusColor(qm.status)">
-                {{ statusLabel(qm.status) }}
-              </span>
-              <span class="text-sm font-semibold text-muted-foreground">#{{ qm.id }}</span>
-              <span v-if="qm.match_id" class="text-[10px] font-mono text-muted-foreground bg-accent/60 px-1.5 py-0.5 rounded">match #{{ qm.match_id }}</span>
-              <span v-if="qm.pool_name" class="text-xs text-muted-foreground bg-accent px-2 py-0.5 rounded">{{ qm.pool_name }}</span>
-            </div>
+        <div v-for="qm in activeMatchesWithStage" :key="qm.id" class="card overflow-hidden">
+          <!-- Header: ids + pool (the stage banner below owns the status, so no badge here) -->
+          <div class="px-4 pt-3 pb-2 flex items-center gap-2 flex-wrap">
+            <span class="text-sm font-semibold text-muted-foreground">#{{ qm.id }}</span>
+            <span v-if="qm.match_id" class="text-[10px] font-mono text-muted-foreground bg-accent/60 px-1.5 py-0.5 rounded">match #{{ qm.match_id }}</span>
+            <span v-if="qm.pool_name" class="text-xs text-muted-foreground bg-accent px-2 py-0.5 rounded">{{ qm.pool_name }}</span>
+          </div>
 
-            <!-- Right: retry + cancel -->
-            <div class="flex items-center gap-1.5">
-              <button
-                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-primary hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                :title="qm.lobby_status === 'completed' ? t('queueAdminMatchInProgress') : t('queueAdminRetryLobbyHint')"
-                :disabled="retryingLobby === qm.id || qm.lobby_status === 'completed'"
-                @click="retryLobby(qm.id)"
-              >
-                <RefreshCw class="w-3.5 h-3.5" :class="retryingLobby === qm.id ? 'animate-spin' : ''" /> {{ t('queueAdminRetryLobby') }}
-              </button>
-              <button
-                v-if="qm.match_id"
-                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-cyan-500 hover:bg-cyan-500/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                :title="t('queueAdminCheckResultHint')"
-                :disabled="checkingResult === qm.id"
-                @click="checkResult(qm.id)"
-              >
-                <Loader2 v-if="checkingResult === qm.id" class="w-3.5 h-3.5 animate-spin" />
-                <Check v-else-if="checkedResult === qm.id" class="w-3.5 h-3.5 text-green-400" />
-                <Search v-else class="w-3.5 h-3.5" />
-                {{ t('queueAdminCheckResult') }}
-              </button>
-              <button
-                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                :title="qm.lobby_status === 'completed' ? t('queueAdminMatchInProgress') : ''"
-                :disabled="qm.lobby_status === 'completed'"
-                @click="cancelMatch(qm.id)"
-              >
-                <Ban class="w-3.5 h-3.5" /> {{ t('cancel') }}
-              </button>
-              <!-- Force-complete: only useful for stuck matches the bot has already left
-                   (lobby_status === 'completed') — that's exactly the case Cancel can't
-                   handle, so this button only appears then. -->
-              <button
-                v-if="qm.lobby_status === 'completed'"
-                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-amber-500 hover:bg-amber-500/10 transition-colors"
-                :title="t('queueAdminForceCompleteHint')"
-                @click="forceComplete(qm.id)"
-              >
-                <CheckSquare class="w-3.5 h-3.5" /> {{ t('queueAdminForceComplete') }}
-              </button>
-              <button
-                v-if="canDeleteMatches"
-                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-destructive hover:bg-destructive/10 transition-colors"
-                :title="t('queueAdminDeleteTitle')"
-                @click="openDeleteMatch(qm)"
-              >
-                <Trash2 class="w-3.5 h-3.5" /> {{ t('queueAdminDelete') }}
-              </button>
+          <!-- Progress stepper: Draft → Lobby → In game → Result -->
+          <div class="px-6 pb-3 flex items-start">
+            <template v-for="(stepKey, i) in STAGE_STEPS" :key="stepKey">
+              <div v-if="i > 0" class="flex-1 h-0.5 mt-[5px]"
+                :class="i <= qm._stage.stepIndex ? 'bg-foreground/25' : 'bg-border'"></div>
+              <div class="flex flex-col items-center gap-1 shrink-0">
+                <div class="w-3 h-3 rounded-full border-2"
+                  :class="i < qm._stage.stepIndex ? 'bg-foreground/40 border-foreground/40'
+                    : i === qm._stage.stepIndex ? qm._stage.stepActiveClass
+                    : 'bg-transparent border-border'"></div>
+                <span class="text-[10px] uppercase tracking-wider font-semibold leading-none whitespace-nowrap"
+                  :class="i === qm._stage.stepIndex ? 'text-foreground' : 'text-muted-foreground/50'">
+                  {{ t(stepKey) }}
+                </span>
+              </div>
+            </template>
+          </div>
+
+          <!-- Stage banner: single, plain-language source of truth for "what state is this game in" -->
+          <div class="mx-4 mb-3 rounded-lg px-3 py-2.5 flex items-start gap-2.5" :class="qm._stage.color">
+            <component :is="qm._stage.icon" class="w-4 h-4 mt-0.5 shrink-0" :class="{ 'animate-spin': qm._stage.iconSpin }" />
+            <div class="min-w-0">
+              <div class="text-sm font-bold leading-tight">{{ qm._stage.label }}</div>
+              <div v-if="qm._stage.sublabel" class="text-xs text-muted-foreground mt-0.5">{{ qm._stage.sublabel }}</div>
             </div>
           </div>
 
@@ -623,14 +685,12 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <!-- Lobby info (if live) -->
+          <!-- Lobby info (name / password / bot / errors). The raw lobby status word
+               is intentionally gone — the stage banner above is the single status. -->
           <div v-if="qm.lobby_name" class="px-4 pb-3 flex flex-col gap-1.5 text-xs text-muted-foreground">
             <div class="flex items-center gap-4 flex-wrap">
               <span>{{ t('queueLobbyName') }}: <strong class="text-foreground font-mono">{{ qm.lobby_name }}</strong></span>
               <span>{{ t('queueLobbyPassword') }}: <strong class="text-foreground font-mono select-all">{{ qm.lobby_password }}</strong></span>
-              <span v-if="qm.lobby_status" class="px-1.5 py-0.5 rounded text-[10px] font-semibold" :class="statusColor(qm.lobby_status)">
-                {{ qm.lobby_status }}
-              </span>
               <span v-if="qm.lobby_bot_id" class="text-[10px]">bot #{{ qm.lobby_bot_id }}</span>
               <span v-if="qm.lobby_error_count > 0" class="text-[10px] text-amber-500">
                 {{ qm.lobby_error_count }} failed {{ qm.lobby_error_count === 1 ? 'attempt' : 'attempts' }}
@@ -639,6 +699,77 @@ onUnmounted(() => {
             <div v-if="qm.lobby_error" class="px-2 py-1.5 rounded bg-red-500/10 border border-red-500/30 text-red-400 text-[11px] font-mono whitespace-pre-wrap break-all">
               {{ qm.lobby_error }}
             </div>
+          </div>
+
+          <!-- Action footer: emphasized stage action (left) + secondary actions (right) -->
+          <div class="px-4 py-2.5 border-t border-border/40 flex items-center justify-between gap-2 flex-wrap">
+            <!-- Primary: the one action this stage calls for (none while the system is just working) -->
+            <div class="flex items-center gap-1.5">
+              <button
+                v-if="qm._stage.key === 'CREATING_LOBBY' || qm._stage.key === 'LOBBY_FAILED'"
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                :title="t('queueAdminRetryLobbyHint')"
+                :disabled="retryingLobby === qm.id"
+                @click="retryLobby(qm.id)"
+              >
+                <RefreshCw class="w-3.5 h-3.5" :class="retryingLobby === qm.id ? 'animate-spin' : ''" /> {{ t('queueAdminRetryLobby') }}
+              </button>
+              <button
+                v-else-if="qm._stage.key === 'IN_GAME'"
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-amber-500 bg-amber-500/10 hover:bg-amber-500/20 transition-colors"
+                :title="t('queueAdminForceCompleteHint')"
+                @click="openForceComplete(qm)"
+              >
+                <CheckSquare class="w-3.5 h-3.5" /> {{ t('queueAdminForceComplete') }}
+              </button>
+            </div>
+
+            <!-- Secondary: muted text buttons -->
+            <div class="flex items-center gap-1.5">
+              <!-- Retry stays reachable (muted) while waiting for players to join -->
+              <button
+                v-if="qm._stage.key === 'WAITING_PLAYERS'"
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-primary hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                :title="t('queueAdminRetryLobbyHint')"
+                :disabled="retryingLobby === qm.id"
+                @click="retryLobby(qm.id)"
+              >
+                <RefreshCw class="w-3.5 h-3.5" :class="retryingLobby === qm.id ? 'animate-spin' : ''" /> {{ t('queueAdminRetryLobby') }}
+              </button>
+              <button
+                v-if="qm.match_id"
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-cyan-500 hover:bg-cyan-500/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                :title="t('queueAdminCheckResultHint')"
+                :disabled="checkingResult === qm.id"
+                @click="checkResult(qm.id)"
+              >
+                <Loader2 v-if="checkingResult === qm.id" class="w-3.5 h-3.5 animate-spin" />
+                <Check v-else-if="checkedResult === qm.id" class="w-3.5 h-3.5 text-green-400" />
+                <Search v-else class="w-3.5 h-3.5" />
+                {{ t('queueAdminCheckResult') }}
+              </button>
+              <button
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                :title="qm._stage.key === 'IN_GAME' ? t('queueAdminMatchInProgress') : ''"
+                :disabled="qm._stage.key === 'IN_GAME'"
+                @click="openCancelMatch(qm)"
+              >
+                <Ban class="w-3.5 h-3.5" /> {{ t('cancel') }}
+              </button>
+              <button
+                v-if="canDeleteMatches"
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-destructive hover:bg-destructive/10 transition-colors"
+                :title="t('queueAdminDeleteTitle')"
+                @click="openDeleteMatch(qm)"
+              >
+                <Trash2 class="w-3.5 h-3.5" /> {{ t('queueAdminDelete') }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Inline retry error (replaces the old alert()) -->
+          <div v-if="retryError && retryError.id === qm.id" class="px-4 pb-3">
+            <p class="text-xs text-destructive bg-destructive/10 border border-destructive/30 rounded-lg px-3 py-2">{{ retryError.message }}</p>
           </div>
         </div>
       </div>
@@ -1366,6 +1497,80 @@ onUnmounted(() => {
           <Loader2 v-if="deleting" class="w-3.5 h-3.5 animate-spin" />
           <Trash2 v-else class="w-3.5 h-3.5" />
           {{ t('queueAdminDelete') }}
+        </button>
+      </div>
+    </ModalOverlay>
+
+    <!-- Cancel queue match confirmation -->
+    <ModalOverlay :show="!!cancelTarget" @close="closeCancelMatch">
+      <div class="border-b border-border px-6 py-5">
+        <h2 class="text-lg font-bold flex items-center gap-2">
+          <Ban class="w-4 h-4 text-destructive" />
+          {{ t('queueAdminCancelTitle') }}
+        </h2>
+        <p class="text-xs text-muted-foreground mt-1">
+          {{ t('queueAdminCancelConfirm') }}
+        </p>
+      </div>
+
+      <div v-if="cancelTarget" class="px-6 py-5 flex flex-col gap-3">
+        <div class="flex items-center gap-2 text-sm flex-wrap">
+          <span class="font-semibold text-muted-foreground">#{{ cancelTarget.id }}</span>
+          <span v-if="cancelTarget.pool_name" class="text-xs text-muted-foreground bg-accent px-2 py-0.5 rounded">{{ cancelTarget.pool_name }}</span>
+          <span class="font-medium">{{ cancelTarget.captain1_display_name || cancelTarget.captain1_name || '—' }}</span>
+          <span class="text-muted-foreground/40 font-bold">vs</span>
+          <span class="font-medium">{{ cancelTarget.captain2_display_name || cancelTarget.captain2_name || '—' }}</span>
+        </div>
+        <p v-if="cancelError" class="text-xs text-destructive bg-destructive/10 border border-destructive/30 rounded-lg px-3 py-2">
+          {{ cancelError }}
+        </p>
+      </div>
+
+      <div class="px-6 py-4 border-t border-border/30 flex justify-end gap-2">
+        <button class="btn-outline" :disabled="cancelling" @click="closeCancelMatch">{{ t('cancel') }}</button>
+        <button class="btn-destructive flex items-center gap-1.5" :disabled="cancelling" @click="confirmCancelMatch">
+          <Loader2 v-if="cancelling" class="w-3.5 h-3.5 animate-spin" />
+          <Ban v-else class="w-3.5 h-3.5" />
+          {{ t('queueAdminCancelButton') }}
+        </button>
+      </div>
+    </ModalOverlay>
+
+    <!-- Force-complete match confirmation -->
+    <ModalOverlay :show="!!forceTarget" @close="closeForceComplete">
+      <div class="border-b border-border px-6 py-5">
+        <h2 class="text-lg font-bold flex items-center gap-2">
+          <CheckSquare class="w-4 h-4 text-amber-500" />
+          {{ t('queueAdminForceCompleteTitle') }}
+        </h2>
+        <p class="text-xs text-muted-foreground mt-1">
+          {{ t('queueAdminForceCompleteConfirm') }}
+        </p>
+      </div>
+
+      <div v-if="forceTarget" class="px-6 py-5 flex flex-col gap-3">
+        <div class="flex items-center gap-2 text-sm flex-wrap">
+          <span class="font-semibold text-muted-foreground">#{{ forceTarget.id }}</span>
+          <span v-if="forceTarget.match_id" class="text-[10px] font-mono text-muted-foreground bg-accent/60 px-1.5 py-0.5 rounded">match #{{ forceTarget.match_id }}</span>
+          <span v-if="forceTarget.pool_name" class="text-xs text-muted-foreground bg-accent px-2 py-0.5 rounded">{{ forceTarget.pool_name }}</span>
+          <span class="font-medium">{{ forceTarget.captain1_display_name || forceTarget.captain1_name || '—' }}</span>
+          <span class="text-muted-foreground/40 font-bold">vs</span>
+          <span class="font-medium">{{ forceTarget.captain2_display_name || forceTarget.captain2_name || '—' }}</span>
+        </div>
+        <p class="text-xs text-amber-500 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
+          {{ t('queueAdminForceCompleteHint') }}
+        </p>
+        <p v-if="forceError" class="text-xs text-destructive bg-destructive/10 border border-destructive/30 rounded-lg px-3 py-2">
+          {{ forceError }}
+        </p>
+      </div>
+
+      <div class="px-6 py-4 border-t border-border/30 flex justify-end gap-2">
+        <button class="btn-outline" :disabled="forcing" @click="closeForceComplete">{{ t('cancel') }}</button>
+        <button class="btn-primary flex items-center gap-1.5" :disabled="forcing" @click="confirmForceComplete">
+          <Loader2 v-if="forcing" class="w-3.5 h-3.5 animate-spin" />
+          <CheckSquare v-else class="w-3.5 h-3.5" />
+          {{ t('queueAdminForceComplete') }}
         </button>
       </div>
     </ModalOverlay>
