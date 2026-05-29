@@ -60,17 +60,21 @@ export async function applyFridayBonusForSeason(seasonId, fridayDate /* YYYY-MM-
     // ONLY — players with equal net_wins are tied regardless of MMR. net_points
     // is selected for the bonus-vs-points display, not as a rank tiebreaker.
     // Exclude prior friday_top_bonus rows (synthetic) — bonus, not ranking input.
-    const windowExpr = fridayWindowSql('created_at', startHour, endHour)
+    // Window keyed on queue_matches.created_at (match START), not
+    // season_match_log.created_at (match END) — so a game started in the
+    // Friday window but recorded after still contributes to the podium.
+    const windowExpr = fridayWindowSql('qm.created_at', startHour, endHour)
     const rows = (await client.query(`
-      SELECT player_id,
-             SUM(delta)::float8 AS net_points,
-             (COUNT(*) FILTER (WHERE won IS TRUE) - COUNT(*) FILTER (WHERE won IS FALSE))::int AS net_wins
-        FROM season_match_log
-       WHERE season_id = $1
-         AND queue_match_id IS NOT NULL
+      SELECT sml.player_id,
+             SUM(sml.delta)::float8 AS net_points,
+             (COUNT(*) FILTER (WHERE sml.won IS TRUE) - COUNT(*) FILTER (WHERE sml.won IS FALSE))::int AS net_wins
+        FROM season_match_log sml
+        JOIN queue_matches qm ON qm.id = sml.queue_match_id
+       WHERE sml.season_id = $1
+         AND sml.queue_match_id IS NOT NULL
          AND (${windowExpr}) = $2::date
-       GROUP BY player_id
-       HAVING (COUNT(*) FILTER (WHERE won IS TRUE) - COUNT(*) FILTER (WHERE won IS FALSE)) > 0
+       GROUP BY sml.player_id
+       HAVING (COUNT(*) FILTER (WHERE sml.won IS TRUE) - COUNT(*) FILTER (WHERE sml.won IS FALSE)) > 0
        ORDER BY net_wins DESC, net_points DESC
     `, [seasonId, fridayDate])).rows
 

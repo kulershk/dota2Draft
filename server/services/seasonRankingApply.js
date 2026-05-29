@@ -94,17 +94,23 @@ export async function applyMatchToSeason({
     // Inhouse settings come from the pool; if poolId wasn't passed, look it
     // up via queue_matches. A NULL pool or inhouse_enabled=false means we
     // skip the inhouse formula and behave exactly like the legacy path.
+    // We always fetch the queue_match here because we also need created_at
+    // for the Friday-window check below.
+    const qmRow = (await client.query('SELECT pool_id, created_at FROM queue_matches WHERE id = $1', [queueMatchId])).rows[0]
     let inhousePool = null
     if (poolId) {
       inhousePool = (await client.query('SELECT * FROM queue_pools WHERE id = $1', [poolId])).rows[0] || null
-    } else {
-      const qm = (await client.query('SELECT pool_id FROM queue_matches WHERE id = $1', [queueMatchId])).rows[0]
-      if (qm?.pool_id) inhousePool = (await client.query('SELECT * FROM queue_pools WHERE id = $1', [qm.pool_id])).rows[0] || null
+    } else if (qmRow?.pool_id) {
+      inhousePool = (await client.query('SELECT * FROM queue_pools WHERE id = $1', [qmRow.pool_id])).rows[0] || null
     }
     const inhouse = !!inhousePool?.inhouse_enabled
-    // Friday is the pool's configurable Riga window, evaluated at match-end
-    // (now). Falls back to the plain calendar Friday when hours are 0/0.
-    const isFriday = isInFridayWindow(new Date(), inhousePool?.friday_window_start_hour, inhousePool?.friday_window_end_hour)
+    // Friday is the pool's configurable Riga window, evaluated at the time the
+    // MATCH STARTED (queue_matches.created_at), not when it ended — so a game
+    // started before the window closed still counts as Friday even if the
+    // result comes in after. Falls back to the plain calendar Friday when
+    // start/end hours are 0/0.
+    const matchStartedAt = qmRow?.created_at || new Date()
+    const isFriday = isInFridayWindow(matchStartedAt, inhousePool?.friday_window_start_hour, inhousePool?.friday_window_end_hour)
 
     // Pull MMR + winstreak for everyone in both teams.
     const allIds = [...new Set([...team1PlayerIds, ...team2PlayerIds])]
@@ -399,7 +405,7 @@ export async function recomputeSeasonFromHistory(seasonId) {
   const matches = await query(`
     SELECT qm.id, qm.team1_players, qm.team2_players, qm.pool_id,
            (SELECT winner_captain_id FROM matches WHERE id = qm.match_id) AS winner_captain_id,
-           qm.captain1_player_id, qm.captain2_player_id, qm.completed_at,
+           qm.captain1_player_id, qm.captain2_player_id, qm.created_at, qm.completed_at,
            qp.inhouse_enabled, qp.mmr_diff_tiers, qp.winstreak_tiers, qp.friday_win_bonus,
            qp.friday_window_start_hour, qp.friday_window_end_hour,
            qp.use_static_points, qp.inhouse_win_points, qp.inhouse_loss_points
@@ -477,8 +483,11 @@ export async function recomputeSeasonFromHistory(seasonId) {
       // had a leaver. Acceptable for an admin diagnostic — re-apply via a
       // future manual adjust if absolute parity is needed.
       const inhouseHere = !!m.inhouse_enabled
-      const matchIsFriday = m.completed_at
-        ? isInFridayWindow(m.completed_at, m.friday_window_start_hour, m.friday_window_end_hour)
+      // Use match START time (queue_matches.created_at) for the Friday-window
+      // check — a game started before the window closed counts as Friday even
+      // if the result is recorded after. Mirrors the live path above.
+      const matchIsFriday = m.created_at
+        ? isInFridayWindow(m.created_at, m.friday_window_start_hour, m.friday_window_end_hour)
         : false
       // Compute the base delta for one player on a given side. Mirrors the
       // live path: static-points mode skips ELO, leaver penalty still
@@ -571,12 +580,16 @@ export async function recomputeSeasonFromHistory(seasonId) {
     [seasonId]
   )
   if (inhousePool) {
-    const windowExpr = fridayWindowSql('created_at',
+    // Window keyed on queue_matches.created_at (match START time), not
+    // season_match_log.created_at (match END time) — see the live/replay
+    // paths above for the rationale.
+    const windowExpr = fridayWindowSql('qm.created_at',
       clampHour(inhousePool.friday_window_start_hour), clampHour(inhousePool.friday_window_end_hour))
     const fdates = await query(`
       SELECT DISTINCT to_char(${windowExpr}, 'YYYY-MM-DD') AS fdate
-        FROM season_match_log
-       WHERE season_id = $1 AND queue_match_id IS NOT NULL AND (${windowExpr}) IS NOT NULL
+        FROM season_match_log sml
+        JOIN queue_matches qm ON qm.id = sml.queue_match_id
+       WHERE sml.season_id = $1 AND sml.queue_match_id IS NOT NULL AND (${windowExpr}) IS NOT NULL
        ORDER BY fdate ASC
     `, [seasonId])
     for (const { fdate } of fdates) {

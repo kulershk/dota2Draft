@@ -168,8 +168,11 @@ export default function createSeasonsRouter(io) {
 
       // Map each match-derived row to its Friday window date (NULL outside any
       // window). Synthetic friday_top_bonus rows (queue_match_id IS NULL) are
-      // excluded. Pre-sorted for the JS grouping below.
-      const windowExpr = fridayWindowSql('sml.created_at',
+      // excluded. Window is keyed on queue_matches.created_at (match START),
+      // not season_match_log.created_at (match END), so a game started in the
+      // Friday window but recorded after still appears on that Friday.
+      // Pre-sorted for the JS grouping below.
+      const windowExpr = fridayWindowSql('qm.created_at',
         clampHour(inhousePool.friday_window_start_hour), clampHour(inhousePool.friday_window_end_hour))
       const rows = await query(`
         SELECT
@@ -183,6 +186,7 @@ export default function createSeasonsRouter(io) {
           COUNT(*) FILTER (WHERE sml.won IS TRUE)::int  AS wins,
           COUNT(*) FILTER (WHERE sml.won IS FALSE)::int AS losses
         FROM season_match_log sml
+        JOIN queue_matches qm ON qm.id = sml.queue_match_id
         JOIN players p ON p.id = sml.player_id
         WHERE sml.season_id = $1
           AND sml.queue_match_id IS NOT NULL
