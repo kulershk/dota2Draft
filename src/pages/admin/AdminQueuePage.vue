@@ -494,24 +494,32 @@ type MatchStage = {
   stepActiveClass: string // fill for the active stepper node
   icon: any
   iconSpin: boolean
+  awaitingResult: boolean // IN_GAME and the bot has left (lobby 'completed') — result auto-detect pending
 }
 function matchStage(qm: any): MatchStage {
   const ls = (qm.lobby_status || '').toLowerCase()
   if (qm.status === 'picking') {
     return { key: 'DRAFTING', label: t('queueStageDrafting'), sublabel: t('queueStageDraftingSub'),
-      color: 'bg-amber-500/10 text-amber-500', stepIndex: 0, stepActiveClass: 'bg-amber-500 border-amber-500', icon: Swords, iconSpin: false }
+      color: 'bg-amber-500/10 text-amber-500', stepIndex: 0, stepActiveClass: 'bg-amber-500 border-amber-500', icon: Swords, iconSpin: false, awaitingResult: false }
   }
+  // 'completed' = bot captured the match id and left; game launched, result auto-detect pending.
   if (qm.status === 'live' && ls === 'completed') {
     return { key: 'IN_GAME', label: t('queueStageInGame'), sublabel: t('queueStageInGameSub'),
-      color: 'bg-green-500/10 text-green-500', stepIndex: 2, stepActiveClass: 'bg-green-500 border-green-500', icon: Swords, iconSpin: false }
+      color: 'bg-green-500/10 text-green-500', stepIndex: 2, stepActiveClass: 'bg-green-500 border-green-500', icon: Swords, iconSpin: false, awaitingResult: true }
+  }
+  // 'active' = Dota lobby state RUN (game is being played); 'cointoss' = SERVERSETUP
+  // (game is starting / coin toss). Both mean the game has started — NOT "waiting".
+  if (qm.status === 'live' && (ls === 'active' || ls === 'cointoss')) {
+    return { key: 'IN_GAME', label: t('queueStageInGame'), sublabel: t('queueStageInGameLiveSub'),
+      color: 'bg-green-500/10 text-green-500', stepIndex: 2, stepActiveClass: 'bg-green-500 border-green-500', icon: Swords, iconSpin: false, awaitingResult: false }
   }
   if (qm.status === 'live' && ls === 'error') {
     return { key: 'LOBBY_FAILED', label: t('queueStageLobbyFailed'), sublabel: t('queueStageLobbyFailedSub'),
-      color: 'bg-destructive/10 text-destructive', stepIndex: 1, stepActiveClass: 'bg-destructive border-destructive', icon: AlertTriangle, iconSpin: false }
+      color: 'bg-destructive/10 text-destructive', stepIndex: 1, stepActiveClass: 'bg-destructive border-destructive', icon: AlertTriangle, iconSpin: false, awaitingResult: false }
   }
-  if (qm.status === 'live' && (ls === 'waiting' || ls === 'launching' || ls === 'active')) {
+  if (qm.status === 'live' && (ls === 'waiting' || ls === 'launching')) {
     return { key: 'WAITING_PLAYERS', label: t('queueStageWaitingPlayers'), sublabel: t('queueStageWaitingPlayersSub'),
-      color: 'bg-blue-500/10 text-blue-500', stepIndex: 1, stepActiveClass: 'bg-blue-500 border-blue-500', icon: Clock, iconSpin: false }
+      color: 'bg-blue-500/10 text-blue-500', stepIndex: 1, stepActiveClass: 'bg-blue-500 border-blue-500', icon: Clock, iconSpin: false, awaitingResult: false }
   }
   if (qm.status === 'lobby_creating' || qm.status === 'live') {
     // lobby_creating, or live with no lobby row yet / still 'creating' — the bot
@@ -520,10 +528,10 @@ function matchStage(qm: any): MatchStage {
     const retrying = (qm.lobby_error_count || 0) > 0
     return { key: 'CREATING_LOBBY', label: t('queueStageCreatingLobby'),
       sublabel: retrying ? t('queueStageCreatingLobbyRetrySub') : t('queueStageCreatingLobbySub'),
-      color: 'bg-blue-500/10 text-blue-500', stepIndex: 1, stepActiveClass: 'bg-blue-500 border-blue-500', icon: Loader2, iconSpin: true }
+      color: 'bg-blue-500/10 text-blue-500', stepIndex: 1, stepActiveClass: 'bg-blue-500 border-blue-500', icon: Loader2, iconSpin: true, awaitingResult: false }
   }
   return { key: 'UNKNOWN', label: statusLabel(qm.status), sublabel: '',
-    color: 'bg-accent text-muted-foreground', stepIndex: 0, stepActiveClass: 'bg-muted-foreground border-muted-foreground', icon: Swords, iconSpin: false }
+    color: 'bg-accent text-muted-foreground', stepIndex: 0, stepActiveClass: 'bg-muted-foreground border-muted-foreground', icon: Swords, iconSpin: false, awaitingResult: false }
 }
 
 // Pre-compute the stage once per row so the template doesn't call matchStage 5×.
@@ -745,8 +753,10 @@ onUnmounted(() => {
               >
                 <RefreshCw class="w-3.5 h-3.5" :class="retryingLobby === qm.id ? 'animate-spin' : ''" /> {{ t('queueAdminRetryLobby') }}
               </button>
+              <!-- Force complete only once the bot has left (lobby 'completed') and we're
+                   stuck waiting on the result — not while the game is still being played. -->
               <button
-                v-else-if="qm._stage.key === 'IN_GAME'"
+                v-else-if="qm._stage.awaitingResult"
                 class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-amber-500 bg-amber-500/10 hover:bg-amber-500/20 transition-colors"
                 :title="t('queueAdminForceCompleteHint')"
                 @click="openForceComplete(qm)"
@@ -782,8 +792,8 @@ onUnmounted(() => {
               </button>
               <button
                 class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                :title="qm._stage.key === 'IN_GAME' ? t('queueAdminMatchInProgress') : ''"
-                :disabled="qm._stage.key === 'IN_GAME'"
+                :title="qm._stage.awaitingResult ? t('queueAdminMatchInProgress') : ''"
+                :disabled="qm._stage.awaitingResult"
                 @click="openCancelMatch(qm)"
               >
                 <Ban class="w-3.5 h-3.5" /> {{ t('cancel') }}

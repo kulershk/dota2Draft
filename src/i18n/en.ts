@@ -1509,6 +1509,7 @@ export default {
   queueStageLobbyFailedSub: 'Lobby creation failed. Retry the lobby or cancel the match.',
   queueStageInGame: 'In game',
   queueStageInGameSub: 'Game launched and in progress — waiting for the result to be detected automatically. This can take a few minutes after the game ends.',
+  queueStageInGameLiveSub: 'The game is being played. The result will be detected automatically once it ends.',
   // Progress stepper nodes
   queueStepDraft: 'Draft',
   queueStepLobby: 'Lobby',

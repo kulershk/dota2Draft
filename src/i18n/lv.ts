@@ -1496,6 +1496,7 @@ export default {
   queueStageLobbyFailedSub: 'Neizdevās izveidot lobiju. Mēģini vēlreiz vai atcel maču.',
   queueStageInGame: 'Spēlē',
   queueStageInGameSub: 'Spēle sākusies un norit — gaida, kamēr rezultāts tiks automātiski noteikts. Tas var aizņemt dažas minūtes pēc spēles beigām.',
+  queueStageInGameLiveSub: 'Spēle notiek. Rezultāts tiks automātiski noteikts, tiklīdz tā beigsies.',
   // Progresa soļu nosaukumi
   queueStepDraft: 'Izvēle',
   queueStepLobby: 'Lobijs',

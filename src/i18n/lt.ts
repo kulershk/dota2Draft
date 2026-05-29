@@ -1496,6 +1496,7 @@ export default {
   queueStageLobbyFailedSub: 'Nepavyko sukurti lobio. Bandyk dar kartą arba atšauk rungtynes.',
   queueStageInGame: 'Žaidžiama',
   queueStageInGameSub: 'Žaidimas prasidėjo ir vyksta — laukiama, kol rezultatas bus automatiškai nustatytas. Tai gali užtrukti kelias minutes po žaidimo pabaigos.',
+  queueStageInGameLiveSub: 'Žaidimas vyksta. Rezultatas bus automatiškai nustatytas, kai tik jis pasibaigs.',
   // Eigos žingsnių pavadinimai
   queueStepDraft: 'Rinkimas',
   queueStepLobby: 'Lobis',

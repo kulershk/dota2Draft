@@ -60,6 +60,7 @@ type Bot struct {
 	detectedRadiantTeamId int
 	detectedDireTeamId    int
 	launchSent            bool // prevent repeated LaunchLobby calls
+	gameStartedSent       bool // game_started already sent for the current lobby (reset per lobby in SetActiveLobbyID)
 }
 
 func NewBot(id, username, password, refreshToken string, send SendFunc) *Bot {
@@ -493,6 +494,11 @@ func (b *Bot) SetActiveLobbyID(id string) {
 		b.log("ACTION: SetActiveLobbyID cleared")
 	} else {
 		b.log(fmt.Sprintf("ACTION: SetActiveLobbyID(%s)", id))
+		// New lobby starting — re-arm the once-per-lobby game_started guard.
+		// SetActiveLobbyID(non-empty) is the single hook hit on every lobby start
+		// (create + rejoin), so resetting here is fresh regardless of how the
+		// previous lobby ended.
+		b.gameStartedSent = false
 	}
 	b.activeLobbyID = id
 }
@@ -733,8 +739,14 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 	// send above, which already derives it from the current state — no separate
 	// transition-only send needed (and a duplicate one would just race it).
 
-	// Detect match ID assigned
-	if matchID != 0 && (oldLobby == nil || oldLobby.GetMatchId() == 0) {
+	// Detect match ID assigned. Use a sticky once-per-lobby guard instead of a
+	// pure edge (old==0 → new!=0): the edge can be missed when the match-id-bearing
+	// cache update is dropped, only seen on the 15s safety poll, or after a rejoin
+	// where the lobby already had a match id — leaving the lobby stuck on
+	// 'waiting'/'active' with no match id captured server-side. Firing once per
+	// lobby is safe — the server's game_started handler is idempotent.
+	if matchID != 0 && !b.gameStartedSent {
+		b.gameStartedSent = true
 		b.log(fmt.Sprintf("Match ID assigned: %d", matchID))
 		b.send("game_started", protocol.GameStartedEvent{
 			LobbyID: b.activeLobbyID,
