@@ -3993,6 +3993,23 @@
           }
         }
       },
+      "/api/admin/queue/matches/{id}/recreate": {
+        "post": {
+          "tags": ["Queue"],
+          "summary": "Cancel a queue match and recreate it with the exact same teams",
+          "description": "Admin-only (queue-admin scope). Tears down the in-flight Dota lobby and Discord voice channels, marks the current queue_match cancelled, then inserts a NEW queue_match + matches row copying captain1_player_id, captain2_player_id, team1_players, team2_players, all_player_ids, role_preferences, pool_id, season_id, and game_mode_used from the old one. Dispatches a fresh create_lobby on a different available bot, remaps playerInMatch + sockets to the new id, and emits queue:teamsFormed + queue:lobbyCreated. Refuses if the queue match is in 'picking' (no teams formed), 'cancelled', or 'completed' status, or once the lobby is 'completed' (bot has left after game_started). On success returns { ok: true, newQueueMatchId, matchId }. If the cancel + new-row insert succeed but the new lobby dispatch fails (no alternate bot, etc.), returns 200 with { ok: false, newQueueMatchId, matchId, lobbyError } — the old match is cancelled either way and the admin can Remake/Cancel on the new row.",
+          "security": [{ "bearerAuth": [] }],
+          "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+          "responses": {
+            "200": { "description": "{ ok, newQueueMatchId, matchId } on success or { ok: false, newQueueMatchId, matchId, lobbyError } when the new lobby could not be dispatched" },
+            "400": { "description": "Teams not formed yet (status is 'picking') or the old match has no teams to copy" },
+            "403": { "description": "Permission denied — match is not in a pool you own" },
+            "404": { "description": "Queue match not found" },
+            "409": { "description": "Queue match is already cancelled/completed, or the Dota game has launched (lobby 'completed')" },
+            "500": { "description": "Pool not found or other server failure" }
+          }
+        }
+      },
       "/api/admin/queue/matches/{id}/check-result": {
         "post": {
           "tags": ["Queue"],

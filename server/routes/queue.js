@@ -990,6 +990,166 @@ export default function createQueueRouter(io) {
     }
   })
 
+  // ── Admin: cancel a live queue match and recreate it with the exact same teams ──
+  // Tears down the in-flight lobby + discord voice, marks the old queue_match
+  // cancelled, then inserts a NEW queue_match + matches row from the same
+  // captains / team1_players / team2_players / pool / season / game_mode_used,
+  // dispatches a fresh Dota lobby on a different bot, remaps playerInMatch +
+  // sockets to the new id, and fires queue:teamsFormed + queue:lobbyCreated.
+  // Refuses once the Dota game has launched (lobby 'completed' — bot has left).
+  router.post('/api/admin/queue/matches/:id/recreate', async (req, res) => {
+    const scope = await getQueueAdminScope(req, res)
+    if (!scope) return
+    const oldQmId = Number(req.params.id)
+    try {
+      const oldQm = await queryOne('SELECT * FROM queue_matches WHERE id = $1', [oldQmId])
+      if (!oldQm) return res.status(404).json({ error: 'Queue match not found' })
+      if (!scope.canManageAll && !scope.ownedPoolIds.has(oldQm.pool_id)) {
+        return res.status(403).json({ error: 'Permission denied — match is not in a pool you own' })
+      }
+      if (oldQm.status === 'picking') {
+        return res.status(400).json({ error: 'Teams not formed yet — recreate needs a non-picking match' })
+      }
+      if (oldQm.status === 'cancelled' || oldQm.status === 'completed') {
+        return res.status(409).json({ error: `Queue match is ${oldQm.status}` })
+      }
+      if (oldQm.match_id) {
+        const latestLobby = await queryOne(
+          'SELECT status FROM match_lobbies WHERE match_id = $1 ORDER BY id DESC LIMIT 1',
+          [oldQm.match_id]
+        )
+        if (latestLobby?.status === 'completed') {
+          return res.status(409).json({ error: 'Match already started — bot has left the lobby' })
+        }
+      }
+      const team1Players = Array.isArray(oldQm.team1_players) ? oldQm.team1_players : []
+      const team2Players = Array.isArray(oldQm.team2_players) ? oldQm.team2_players : []
+      if (!team1Players.length || !team2Players.length) {
+        return res.status(400).json({ error: 'Old match has no teams to copy' })
+      }
+      const pool = await queryOne('SELECT * FROM queue_pools WHERE id = $1', [oldQm.pool_id])
+      if (!pool) return res.status(500).json({ error: 'Pool not found for match' })
+
+      const allPlayerIds = [...new Set([
+        ...team1Players.map(p => p.playerId),
+        ...team2Players.map(p => p.playerId),
+      ])]
+
+      // ── Tear down the OLD match ──
+      // 1. Drop any in-flight Dota lobby on the old match
+      if (oldQm.match_id) {
+        const lobbies = await query(
+          "SELECT id FROM match_lobbies WHERE match_id = $1 AND status NOT IN ('completed', 'cancelled', 'error')",
+          [oldQm.match_id]
+        )
+        for (const lobby of lobbies) {
+          try { await botPool.cancelLobby(lobby.id) } catch (e) { console.error('[Queue recreate] cancel old lobby failed:', e.message) }
+        }
+        // 2. Discord voice teardown (radiant/dire channels → In-House)
+        discordBot.matchEnd(oldQm.match_id, true)
+          .catch((err) => console.warn('[Queue recreate] discord matchEnd failed:', err.message))
+      }
+
+      // 3. Mark old queue_match cancelled
+      await execute("UPDATE queue_matches SET status = 'cancelled', completed_at = NOW() WHERE id = $1", [oldQmId])
+
+      // 4. Clear in-memory pick state (lobby_creating/live shouldn't have a timer, but be defensive)
+      clearPickTimer(oldQmId)
+      activeQueueMatches.delete(oldQmId)
+
+      // 5. Notify old room — clients render "Recreated by admin" then re-route via the new room
+      io.to(`queue-match:${oldQmId}`).emit('queue:cancelled', { queueMatchId: oldQmId, reason: 'Recreated by admin' })
+
+      // ── Insert the NEW queue_match copying everything that defines the matchup ──
+      const newQm = await queryOne(`
+        INSERT INTO queue_matches (
+          pool_id, captain1_player_id, captain2_player_id,
+          team1_players, team2_players, all_player_ids, role_preferences,
+          status, season_id, game_mode_used
+        ) VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb, 'lobby_creating', $8, $9)
+        RETURNING *
+      `, [
+        oldQm.pool_id, oldQm.captain1_player_id, oldQm.captain2_player_id,
+        JSON.stringify(team1Players), JSON.stringify(team2Players),
+        JSON.stringify(allPlayerIds), JSON.stringify(oldQm.role_preferences || {}),
+        oldQm.season_id, oldQm.game_mode_used,
+      ])
+      const newQmId = newQm.id
+
+      // New matches row (mirror finalizeQueueMatch). queue matches never have a competition.
+      const matchRow = await queryOne(`
+        INSERT INTO matches (competition_id, stage, round, match_order, best_of, status)
+        VALUES (NULL, 0, 0, 0, $1, 'live') RETURNING *
+      `, [pool.best_of || 1])
+      await execute('UPDATE queue_matches SET match_id = $1 WHERE id = $2', [matchRow.id, newQmId])
+      await execute(`
+        INSERT INTO match_games (match_id, game_number) VALUES ($1, 1)
+        ON CONFLICT (match_id, game_number) DO NOTHING
+      `, [matchRow.id])
+
+      // ── Remap in-memory state from old → new queue_match id ──
+      // Players stay locked in a match (no re-queue). Repin idempotently in case
+      // the old entry was already missing.
+      for (const pid of allPlayerIds) {
+        playerInMatch.set(pid, newQmId)
+        broadcastPresence(pid)
+      }
+      // Move sockets to the new room so they receive teamsFormed/lobbyCreated.
+      for (const [socketId, playerId] of socketPlayers) {
+        if (allPlayerIds.includes(playerId)) {
+          const s = io.sockets.sockets.get(socketId)
+          if (s) {
+            s.leave(`queue-match:${oldQmId}`)
+            s.join(`queue-match:${newQmId}`)
+          }
+        }
+      }
+
+      // ── Dispatch the new lobby ──
+      const goTeam1 = team1Players.map(p => ({ steam_id: p.steamId, name: p.name, team: 'radiant' }))
+      const goTeam2 = team2Players.map(p => ({ steam_id: p.steamId, name: p.name, team: 'dire' }))
+      const opts = oldQm.game_mode_used != null ? { gameModeOverride: oldQm.game_mode_used } : {}
+      let lobby
+      try {
+        lobby = await botPool.createQueueLobby(oldQm.pool_id, matchRow.id, 1, goTeam1, goTeam2, opts)
+      } catch (e) {
+        console.error('[Queue recreate] new lobby dispatch failed:', e.message)
+        io.to(`queue-match:${newQmId}`).emit('queue:error', { message: `Lobby creation failed: ${e.message}` })
+        // Return 200 with the new id so the admin can see the new match and use
+        // Remake/Cancel on it. The old match is already cancelled either way.
+        return res.json({ ok: false, newQueueMatchId: newQmId, matchId: matchRow.id, lobbyError: e.message })
+      }
+
+      await execute("UPDATE queue_matches SET status = 'live' WHERE id = $1", [newQmId])
+      const lobbyExpiresAt = Date.now() + ((pool.lobby_timeout_minutes || 10) * 60 * 1000)
+
+      io.to(`queue-match:${newQmId}`).emit('queue:teamsFormed', {
+        queueMatchId: newQmId,
+        team1: team1Players,
+        team2: team2Players,
+      })
+      io.to(`queue-match:${newQmId}`).emit('queue:lobbyCreated', {
+        queueMatchId: newQmId,
+        matchId: matchRow.id,
+        lobbyInfo: { gameName: lobby.game_name, password: lobby.password },
+        lobbyExpiresAt,
+      })
+
+      // Spin up fresh discord voice for the new matches row (radiant/dire).
+      discordBot.matchStart({
+        matchId: matchRow.id,
+        queueMatchId: newQmId,
+        team1: { side: 'radiant', captainName: team1Players[0]?.name, playerIds: team1Players.map(p => p.playerId) },
+        team2: { side: 'dire',    captainName: team2Players[0]?.name, playerIds: team2Players.map(p => p.playerId) },
+      }).catch((err) => console.warn('[Queue recreate] discord matchStart failed:', err.message))
+
+      res.json({ ok: true, newQueueMatchId: newQmId, matchId: matchRow.id })
+    } catch (e) {
+      console.error('[Queue] Admin recreate failed:', e.message)
+      res.status(500).json({ error: e.message })
+    }
+  })
+
   // ── Admin: force an immediate match-result check ──
   // Bumps the per-game fetch_match_stats poll to run NOW instead of waiting for
   // its next 60s cadence — for when an admin knows the Dota game just ended and

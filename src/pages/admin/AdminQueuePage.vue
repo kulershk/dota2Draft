@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Plus, Trash2, Pencil, X, Check, Ban, RefreshCw, Swords, Loader2, UserX, Clock, Search, CheckSquare, AlertTriangle } from 'lucide-vue-next'
+import { Plus, Trash2, Pencil, X, Check, Ban, RefreshCw, Swords, Loader2, UserX, Clock, Search, CheckSquare, AlertTriangle, RotateCcw } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
@@ -38,6 +38,12 @@ const retryError = ref<{ id: number; message: string } | null>(null)
 const remakeTarget = ref<any | null>(null)
 const remaking = ref(false)
 const remakeError = ref('')
+// Recreate-match modal — cancels the current queue match and starts a NEW one
+// with the same captains/teams/pool/season (a do-over). Destructive: drops the
+// current Dota lobby and players have to rejoin the fresh one.
+const recreateTarget = ref<any | null>(null)
+const recreating = ref(false)
+const recreateError = ref('')
 const queuedPlayers = ref<any[]>([])
 const bans = ref<any[]>([])
 const banForm = ref<{
@@ -437,6 +443,36 @@ async function confirmForceRemake() {
   }
 }
 
+// Recreate — cancel the current match and start a new one with the same teams.
+function openRecreateMatch(qm: any) {
+  recreateError.value = ''
+  recreateTarget.value = qm
+}
+function closeRecreate() {
+  if (recreating.value) return
+  recreateTarget.value = null
+}
+async function confirmRecreate() {
+  if (!recreateTarget.value) return
+  recreating.value = true
+  recreateError.value = ''
+  try {
+    const res: any = await api.recreateQueueMatch(recreateTarget.value.id)
+    recreateTarget.value = null
+    await fetchActiveMatches()
+    // Backend returns ok:false + newQueueMatchId when the new match was created
+    // but its lobby dispatch failed (no available bot, etc.) — surface that.
+    if (res && res.ok === false && res.lobbyError) {
+      retryError.value = { id: res.newQueueMatchId, message: `Lobby dispatch failed: ${res.lobbyError}` }
+    }
+  } catch (e: any) {
+    recreateError.value = e?.message || 'Failed to recreate match'
+  } finally {
+    recreating.value = false
+  }
+}
+
+
 // Force an immediate match-result check (runs the fetch_match_stats job now).
 // Non-destructive; on success we flash a checkmark and refresh — the winner
 // resolves a few seconds later once the worker picks up the bumped job.
@@ -777,6 +813,17 @@ onUnmounted(() => {
                 @click="openForceRemake(qm)"
               >
                 <RefreshCw class="w-3.5 h-3.5" :class="retryingLobby === qm.id ? 'animate-spin' : ''" /> {{ t('queueAdminForceRemake') }}
+              </button>
+              <!-- Recreate: cancels the current queue match and starts a new one with the
+                   exact same captains/teams/pool/season. Available once teams are formed
+                   (no DRAFTING) and the game hasn't already launched (no awaitingResult). -->
+              <button
+                v-if="qm._stage.key !== 'DRAFTING' && qm._stage.key !== 'UNKNOWN' && !qm._stage.awaitingResult"
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-amber-500 hover:bg-amber-500/10 transition-colors"
+                :title="t('queueAdminRecreateHint')"
+                @click="openRecreateMatch(qm)"
+              >
+                <RotateCcw class="w-3.5 h-3.5" /> {{ t('queueAdminRecreate') }}
               </button>
               <button
                 v-if="qm.match_id"
@@ -1652,6 +1699,41 @@ onUnmounted(() => {
           <Loader2 v-if="remaking" class="w-3.5 h-3.5 animate-spin" />
           <RefreshCw v-else class="w-3.5 h-3.5" />
           {{ t('queueAdminForceRemake') }}
+        </button>
+      </div>
+    </ModalOverlay>
+
+    <!-- Recreate match confirmation (cancel current, create new with same teams) -->
+    <ModalOverlay :show="!!recreateTarget" @close="closeRecreate">
+      <div class="border-b border-border px-6 py-5">
+        <h2 class="text-lg font-bold flex items-center gap-2">
+          <RotateCcw class="w-4 h-4 text-amber-500" />
+          {{ t('queueAdminRecreateTitle') }}
+        </h2>
+        <p class="text-xs text-muted-foreground mt-1">
+          {{ t('queueAdminRecreateConfirm') }}
+        </p>
+      </div>
+
+      <div v-if="recreateTarget" class="px-6 py-5 flex flex-col gap-3">
+        <div class="flex items-center gap-2 text-sm flex-wrap">
+          <span class="font-semibold text-muted-foreground">#{{ recreateTarget.id }}</span>
+          <span v-if="recreateTarget.pool_name" class="text-xs text-muted-foreground bg-accent px-2 py-0.5 rounded">{{ recreateTarget.pool_name }}</span>
+          <span class="font-medium">{{ recreateTarget.captain1_display_name || recreateTarget.captain1_name || '—' }}</span>
+          <span class="text-muted-foreground/40 font-bold">vs</span>
+          <span class="font-medium">{{ recreateTarget.captain2_display_name || recreateTarget.captain2_name || '—' }}</span>
+        </div>
+        <p v-if="recreateError" class="text-xs text-destructive bg-destructive/10 border border-destructive/30 rounded-lg px-3 py-2">
+          {{ recreateError }}
+        </p>
+      </div>
+
+      <div class="px-6 py-4 border-t border-border/30 flex justify-end gap-2">
+        <button class="btn-outline" :disabled="recreating" @click="closeRecreate">{{ t('cancel') }}</button>
+        <button class="btn-primary flex items-center gap-1.5" :disabled="recreating" @click="confirmRecreate">
+          <Loader2 v-if="recreating" class="w-3.5 h-3.5 animate-spin" />
+          <RotateCcw v-else class="w-3.5 h-3.5" />
+          {{ t('queueAdminRecreate') }}
         </button>
       </div>
     </ModalOverlay>

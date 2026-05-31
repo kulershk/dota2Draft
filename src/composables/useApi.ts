@@ -763,6 +763,8 @@ export function useApi() {
       request(`/api/admin/queue/matches/${id}/cancel`, { method: 'POST' }),
     forceCompleteQueueMatch: (id: number) =>
       request(`/api/admin/queue/matches/${id}/force-complete`, { method: 'POST' }),
+    recreateQueueMatch: (id: number) =>
+      request(`/api/admin/queue/matches/${id}/recreate`, { method: 'POST' }),
     checkQueueMatchResult: (id: number) =>
       request(`/api/admin/queue/matches/${id}/check-result`, { method: 'POST' }),
     deleteQueueMatch: (id: number) =>
