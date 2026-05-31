@@ -27,6 +27,13 @@ export const DRAFT_EVENTS = {
    *  bot can grant/remove the Subscriber role. Server resolves the Discord id
    *  before emitting (no DB lookup needed bot-side). */
   SUBSCRIPTION_CHANGED: 'subscriptionChanged',
+  /** Admin added a reaction-role mapping in /admin/discord. Bot fetches the
+   *  message and adds its own reaction so users have something to click. */
+  REACTION_ROLE_ADDED: 'reactionRoleAdded',
+  /** Admin deleted a reaction-role mapping. Bot removes its own reaction;
+   *  users who already have the role keep it (intentional — flips don't
+   *  retroactively strip). */
+  REACTION_ROLE_REMOVED: 'reactionRoleRemoved',
 } as const
 
 export type DraftEventName = (typeof DRAFT_EVENTS)[keyof typeof DRAFT_EVENTS]
@@ -73,4 +80,14 @@ export interface TournamentAnnouncePayload {
   competitionType?: string | null
   bannerUrl?: string | null
   publicUrl?: string | null
+}
+
+export interface ReactionRolePayload {
+  id: number
+  guildId: string
+  channelId: string
+  messageId: string
+  /** Unicode char (e.g. "✅") OR custom-emoji form "<name>:<id>". */
+  emoji: string
+  roleId: string
 }

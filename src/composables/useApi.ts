@@ -371,6 +371,25 @@ export function useApi() {
       request('/api/admin/discord/plugins') as Promise<{
         plugins: Array<{ name: string; description: string; class: string; enabled: boolean }>
       }>,
+    getDiscordReactionRoles: () =>
+      request('/api/admin/discord/reaction-roles') as Promise<{
+        rows: Array<{
+          id: number
+          guild_id: string
+          channel_id: string
+          message_id: string
+          emoji: string
+          role_id: string
+          label: string | null
+          created_by: number | null
+          created_by_name: string | null
+          created_at: string
+        }>
+      }>,
+    addDiscordReactionRole: (data: { guild_id?: string; channel_id?: string; message_id?: string; message_link?: string; emoji: string; role_id: string; label?: string | null }) =>
+      request('/api/admin/discord/reaction-roles', { method: 'POST', body: JSON.stringify(data) }),
+    deleteDiscordReactionRole: (id: number) =>
+      request(`/api/admin/discord/reaction-roles/${id}`, { method: 'DELETE' }),
 
     // Site Settings
     getSiteSettings: () => request('/api/site-settings'),

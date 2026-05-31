@@ -26,6 +26,7 @@ import streamRoutes from './routes/streams.js'
 import permissionRoutes from './routes/permissions.js'
 import settingRoutes from './routes/settings.js'
 import discordSettingsRoutes from './routes/discordSettings.js'
+import discordReactionRolesRoutes from './routes/discordReactionRoles.js'
 import userRoutes from './routes/users.js'
 import createFriendsRouter from './routes/friends.js'
 import createSlotsRouter from './routes/slots.js'
@@ -151,6 +152,7 @@ app.use(streamRoutes)
 app.use(permissionRoutes)
 app.use(settingRoutes)
 app.use(discordSettingsRoutes)
+app.use(discordReactionRolesRoutes)
 app.use(userRoutes)
 app.use(createFriendsRouter(io))
 app.use(createSlotsRouter(io))

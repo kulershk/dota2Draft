@@ -843,7 +843,21 @@ export async function initDb() {
       dire_channel_id TEXT NOT NULL,
       cleanup_at TIMESTAMP NULL,
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
-    )
+    );
+
+    CREATE TABLE IF NOT EXISTS discord_reaction_roles (
+      id          SERIAL PRIMARY KEY,
+      guild_id    TEXT NOT NULL,
+      channel_id  TEXT NOT NULL,
+      message_id  TEXT NOT NULL,
+      emoji       TEXT NOT NULL,
+      role_id     TEXT NOT NULL,
+      label       TEXT,
+      created_by  INTEGER REFERENCES players(id) ON DELETE SET NULL,
+      created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
+      UNIQUE (message_id, emoji)
+    );
+    CREATE INDEX IF NOT EXISTS idx_drr_message ON discord_reaction_roles(message_id);
   `)
 
   // Drop FK constraints on winner_captain_id so queue matches can store player IDs

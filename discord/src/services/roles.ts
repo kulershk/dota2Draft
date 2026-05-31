@@ -54,3 +54,21 @@ export async function removeRole(member: GuildMember, key: RoleKey): Promise<boo
   await member.roles.remove(role, `Removed: ${key}`)
   return true
 }
+
+// Generic helpers for arbitrary role IDs (e.g. the reaction-roles plugin where
+// the admin picks any role in the guild, not just the canonical RoleKey set).
+// Idempotent: re-adding an already-held role / removing one the member doesn't
+// have is a no-op that returns false.
+export async function addRoleById(member: GuildMember, roleId: string, reason: string): Promise<boolean> {
+  if (!roleId) return false
+  if (member.roles.cache.has(roleId)) return false
+  await member.roles.add(roleId, reason)
+  return true
+}
+
+export async function removeRoleById(member: GuildMember, roleId: string, reason: string): Promise<boolean> {
+  if (!roleId) return false
+  if (!member.roles.cache.has(roleId)) return false
+  await member.roles.remove(roleId, reason)
+  return true
+}

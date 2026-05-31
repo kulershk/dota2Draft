@@ -1,5 +1,5 @@
 import 'reflect-metadata'
-import { Client, Events, GatewayIntentBits } from 'discord.js'
+import { Client, Events, GatewayIntentBits, Partials } from 'discord.js'
 import { MSG_FLAG_EPHEMERAL } from './core/flags.js'
 import { env } from './env.js'
 import { Logger } from './services/logger.js'
@@ -26,10 +26,21 @@ async function main(): Promise<void> {
   // GuildMembers is privileged — opt in via ENABLE_GUILD_MEMBERS_INTENT=true
   // AFTER toggling SERVER MEMBERS INTENT at https://discord.com/developers.
   // Without it, the auto-verify plugin's onGuildMemberAdd hook never fires.
-  const intents = [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates]
+  // GuildMessageReactions + Message/Channel/Reaction partials power the
+  // reaction-roles plugin — without partials, reactions on messages older
+  // than the bot's cache silently never fire.
+  const intents = [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.GuildMessageReactions,
+  ]
   if (env.ENABLE_GUILD_MEMBERS_INTENT) intents.push(GatewayIntentBits.GuildMembers)
   Logger.info(`Intents: ${intents.map((i) => GatewayIntentBits[i]).join(', ')} (ENABLE_GUILD_MEMBERS_INTENT=${env.ENABLE_GUILD_MEMBERS_INTENT})`)
-  const client = new Client({ intents })
+  const client = new Client({
+    intents,
+    partials: [Partials.Message, Partials.Channel, Partials.Reaction],
+  })
   client.on('error', (e) => Logger.error('client error', e))
 
   await client.login(env.DISCORD_BOT_TOKEN)

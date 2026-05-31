@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { MessageSquare, Save, RefreshCw, ShieldCheck, Hash, Volume2, AlertTriangle, CheckCircle2, Swords, Puzzle, Settings as SettingsIcon, Trophy, UserPlus, Hand } from 'lucide-vue-next'
+import { MessageSquare, Save, RefreshCw, ShieldCheck, Hash, Volume2, AlertTriangle, CheckCircle2, Swords, Puzzle, Settings as SettingsIcon, Trophy, UserPlus, Hand, Smile, Plus, Trash2, ExternalLink } from 'lucide-vue-next'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
+import ModalOverlay from '@/components/common/ModalOverlay.vue'
 
 const { t } = useI18n()
 const api = useApi()
@@ -53,6 +54,7 @@ const PLUGIN_ICONS: Record<string, any> = {
   autoVerify: ShieldCheck,
   welcome: Hand,
   tournamentAnnounce: Trophy,
+  reactionRoles: Smile,
 }
 function pluginIcon(name: string) { return PLUGIN_ICONS[name] ?? Puzzle }
 function pluginLabel(name: string) {
@@ -69,6 +71,94 @@ const categoryChannels = computed(() => channels.value.filter((c) => c.type === 
 function colorHex(color: number): string {
   if (!color) return '#99a'
   return '#' + color.toString(16).padStart(6, '0')
+}
+
+// ─── Reaction Roles ───────────────────────────────────────────
+interface ReactionRoleRow {
+  id: number
+  guild_id: string
+  channel_id: string
+  message_id: string
+  emoji: string
+  role_id: string
+  label: string | null
+  created_by: number | null
+  created_by_name: string | null
+  created_at: string
+}
+const reactionRoles = ref<ReactionRoleRow[]>([])
+const reactionRolesLoading = ref(false)
+const showRrModal = ref(false)
+const rrForm = ref<{ message_link: string; emoji: string; role_id: string; label: string }>({
+  message_link: '', emoji: '', role_id: '', label: '',
+})
+const rrSubmitting = ref(false)
+const rrError = ref('')
+const rrDeleteTarget = ref<ReactionRoleRow | null>(null)
+
+async function loadReactionRoles() {
+  reactionRolesLoading.value = true
+  try {
+    const { rows } = await api.getDiscordReactionRoles()
+    reactionRoles.value = rows
+  } catch (err) {
+    errorMsg.value = (err as Error).message
+  } finally {
+    reactionRolesLoading.value = false
+  }
+}
+
+function openRrModal() {
+  rrForm.value = { message_link: '', emoji: '', role_id: '', label: '' }
+  rrError.value = ''
+  showRrModal.value = true
+}
+
+async function submitRr() {
+  rrError.value = ''
+  if (!rrForm.value.emoji || !rrForm.value.role_id || !rrForm.value.message_link) {
+    rrError.value = t('discordReactionRolesMissingFields')
+    return
+  }
+  rrSubmitting.value = true
+  try {
+    await api.addDiscordReactionRole({
+      message_link: rrForm.value.message_link.trim(),
+      emoji: rrForm.value.emoji.trim(),
+      role_id: rrForm.value.role_id,
+      label: rrForm.value.label.trim() || null,
+    })
+    showRrModal.value = false
+    await loadReactionRoles()
+  } catch (err) {
+    rrError.value = (err as Error).message
+  } finally {
+    rrSubmitting.value = false
+  }
+}
+
+async function confirmDeleteRr() {
+  if (!rrDeleteTarget.value) return
+  try {
+    await api.deleteDiscordReactionRole(rrDeleteTarget.value.id)
+    rrDeleteTarget.value = null
+    await loadReactionRoles()
+  } catch (err) {
+    errorMsg.value = (err as Error).message
+  }
+}
+
+function roleName(id: string): string {
+  return roles.value.find((r) => r.id === id)?.name ?? `#${id}`
+}
+
+function roleColor(id: string): string {
+  const r = roles.value.find((x) => x.id === id)
+  return r ? colorHex(r.color) : '#99a'
+}
+
+function messageLink(row: ReactionRoleRow): string {
+  return `https://discord.com/channels/${row.guild_id}/${row.channel_id}/${row.message_id}`
 }
 
 async function refreshFromBot() {
@@ -120,6 +210,7 @@ onMounted(async () => {
       if (m) pluginToggles.value[m[1]] = v !== 'false'
     }
     await refreshFromBot()
+    await loadReactionRoles()
   } finally {
     loading.value = false
   }
@@ -345,6 +436,60 @@ async function save() {
                 <p class="text-[11px] text-muted-foreground mt-1">{{ t('discordTournamentChannelHint') }}</p>
               </div>
             </div>
+
+            <div v-if="p.name === 'reactionRoles'" class="card">
+              <div class="flex items-center justify-between gap-2 px-5 py-3 border-b border-border">
+                <div class="flex items-center gap-2">
+                  <Smile class="w-4 h-4 text-foreground" />
+                  <span class="text-sm font-semibold text-foreground">{{ t('discordReactionRolesSection') }}</span>
+                </div>
+                <button class="btn-primary text-xs" @click="openRrModal">
+                  <Plus class="w-3.5 h-3.5" />
+                  {{ t('discordReactionRolesAdd') }}
+                </button>
+              </div>
+              <div class="px-5 py-4">
+                <p class="text-[11px] text-muted-foreground mb-3">{{ t('discordReactionRolesHint') }}</p>
+                <div v-if="reactionRolesLoading" class="text-sm text-muted-foreground py-4 text-center">{{ t('loading') }}</div>
+                <div v-else-if="!reactionRoles.length" class="text-sm text-muted-foreground py-4 text-center">{{ t('discordReactionRolesEmpty') }}</div>
+                <table v-else class="w-full text-sm">
+                  <thead>
+                    <tr class="text-left text-[11px] uppercase tracking-wide text-muted-foreground border-b border-border">
+                      <th class="py-2 pr-3">{{ t('discordReactionRolesMessage') }}</th>
+                      <th class="py-2 pr-3">{{ t('discordReactionRolesEmoji') }}</th>
+                      <th class="py-2 pr-3">{{ t('discordReactionRolesRole') }}</th>
+                      <th class="py-2 pr-3">{{ t('discordReactionRolesLabel') }}</th>
+                      <th class="py-2 pr-3">{{ t('createdBy') }}</th>
+                      <th class="py-2 w-8"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in reactionRoles" :key="row.id" class="border-b border-border/50 last:border-0">
+                      <td class="py-2 pr-3 font-mono text-xs">
+                        <a :href="messageLink(row)" target="_blank" rel="noopener" class="text-primary hover:underline inline-flex items-center gap-1">
+                          {{ row.message_id }}
+                          <ExternalLink class="w-3 h-3" />
+                        </a>
+                      </td>
+                      <td class="py-2 pr-3">{{ row.emoji }}</td>
+                      <td class="py-2 pr-3">
+                        <span class="inline-flex items-center gap-1.5">
+                          <span class="w-2 h-2 rounded-full" :style="{ backgroundColor: roleColor(row.role_id) }" />
+                          {{ roleName(row.role_id) }}
+                        </span>
+                      </td>
+                      <td class="py-2 pr-3 text-muted-foreground">{{ row.label || '—' }}</td>
+                      <td class="py-2 pr-3 text-muted-foreground">{{ row.created_by_name || '—' }}</td>
+                      <td class="py-2">
+                        <button class="text-destructive hover:text-destructive/80" :title="t('delete')" @click="rrDeleteTarget = row">
+                          <Trash2 class="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </template>
         </template>
 
@@ -402,5 +547,83 @@ async function save() {
         <div v-if="loading" class="text-center text-sm text-muted-foreground py-4">{{ t('loading') }}</div>
       </div>
     </div>
+
+    <ModalOverlay :show="showRrModal" @close="showRrModal = false">
+      <div class="px-7 py-6 flex flex-col gap-4">
+        <div>
+          <h2 class="text-xl font-semibold text-foreground flex items-center gap-2">
+            <Smile class="w-5 h-5 text-primary" />
+            {{ t('discordReactionRolesAdd') }}
+          </h2>
+          <p class="text-sm text-muted-foreground mt-2">{{ t('discordReactionRolesModalHint') }}</p>
+        </div>
+        <div>
+          <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{{ t('discordReactionRolesMessageLink') }}</label>
+          <input
+            v-model="rrForm.message_link"
+            type="text"
+            class="input-field w-full mt-1.5 font-mono text-xs"
+            placeholder="https://discord.com/channels/.../.../..."
+          />
+        </div>
+        <div>
+          <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{{ t('discordReactionRolesEmoji') }}</label>
+          <input
+            v-model="rrForm.emoji"
+            type="text"
+            class="input-field w-full mt-1.5"
+            :placeholder="t('discordReactionRolesEmojiPlaceholder')"
+          />
+          <p class="text-[11px] text-muted-foreground mt-1">{{ t('discordReactionRolesEmojiHint') }}</p>
+        </div>
+        <div>
+          <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{{ t('discordReactionRolesRole') }}</label>
+          <select v-model="rrForm.role_id" class="input-field w-full mt-1.5">
+            <option value="">{{ t('discordRoleNone') }}</option>
+            <option v-for="r in roles" :key="r.id" :value="r.id" :disabled="r.managed">
+              {{ r.name }} {{ r.managed ? '(managed)' : '' }}
+            </option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{{ t('discordReactionRolesLabel') }}</label>
+          <input
+            v-model="rrForm.label"
+            type="text"
+            class="input-field w-full mt-1.5"
+            maxlength="120"
+          />
+        </div>
+        <p v-if="rrError" class="text-sm text-destructive">{{ rrError }}</p>
+      </div>
+      <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
+        <button class="btn-primary w-full justify-center" :disabled="rrSubmitting" @click="submitRr">
+          <Plus class="w-4 h-4" />
+          {{ rrSubmitting ? t('loading') : t('add') }}
+        </button>
+        <button class="btn-secondary w-full justify-center" @click="showRrModal = false">{{ t('cancel') }}</button>
+      </div>
+    </ModalOverlay>
+
+    <ModalOverlay :show="!!rrDeleteTarget" @close="rrDeleteTarget = null">
+      <div class="px-7 py-6 flex flex-col gap-4">
+        <div>
+          <h2 class="text-xl font-semibold text-foreground">{{ t('discordReactionRolesDeleteTitle') }}</h2>
+          <p class="text-sm text-muted-foreground mt-2">{{ t('discordReactionRolesDeleteHint') }}</p>
+        </div>
+        <div v-if="rrDeleteTarget" class="rounded-md bg-accent/40 border border-border p-3 text-sm">
+          <div class="flex justify-between gap-3"><span class="text-muted-foreground">{{ t('discordReactionRolesEmoji') }}</span><span class="font-mono">{{ rrDeleteTarget.emoji }}</span></div>
+          <div class="flex justify-between gap-3"><span class="text-muted-foreground">{{ t('discordReactionRolesRole') }}</span><span>{{ roleName(rrDeleteTarget.role_id) }}</span></div>
+          <div class="flex justify-between gap-3"><span class="text-muted-foreground">{{ t('discordReactionRolesMessage') }}</span><span class="font-mono text-xs">{{ rrDeleteTarget.message_id }}</span></div>
+        </div>
+      </div>
+      <div class="px-7 py-5 flex flex-col gap-3 border-t border-border">
+        <button class="btn-destructive w-full justify-center" @click="confirmDeleteRr">
+          <Trash2 class="w-4 h-4" />
+          {{ t('delete') }}
+        </button>
+        <button class="btn-secondary w-full justify-center" @click="rrDeleteTarget = null">{{ t('cancel') }}</button>
+      </div>
+    </ModalOverlay>
   </div>
 </template>

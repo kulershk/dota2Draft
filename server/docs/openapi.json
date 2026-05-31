@@ -3167,6 +3167,60 @@
         "responses": { "200": { "description": "{ reachable, ready, bot, settingsLoaded } or { reachable: false, error }" } }
       }
     },
+    "/api/admin/discord/reaction-roles": {
+      "get": {
+        "tags": ["Discord"],
+        "summary": "List reaction-role mappings",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_discord_settings. Returns every configured (message, emoji) → role mapping the reactionRoles bot plugin watches.",
+        "responses": {
+          "200": { "description": "{ rows: [{ id, guild_id, channel_id, message_id, emoji, role_id, label, created_by, created_by_name, created_at }] }" }
+        }
+      },
+      "post": {
+        "tags": ["Discord"],
+        "summary": "Add a reaction-role mapping",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_discord_settings. Either pass guild_id + channel_id + message_id explicitly, or paste a Discord message link as `message_link` (or in any of the id fields) and the server will parse it. On success emits `reactionRoleAdded` to the bot so it adds its own reaction to the message; conflicts (same emoji already mapped on that message) return 409.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "guild_id": { "type": "string" },
+                  "channel_id": { "type": "string" },
+                  "message_id": { "type": "string" },
+                  "message_link": { "type": "string", "description": "Optional convenience: https://discord.com/channels/<guild>/<channel>/<message>" },
+                  "emoji": { "type": "string", "description": "Unicode char (e.g. ✅) or custom-emoji form name:id" },
+                  "role_id": { "type": "string" },
+                  "label": { "type": "string", "nullable": true }
+                },
+                "required": ["emoji", "role_id"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Created row" },
+          "400": { "description": "Missing required fields" },
+          "409": { "description": "Mapping already exists for this (message, emoji)" }
+        }
+      }
+    },
+    "/api/admin/discord/reaction-roles/{id}": {
+      "delete": {
+        "tags": ["Discord"],
+        "summary": "Delete a reaction-role mapping",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_discord_settings. Removes the mapping row and emits `reactionRoleRemoved` to the bot so it strips its own reaction from the message. Users who already received the role keep it — flipping a mapping off does not retroactively revoke.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": { "description": "{ ok: true }" },
+          "404": { "description": "Not found" }
+        }
+      }
+    },
     "/api/site-settings/logo": {
       "post": {
         "tags": ["Settings"],
