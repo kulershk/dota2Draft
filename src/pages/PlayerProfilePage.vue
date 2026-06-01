@@ -267,7 +267,18 @@ const pointsChartData = computed(() => {
       label: t('seasonPointsLabel'),
       data,
       borderColor: 'rgb(34, 211, 238)',
-      backgroundColor: 'rgba(34, 211, 238, 0.12)',
+      // Vertical gradient: brand blue at the line fading to transparent at the
+      // bottom. Scriptable so it can read the chart's draw area; chartArea is
+      // undefined on the very first paint, so fall back to a flat tint then.
+      backgroundColor: (ctx: any) => {
+        const { chart } = ctx
+        const { ctx: c, chartArea } = chart
+        if (!chartArea) return 'rgba(34, 211, 238, 0.12)'
+        const grad = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom)
+        grad.addColorStop(0, 'rgba(34, 211, 238, 0.35)')
+        grad.addColorStop(1, 'rgba(34, 211, 238, 0)')
+        return grad
+      },
       tension: 0.25,
       fill: true,
       pointRadius: rows.length > 40 ? 0 : 2,
