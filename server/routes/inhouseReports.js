@@ -538,8 +538,9 @@ export default function createInhouseReportsRouter(io) {
         )).rows[0].grief_strikes
         // Captain status is now per-season membership in a captains_drawn_from
         // group. Find the matching group + membership row so the revocation
-        // step can target the right (group, player) pair.
-        const captainGroupRow = pool?.season_id
+        // step can target the right (group, player) pair. Skip the lookup
+        // entirely when the pool opts out of auto-revoking griefing captains.
+        const captainGroupRow = pool?.season_id && pool?.grief_revoke_captain !== false
           ? (await client.query(
               `SELECT g.id FROM season_player_groups g
                  JOIN season_player_group_members m ON m.group_id = g.id

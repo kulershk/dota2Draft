@@ -2242,6 +2242,8 @@ export default {
   queueInhouseStrikeDelta: 'Strike pieaugums',
   queueInhouseToxicCooldowns: 'Toksiski strike sodi',
   queueInhouseGriefCooldowns: 'Grief strike sodi',
+  queueInhouseGriefRevokeCaptain: 'Atņemt kapteiņa statusu par grief strike',
+  queueInhouseGriefRevokeCaptainHint: 'Ja ieslēgts, kapteinis, kas saņem grief strike, zaudē kapteiņa statusu uz sezonu. Izslēdz, lai saglabātu kapteiņa statusu.',
   queueInhouseAtStrikes: 'Pie strikiem',
   queueInhouseHours: 'Stundas',
   queueInhouseCooldownNoAction: '(nekas)',

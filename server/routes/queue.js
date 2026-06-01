@@ -418,6 +418,7 @@ export default function createQueueRouter(io) {
       winstreak_tiers, mmr_diff_tiers,
       prize_active_pct,
       toxic_report_thresholds, toxic_strike_cooldowns, grief_strike_cooldowns,
+      grief_revoke_captain,
       clean_games_to_decay_strike,
       report_window_minutes,
       use_static_points, inhouse_win_points, inhouse_loss_points,
@@ -450,12 +451,13 @@ export default function createQueueRouter(io) {
           winstreak_tiers, mmr_diff_tiers,
           prize_active_pct,
           toxic_report_thresholds, toxic_strike_cooldowns, grief_strike_cooldowns,
+          grief_revoke_captain,
           clean_games_to_decay_strike,
           report_window_minutes,
           use_static_points, inhouse_win_points, inhouse_loss_points,
           friday_window_start_hour, friday_window_end_hour
         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,
-                  $31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53)
+                  $31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54)
         RETURNING *
       `, [
         name, enabled !== false, min_mmr || 0, max_mmr || 0,
@@ -479,6 +481,7 @@ export default function createQueueRouter(io) {
         JSON.stringify(toxic_report_thresholds ?? [{ reports: 3, strike_delta: 1 }, { reports: 4, strike_delta: 2 }]),
         JSON.stringify(toxic_strike_cooldowns ?? [{ strikes: 2, action: 'warn' }, { strikes: 3, hours: 12 }, { strikes: 4, hours: 24 }, { strikes: 5, hours: 72 }]),
         JSON.stringify(grief_strike_cooldowns ?? [{ strikes: 1, action: 'warn' }, { strikes: 2, hours: 24 }, { strikes: 3, hours: 72 }, { strikes: 4, action: 'ban' }]),
+        grief_revoke_captain !== false,
         clean_games_to_decay_strike ?? 5,
         report_window_minutes ?? 15,
         !!use_static_points,
@@ -527,6 +530,7 @@ export default function createQueueRouter(io) {
         'winstreak_tiers', 'mmr_diff_tiers',
         'prize_active_pct',
         'toxic_report_thresholds', 'toxic_strike_cooldowns', 'grief_strike_cooldowns',
+        'grief_revoke_captain',
         'clean_games_to_decay_strike',
         'report_window_minutes',
         'use_static_points', 'inhouse_win_points', 'inhouse_loss_points',

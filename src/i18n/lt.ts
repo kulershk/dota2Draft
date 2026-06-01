@@ -2242,6 +2242,8 @@ export default {
   queueInhouseStrikeDelta: 'Strike pokytis',
   queueInhouseToxicCooldowns: 'Toks strike baudos',
   queueInhouseGriefCooldowns: 'Grief strike baudos',
+  queueInhouseGriefRevokeCaptain: 'Atimti kapitono statusą už grief strike',
+  queueInhouseGriefRevokeCaptainHint: 'Kai įjungta, kapitonas, gavęs grief strike, praranda kapitono statusą sezonui. Išjunkite, kad išliktų kapitonu.',
   queueInhouseAtStrikes: 'Prie strikų',
   queueInhouseHours: 'Valandos',
   queueInhouseCooldownNoAction: '(nieko)',

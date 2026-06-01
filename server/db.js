@@ -1108,6 +1108,9 @@ export async function initDb() {
     ['toxic_report_thresholds',     `JSONB NOT NULL DEFAULT '[{"reports":3,"strike_delta":1},{"reports":4,"strike_delta":2}]'::jsonb`],
     ['toxic_strike_cooldowns',      `JSONB NOT NULL DEFAULT '[{"strikes":2,"action":"warn"},{"strikes":3,"hours":12},{"strikes":4,"hours":24},{"strikes":5,"hours":72}]'::jsonb`],
     ['grief_strike_cooldowns',      `JSONB NOT NULL DEFAULT '[{"strikes":1,"action":"warn"},{"strikes":2,"hours":24},{"strikes":3,"hours":72},{"strikes":4,"action":"ban"}]'::jsonb`],
+    // When TRUE (default, the historical behavior) a captain who takes a grief
+    // strike loses captain status for that season. Toggle off to keep them.
+    ['grief_revoke_captain',        'BOOLEAN NOT NULL DEFAULT TRUE'],
     ['clean_games_to_decay_strike', 'INTEGER NOT NULL DEFAULT 5'],
     ['report_window_minutes',       'INTEGER NOT NULL DEFAULT 15'],
     // Flat base points override ELO when use_static_points is TRUE.

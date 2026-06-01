@@ -2254,6 +2254,8 @@ export default {
   queueInhouseStrikeDelta: 'Strike delta',
   queueInhouseToxicCooldowns: 'Toxic-strike cooldowns',
   queueInhouseGriefCooldowns: 'Grief-strike cooldowns',
+  queueInhouseGriefRevokeCaptain: 'Revoke captain status on grief strike',
+  queueInhouseGriefRevokeCaptainHint: 'When on, a captain who takes a grief strike loses captain status for the season. Turn off to keep them as captain.',
   queueInhouseAtStrikes: 'At strikes',
   queueInhouseHours: 'Hours',
   queueInhouseCooldownNoAction: '(no action)',

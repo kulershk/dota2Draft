@@ -98,6 +98,7 @@ const INHOUSE_DEFAULTS = {
   toxic_report_thresholds: [{ reports: 3, strike_delta: 1 }, { reports: 4, strike_delta: 2 }],
   toxic_strike_cooldowns: [{ strikes: 2, action: 'warn' }, { strikes: 3, hours: 12 }, { strikes: 4, hours: 24 }, { strikes: 5, hours: 72 }],
   grief_strike_cooldowns: [{ strikes: 1, action: 'warn' }, { strikes: 2, hours: 24 }, { strikes: 3, hours: 72 }, { strikes: 4, action: 'ban' }],
+  grief_revoke_captain: true,
   clean_games_to_decay_strike: 5,
   report_window_minutes: 15,
   use_static_points: false,
@@ -1435,6 +1436,14 @@ onUnmounted(() => {
                   + {{ t('queueInhouseAddTier') }}
                 </button>
               </div>
+            </div>
+
+            <div>
+              <label class="flex items-center gap-2 cursor-pointer text-sm">
+                <input type="checkbox" v-model="form.grief_revoke_captain" class="w-4 h-4" />
+                <span>{{ t('queueInhouseGriefRevokeCaptain') }}</span>
+              </label>
+              <p class="text-[11px] text-muted-foreground mt-1">{{ t('queueInhouseGriefRevokeCaptainHint') }}</p>
             </div>
 
             <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
