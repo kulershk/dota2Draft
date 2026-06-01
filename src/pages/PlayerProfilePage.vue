@@ -301,6 +301,24 @@ const pointsChartData = computed(() => {
   }
 })
 
+// The chart reserves space on its left for the y-axis labels, so the plotting
+// area is inset. Mirror that inset onto the win/loss strip below so the two
+// line up. A tiny plugin reads the chart's draw area after each layout and
+// publishes the left/right padding (in px) for the strip to consume.
+const stripPad = ref({ left: 0, right: 0 })
+const stripAlignPlugin = {
+  id: 'seasonPointsStripAlign',
+  afterLayout(chart: any) {
+    const left = Math.round(chart.chartArea.left)
+    const right = Math.round(chart.width - chart.chartArea.right)
+    if (stripPad.value.left !== left || stripPad.value.right !== right) {
+      stripPad.value = { left, right }
+    }
+  },
+}
+// Stable array reference so vue-chartjs doesn't re-init the chart each render.
+const pointsChartPlugins = [stripAlignPlugin]
+
 const pointsChartOptions = computed(() => ({
   responsive: true,
   maintainAspectRatio: false,
@@ -829,12 +847,14 @@ const streakBadge = computed(() => {
               <div v-else-if="pointsHistory.length === 0" class="h-56 flex items-center justify-center text-sm text-muted-foreground">{{ t('seasonPointsEmpty') }}</div>
               <template v-else>
                 <div class="h-56">
-                  <Line :data="pointsChartData" :options="pointsChartOptions" />
+                  <Line :data="pointsChartData" :options="pointsChartOptions" :plugins="pointsChartPlugins" />
                 </div>
                 <!-- Win/loss strip: one segment per shown game, green=win,
                      red=loss. Real games link to the match; synthetic rows
-                     (Friday bonus, admin adjust) render as a plain segment. -->
-                <div class="flex items-stretch gap-[3px] mt-3 px-1 h-2.5">
+                     (Friday bonus, admin adjust) render as a plain segment.
+                     Padded to match the chart's plotting area (see plugin). -->
+                <div class="flex items-stretch gap-[3px] mt-3 h-2.5"
+                     :style="{ paddingLeft: stripPad.left + 'px', paddingRight: stripPad.right + 'px' }">
                   <component
                     :is="pointMatchRoute(row) ? 'router-link' : 'div'"
                     v-for="row in recentPoints"
