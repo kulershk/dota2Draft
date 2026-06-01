@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Crown, Plus, Pencil, Trash2, X, Eye, EyeOff, UserPlus, Search, BadgeCheck } from 'lucide-vue-next'
+import { Crown, Plus, Pencil, Trash2, X, Eye, EyeOff, UserPlus, Search, BadgeCheck, Sparkles } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 import InputGroup from '@/components/common/InputGroup.vue'
@@ -115,6 +115,47 @@ function fmtPrice(cents: number, currency: string) {
 function fmtDate(iso: string | null) {
   if (!iso) return '—'
   return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+}
+
+// Effective status for the subscriber list. The DB `status` column is only
+// flipped to 'expired' by the hourly job, so a row can read 'active' while its
+// expires_at is already in the past — we surface that as Expired so the list
+// never shows a misleading green badge (the inconsistency the admin spotted).
+// Active trials get their own bucket so it's obvious who's sampling vs. paying.
+type EffStatus = 'active' | 'trial' | 'expired' | 'cancelled'
+function effectiveStatus(sub: Subscriber): EffStatus {
+  if (sub.status === 'cancelled') return 'cancelled'
+  if (sub.status === 'expired') return 'expired'
+  if (sub.expires_at && new Date(sub.expires_at).getTime() <= Date.now()) return 'expired'
+  if (sub.source === 'trial') return 'trial'
+  return 'active'
+}
+
+const STATUS_META: Record<EffStatus, { labelKey: string; pill: string; accent: string }> = {
+  active:    { labelKey: 'subscriptionStatusActive',    pill: 'bg-emerald-500/15 text-emerald-400', accent: 'border-l-emerald-500/60' },
+  trial:     { labelKey: 'subscriptionStatusTrial',     pill: 'bg-violet-500/15 text-violet-300',   accent: 'border-l-violet-500/60' },
+  expired:   { labelKey: 'subscriptionStatusExpired',   pill: 'bg-amber-500/15 text-amber-400',     accent: 'border-l-amber-500/50' },
+  cancelled: { labelKey: 'subscriptionStatusCancelled', pill: 'bg-muted/50 text-muted-foreground',  accent: 'border-l-border' },
+}
+
+// One filter at a time; only one plan is expanded so a single ref is enough.
+const SUB_FILTERS: ('all' | EffStatus)[] = ['all', 'active', 'trial', 'expired', 'cancelled']
+const subscriberFilter = ref<'all' | EffStatus>('all')
+
+function statusCounts(planId: number): Record<EffStatus, number> {
+  const c: Record<EffStatus, number> = { active: 0, trial: 0, expired: 0, cancelled: 0 }
+  for (const s of subscribersByPlan.value[planId] || []) c[effectiveStatus(s)]++
+  return c
+}
+function filteredSubscribers(planId: number): Subscriber[] {
+  const list = subscribersByPlan.value[planId] || []
+  if (subscriberFilter.value === 'all') return list
+  return list.filter(s => effectiveStatus(s) === subscriberFilter.value)
+}
+// Cancelling is only meaningful while a row is still providing perks.
+function canCancel(sub: Subscriber): boolean {
+  const s = effectiveStatus(sub)
+  return s === 'active' || s === 'trial'
 }
 
 async function load() {
@@ -279,6 +320,7 @@ async function toggleExpanded(planId: number) {
     return
   }
   expandedPlanId.value = planId
+  subscriberFilter.value = 'all'
   if (!subscribersByPlan.value[planId]) await loadSubscribers(planId)
 }
 
@@ -433,35 +475,74 @@ onUnmounted(() => {
             <div v-else-if="!subscribersByPlan[plan.id]?.length" class="py-4 text-center text-xs text-muted-foreground">
               {{ t('subscriptionPlanNoSubscribers') }}
             </div>
-            <div v-else class="flex flex-col gap-1.5">
-              <div
-                v-for="sub in subscribersByPlan[plan.id]"
-                :key="sub.id"
-                class="flex items-center gap-3 px-3 py-2 rounded bg-card border border-border/40"
-                :class="sub.status !== 'active' && 'opacity-60'"
-              >
-                <img v-if="sub.player_avatar_url" :src="sub.player_avatar_url" class="w-7 h-7 rounded-full object-cover" />
-                <div v-else class="w-7 h-7 rounded-full bg-accent" />
-                <div class="min-w-0 flex-1">
-                  <div class="flex items-center gap-2 flex-wrap">
-                    <span class="text-sm font-semibold truncate">{{ sub.player_display_name || sub.player_name || `#${sub.player_id}` }}</span>
-                    <span class="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded"
-                          :class="sub.status === 'active' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-muted/40 text-muted-foreground'">
-                      {{ sub.status }}
-                    </span>
-                    <span class="text-[10px] font-mono text-muted-foreground">{{ sub.source }}</span>
-                  </div>
-                  <div class="text-[11px] text-muted-foreground font-mono mt-0.5">
-                    {{ t('subscriptionPlanStartedAt') }}: {{ fmtDate(sub.started_at) }}
-                    <span v-if="sub.expires_at"> · {{ t('subscriptionPlanExpiresAt') }}: {{ fmtDate(sub.expires_at) }}</span>
-                    <span v-if="sub.cancelled_at"> · {{ t('subscriptionPlanCancelledAt') }}: {{ fmtDate(sub.cancelled_at) }}</span>
-                  </div>
-                </div>
-                <button v-if="sub.status === 'active'" class="btn-ghost p-1.5 text-destructive" :title="t('subscriptionPlanCancel')" @click="cancelSubscriber(plan.id, sub)">
-                  <X class="w-4 h-4" />
+            <template v-else>
+              <!-- Status filter chips with live counts -->
+              <div class="flex flex-wrap gap-1.5 pb-3">
+                <button
+                  v-for="f in SUB_FILTERS"
+                  :key="f"
+                  class="text-[11px] font-medium pl-2 pr-1.5 py-1 rounded-full border transition-colors flex items-center gap-1.5"
+                  :class="subscriberFilter === f
+                    ? 'bg-primary/15 border-primary/40 text-foreground'
+                    : 'border-border/50 text-muted-foreground hover:bg-accent/30'"
+                  @click="subscriberFilter = f"
+                >
+                  <span
+                    v-if="f !== 'all'"
+                    class="w-1.5 h-1.5 rounded-full"
+                    :class="{
+                      'bg-emerald-400': f === 'active',
+                      'bg-violet-300': f === 'trial',
+                      'bg-amber-400': f === 'expired',
+                      'bg-muted-foreground': f === 'cancelled',
+                    }"
+                  />
+                  {{ f === 'all' ? t('subscriptionFilterAll') : t(STATUS_META[f].labelKey) }}
+                  <span class="tabular-nums text-[10px] px-1 rounded bg-accent/40 text-foreground/70 min-w-[1.1rem] text-center">
+                    {{ f === 'all' ? (subscribersByPlan[plan.id]?.length || 0) : statusCounts(plan.id)[f] }}
+                  </span>
                 </button>
               </div>
-            </div>
+
+              <div v-if="!filteredSubscribers(plan.id).length" class="py-4 text-center text-xs text-muted-foreground">
+                {{ t('subscriptionPlanNoSubscribersForFilter') }}
+              </div>
+              <div v-else class="flex flex-col gap-1.5">
+                <div
+                  v-for="sub in filteredSubscribers(plan.id)"
+                  :key="sub.id"
+                  class="flex items-center gap-3 px-3 py-2 rounded bg-card border border-border/40 border-l-2"
+                  :class="[
+                    STATUS_META[effectiveStatus(sub)].accent,
+                    effectiveStatus(sub) === 'cancelled' || effectiveStatus(sub) === 'expired' ? 'opacity-70' : '',
+                  ]"
+                >
+                  <img v-if="sub.player_avatar_url" :src="sub.player_avatar_url" class="w-8 h-8 rounded-full object-cover shrink-0" />
+                  <div v-else class="w-8 h-8 rounded-full bg-accent shrink-0" />
+                  <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <span class="text-sm font-semibold truncate">{{ sub.player_display_name || sub.player_name || `#${sub.player_id}` }}</span>
+                      <span
+                        class="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded inline-flex items-center gap-1"
+                        :class="STATUS_META[effectiveStatus(sub)].pill"
+                      >
+                        <Sparkles v-if="effectiveStatus(sub) === 'trial'" class="w-2.5 h-2.5" />
+                        {{ t(STATUS_META[effectiveStatus(sub)].labelKey) }}
+                      </span>
+                      <span class="text-[10px] font-mono text-muted-foreground/70 px-1 rounded bg-accent/30">{{ sub.source }}</span>
+                    </div>
+                    <div class="text-[11px] text-muted-foreground font-mono mt-0.5">
+                      {{ t('subscriptionPlanStartedAt') }}: {{ fmtDate(sub.started_at) }}
+                      <span v-if="sub.expires_at"> · {{ t('subscriptionPlanExpiresAt') }}: {{ fmtDate(sub.expires_at) }}</span>
+                      <span v-if="sub.cancelled_at"> · {{ t('subscriptionPlanCancelledAt') }}: {{ fmtDate(sub.cancelled_at) }}</span>
+                    </div>
+                  </div>
+                  <button v-if="canCancel(sub)" class="btn-ghost p-1.5 text-destructive shrink-0" :title="t('subscriptionPlanCancel')" @click="cancelSubscriber(plan.id, sub)">
+                    <X class="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </template>
           </div>
         </div>
       </div>
