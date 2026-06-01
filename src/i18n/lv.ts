@@ -1628,6 +1628,8 @@ export default {
   seasonPointsGames: 'Spēles',
   seasonPointsEmpty: 'Šajā sezonā vēl nav reitinga spēļu',
   seasonPointsNoStats: 'Nav spēles statistikas',
+  seasonPointsFridayBonus: 'Piektdienas podija bonuss',
+  seasonPointsAdjustment: 'Punktu korekcija',
   seasonRankingsCount: 'sezonas',
   queuePoolSeason: 'Sezona',
   queuePoolNoSeason: 'Bez sezonas — neietekmē reitingus',

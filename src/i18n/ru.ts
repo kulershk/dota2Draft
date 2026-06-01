@@ -1535,6 +1535,8 @@ export default {
   seasonPointsGames: 'Игры',
   seasonPointsEmpty: 'В этом сезоне пока нет рейтинговых игр',
   seasonPointsNoStats: 'Нет статистики игры',
+  seasonPointsFridayBonus: 'Бонус за пятничный подиум',
+  seasonPointsAdjustment: 'Корректировка очков',
   inhouseReportEvidenceLabel: 'Доказательства (необязательно)',
   inhouseReportEvidenceAdd: 'Добавить файлы',
   inhouseReportEvidenceHelp: 'Скриншоты или короткие клипы. До {n} файлов, по 50 МБ.',

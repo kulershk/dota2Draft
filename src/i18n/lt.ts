@@ -1628,6 +1628,8 @@ export default {
   seasonPointsGames: 'Žaidimai',
   seasonPointsEmpty: 'Šiame sezone dar nėra reitinguojamų žaidimų',
   seasonPointsNoStats: 'Nėra žaidimo statistikos',
+  seasonPointsFridayBonus: 'Penktadienio podiumo premija',
+  seasonPointsAdjustment: 'Taškų koregavimas',
   seasonRankingsCount: 'sezonai',
   queuePoolSeason: 'Sezonas',
   queuePoolNoSeason: 'Be sezono — neturi įtakos reitingams',

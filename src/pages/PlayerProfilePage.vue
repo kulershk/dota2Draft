@@ -241,24 +241,44 @@ function r1(n: number): number { return Math.round(n * 10) / 10 }
 const POINTS_GRAPH_LIMIT = 30
 const recentPoints = computed(() => pointsHistory.value.slice(-POINTS_GRAPH_LIMIT))
 
-// Summary stats derived from the shown window (start → current, peak, Δ, W/L).
+// Cumulative points line, rebuilt from per-row `delta` rather than each row's
+// stored `points_after`. Friday-podium bonuses are back-dated to their Friday
+// noon but their absolute points_before/after reflect the ranking total at the
+// time the bonus job ran (≈ end of season after a recompute) — plotting those
+// raw values mid-timeline produced a huge spike. `delta` is reliable for every
+// row type (game, bonus, admin adjust), so a running sum anchored at the first
+// shown row's points_before yields a continuous, spike-free line.
+const pointsCumulative = computed(() => {
+  const rows = recentPoints.value
+  if (rows.length === 0) return { anchor: 0, values: [] as number[] }
+  const anchor = rows[0].points_before
+  let running = anchor
+  const values: number[] = []
+  for (const row of rows) {
+    running += row.delta
+    values.push(r1(running))
+  }
+  return { anchor: r1(anchor), values }
+})
+
+// Summary stats derived from the cumulative line (start → current, peak, Δ, W/L).
 const pointsSummary = computed(() => {
   const rows = recentPoints.value
+  const { anchor, values } = pointsCumulative.value
   if (rows.length === 0) return null
-  const start = rows[0].points_before
-  const current = rows[rows.length - 1].points_after
-  let peak = -Infinity
-  let trough = Infinity
+  const current = values[values.length - 1]
+  let peak = anchor
+  let trough = anchor
   let wins = 0
   let losses = 0
-  for (const row of rows) {
-    if (row.points_after > peak) peak = row.points_after
-    if (row.points_after < trough) trough = row.points_after
-    if (row.won === true) wins++
-    else if (row.won === false) losses++
+  for (let i = 0; i < rows.length; i++) {
+    if (values[i] > peak) peak = values[i]
+    if (values[i] < trough) trough = values[i]
+    if (rows[i].won === true) wins++
+    else if (rows[i].won === false) losses++
   }
   return {
-    start: r1(start), current: r1(current), change: r1(current - start),
+    start: anchor, current, change: r1(current - anchor),
     peak: r1(peak), low: r1(trough), wins, losses, games: rows.length,
   }
 })
@@ -288,14 +308,25 @@ function onStripLeave() { hoverRow.value = null }
 function hasGameStats(row: PointsRow | null): boolean {
   return !!row && row.kills != null && row.deaths != null && row.assists != null
 }
+// A synthetic (non-game) row is a Friday-podium bonus or an admin adjustment.
+function isSyntheticRow(row: PointsRow): boolean {
+  return !row.queue_match_id
+}
+// Friendly label for a non-game row, used in the tooltip in place of the hero.
+function rowReasonLabel(row: PointsRow): string {
+  if (row.reason === 'friday_top_bonus') return t('seasonPointsFridayBonus') as string
+  if (row.reason) return row.reason
+  return t('seasonPointsAdjustment') as string
+}
 
 // Chart.js dataset: a single blue line of cumulative points over time,
 // anchored at the points held going into the first shown game.
 const pointsChartData = computed(() => {
   const rows = recentPoints.value
   if (rows.length === 0) return { labels: [], datasets: [] }
+  const { anchor, values } = pointsCumulative.value
   const labels = [t('seasonPointsStartLabel'), ...rows.map((_, i) => String(i + 1))]
-  const data = [r1(rows[0].points_before), ...rows.map(row => r1(row.points_after))]
+  const data = [anchor, ...values]
   return {
     labels,
     datasets: [{
@@ -888,10 +919,13 @@ const streakBadge = computed(() => {
                       :to="pointMatchRoute(row) ?? undefined"
                       class="flex-1 rounded-sm transition-transform origin-bottom"
                       :class="[
-                        row.won === true ? 'bg-green-500' : row.won === false ? 'bg-red-500' : 'bg-muted-foreground/40',
+                        row.won === true ? 'bg-green-500'
+                          : row.won === false ? 'bg-red-500'
+                          : 'bg-sky-400/70',
                         pointMatchRoute(row) ? 'cursor-pointer' : '',
                         hoverRow?.id === row.id ? 'scale-y-[2]' : '',
                       ]"
+                      :title="isSyntheticRow(row) ? rowReasonLabel(row) : ''"
                       @mouseenter="onStripEnter($event, row)"
                       @mouseleave="onStripLeave"
                     />
@@ -904,34 +938,46 @@ const streakBadge = computed(() => {
                     :style="{ left: hoverLeft + 'px', bottom: 'calc(100% + 9px)' }"
                   >
                     <div class="rounded-xl border border-border bg-popover shadow-2xl overflow-hidden min-w-[196px]">
-                      <!-- Header: hero portrait + name/KDA + result chip -->
+                      <!-- Header: hero portrait + name/KDA + result chip for a
+                           game; bonus/adjustment label for a synthetic row. -->
                       <div class="flex items-center gap-2.5 p-2.5">
-                        <img v-if="hoverRow.hero_id && dota.heroImg(hoverRow.hero_id)"
-                             :src="dota.heroImg(hoverRow.hero_id)!"
-                             :alt="dota.heroName(hoverRow.hero_id) || ''"
-                             class="w-9 h-9 rounded-md object-cover border border-primary/40 shrink-0" />
-                        <div v-else class="w-9 h-9 rounded-md bg-accent/50 border border-border/40 shrink-0 flex items-center justify-center">
-                          <Swords class="w-4 h-4 text-muted-foreground" />
-                        </div>
-                        <div class="flex flex-col min-w-0 gap-0.5">
-                          <span class="text-xs font-bold text-foreground truncate leading-tight">
-                            {{ hoverRow.hero_id ? (dota.heroName(hoverRow.hero_id) || `Hero #${hoverRow.hero_id}`) : t('seasonPointsNoStats') }}
+                        <template v-if="!isSyntheticRow(hoverRow)">
+                          <img v-if="hoverRow.hero_id && dota.heroImg(hoverRow.hero_id)"
+                               :src="dota.heroImg(hoverRow.hero_id)!"
+                               :alt="dota.heroName(hoverRow.hero_id) || ''"
+                               class="w-9 h-9 rounded-md object-cover border border-primary/40 shrink-0" />
+                          <div v-else class="w-9 h-9 rounded-md bg-accent/50 border border-border/40 shrink-0 flex items-center justify-center">
+                            <Swords class="w-4 h-4 text-muted-foreground" />
+                          </div>
+                          <div class="flex flex-col min-w-0 gap-0.5">
+                            <span class="text-xs font-bold text-foreground truncate leading-tight">
+                              {{ hoverRow.hero_id ? (dota.heroName(hoverRow.hero_id) || `Hero #${hoverRow.hero_id}`) : t('seasonPointsNoStats') }}
+                            </span>
+                            <span v-if="hasGameStats(hoverRow)" class="text-[11px] font-mono leading-tight tracking-tight">
+                              <span class="font-bold text-foreground">{{ hoverRow.kills }}</span>
+                              <span class="text-muted-foreground/40">/</span>
+                              <span class="font-bold text-red-400">{{ hoverRow.deaths }}</span>
+                              <span class="text-muted-foreground/40">/</span>
+                              <span class="font-bold text-sky-400">{{ hoverRow.assists }}</span>
+                              <span class="text-muted-foreground/50 ml-1">{{ t('profileKdaShort') }}</span>
+                            </span>
+                          </div>
+                          <span class="ml-auto self-start inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-extrabold tracking-wider"
+                                :class="hoverRow.won === true ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'">
+                            <Check v-if="hoverRow.won === true" class="w-3 h-3" />
+                            <X v-else class="w-3 h-3" />
+                            {{ hoverRow.won === true ? t('profileWin') : t('profileLoss') }}
                           </span>
-                          <span v-if="hasGameStats(hoverRow)" class="text-[11px] font-mono leading-tight tracking-tight">
-                            <span class="font-bold text-foreground">{{ hoverRow.kills }}</span>
-                            <span class="text-muted-foreground/40">/</span>
-                            <span class="font-bold text-red-400">{{ hoverRow.deaths }}</span>
-                            <span class="text-muted-foreground/40">/</span>
-                            <span class="font-bold text-sky-400">{{ hoverRow.assists }}</span>
-                            <span class="text-muted-foreground/50 ml-1">{{ t('profileKdaShort') }}</span>
-                          </span>
-                        </div>
-                        <span class="ml-auto self-start inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-extrabold tracking-wider"
-                              :class="hoverRow.won === true ? 'bg-green-500/15 text-green-400' : hoverRow.won === false ? 'bg-red-500/15 text-red-400' : 'bg-muted-foreground/10 text-muted-foreground'">
-                          <Check v-if="hoverRow.won === true" class="w-3 h-3" />
-                          <X v-else-if="hoverRow.won === false" class="w-3 h-3" />
-                          {{ hoverRow.won === true ? t('profileWin') : hoverRow.won === false ? t('profileLoss') : '—' }}
-                        </span>
+                        </template>
+                        <template v-else>
+                          <div class="w-9 h-9 rounded-md bg-sky-500/15 border border-sky-500/30 shrink-0 flex items-center justify-center">
+                            <Sparkles class="w-4 h-4 text-sky-400" />
+                          </div>
+                          <div class="flex flex-col min-w-0 gap-0.5">
+                            <span class="text-xs font-bold text-foreground truncate leading-tight">{{ rowReasonLabel(hoverRow) }}</span>
+                            <span class="text-[11px] text-muted-foreground leading-tight">{{ t('seasonPointsAdjustment') }}</span>
+                          </div>
+                        </template>
                       </div>
 
                       <!-- Footer: points delta · scoreline · date -->

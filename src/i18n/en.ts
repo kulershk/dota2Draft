@@ -1636,6 +1636,8 @@ export default {
   seasonPointsGames: 'Games',
   seasonPointsEmpty: 'No ranked games in this season yet',
   seasonPointsNoStats: 'No game stats available',
+  seasonPointsFridayBonus: 'Friday podium bonus',
+  seasonPointsAdjustment: 'Points adjustment',
   seasonRankingsCount: 'seasons',
   queuePoolSeason: 'Season',
   queuePoolNoSeason: 'No season — does not affect rankings',
