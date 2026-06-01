@@ -266,8 +266,8 @@ const pointsChartData = computed(() => {
     datasets: [{
       label: t('seasonPointsLabel'),
       data,
-      borderColor: 'rgb(244, 114, 34)',
-      backgroundColor: 'rgba(244, 114, 34, 0.12)',
+      borderColor: 'rgb(34, 211, 238)',
+      backgroundColor: 'rgba(34, 211, 238, 0.12)',
       tension: 0.25,
       fill: true,
       pointRadius: rows.length > 40 ? 0 : 2,
