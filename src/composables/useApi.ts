@@ -37,6 +37,30 @@ async function request(path: string, options?: RequestInit) {
   return res.json()
 }
 
+// Files an inhouse report as multipart/form-data. Text fields are appended
+// alongside any evidence files under the `evidence` field (the name the
+// server's multer .array('evidence') expects). Content-Type is left unset so
+// the browser adds the multipart boundary itself.
+async function submitReport(
+  path: string,
+  data: { queue_match_id: number; reported_player_id: number; comment?: string; evidence?: File[] },
+) {
+  const fd = new FormData()
+  fd.append('queue_match_id', String(data.queue_match_id))
+  fd.append('reported_player_id', String(data.reported_player_id))
+  if (data.comment) fd.append('comment', data.comment)
+  for (const file of data.evidence || []) fd.append('evidence', file)
+  const headers: Record<string, string> = {}
+  const token = (typeof localStorage !== 'undefined') ? localStorage.getItem('draft_auth_token') : null
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  const res = await fetch(path, { method: 'POST', headers, body: fd })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error(err.error || 'Report failed')
+  }
+  return res.json()
+}
+
 export function useApi() {
   return {
     // Auth
@@ -805,11 +829,12 @@ export function useApi() {
     removeAdminQueueBan: (banId: number) =>
       request(`/api/admin/queue/bans/${banId}`, { method: 'DELETE' }),
 
-    // Inhouse reports
-    reportToxic: (data: { queue_match_id: number; reported_player_id: number; comment?: string }) =>
-      request('/api/inhouse/reports/toxic', { method: 'POST', body: JSON.stringify(data) }),
-    reportGrief: (data: { queue_match_id: number; reported_player_id: number; comment: string }) =>
-      request('/api/inhouse/reports/grief', { method: 'POST', body: JSON.stringify(data) }),
+    // Inhouse reports. Sent as multipart so optional evidence files (images /
+    // short clips, ≤50MB each) can ride along with the text fields.
+    reportToxic: (data: { queue_match_id: number; reported_player_id: number; comment?: string; evidence?: File[] }) =>
+      submitReport('/api/inhouse/reports/toxic', data),
+    reportGrief: (data: { queue_match_id: number; reported_player_id: number; comment: string; evidence?: File[] }) =>
+      submitReport('/api/inhouse/reports/grief', data),
     getAdminGriefReports: (status: 'pending' | 'approved' | 'rejected' = 'pending') =>
       request(`/api/admin/inhouse/grief-reports?status=${status}`),
     getAdminToxicReports: (params?: { status?: 'pending' | 'approved' | 'rejected'; player_id?: number; limit?: number }) => {

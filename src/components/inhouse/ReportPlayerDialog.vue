@@ -7,7 +7,7 @@
 // type choice, comment input, submit state and error display.
 import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { AlertTriangle, Loader2, Check } from 'lucide-vue-next'
+import { AlertTriangle, Loader2, Check, Paperclip, X, FileVideo, FileImage } from 'lucide-vue-next'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 import { useApi } from '@/composables/useApi'
 
@@ -36,12 +36,54 @@ const submitting = ref(false)
 const errorText = ref<string | null>(null)
 const successFlash = ref(false)
 
-// Reset every time the dialog opens — never leak state (type or comment)
+// Evidence uploads — must match the server's limits (middleware/upload.js).
+const MAX_EVIDENCE_FILES = 5
+const MAX_EVIDENCE_BYTES = 50 * 1024 * 1024
+const ALLOWED_EVIDENCE = /^(image\/(jpeg|png|gif|webp)|video\/(mp4|webm|quicktime))$/
+const evidenceFiles = ref<File[]>([])
+const fileInput = ref<HTMLInputElement | null>(null)
+
+function humanSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`
+}
+
+function onPickFiles(e: Event) {
+  const input = e.target as HTMLInputElement
+  const picked = Array.from(input.files || [])
+  errorText.value = null
+  for (const f of picked) {
+    if (!ALLOWED_EVIDENCE.test(f.type)) {
+      errorText.value = t('inhouseReportEvidenceBadType', { name: f.name }) as string
+      continue
+    }
+    if (f.size > MAX_EVIDENCE_BYTES) {
+      errorText.value = t('inhouseReportEvidenceTooBig', { name: f.name }) as string
+      continue
+    }
+    if (evidenceFiles.value.length >= MAX_EVIDENCE_FILES) {
+      errorText.value = t('inhouseReportEvidenceTooMany', { n: MAX_EVIDENCE_FILES }) as string
+      break
+    }
+    // Skip exact duplicates (same name + size) so re-picking is harmless.
+    if (evidenceFiles.value.some(x => x.name === f.name && x.size === f.size)) continue
+    evidenceFiles.value.push(f)
+  }
+  // Reset the native input so picking the same file again still fires change.
+  input.value = ''
+}
+
+function removeFile(idx: number) {
+  evidenceFiles.value.splice(idx, 1)
+}
+
+// Reset every time the dialog opens — never leak state (type, comment, files)
 // from a prior report against a different player.
 watch(() => props.show, (open) => {
   if (open) {
     kind.value = 'toxic'
     comment.value = ''
+    evidenceFiles.value = []
     submitting.value = false
     errorText.value = null
     successFlash.value = false
@@ -71,12 +113,14 @@ async function submit() {
         queue_match_id: props.queueMatchId,
         reported_player_id: props.player.id,
         comment: comment.value.trim() || undefined,
+        evidence: evidenceFiles.value,
       })
     } else {
       await api.reportGrief({
         queue_match_id: props.queueMatchId,
         reported_player_id: props.player.id,
         comment: comment.value.trim(),
+        evidence: evidenceFiles.value,
       })
     }
     successFlash.value = true
@@ -146,6 +190,49 @@ async function submit() {
       <p class="text-[11px] text-muted-foreground">
         {{ kind === 'toxic' ? t('inhouseReportToxicHelp') : t('inhouseReportGriefHelp') }}
       </p>
+
+      <!-- Evidence (optional): screenshots / short clips, ≤50MB each -->
+      <label class="text-xs font-medium text-muted-foreground">{{ t('inhouseReportEvidenceLabel') }}</label>
+      <input
+        ref="fileInput"
+        type="file"
+        class="hidden"
+        accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,video/quicktime"
+        multiple
+        @change="onPickFiles"
+      />
+      <div class="flex flex-col gap-2">
+        <ul v-if="evidenceFiles.length" class="flex flex-col gap-1.5">
+          <li
+            v-for="(f, i) in evidenceFiles"
+            :key="`${f.name}-${f.size}-${i}`"
+            class="flex items-center gap-2 text-xs bg-muted/50 border border-border rounded-md px-2.5 py-1.5"
+          >
+            <FileVideo v-if="f.type.startsWith('video/')" class="w-4 h-4 text-muted-foreground shrink-0" />
+            <FileImage v-else class="w-4 h-4 text-muted-foreground shrink-0" />
+            <span class="truncate flex-1 min-w-0">{{ f.name }}</span>
+            <span class="text-muted-foreground/70 font-mono shrink-0">{{ humanSize(f.size) }}</span>
+            <button
+              type="button"
+              class="text-muted-foreground hover:text-destructive shrink-0"
+              :disabled="submitting || successFlash"
+              @click="removeFile(i)"
+            >
+              <X class="w-3.5 h-3.5" />
+            </button>
+          </li>
+        </ul>
+        <button
+          type="button"
+          class="btn-outline flex items-center justify-center gap-2 text-sm"
+          :disabled="submitting || successFlash || evidenceFiles.length >= MAX_EVIDENCE_FILES"
+          @click="fileInput?.click()"
+        >
+          <Paperclip class="w-3.5 h-3.5" />
+          {{ t('inhouseReportEvidenceAdd') }}
+        </button>
+        <p class="text-[11px] text-muted-foreground">{{ t('inhouseReportEvidenceHelp', { n: MAX_EVIDENCE_FILES }) }}</p>
+      </div>
 
       <div v-if="errorText" class="text-xs text-destructive bg-destructive/10 border border-destructive/30 rounded-md px-3 py-2">
         {{ errorText }}

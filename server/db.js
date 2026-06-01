@@ -1183,6 +1183,8 @@ export async function initDb() {
     ['reviewed_by', `INTEGER NULL REFERENCES players(id) ON DELETE SET NULL`],
     ['reviewed_at', `TIMESTAMP NULL`],
     ['review_note', `TEXT NULL`],
+    // JSONB array of uploaded evidence file URLs (`/uploads/evidence_*`).
+    ['evidence_urls', `JSONB NOT NULL DEFAULT '[]'::jsonb`],
   ]) {
     const has = await queryOne(
       `SELECT 1 FROM information_schema.columns WHERE table_name = 'inhouse_toxic_reports' AND column_name = $1`, [col]
@@ -1213,6 +1215,13 @@ export async function initDb() {
   try { await execute(`CREATE UNIQUE INDEX IF NOT EXISTS inhouse_grief_reports_unique ON inhouse_grief_reports (reporter_player_id, reported_player_id, queue_match_id)`) } catch {}
   try { await execute(`CREATE INDEX IF NOT EXISTS inhouse_grief_reports_status_idx ON inhouse_grief_reports (status, created_at DESC)`) } catch {}
   try { await execute(`CREATE INDEX IF NOT EXISTS inhouse_grief_reports_target_idx ON inhouse_grief_reports (reported_player_id, created_at DESC)`) } catch {}
+  // JSONB array of uploaded evidence file URLs (`/uploads/evidence_*`).
+  for (const [col, def] of [['evidence_urls', `JSONB NOT NULL DEFAULT '[]'::jsonb`]]) {
+    const has = await queryOne(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'inhouse_grief_reports' AND column_name = $1`, [col]
+    )
+    if (!has) await execute(`ALTER TABLE inhouse_grief_reports ADD COLUMN ${col} ${def}`)
+  }
 
   // Strike audit log — every ±strike, from any source.
   await execute(`

@@ -4535,17 +4535,18 @@
         "post": {
           "tags": ["Inhouse"],
           "summary": "File a toxic-behaviour report against a match participant",
-          "description": "Reporter must be a participant of the queue match. Inhouse-pool only. The match must either still be active (picking/lobby_creating/live) or have completed within `pool.report_window_minutes` (default 15). Cancelled matches are never reportable. The unique-on-(reporter,reported,match) constraint prevents duplicates (409 on retry). The report is inserted with `status='pending'` — strikes only apply once an admin approves via /api/admin/inhouse/toxic-reports/:id/approve.",
+          "description": "Reporter must be a participant of the queue match. Inhouse-pool only. The match must either still be active (picking/lobby_creating/live) or have completed within `pool.report_window_minutes` (default 15). Cancelled matches are never reportable. The unique-on-(reporter,reported,match) constraint prevents duplicates (409 on retry). The report is inserted with `status='pending'` — strikes only apply once an admin approves via /api/admin/inhouse/toxic-reports/:id/approve. Sent as multipart/form-data so optional evidence files (images or short clips, up to 5 files, 50MB each) can be attached under the `evidence` field; stored as `/uploads/evidence_*` URLs in `evidence_urls`.",
           "security": [{ "bearerAuth": [] }],
           "requestBody": {
             "required": true,
-            "content": { "application/json": { "schema": {
+            "content": { "multipart/form-data": { "schema": {
               "type": "object",
               "required": ["queue_match_id", "reported_player_id"],
               "properties": {
                 "queue_match_id": { "type": "integer" },
                 "reported_player_id": { "type": "integer" },
-                "comment": { "type": "string", "maxLength": 500 }
+                "comment": { "type": "string", "maxLength": 500 },
+                "evidence": { "type": "array", "items": { "type": "string", "format": "binary" }, "description": "Up to 5 image/video files, ≤50MB each" }
               }
             } } }
           },
@@ -4561,17 +4562,18 @@
         "post": {
           "tags": ["Inhouse"],
           "summary": "File a grief report against a match participant",
-          "description": "Reporter must be a participant of the queue match (any player, not just captains). Inhouse-pool only. The match must either still be active (picking/lobby_creating/live) or have completed within `pool.report_window_minutes` (default 15). Comment is mandatory. The unique-on-(reporter,reported,match) constraint prevents duplicates (409 on retry). Inserts a pending report — strikes only apply on admin approval.",
+          "description": "Reporter must be a participant of the queue match (any player, not just captains). Inhouse-pool only. The match must either still be active (picking/lobby_creating/live) or have completed within `pool.report_window_minutes` (default 15). Comment is mandatory. The unique-on-(reporter,reported,match) constraint prevents duplicates (409 on retry). Inserts a pending report — strikes only apply on admin approval. Sent as multipart/form-data so optional evidence files (images or short clips, up to 5 files, 50MB each) can be attached under the `evidence` field; stored as `/uploads/evidence_*` URLs in `evidence_urls`.",
           "security": [{ "bearerAuth": [] }],
           "requestBody": {
             "required": true,
-            "content": { "application/json": { "schema": {
+            "content": { "multipart/form-data": { "schema": {
               "type": "object",
               "required": ["queue_match_id", "reported_player_id", "comment"],
               "properties": {
                 "queue_match_id": { "type": "integer" },
                 "reported_player_id": { "type": "integer" },
-                "comment": { "type": "string", "minLength": 1 }
+                "comment": { "type": "string", "minLength": 1 },
+                "evidence": { "type": "array", "items": { "type": "string", "format": "binary" }, "description": "Up to 5 image/video files, ≤50MB each" }
               }
             } } }
           },

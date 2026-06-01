@@ -8,7 +8,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { Check, X, Loader2, AlertTriangle, Flag, Users, Plus, Search, BadgeCheck } from 'lucide-vue-next'
+import { Check, X, Loader2, AlertTriangle, Flag, Users, Plus, Search, BadgeCheck, FileVideo } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
 
@@ -33,6 +33,7 @@ interface GriefReport {
   reported_captain_pool: boolean
   reported_grief_strikes: number
   pool_name: string | null
+  evidence_urls: string[] | null
 }
 
 interface ToxicReport {
@@ -56,6 +57,7 @@ interface ToxicReport {
   reported_toxic_reports_received: number
   reported_toxic_strikes: number
   pool_name: string | null
+  evidence_urls: string[] | null
 }
 
 interface StrikeLogRow {
@@ -287,6 +289,13 @@ function statusPillClass(status: string): string {
   return 'bg-amber-500/15 text-amber-400'
 }
 
+// Evidence files are stored as `/uploads/evidence_*.<ext>`; videos get a player
+// thumbnail with a film badge, images get an <img> preview. Both link out to
+// the raw file in a new tab.
+function isVideoEvidence(url: string): boolean {
+  return /\.(mp4|webm|mov|quicktime)$/i.test(url)
+}
+
 function strikeKindPill(kind: string): string {
   if (kind === 'toxic')           return 'bg-amber-500/15 text-amber-400'
   if (kind === 'grief')           return 'bg-rose-500/15 text-rose-400'
@@ -412,6 +421,26 @@ onUnmounted(() => { if (addSearchTimer) clearTimeout(addSearchTimer) })
             </div>
           </div>
           <div v-if="r.comment" class="text-sm bg-accent/20 rounded-md px-3 py-2 whitespace-pre-wrap">"{{ r.comment }}"</div>
+          <!-- Evidence gallery -->
+          <div v-if="r.evidence_urls && r.evidence_urls.length" class="flex flex-col gap-1.5">
+            <p class="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">{{ t('reportsEvidence') }}</p>
+            <div class="flex flex-wrap gap-2">
+              <a
+                v-for="(url, i) in r.evidence_urls"
+                :key="i"
+                :href="url"
+                target="_blank"
+                rel="noopener"
+                class="relative w-24 h-16 rounded-md overflow-hidden border border-border bg-muted hover:ring-2 hover:ring-primary/60 transition-shadow group"
+              >
+                <video v-if="isVideoEvidence(url)" :src="url" class="w-full h-full object-cover" muted preload="metadata" />
+                <img v-else :src="url" class="w-full h-full object-cover" :alt="t('reportsEvidence')" />
+                <span v-if="isVideoEvidence(url)" class="absolute inset-0 flex items-center justify-center bg-black/30">
+                  <FileVideo class="w-5 h-5 text-white" />
+                </span>
+              </a>
+            </div>
+          </div>
           <div v-if="r.status !== 'pending'" class="flex items-center gap-2 text-[11px] text-muted-foreground">
             <span class="font-semibold px-1.5 py-0.5 rounded" :class="statusPillClass(r.status)">
               {{ t('griefStatus_' + r.status) }}
@@ -483,6 +512,26 @@ onUnmounted(() => { if (addSearchTimer) clearTimeout(addSearchTimer) })
             </div>
           </div>
           <div class="text-sm bg-accent/20 rounded-md px-3 py-2 whitespace-pre-wrap">{{ r.comment }}</div>
+          <!-- Evidence gallery -->
+          <div v-if="r.evidence_urls && r.evidence_urls.length" class="flex flex-col gap-1.5">
+            <p class="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">{{ t('reportsEvidence') }}</p>
+            <div class="flex flex-wrap gap-2">
+              <a
+                v-for="(url, i) in r.evidence_urls"
+                :key="i"
+                :href="url"
+                target="_blank"
+                rel="noopener"
+                class="relative w-24 h-16 rounded-md overflow-hidden border border-border bg-muted hover:ring-2 hover:ring-primary/60 transition-shadow group"
+              >
+                <video v-if="isVideoEvidence(url)" :src="url" class="w-full h-full object-cover" muted preload="metadata" />
+                <img v-else :src="url" class="w-full h-full object-cover" :alt="t('reportsEvidence')" />
+                <span v-if="isVideoEvidence(url)" class="absolute inset-0 flex items-center justify-center bg-black/30">
+                  <FileVideo class="w-5 h-5 text-white" />
+                </span>
+              </a>
+            </div>
+          </div>
           <div v-if="r.status !== 'pending'" class="flex items-center gap-2 text-[11px] text-muted-foreground">
             <span class="font-semibold px-1.5 py-0.5 rounded" :class="statusPillClass(r.status)">
               {{ t('griefStatus_' + r.status) }}

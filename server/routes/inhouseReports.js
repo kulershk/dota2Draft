@@ -13,9 +13,34 @@
 // Both flows emit socket notifications via the per-user `user:${id}` room.
 
 import { Router } from 'express'
+import fs from 'fs'
 import pgPool, { query, queryOne, execute } from '../db.js'
 import { getAuthPlayer } from '../middleware/auth.js'
 import { requirePermission, hasPermission } from '../middleware/permissions.js'
+import { uploadEvidence, EVIDENCE_MAX_FILES } from '../middleware/upload.js'
+
+// Wrap the multer evidence handler so its errors (oversized file, too many
+// files, wrong type) come back as clean 400 JSON instead of the default HTML
+// error page. Optional — a report with no files still works.
+function evidenceUpload(req, res, next) {
+  uploadEvidence.array('evidence', EVIDENCE_MAX_FILES)(req, res, (err) => {
+    if (err) {
+      const msg = err.code === 'LIMIT_FILE_SIZE' ? 'Each evidence file must be 50MB or smaller'
+        : err.code === 'LIMIT_FILE_COUNT' ? `At most ${EVIDENCE_MAX_FILES} evidence files allowed`
+        : err.message || 'Evidence upload failed'
+      return res.status(400).json({ error: msg })
+    }
+    next()
+  })
+}
+
+// Delete any uploaded evidence from disk — called whenever the report they
+// were attached to is rejected before it's persisted.
+function cleanupEvidence(req) {
+  for (const f of req.files || []) {
+    try { fs.unlinkSync(f.path) } catch {}
+  }
+}
 
 // Returns { qm, pool } where qm is the queue_matches row + parsed roster
 // or { error, status } on validation failure. Centralises the membership
@@ -106,98 +131,112 @@ export default function createInhouseReportsRouter(io) {
   const router = Router()
 
   // ── User: file a toxic report against a match participant ──
-  router.post('/api/inhouse/reports/toxic', async (req, res) => {
-    const reporter = await getAuthPlayer(req)
-    if (!reporter) return res.status(401).json({ error: 'Not authenticated' })
-
-    const queueMatchId = Number(req.body?.queue_match_id)
-    const reportedId = Number(req.body?.reported_player_id)
-    const comment = (req.body?.comment || '').toString().slice(0, 500)
-    if (!queueMatchId || !reportedId) return res.status(400).json({ error: 'queue_match_id and reported_player_id required' })
-    if (reportedId === reporter.id) return res.status(400).json({ error: "Can't report yourself" })
-
-    const { qm, pool, error, status } = await _loadMatchAndPool(queueMatchId)
-    if (error) return res.status(status).json({ error })
-    if (!pool?.inhouse_enabled) return res.status(400).json({ error: 'Reports only available on inhouse matches' })
-
-    const allIds = _allPlayerIds(qm)
-    if (!allIds.includes(reporter.id)) return res.status(403).json({ error: 'You were not in this match' })
-    if (!allIds.includes(reportedId))  return res.status(400).json({ error: 'Reported player was not in this match' })
-
-    // Window: matches stay reportable for pool.report_window_minutes after
-    // they complete (default 15). Prevents weaponising the system months
-    // later while still tolerating "let me re-queue first then report".
-    const windowCheck = _isWithinReportWindow(qm, pool)
-    if (!windowCheck.ok) return res.status(403).json({ error: windowCheck.error })
-
-    // Insert as pending. The unique constraint still blocks dupes for the
-    // same (reporter, reported, match). The strike + cooldown logic lives
-    // on the admin approve endpoint — see /api/admin/inhouse/toxic-reports/:id/approve.
+  router.post('/api/inhouse/reports/toxic', evidenceUpload, async (req, res) => {
+    // Any uploaded evidence is removed unless the report is persisted.
+    let keepFiles = false
     try {
+      const reporter = await getAuthPlayer(req)
+      if (!reporter) return res.status(401).json({ error: 'Not authenticated' })
+
+      const queueMatchId = Number(req.body?.queue_match_id)
+      const reportedId = Number(req.body?.reported_player_id)
+      const comment = (req.body?.comment || '').toString().slice(0, 500)
+      if (!queueMatchId || !reportedId) return res.status(400).json({ error: 'queue_match_id and reported_player_id required' })
+      if (reportedId === reporter.id) return res.status(400).json({ error: "Can't report yourself" })
+
+      const { qm, pool, error, status } = await _loadMatchAndPool(queueMatchId)
+      if (error) return res.status(status).json({ error })
+      if (!pool?.inhouse_enabled) return res.status(400).json({ error: 'Reports only available on inhouse matches' })
+
+      const allIds = _allPlayerIds(qm)
+      if (!allIds.includes(reporter.id)) return res.status(403).json({ error: 'You were not in this match' })
+      if (!allIds.includes(reportedId))  return res.status(400).json({ error: 'Reported player was not in this match' })
+
+      // Window: matches stay reportable for pool.report_window_minutes after
+      // they complete (default 15). Prevents weaponising the system months
+      // later while still tolerating "let me re-queue first then report".
+      const windowCheck = _isWithinReportWindow(qm, pool)
+      if (!windowCheck.ok) return res.status(403).json({ error: windowCheck.error })
+
+      const evidenceUrls = (req.files || []).map(f => `/uploads/${f.filename}`)
+
+      // Insert as pending. The unique constraint still blocks dupes for the
+      // same (reporter, reported, match). The strike + cooldown logic lives
+      // on the admin approve endpoint — see /api/admin/inhouse/toxic-reports/:id/approve.
       let insertedId
       try {
         const ins = await queryOne(
-          `INSERT INTO inhouse_toxic_reports (reporter_player_id, reported_player_id, queue_match_id, pool_id, comment, status)
-           VALUES ($1, $2, $3, $4, $5, 'pending') RETURNING id`,
-          [reporter.id, reportedId, queueMatchId, qm.pool_id, comment || null]
+          `INSERT INTO inhouse_toxic_reports (reporter_player_id, reported_player_id, queue_match_id, pool_id, comment, status, evidence_urls)
+           VALUES ($1, $2, $3, $4, $5, 'pending', $6::jsonb) RETURNING id`,
+          [reporter.id, reportedId, queueMatchId, qm.pool_id, comment || null, JSON.stringify(evidenceUrls)]
         )
         insertedId = ins.id
       } catch (e) {
         if (e.code === '23505') return res.status(409).json({ error: 'You already reported this player for this match' })
         throw e
       }
+      keepFiles = true
       io.to(`user:${reporter.id}`).emit('inhouse:reportFiled', { kind: 'toxic', queueMatchId, reportedPlayerId: reportedId })
       res.status(201).json({ ok: true, reportId: insertedId, status: 'pending' })
     } catch (e) {
       console.error('[inhouse toxic]', e)
       res.status(500).json({ error: e.message })
+    } finally {
+      if (!keepFiles) cleanupEvidence(req)
     }
   })
 
   // ── User: file a grief report against any match participant ──
-  router.post('/api/inhouse/reports/grief', async (req, res) => {
-    const reporter = await getAuthPlayer(req)
-    if (!reporter) return res.status(401).json({ error: 'Not authenticated' })
-
-    const queueMatchId = Number(req.body?.queue_match_id)
-    const reportedId = Number(req.body?.reported_player_id)
-    const comment = (req.body?.comment || '').toString().trim()
-    if (!queueMatchId || !reportedId) return res.status(400).json({ error: 'queue_match_id and reported_player_id required' })
-    if (!comment) return res.status(400).json({ error: 'Comment is required for grief reports' })
-    if (reportedId === reporter.id) return res.status(400).json({ error: "Can't report yourself" })
-
-    const { qm, pool, error, status } = await _loadMatchAndPool(queueMatchId)
-    if (error) return res.status(status).json({ error })
-    if (!pool?.inhouse_enabled) return res.status(400).json({ error: 'Reports only available on inhouse matches' })
-
-    // Any match participant can file a grief report against any other
-    // participant (was captain-only + same-team).
-    const allIds = _allPlayerIds(qm)
-    if (!allIds.includes(reporter.id)) return res.status(403).json({ error: 'You were not in this match' })
-    if (!allIds.includes(reportedId))  return res.status(400).json({ error: 'Reported player was not in this match' })
-
-    // Window: same rule as toxic — reportable until pool.report_window_minutes
-    // after completion.
-    const windowCheck = _isWithinReportWindow(qm, pool)
-    if (!windowCheck.ok) return res.status(403).json({ error: windowCheck.error })
-
+  router.post('/api/inhouse/reports/grief', evidenceUpload, async (req, res) => {
+    // Any uploaded evidence is removed unless the report is persisted.
+    let keepFiles = false
     try {
+      const reporter = await getAuthPlayer(req)
+      if (!reporter) return res.status(401).json({ error: 'Not authenticated' })
+
+      const queueMatchId = Number(req.body?.queue_match_id)
+      const reportedId = Number(req.body?.reported_player_id)
+      const comment = (req.body?.comment || '').toString().trim()
+      if (!queueMatchId || !reportedId) return res.status(400).json({ error: 'queue_match_id and reported_player_id required' })
+      if (!comment) return res.status(400).json({ error: 'Comment is required for grief reports' })
+      if (reportedId === reporter.id) return res.status(400).json({ error: "Can't report yourself" })
+
+      const { qm, pool, error, status } = await _loadMatchAndPool(queueMatchId)
+      if (error) return res.status(status).json({ error })
+      if (!pool?.inhouse_enabled) return res.status(400).json({ error: 'Reports only available on inhouse matches' })
+
+      // Any match participant can file a grief report against any other
+      // participant (was captain-only + same-team).
+      const allIds = _allPlayerIds(qm)
+      if (!allIds.includes(reporter.id)) return res.status(403).json({ error: 'You were not in this match' })
+      if (!allIds.includes(reportedId))  return res.status(400).json({ error: 'Reported player was not in this match' })
+
+      // Window: same rule as toxic — reportable until pool.report_window_minutes
+      // after completion.
+      const windowCheck = _isWithinReportWindow(qm, pool)
+      if (!windowCheck.ok) return res.status(403).json({ error: windowCheck.error })
+
+      const evidenceUrls = (req.files || []).map(f => `/uploads/${f.filename}`)
+
       let inserted
       try {
         inserted = await queryOne(
-          `INSERT INTO inhouse_grief_reports (reporter_player_id, reported_player_id, queue_match_id, pool_id, comment)
-           VALUES ($1, $2, $3, $4, $5) RETURNING id, created_at`,
-          [reporter.id, reportedId, queueMatchId, qm.pool_id, comment]
+          `INSERT INTO inhouse_grief_reports (reporter_player_id, reported_player_id, queue_match_id, pool_id, comment, evidence_urls)
+           VALUES ($1, $2, $3, $4, $5, $6::jsonb) RETURNING id, created_at`,
+          [reporter.id, reportedId, queueMatchId, qm.pool_id, comment, JSON.stringify(evidenceUrls)]
         )
       } catch (e) {
         if (e.code === '23505') return res.status(409).json({ error: 'You already reported this player for this match' })
         throw e
       }
+      keepFiles = true
       io.to(`user:${reporter.id}`).emit('inhouse:reportFiled', { kind: 'grief', queueMatchId, reportedPlayerId: reportedId })
       res.status(201).json({ ok: true, reportId: inserted.id, status: 'pending' })
     } catch (e) {
       console.error('[inhouse grief]', e)
       res.status(500).json({ error: e.message })
+    } finally {
+      if (!keepFiles) cleanupEvidence(req)
     }
   })
 
