@@ -3788,6 +3788,21 @@
         "responses": { "200": { "description": "Player's season rows" } }
       }
     },
+    "/api/players/{playerId}/seasons/{seasonId}/points-history": {
+      "get": {
+        "tags": ["Seasons"],
+        "summary": "A player's full points-change timeline for one season",
+        "description": "Returns every season_match_log row for the (player, season) ordered chronologically (created_at ASC, id ASC) so the client can plot a points-over-time graph. Each row carries points_before, points_after, delta, won and created_at. The first row's points_before is the season's starting points.",
+        "parameters": [
+          { "name": "playerId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "seasonId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "{ rows: season_match_log[] } ordered ASC" },
+          "400": { "description": "invalid playerId or seasonId" }
+        }
+      }
+    },
     "/api/seasons/{slug}/players/{playerId}": {
       "get": {
         "tags": ["Seasons"],

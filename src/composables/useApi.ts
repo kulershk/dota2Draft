@@ -858,6 +858,14 @@ export function useApi() {
       request(`/api/seasons/${slug}/players/${playerId}`),
     getPlayerSeasons: (playerId: number) =>
       request(`/api/players/${playerId}/seasons`),
+    getPlayerSeasonPointsHistory: (playerId: number, seasonId: number) =>
+      request(`/api/players/${playerId}/seasons/${seasonId}/points-history`) as Promise<{
+        rows: Array<{
+          id: number; queue_match_id: number | null; won: boolean | null;
+          points_before: number; points_after: number; delta: number;
+          reason: string | null; created_at: string;
+        }>
+      }>,
 
     // Seasons (admin)
     getAdminSeasons: () => request('/api/admin/seasons'),

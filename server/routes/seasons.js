@@ -276,6 +276,30 @@ export default function createSeasonsRouter(io) {
     }
   })
 
+  // ── Public: a player's full points-change timeline for one season ──
+  // Powers the season-points graph on the profile page. Ordered ASC so the
+  // client can plot it left-to-right without re-sorting; includes the starting
+  // baseline (points_before of the first row) as a synthetic anchor point so
+  // the line begins at the season's starting points rather than after game 1.
+  router.get('/api/players/:playerId/seasons/:seasonId/points-history', async (req, res) => {
+    try {
+      const playerId = Number(req.params.playerId)
+      const seasonId = Number(req.params.seasonId)
+      if (!Number.isInteger(playerId) || !Number.isInteger(seasonId)) {
+        return res.status(400).json({ error: 'invalid playerId or seasonId' })
+      }
+      const rows = await query(`
+        SELECT id, queue_match_id, won, points_before, points_after, delta, reason, created_at
+        FROM season_match_log
+        WHERE season_id = $1 AND player_id = $2
+        ORDER BY created_at ASC, id ASC
+      `, [seasonId, playerId])
+      res.json({ rows })
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
   // ── Public: single player's stats in a season + recent log ──
   router.get('/api/seasons/:slug/players/:playerId', async (req, res) => {
     try {

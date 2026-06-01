@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { User, Trophy, Swords, Tv, Medal, MessageCircle, Star, ChevronLeft, ChevronRight, Percent, Target, Flame, Clock, Award, Zap, Check, X, Flag, Users, BadgeCheck, Ban, UserPlus, UserMinus, ShieldOff, ImagePlus, Loader2, Sparkles } from 'lucide-vue-next'
+import { User, Trophy, Swords, Tv, Medal, MessageCircle, Star, ChevronLeft, ChevronRight, Percent, Target, Flame, Clock, Award, Zap, Check, X, Flag, Users, BadgeCheck, Ban, UserPlus, UserMinus, ShieldOff, ImagePlus, Loader2, Sparkles, TrendingUp } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -19,6 +19,18 @@ import RankBadge from '@/components/common/RankBadge.vue'
 import { sortedRoles } from '@/utils/roles'
 import { fmtDateOnly, fmtDateTime } from '@/utils/format'
 import { getRank } from '@/utils/ranks'
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  LineElement,
+  PointElement,
+  Tooltip,
+  Filler,
+} from 'chart.js'
+import { Line } from 'vue-chartjs'
+
+ChartJS.register(CategoryScale, LinearScale, LineElement, PointElement, Tooltip, Filler)
 
 const { t } = useI18n()
 const route = useRoute()
@@ -190,6 +202,115 @@ const playerSeasons = ref<Array<{
   last_match_at: string | null;
 }>>([])
 
+// ── Season points-change graph ──
+type PointsRow = {
+  id: number; queue_match_id: number | null; won: boolean | null;
+  points_before: number; points_after: number; delta: number;
+  reason: string | null; created_at: string;
+}
+const selectedSeasonId = ref<number | null>(null)
+const pointsHistory = ref<PointsRow[]>([])
+const pointsLoading = ref(false)
+
+async function fetchPointsHistory() {
+  const pid = playerId.value
+  const sid = selectedSeasonId.value
+  if (!pid || !sid) { pointsHistory.value = []; return }
+  pointsLoading.value = true
+  try {
+    const data = await api.getPlayerSeasonPointsHistory(pid, sid)
+    pointsHistory.value = data.rows
+  } catch {
+    pointsHistory.value = []
+  } finally {
+    pointsLoading.value = false
+  }
+}
+
+watch(selectedSeasonId, fetchPointsHistory)
+
+// Round to one decimal — points are stored as REAL and can carry long tails.
+function r1(n: number): number { return Math.round(n * 10) / 10 }
+
+// Summary stats derived from the timeline (start → current, peak, Δ, W/L).
+const pointsSummary = computed(() => {
+  const rows = pointsHistory.value
+  if (rows.length === 0) return null
+  const start = rows[0].points_before
+  const current = rows[rows.length - 1].points_after
+  let peak = -Infinity
+  let trough = Infinity
+  let wins = 0
+  let losses = 0
+  for (const row of rows) {
+    if (row.points_after > peak) peak = row.points_after
+    if (row.points_after < trough) trough = row.points_after
+    if (row.won === true) wins++
+    else if (row.won === false) losses++
+  }
+  return {
+    start: r1(start), current: r1(current), change: r1(current - start),
+    peak: r1(peak), low: r1(trough), wins, losses, games: rows.length,
+  }
+})
+
+// Chart.js dataset: a single orange line of cumulative points over time,
+// anchored at the season's starting points (points_before of the first game).
+const pointsChartData = computed(() => {
+  const rows = pointsHistory.value
+  if (rows.length === 0) return { labels: [], datasets: [] }
+  const labels = [t('seasonPointsStartLabel'), ...rows.map((_, i) => String(i + 1))]
+  const data = [r1(rows[0].points_before), ...rows.map(row => r1(row.points_after))]
+  return {
+    labels,
+    datasets: [{
+      label: t('seasonPointsLabel'),
+      data,
+      borderColor: 'rgb(244, 114, 34)',
+      backgroundColor: 'rgba(244, 114, 34, 0.12)',
+      tension: 0.25,
+      fill: true,
+      pointRadius: rows.length > 40 ? 0 : 2,
+      pointHoverRadius: 4,
+      borderWidth: 2,
+    }],
+  }
+})
+
+const pointsChartOptions = computed(() => ({
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { display: false },
+    tooltip: {
+      intersect: false,
+      mode: 'index' as const,
+      callbacks: {
+        title: (items: any[]) => {
+          const idx = items[0]?.dataIndex ?? 0
+          if (idx === 0) return t('seasonPointsStartLabel')
+          const row = pointsHistory.value[idx - 1]
+          return row ? fmtDateTime(new Date(row.created_at)) : ''
+        },
+        label: (item: any) => {
+          const idx = item.dataIndex
+          const pts = `${t('seasonPointsLabel')}: ${item.formattedValue}`
+          if (idx === 0) return pts
+          const row = pointsHistory.value[idx - 1]
+          if (!row) return pts
+          const sign = row.delta >= 0 ? '+' : ''
+          return `${pts} (${sign}${r1(row.delta)})`
+        },
+      },
+    },
+  },
+  scales: {
+    x: { ticks: { color: 'rgb(156, 163, 175)', maxRotation: 0, autoSkip: true, maxTicksLimit: 12 }, grid: { display: false } },
+    y: { ticks: { color: 'rgb(156, 163, 175)' }, grid: { color: 'rgba(156, 163, 175, 0.1)' } },
+  },
+  interaction: { mode: 'nearest' as const, axis: 'x' as const, intersect: false },
+}))
+
 const compTotalPages = computed(() => Math.max(1, Math.ceil((profile.value?.competitions?.length || 0) / PAGE_SIZE)))
 const pagedCompetitions = computed(() => (profile.value?.competitions || []).slice((compPage.value - 1) * PAGE_SIZE, compPage.value * PAGE_SIZE))
 
@@ -206,7 +327,15 @@ watch(playerId, async (id) => {
   try {
     profile.value = await api.getPlayerProfile(id)
     api.getPlayerXpLog(id).then(logs => { xpLog.value = logs }).catch(() => {})
-    api.getPlayerSeasons(id).then(rows => { playerSeasons.value = rows }).catch(() => { playerSeasons.value = [] })
+    selectedSeasonId.value = null
+    pointsHistory.value = []
+    api.getPlayerSeasons(id).then((rows: typeof playerSeasons.value) => {
+      playerSeasons.value = rows
+      // Default to the active season, else the most recent one. Setting this
+      // triggers the watcher that fetches the points timeline.
+      const def = rows.find(r => r.is_active) ?? rows[0]
+      selectedSeasonId.value = def ? def.season_id : null
+    }).catch(() => { playerSeasons.value = [] })
     matchPage.value = 0
     fetchMatches(id)
   } catch {
@@ -626,6 +755,60 @@ const streakBadge = computed(() => {
       <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-5 md:gap-6">
         <!-- Main column: match history + XP + comp history -->
         <div class="flex flex-col gap-5 md:gap-6 min-w-0">
+          <!-- Season points graph -->
+          <div v-if="playerSeasons.length > 0" class="card flex flex-col">
+            <div class="flex items-center gap-2 px-5 py-4 border-b border-border">
+              <TrendingUp class="w-5 h-5 text-primary" />
+              <span class="text-sm font-bold text-foreground">{{ t('seasonPointsTitle') }}</span>
+              <select
+                v-model.number="selectedSeasonId"
+                class="ml-auto input-field !py-1 !text-xs max-w-[180px]"
+              >
+                <option v-for="s in playerSeasons" :key="s.season_id" :value="s.season_id">
+                  {{ s.season_name }}
+                </option>
+              </select>
+            </div>
+
+            <!-- Summary stats strip -->
+            <div v-if="pointsSummary" class="grid grid-cols-3 sm:grid-cols-5 gap-px bg-border">
+              <div class="bg-card px-4 py-2.5">
+                <p class="text-[10px] font-mono tracking-widest text-muted-foreground/70 uppercase">{{ t('seasonPointsCurrent') }}</p>
+                <p class="text-base font-bold text-foreground">{{ pointsSummary.current }}</p>
+              </div>
+              <div class="bg-card px-4 py-2.5">
+                <p class="text-[10px] font-mono tracking-widest text-muted-foreground/70 uppercase">{{ t('seasonPointsChange') }}</p>
+                <p class="text-base font-bold" :class="pointsSummary.change > 0 ? 'text-green-400' : pointsSummary.change < 0 ? 'text-red-400' : 'text-foreground'">
+                  {{ pointsSummary.change > 0 ? '+' : '' }}{{ pointsSummary.change }}
+                </p>
+              </div>
+              <div class="bg-card px-4 py-2.5">
+                <p class="text-[10px] font-mono tracking-widest text-muted-foreground/70 uppercase">{{ t('seasonPointsPeak') }}</p>
+                <p class="text-base font-bold text-foreground">{{ pointsSummary.peak }}</p>
+              </div>
+              <div class="bg-card px-4 py-2.5">
+                <p class="text-[10px] font-mono tracking-widest text-muted-foreground/70 uppercase">{{ t('seasonPointsRecord') }}</p>
+                <p class="text-base font-bold text-foreground">
+                  <span class="text-green-400">{{ pointsSummary.wins }}</span>
+                  <span class="text-muted-foreground/50"> / </span>
+                  <span class="text-red-400">{{ pointsSummary.losses }}</span>
+                </p>
+              </div>
+              <div class="bg-card px-4 py-2.5 col-span-1">
+                <p class="text-[10px] font-mono tracking-widest text-muted-foreground/70 uppercase">{{ t('seasonPointsGames') }}</p>
+                <p class="text-base font-bold text-foreground">{{ pointsSummary.games }}</p>
+              </div>
+            </div>
+
+            <div class="p-4">
+              <div v-if="pointsLoading" class="h-56 flex items-center justify-center text-sm text-muted-foreground">{{ t('loading') }}</div>
+              <div v-else-if="pointsHistory.length === 0" class="h-56 flex items-center justify-center text-sm text-muted-foreground">{{ t('seasonPointsEmpty') }}</div>
+              <div v-else class="h-56">
+                <Line :data="pointsChartData" :options="pointsChartOptions" />
+              </div>
+            </div>
+          </div>
+
           <!-- Match History -->
           <div class="card flex flex-col">
             <div class="flex items-center gap-2 px-5 py-4 border-b border-border">
