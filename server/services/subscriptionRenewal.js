@@ -109,3 +109,54 @@ export async function runDotacoinRenewals(io) {
 
   return { due: due.length, renewed, lapsed }
 }
+
+// Lapse free trials whose window has ended. Trials never renew, so once
+// expires_at passes we flip status -> 'expired' (freeing the truthful admin
+// status), strip the Subscriber Discord role, and notify the player. Seat-cap
+// counting already ignores expired rows via expires_at, so this is about role
+// cleanup + a clear end-of-trial signal, not about freeing slots.
+//
+// Idempotent: each pass only touches still-'active' trial rows past expiry, and
+// the UPDATE moves them out of that set, so repeated ticks converge.
+export async function runTrialExpirations(io) {
+  const due = await query(`
+    SELECT us.id, us.player_id, sp.name AS plan_name, p.discord_id
+      FROM user_subscriptions us
+      JOIN subscription_plans sp ON sp.id = us.plan_id
+      JOIN players p ON p.id = us.player_id
+     WHERE us.source = 'trial'
+       AND us.status = 'active'
+       AND us.expires_at IS NOT NULL
+       AND us.expires_at <= NOW()
+     ORDER BY us.id ASC
+  `)
+
+  let expired = 0
+  for (const row of due) {
+    const flipped = await execute(
+      `UPDATE user_subscriptions SET status = 'expired', updated_at = NOW()
+        WHERE id = $1 AND status = 'active'`,
+      [row.id]
+    )
+    if (!flipped.rowCount) continue
+    expired++
+
+    if (row.discord_id) {
+      try { discordBot.emit('subscriptionChanged', { discordId: row.discord_id, active: false, planName: null }) } catch {}
+    }
+
+    try {
+      const notif = await queryOne(
+        `INSERT INTO notifications (recipient_id, type, title, body, link)
+         VALUES ($1, 'subscription_lapsed', $2, $3, '/subscription') RETURNING id`,
+        [row.player_id, `Your ${row.plan_name} trial ended`,
+         'Your free trial has ended. Subscribe anytime from your profile to keep the perks.']
+      )
+      io?.to(`user:${row.player_id}`).emit('notification:new', { id: notif.id })
+    } catch (e) {
+      console.error('[sub-renew] trial-expiry notify failed for player', row.player_id, e?.message)
+    }
+  }
+
+  return { dueTrials: due.length, expired }
+}

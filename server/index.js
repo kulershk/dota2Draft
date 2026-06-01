@@ -57,7 +57,7 @@ import { queryOne } from './db.js'
 import { initSocket, setSocketsEnabled } from './socket/index.js'
 import { setLivePollerIo, resumeActiveMatches as resumeLivePolling } from './services/liveMatchPoller.js'
 import { startFridayBonusScheduler } from './services/inhouseFridayBonus.js'
-import { runDotacoinRenewals } from './services/subscriptionRenewal.js'
+import { runDotacoinRenewals, runTrialExpirations } from './services/subscriptionRenewal.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -252,7 +252,11 @@ initDb().then(async () => {
   // the ones that ran out of auto-renew or balance. Hourly is plenty for a
   // 30-day cadence; the job only acts on subs already past expires_at.
   registerHandler('renew_dotacoin_subscriptions', async () => {
-    return await runDotacoinRenewals(io)
+    const renew = await runDotacoinRenewals(io)
+    // Also lapse free trials past their window (status -> expired, strip the
+    // Discord role, notify). Same hourly cadence; both only touch expired rows.
+    const trials = await runTrialExpirations(io)
+    return { ...renew, ...trials }
   })
   registerSchedule('renew_dotacoin_subscriptions', { everyMs: 60 * 60_000 })
 

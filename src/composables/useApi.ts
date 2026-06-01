@@ -694,6 +694,8 @@ export function useApi() {
     getMySubscription: () => request('/api/me/subscription'),
     subscribeWithDotacoins: (planId: number) =>
       request('/api/me/subscription', { method: 'POST', body: JSON.stringify({ plan_id: planId }) }),
+    startSubscriptionTrial: (planId: number) =>
+      request('/api/me/subscription/trial', { method: 'POST', body: JSON.stringify({ plan_id: planId }) }),
     cancelMySubscription: () => request('/api/me/subscription', { method: 'DELETE' }),
     deleteSubscriptionPlan: (id: number) =>
       request(`/api/admin/subscription-plans/${id}`, { method: 'DELETE' }),

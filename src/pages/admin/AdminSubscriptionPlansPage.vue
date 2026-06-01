@@ -15,6 +15,9 @@ interface Plan {
   currency: string
   price_dotacoins: number
   duration_days: number
+  trial_enabled: boolean
+  trial_days: number
+  trial_max_concurrent: number
   perks: Record<string, any>
   badge_url: string | null
   is_active: boolean
@@ -79,6 +82,9 @@ const planForm = ref({
   currency: 'EUR',
   price_dotacoins: 0,
   duration_days: 30,
+  trial_enabled: false,
+  trial_days: 7,
+  trial_max_concurrent: 0,
   is_active: true,
   sort_order: 0,
   perks: {} as Record<string, boolean | number>,
@@ -136,7 +142,7 @@ function perksToForm(plan?: Plan): Record<string, boolean | number> {
 
 function openCreate() {
   editingPlan.value = null
-  planForm.value = { name: '', slug: '', description: '', price_cents: 0, currency: 'EUR', price_dotacoins: 0, duration_days: 30, is_active: true, sort_order: nextSortOrder(), perks: perksToForm() }
+  planForm.value = { name: '', slug: '', description: '', price_cents: 0, currency: 'EUR', price_dotacoins: 0, duration_days: 30, trial_enabled: false, trial_days: 7, trial_max_concurrent: 0, is_active: true, sort_order: nextSortOrder(), perks: perksToForm() }
   badgeFile.value = null
   badgePreviewUrl.value = null
   error.value = ''
@@ -160,6 +166,9 @@ function openEdit(plan: Plan) {
     currency: plan.currency,
     price_dotacoins: plan.price_dotacoins || 0,
     duration_days: plan.duration_days || 30,
+    trial_enabled: !!plan.trial_enabled,
+    trial_days: plan.trial_days || 7,
+    trial_max_concurrent: plan.trial_max_concurrent || 0,
     is_active: plan.is_active,
     sort_order: plan.sort_order,
     perks: perksToForm(plan),
@@ -217,6 +226,9 @@ async function savePlan() {
     currency: planForm.value.currency.trim() || 'EUR',
     price_dotacoins: Math.max(0, Math.floor(Number(planForm.value.price_dotacoins) || 0)),
     duration_days: Math.max(1, Math.floor(Number(planForm.value.duration_days) || 30)),
+    trial_enabled: !!planForm.value.trial_enabled,
+    trial_days: Math.max(1, Math.floor(Number(planForm.value.trial_days) || 7)),
+    trial_max_concurrent: Math.max(0, Math.floor(Number(planForm.value.trial_max_concurrent) || 0)),
     is_active: planForm.value.is_active,
     sort_order: Math.floor(Number(planForm.value.sort_order) || 0),
     perks,
@@ -511,6 +523,33 @@ onUnmounted(() => {
             @update:model-value="planForm.duration_days = Number($event) || 30"
           />
         </div>
+        <!-- Free trial config -->
+        <div class="flex flex-col gap-3 rounded border border-border p-3 bg-accent/10">
+          <label class="flex items-start gap-2 cursor-pointer">
+            <input type="checkbox" class="mt-0.5 w-4 h-4 accent-primary" v-model="planForm.trial_enabled" />
+            <div class="flex flex-col">
+              <span class="text-sm text-foreground font-medium">{{ t('subscriptionPlanTrialEnabled') }}</span>
+              <span class="text-[11px] text-muted-foreground">{{ t('subscriptionPlanTrialEnabledDesc') }}</span>
+            </div>
+          </label>
+          <div v-if="planForm.trial_enabled" class="grid grid-cols-2 gap-3">
+            <InputGroup
+              :label="t('subscriptionPlanTrialDays')"
+              type="number"
+              :model-value="String(planForm.trial_days)"
+              :hint="t('subscriptionPlanTrialDaysHint')"
+              @update:model-value="planForm.trial_days = Number($event) || 7"
+            />
+            <InputGroup
+              :label="t('subscriptionPlanTrialMaxConcurrent')"
+              type="number"
+              :model-value="String(planForm.trial_max_concurrent)"
+              :hint="t('subscriptionPlanTrialMaxConcurrentHint')"
+              @update:model-value="planForm.trial_max_concurrent = Number($event) || 0"
+            />
+          </div>
+        </div>
+
         <InputGroup
           :label="t('subscriptionPlanSort')"
           type="number"

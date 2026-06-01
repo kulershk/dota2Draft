@@ -33,7 +33,9 @@ export default function createSubscriptionPlansRouter() {
   router.get('/api/subscription-plans', async (_req, res) => {
     const rows = await query(`
       SELECT id, name, slug, description, price_cents, currency,
-             price_dotacoins, duration_days, perks, badge_url, sort_order
+             price_dotacoins, duration_days,
+             trial_enabled, trial_days, trial_max_concurrent,
+             perks, badge_url, sort_order
         FROM subscription_plans
        WHERE is_active = TRUE
        ORDER BY sort_order ASC, id ASC
@@ -48,6 +50,7 @@ export default function createSubscriptionPlansRouter() {
     const rows = await query(`
       SELECT sp.id, sp.name, sp.slug, sp.description, sp.price_cents, sp.currency,
              sp.price_dotacoins, sp.duration_days,
+             sp.trial_enabled, sp.trial_days, sp.trial_max_concurrent,
              sp.perks, sp.badge_url, sp.is_active, sp.sort_order, sp.created_at, sp.updated_at,
              COALESCE(c.active_count, 0) AS active_subscriber_count
         FROM subscription_plans sp
@@ -65,19 +68,22 @@ export default function createSubscriptionPlansRouter() {
   router.post('/api/admin/subscription-plans', async (req, res) => {
     const admin = await requirePermission(req, res, 'manage_subscription_plans')
     if (!admin) return
-    const { name, slug, description, price_cents, currency, price_dotacoins, duration_days, perks, is_active, sort_order } = req.body || {}
+    const { name, slug, description, price_cents, currency, price_dotacoins, duration_days, trial_enabled, trial_days, trial_max_concurrent, perks, is_active, sort_order } = req.body || {}
     if (!name || !String(name).trim()) return res.status(400).json({ error: 'name is required' })
     const finalSlug = slug ? slugify(slug) : slugify(name)
     if (!finalSlug) return res.status(400).json({ error: 'slug could not be derived' })
     const priceCents = Number.isFinite(Number(price_cents)) ? Math.max(0, Math.floor(Number(price_cents))) : 0
     const priceDotacoins = Number.isFinite(Number(price_dotacoins)) ? Math.max(0, Math.floor(Number(price_dotacoins))) : 0
     const durationDays = Number.isFinite(Number(duration_days)) ? Math.max(1, Math.floor(Number(duration_days))) : 30
+    const trialEnabled = trial_enabled === true
+    const trialDays = Number.isFinite(Number(trial_days)) ? Math.max(1, Math.floor(Number(trial_days))) : 7
+    const trialMaxConcurrent = Number.isFinite(Number(trial_max_concurrent)) ? Math.max(0, Math.floor(Number(trial_max_concurrent))) : 0
     const sortOrder = Number.isFinite(Number(sort_order)) ? Math.floor(Number(sort_order)) : 0
     try {
       const row = await queryOne(
-        `INSERT INTO subscription_plans (name, slug, description, price_cents, currency, price_dotacoins, duration_days, perks, is_active, sort_order)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
-        [String(name).trim(), finalSlug, description || null, priceCents, currency || 'EUR', priceDotacoins, durationDays, perks || {}, is_active !== false, sortOrder]
+        `INSERT INTO subscription_plans (name, slug, description, price_cents, currency, price_dotacoins, duration_days, trial_enabled, trial_days, trial_max_concurrent, perks, is_active, sort_order)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
+        [String(name).trim(), finalSlug, description || null, priceCents, currency || 'EUR', priceDotacoins, durationDays, trialEnabled, trialDays, trialMaxConcurrent, perks || {}, is_active !== false, sortOrder]
       )
       res.status(201).json(row)
     } catch (e) {
@@ -94,7 +100,7 @@ export default function createSubscriptionPlansRouter() {
     const existing = await queryOne('SELECT * FROM subscription_plans WHERE id = $1', [id])
     if (!existing) return res.status(404).json({ error: 'plan not found' })
 
-    const { name, slug, description, price_cents, currency, price_dotacoins, duration_days, perks, is_active, sort_order } = req.body || {}
+    const { name, slug, description, price_cents, currency, price_dotacoins, duration_days, trial_enabled, trial_days, trial_max_concurrent, perks, is_active, sort_order } = req.body || {}
     const newName = name !== undefined ? String(name).trim() : existing.name
     if (!newName) return res.status(400).json({ error: 'name is required' })
     const newSlug = slug !== undefined ? slugify(slug) : existing.slug
@@ -105,6 +111,11 @@ export default function createSubscriptionPlansRouter() {
       ? Math.max(0, Math.floor(Number(price_dotacoins))) : existing.price_dotacoins
     const newDurationDays = duration_days !== undefined && Number.isFinite(Number(duration_days))
       ? Math.max(1, Math.floor(Number(duration_days))) : existing.duration_days
+    const newTrialEnabled = trial_enabled !== undefined ? !!trial_enabled : existing.trial_enabled
+    const newTrialDays = trial_days !== undefined && Number.isFinite(Number(trial_days))
+      ? Math.max(1, Math.floor(Number(trial_days))) : existing.trial_days
+    const newTrialMaxConcurrent = trial_max_concurrent !== undefined && Number.isFinite(Number(trial_max_concurrent))
+      ? Math.max(0, Math.floor(Number(trial_max_concurrent))) : existing.trial_max_concurrent
     const newSort = sort_order !== undefined && Number.isFinite(Number(sort_order))
       ? Math.floor(Number(sort_order)) : existing.sort_order
 
@@ -113,9 +124,10 @@ export default function createSubscriptionPlansRouter() {
         `UPDATE subscription_plans
             SET name = $1, slug = $2, description = $3, price_cents = $4,
                 currency = $5, price_dotacoins = $6, duration_days = $7,
-                perks = $8, is_active = $9, sort_order = $10,
+                trial_enabled = $8, trial_days = $9, trial_max_concurrent = $10,
+                perks = $11, is_active = $12, sort_order = $13,
                 updated_at = NOW()
-          WHERE id = $11`,
+          WHERE id = $14`,
         [
           newName, newSlug,
           description !== undefined ? description : existing.description,
@@ -123,6 +135,9 @@ export default function createSubscriptionPlansRouter() {
           currency !== undefined ? currency : existing.currency,
           newPriceDotacoins,
           newDurationDays,
+          newTrialEnabled,
+          newTrialDays,
+          newTrialMaxConcurrent,
           perks !== undefined ? perks : existing.perks,
           is_active !== undefined ? !!is_active : existing.is_active,
           newSort,
@@ -333,7 +348,120 @@ export default function createSubscriptionPlansRouter() {
        LIMIT 1
     `, [player.id])
     const me = await queryOne('SELECT dotacoins FROM players WHERE id = $1', [player.id])
-    res.json({ subscription: sub, dotacoins: me?.dotacoins || 0 })
+
+    // Trial state for rendering Try buttons on the /subscription page:
+    //  - used_plan_ids: plans this player has already trialed (any status), so
+    //    the once-per-plan rule can be reflected in the UI.
+    //  - active_counts: how many players currently hold an active (non-expired)
+    //    trial per plan, so a plan whose seat cap is full shows as unavailable.
+    const trialedRows = await query(
+      `SELECT DISTINCT plan_id FROM user_subscriptions
+        WHERE player_id = $1 AND source = 'trial'`,
+      [player.id]
+    )
+    const trialCountRows = await query(
+      `SELECT plan_id, COUNT(*)::int AS n
+         FROM user_subscriptions
+        WHERE source = 'trial' AND status = 'active' AND expires_at > NOW()
+        GROUP BY plan_id`
+    )
+    const activeCounts = {}
+    for (const r of trialCountRows) activeCounts[r.plan_id] = r.n
+
+    res.json({
+      subscription: sub,
+      dotacoins: me?.dotacoins || 0,
+      trial: {
+        used_plan_ids: trialedRows.map(r => r.plan_id),
+        active_counts: activeCounts,
+      },
+    })
+  })
+
+  // Start a free trial of a trial-enabled plan. No charge; grants the plan's
+  // perks for trial_days. Guarded by three rules, all re-checked server-side:
+  //  1. Eligibility — the player must have no active subscription (matches the
+  //     one-active-row unique index; a trial would otherwise collide).
+  //  2. Once per plan — a prior trial row for this plan (any status) blocks a
+  //     re-try. Also enforced by the partial unique index as a race backstop.
+  //  3. Seat cap — at most trial_max_concurrent players may hold an active
+  //     trial of this plan at once (0 = unlimited). A slot frees once a trial
+  //     passes its expires_at, so the count only includes non-expired rows.
+  // The plan row is locked FOR UPDATE so concurrent trial starts on the same
+  // plan are serialized and can't overshoot the cap.
+  router.post('/api/me/subscription/trial', async (req, res) => {
+    const player = await getAuthPlayer(req)
+    if (!player) return res.status(401).json({ error: 'Not authenticated' })
+    const planId = Number(req.body?.plan_id)
+    if (!planId) return res.status(400).json({ error: 'plan_id is required' })
+
+    let result
+    try {
+      result = await withTransaction(async (c) => {
+        const planRes = await c.query(
+          `SELECT id, name, is_active, trial_enabled, trial_days, trial_max_concurrent
+             FROM subscription_plans WHERE id = $1 FOR UPDATE`,
+          [planId]
+        )
+        const plan = planRes.rows[0]
+        if (!plan || !plan.is_active) { const e = new Error('plan'); e.code = 'NOTFOUND'; throw e }
+        if (!plan.trial_enabled) { const e = new Error('no trial'); e.code = 'NO_TRIAL'; throw e }
+
+        // 1. No active subscription already.
+        const active = await c.query(
+          `SELECT 1 FROM user_subscriptions
+            WHERE player_id = $1 AND status = 'active'
+              AND (expires_at IS NULL OR expires_at > NOW())
+            LIMIT 1`,
+          [player.id]
+        )
+        if (active.rowCount) { const e = new Error('has sub'); e.code = 'HAS_SUB'; throw e }
+
+        // 2. Hasn't trialed this plan before.
+        const used = await c.query(
+          `SELECT 1 FROM user_subscriptions
+            WHERE player_id = $1 AND plan_id = $2 AND source = 'trial' LIMIT 1`,
+          [player.id, planId]
+        )
+        if (used.rowCount) { const e = new Error('used'); e.code = 'TRIAL_USED'; throw e }
+
+        // 3. Seat cap not full.
+        const cap = Math.max(0, Math.floor(Number(plan.trial_max_concurrent) || 0))
+        if (cap > 0) {
+          const cnt = await c.query(
+            `SELECT COUNT(*)::int AS n FROM user_subscriptions
+              WHERE plan_id = $1 AND source = 'trial' AND status = 'active'
+                AND expires_at > NOW()`,
+            [planId]
+          )
+          if (cnt.rows[0].n >= cap) { const e = new Error('full'); e.code = 'TRIAL_FULL'; throw e }
+        }
+
+        const days = Math.max(1, Math.floor(Number(plan.trial_days) || 7))
+        const inserted = await c.query(
+          `INSERT INTO user_subscriptions (player_id, plan_id, status, source, auto_renew, expires_at)
+           VALUES ($1, $2, 'active', 'trial', FALSE, NOW() + ($3 || ' days')::interval)
+           RETURNING *`,
+          [player.id, planId, String(days)]
+        )
+        return { sub: inserted.rows[0], planName: plan.name }
+      })
+    } catch (e) {
+      if (e.code === 'NOTFOUND') return res.status(404).json({ error: 'plan not available' })
+      if (e.code === 'NO_TRIAL') return res.status(400).json({ error: 'this plan has no trial' })
+      if (e.code === 'HAS_SUB') return res.status(409).json({ error: 'You already have an active subscription' })
+      if (e.code === 'TRIAL_USED') return res.status(409).json({ error: 'You have already used your trial for this plan' })
+      if (e.code === 'TRIAL_FULL') return res.status(409).json({ error: 'All trial slots are currently in use — try again later' })
+      // Unique index race: a concurrent request already created the trial row.
+      if (e.code === '23505') return res.status(409).json({ error: 'You have already used your trial for this plan' })
+      throw e
+    }
+
+    // Active now → grant the Subscriber Discord role (after commit). The
+    // trial-expiration sweep strips it again once expires_at passes.
+    const acct = await queryOne('SELECT discord_id FROM players WHERE id = $1', [player.id])
+    syncDiscordSubscriberRole(acct?.discord_id, true, result.planName)
+    res.status(201).json({ ok: true, subscription: result.sub })
   })
 
   // Subscribe to (or switch to) a plan, paying its price_dotacoins up front.

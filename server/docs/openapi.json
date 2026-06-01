@@ -1750,6 +1750,9 @@
                       "currency": { "type": "string" },
                       "price_dotacoins": { "type": "integer", "description": "Cost per period in dotacoins; >0 means buyable on /subscription" },
                       "duration_days": { "type": "integer", "description": "Auto-renew period length in days" },
+                      "trial_enabled": { "type": "boolean", "description": "Whether a free trial is offered for this plan" },
+                      "trial_days": { "type": "integer", "description": "How long a trial stays active before expiring" },
+                      "trial_max_concurrent": { "type": "integer", "description": "Max players who may hold an active trial of this plan at once; 0 = unlimited" },
                       "perks": { "type": "object" },
                       "sort_order": { "type": "integer" }
                     }
@@ -1766,7 +1769,7 @@
         "tags": ["Subscription Plans"],
         "summary": "Get my active subscription + dotacoins balance",
         "security": [{ "bearerAuth": [] }],
-        "description": "Self-serve. Returns the caller's active subscription (with auto_renew, expires_at, and the plan's price_dotacoins/duration_days) or null, plus their current dotacoins balance.",
+        "description": "Self-serve. Returns the caller's active subscription (with auto_renew, expires_at, source, and the plan's price_dotacoins/duration_days) or null, their current dotacoins balance, and trial state for rendering Try buttons (which plans they've already trialed and the current global active-trial count per plan).",
         "responses": {
           "200": {
             "description": "Active subscription summary",
@@ -1776,7 +1779,14 @@
                   "type": "object",
                   "properties": {
                     "subscription": { "type": "object", "nullable": true },
-                    "dotacoins": { "type": "integer" }
+                    "dotacoins": { "type": "integer" },
+                    "trial": {
+                      "type": "object",
+                      "properties": {
+                        "used_plan_ids": { "type": "array", "items": { "type": "integer" }, "description": "Plan ids the caller has already trialed (any status); blocks a re-try" },
+                        "active_counts": { "type": "object", "additionalProperties": { "type": "integer" }, "description": "plan_id -> count of players currently holding an active (non-expired) trial" }
+                      }
+                    }
                   }
                 }
               }
@@ -1849,6 +1859,45 @@
         }
       }
     },
+    "/api/me/subscription/trial": {
+      "post": {
+        "tags": ["Subscription Plans"],
+        "summary": "Start a free trial of a plan",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Self-serve. Starts a free trial of a trial-enabled plan: inserts a user_subscriptions row (source='trial', auto_renew=false, expires_at=NOW()+trial_days) granting the plan's perks at no charge, and grants the Subscriber Discord role. Three rules, all re-checked server-side under a plan-row lock: (1) the caller must have no active subscription; (2) each player may trial a given plan only once ever; (3) at most trial_max_concurrent players may hold an active trial of the plan at once (0 = unlimited; an expired trial frees its slot). The trial-expiration sweep lapses it (status->expired) and strips the Discord role once expires_at passes.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["plan_id"],
+                "properties": { "plan_id": { "type": "integer" } }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Trial started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "subscription": { "type": "object" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "plan_id missing, or this plan has no trial" },
+          "401": { "description": "Not authenticated" },
+          "404": { "description": "Plan not available" },
+          "409": { "description": "Already have an active subscription, already used this plan's trial, or all trial slots are full" }
+        }
+      }
+    },
     "/api/admin/subscription-plans": {
       "get": {
         "tags": ["Subscription Plans"],
@@ -1876,6 +1925,9 @@
                   "currency": { "type": "string", "default": "EUR" },
                   "price_dotacoins": { "type": "integer", "default": 0, "description": "Dotacoins charged per period; >0 makes the plan self-purchasable" },
                   "duration_days": { "type": "integer", "default": 30, "description": "Auto-renew period length in days (min 1)" },
+                  "trial_enabled": { "type": "boolean", "default": false, "description": "Offer a free trial on the /subscription page" },
+                  "trial_days": { "type": "integer", "default": 7, "description": "Trial length in days (min 1)" },
+                  "trial_max_concurrent": { "type": "integer", "default": 0, "description": "Max concurrent active trials of this plan; 0 = unlimited" },
                   "perks": { "type": "object", "default": {} },
                   "is_active": { "type": "boolean", "default": true },
                   "sort_order": { "type": "integer", "default": 0 }
@@ -1910,6 +1962,9 @@
                   "currency": { "type": "string" },
                   "price_dotacoins": { "type": "integer" },
                   "duration_days": { "type": "integer" },
+                  "trial_enabled": { "type": "boolean" },
+                  "trial_days": { "type": "integer" },
+                  "trial_max_concurrent": { "type": "integer" },
                   "perks": { "type": "object" },
                   "is_active": { "type": "boolean" },
                   "sort_order": { "type": "integer" }

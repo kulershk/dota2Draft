@@ -1415,6 +1415,16 @@ export async function initDb() {
   try { await execute(`ALTER TABLE subscription_plans ADD COLUMN price_dotacoins INTEGER NOT NULL DEFAULT 0`) } catch {}
   try { await execute(`ALTER TABLE subscription_plans ADD COLUMN duration_days INTEGER NOT NULL DEFAULT 30`) } catch {}
 
+  // Free trial config. A trial-enabled plan shows a "Try" button on the
+  // /subscription page that grants the plan's perks for trial_days at no cost.
+  // trial_max_concurrent caps how many players may hold an active trial of this
+  // plan at once (0 = unlimited seats); a slot frees automatically once a trial
+  // passes its expires_at. Each player may trial a given plan only once ever
+  // (enforced by the partial unique index on user_subscriptions below).
+  try { await execute(`ALTER TABLE subscription_plans ADD COLUMN trial_enabled BOOLEAN NOT NULL DEFAULT FALSE`) } catch {}
+  try { await execute(`ALTER TABLE subscription_plans ADD COLUMN trial_days INTEGER NOT NULL DEFAULT 7`) } catch {}
+  try { await execute(`ALTER TABLE subscription_plans ADD COLUMN trial_max_concurrent INTEGER NOT NULL DEFAULT 0`) } catch {}
+
   // Admin-managed catalogue of avatar decorations (crowns, sunglasses, …) that
   // subscribers with the avatar_decoration perk can wear on their avatar. The
   // image is a square transparent PNG overlaid on top of the avatar.
@@ -1586,6 +1596,17 @@ export async function initDb() {
   }
   try { await execute(`CREATE INDEX IF NOT EXISTS user_subscriptions_plan_idx ON user_subscriptions (plan_id)`) } catch {}
   try { await execute(`CREATE INDEX IF NOT EXISTS user_subscriptions_player_idx ON user_subscriptions (player_id)`) } catch {}
+
+  // One trial per (player, plan) ever — a player can sample each plan a single
+  // time. Spans all statuses (active/expired/cancelled) so a finished trial
+  // still blocks a re-try. A second safety net for the seat-cap race in
+  // POST /api/me/subscription/trial, which also checks explicitly.
+  try {
+    await execute(`CREATE UNIQUE INDEX IF NOT EXISTS user_subscriptions_one_trial_per_plan
+                     ON user_subscriptions (player_id, plan_id) WHERE source = 'trial'`)
+  } catch (e) {
+    console.warn('[db] Could not add unique index on trial user_subscriptions:', e.message)
+  }
 
   // Auto-renew flag — TRUE only on dotacoins-funded subs bought via
   // POST /api/me/subscription. The renew_dotacoin_subscriptions job re-charges
