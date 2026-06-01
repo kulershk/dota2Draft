@@ -35,6 +35,59 @@ const TYPE_MAP: Record<number, ChannelDto['type']> = {
   [ChannelType.GuildStageVoice]: 'stage',
 }
 
+// Roles/channels/members change rarely but the admin UI fetches several of
+// them in parallel on every page load. Hitting Discord's REST API on every
+// request burns the rate limit and surfaces as "Request failed" in the UI.
+// This small TTL cache collapses bursts into a single upstream fetch, dedupes
+// concurrent in-flight requests, and — crucially — serves the last good value
+// if a refresh fails (e.g. a 429), so a transient outage degrades to slightly
+// stale data instead of an error.
+const CACHE_TTL_MS = 60_000
+
+interface CacheEntry<T> {
+  value: T | null
+  expiresAt: number
+  inflight: Promise<T> | null
+}
+
+const caches = new Map<string, CacheEntry<unknown>>()
+
+async function cached<T>(key: string, producer: () => Promise<T>): Promise<T> {
+  const now = Date.now()
+  let entry = caches.get(key) as CacheEntry<T> | undefined
+  if (!entry) {
+    entry = { value: null, expiresAt: 0, inflight: null }
+    caches.set(key, entry as CacheEntry<unknown>)
+  }
+
+  // Fresh enough — serve from cache.
+  if (entry.value !== null && now < entry.expiresAt) return entry.value
+  // A refresh is already running — piggyback on it instead of firing another.
+  if (entry.inflight) return entry.inflight
+
+  const refresh = (async () => {
+    try {
+      const value = await producer()
+      entry!.value = value
+      entry!.expiresAt = Date.now() + CACHE_TTL_MS
+      return value
+    } catch (err) {
+      // Serve stale data if we have any — better than a hard failure when
+      // Discord is rate-limiting us. Only throw if the cache is empty.
+      if (entry!.value !== null) {
+        Logger.warn(`cache refresh for "${key}" failed, serving stale value`, err)
+        return entry!.value
+      }
+      throw err
+    } finally {
+      entry!.inflight = null
+    }
+  })()
+
+  entry.inflight = refresh
+  return refresh
+}
+
 function bearerAuth(req: Request, res: Response, next: NextFunction): void {
   const expected = env.INTERNAL_TOKEN
   if (!expected) {
@@ -76,20 +129,24 @@ export function startInternalServer(client: Client): void {
       return
     }
     try {
-      const guild = await client.guilds.fetch(guildId)
-      await guild.roles.fetch()
-      const roles: RoleDto[] = guild.roles.cache
-        .filter((r) => r.id !== guild.roles.everyone.id)
-        .map((r) => ({
-          id: r.id,
-          name: r.name,
-          color: r.color,
-          position: r.position,
-          managed: r.managed,
-          hoist: r.hoist,
-          mentionable: r.mentionable,
-        }))
-        .sort((a, b) => b.position - a.position)
+      const roles = await cached(`roles:${guildId}`, async () => {
+        const guild = await client.guilds.fetch(guildId)
+        await guild.roles.fetch()
+        return guild.roles.cache
+          .filter((r) => r.id !== guild.roles.everyone.id)
+          .map(
+            (r): RoleDto => ({
+              id: r.id,
+              name: r.name,
+              color: r.color,
+              position: r.position,
+              managed: r.managed,
+              hoist: r.hoist,
+              mentionable: r.mentionable,
+            }),
+          )
+          .sort((a, b) => b.position - a.position)
+      })
       res.json({ guildId, roles })
     } catch (err) {
       Logger.error('GET /internal/roles failed', err)
@@ -104,17 +161,21 @@ export function startInternalServer(client: Client): void {
       return
     }
     try {
-      const guild = await client.guilds.fetch(guildId)
-      await guild.channels.fetch()
-      const channels: ChannelDto[] = guild.channels.cache
-        .map((c): ChannelDto => ({
-          id: c.id,
-          name: c.name,
-          type: TYPE_MAP[c.type] ?? 'other',
-          parentId: 'parentId' in c ? (c.parentId ?? null) : null,
-          position: 'position' in c ? (c.position ?? 0) : 0,
-        }))
-        .sort((a, b) => a.position - b.position)
+      const channels = await cached(`channels:${guildId}`, async () => {
+        const guild = await client.guilds.fetch(guildId)
+        await guild.channels.fetch()
+        return guild.channels.cache
+          .map(
+            (c): ChannelDto => ({
+              id: c.id,
+              name: c.name,
+              type: TYPE_MAP[c.type] ?? 'other',
+              parentId: 'parentId' in c ? (c.parentId ?? null) : null,
+              position: 'position' in c ? (c.position ?? 0) : 0,
+            }),
+          )
+          .sort((a, b) => a.position - b.position)
+      })
       res.json({ guildId, channels })
     } catch (err) {
       Logger.error('GET /internal/channels failed', err)
@@ -183,19 +244,21 @@ export function startInternalServer(client: Client): void {
       return
     }
     try {
-      const guild = await client.guilds.fetch(guildId)
-      // Forces a full member fetch — requires GuildMembers privileged intent.
-      // Without it the cache only contains members the bot has seen interact.
-      await guild.members.fetch().catch(() => {})
-      const members = [...guild.members.cache.values()]
-        .filter((m) => !m.user.bot)
-        .map((m) => ({
-          id: m.id,
-          username: m.user.username,
-          displayName: m.displayName ?? m.user.username,
-          avatarUrl: m.user.displayAvatarURL({ size: 64 }),
-        }))
-        .sort((a, b) => a.displayName.localeCompare(b.displayName))
+      const members = await cached(`members:${guildId}`, async () => {
+        const guild = await client.guilds.fetch(guildId)
+        // Forces a full member fetch — requires GuildMembers privileged intent.
+        // Without it the cache only contains members the bot has seen interact.
+        await guild.members.fetch().catch(() => {})
+        return [...guild.members.cache.values()]
+          .filter((m) => !m.user.bot)
+          .map((m) => ({
+            id: m.id,
+            username: m.user.username,
+            displayName: m.displayName ?? m.user.username,
+            avatarUrl: m.user.displayAvatarURL({ size: 64 }),
+          }))
+          .sort((a, b) => a.displayName.localeCompare(b.displayName))
+      })
       res.json({ guildId, members })
     } catch (err) {
       Logger.error('GET /internal/members failed', err)
