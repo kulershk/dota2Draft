@@ -232,9 +232,15 @@ watch(selectedSeasonId, fetchPointsHistory)
 // Round to one decimal — points are stored as REAL and can carry long tails.
 function r1(n: number): number { return Math.round(n * 10) / 10 }
 
-// Summary stats derived from the timeline (start → current, peak, Δ, W/L).
+// The graph + win/loss strip only show the most recent games so a long
+// season stays readable. The line is anchored at the points the player held
+// going into the first of these games (points_before of that row).
+const POINTS_GRAPH_LIMIT = 30
+const recentPoints = computed(() => pointsHistory.value.slice(-POINTS_GRAPH_LIMIT))
+
+// Summary stats derived from the shown window (start → current, peak, Δ, W/L).
 const pointsSummary = computed(() => {
-  const rows = pointsHistory.value
+  const rows = recentPoints.value
   if (rows.length === 0) return null
   const start = rows[0].points_before
   const current = rows[rows.length - 1].points_after
@@ -254,10 +260,17 @@ const pointsSummary = computed(() => {
   }
 })
 
-// Chart.js dataset: a single orange line of cumulative points over time,
-// anchored at the season's starting points (points_before of the first game).
+// The match a strip segment / data point links to. season_match_log rows for
+// real games carry a queue_match_id; synthetic rows (Friday bonus, admin
+// adjustments) have none and aren't clickable.
+function pointMatchRoute(row: PointsRow) {
+  return row.queue_match_id ? { name: 'queue-match', params: { id: row.queue_match_id } } : null
+}
+
+// Chart.js dataset: a single blue line of cumulative points over time,
+// anchored at the points held going into the first shown game.
 const pointsChartData = computed(() => {
-  const rows = pointsHistory.value
+  const rows = recentPoints.value
   if (rows.length === 0) return { labels: [], datasets: [] }
   const labels = [t('seasonPointsStartLabel'), ...rows.map((_, i) => String(i + 1))]
   const data = [r1(rows[0].points_before), ...rows.map(row => r1(row.points_after))]
@@ -300,14 +313,14 @@ const pointsChartOptions = computed(() => ({
         title: (items: any[]) => {
           const idx = items[0]?.dataIndex ?? 0
           if (idx === 0) return t('seasonPointsStartLabel')
-          const row = pointsHistory.value[idx - 1]
+          const row = recentPoints.value[idx - 1]
           return row ? fmtDateTime(new Date(row.created_at)) : ''
         },
         label: (item: any) => {
           const idx = item.dataIndex
           const pts = `${t('seasonPointsLabel')}: ${item.formattedValue}`
           if (idx === 0) return pts
-          const row = pointsHistory.value[idx - 1]
+          const row = recentPoints.value[idx - 1]
           if (!row) return pts
           const sign = row.delta >= 0 ? '+' : ''
           return `${pts} (${sign}${r1(row.delta)})`
@@ -814,9 +827,28 @@ const streakBadge = computed(() => {
             <div class="p-4">
               <div v-if="pointsLoading" class="h-56 flex items-center justify-center text-sm text-muted-foreground">{{ t('loading') }}</div>
               <div v-else-if="pointsHistory.length === 0" class="h-56 flex items-center justify-center text-sm text-muted-foreground">{{ t('seasonPointsEmpty') }}</div>
-              <div v-else class="h-56">
-                <Line :data="pointsChartData" :options="pointsChartOptions" />
-              </div>
+              <template v-else>
+                <div class="h-56">
+                  <Line :data="pointsChartData" :options="pointsChartOptions" />
+                </div>
+                <!-- Win/loss strip: one segment per shown game, green=win,
+                     red=loss. Real games link to the match; synthetic rows
+                     (Friday bonus, admin adjust) render as a plain segment. -->
+                <div class="flex items-stretch gap-[3px] mt-3 px-1 h-2.5">
+                  <component
+                    :is="pointMatchRoute(row) ? 'router-link' : 'div'"
+                    v-for="row in recentPoints"
+                    :key="row.id"
+                    :to="pointMatchRoute(row) ?? undefined"
+                    class="flex-1 rounded-sm transition-transform"
+                    :class="[
+                      row.won === true ? 'bg-green-500' : row.won === false ? 'bg-red-500' : 'bg-muted-foreground/40',
+                      pointMatchRoute(row) ? 'cursor-pointer hover:scale-y-150' : '',
+                    ]"
+                    :title="`${row.won === true ? t('profileWin') : row.won === false ? t('profileLoss') : '—'} · ${row.delta >= 0 ? '+' : ''}${r1(row.delta)} · ${formatDate(row.created_at)}`"
+                  />
+                </div>
+              </template>
             </div>
           </div>
 
