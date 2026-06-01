@@ -1627,6 +1627,7 @@ export default {
   seasonPointsRecord: 'P / Pr',
   seasonPointsGames: 'Žaidimai',
   seasonPointsEmpty: 'Šiame sezone dar nėra reitinguojamų žaidimų',
+  seasonPointsNoStats: 'Nėra žaidimo statistikos',
   seasonRankingsCount: 'sezonai',
   queuePoolSeason: 'Sezonas',
   queuePoolNoSeason: 'Be sezono — neturi įtakos reitingams',

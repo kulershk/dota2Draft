@@ -1627,6 +1627,7 @@ export default {
   seasonPointsRecord: 'U / Z',
   seasonPointsGames: 'Spēles',
   seasonPointsEmpty: 'Šajā sezonā vēl nav reitinga spēļu',
+  seasonPointsNoStats: 'Nav spēles statistikas',
   seasonRankingsCount: 'sezonas',
   queuePoolSeason: 'Sezona',
   queuePoolNoSeason: 'Bez sezonas — neietekmē reitingus',

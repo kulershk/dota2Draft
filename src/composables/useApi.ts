@@ -864,6 +864,9 @@ export function useApi() {
           id: number; queue_match_id: number | null; won: boolean | null;
           points_before: number; points_after: number; delta: number;
           reason: string | null; created_at: string;
+          hero_id: number | null; kills: number | null; deaths: number | null;
+          assists: number | null; is_radiant: boolean | null;
+          radiant_kills: number | null; dire_kills: number | null;
         }>
       }>,
 

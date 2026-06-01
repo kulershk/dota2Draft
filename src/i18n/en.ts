@@ -1635,6 +1635,7 @@ export default {
   seasonPointsRecord: 'W / L',
   seasonPointsGames: 'Games',
   seasonPointsEmpty: 'No ranked games in this season yet',
+  seasonPointsNoStats: 'No game stats available',
   seasonRankingsCount: 'seasons',
   queuePoolSeason: 'Season',
   queuePoolNoSeason: 'No season — does not affect rankings',

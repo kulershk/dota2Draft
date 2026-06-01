@@ -1534,6 +1534,7 @@ export default {
   seasonPointsRecord: 'П / П',
   seasonPointsGames: 'Игры',
   seasonPointsEmpty: 'В этом сезоне пока нет рейтинговых игр',
+  seasonPointsNoStats: 'Нет статистики игры',
   seasonRankingsCount: 'сезонов',
   queuePoolSeason: 'Сезон',
   queuePoolNoSeason: 'Без сезона — не влияет на рейтинги',

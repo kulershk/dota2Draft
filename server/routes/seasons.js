@@ -288,12 +288,40 @@ export default function createSeasonsRouter(io) {
       if (!Number.isInteger(playerId) || !Number.isInteger(seasonId)) {
         return res.status(400).json({ error: 'invalid playerId or seasonId' })
       }
+      // Per-game stats (hero, KDA, score) live in match_game_player_stats keyed
+      // by the Dota 3.2bn account id, so resolve the player's steam32 first.
+      const player = await queryOne('SELECT steam_id FROM players WHERE id = $1', [playerId])
+      const steam32 = player?.steam_id
+        ? (BigInt(player.steam_id) - 76561197960265728n).toString()
+        : null
+      // Enrich each log row with the player's stat line for that match's game
+      // (latest game if it was a series) plus the game's team kill totals for a
+      // full scoreline. Synthetic rows (Friday bonus, admin adjust) have no
+      // queue_match_id and fall through with null stats.
       const rows = await query(`
-        SELECT id, queue_match_id, won, points_before, points_after, delta, reason, created_at
-        FROM season_match_log
-        WHERE season_id = $1 AND player_id = $2
-        ORDER BY created_at ASC, id ASC
-      `, [seasonId, playerId])
+        SELECT sml.id, sml.queue_match_id, sml.won, sml.points_before, sml.points_after,
+               sml.delta, sml.reason, sml.created_at,
+               ps.hero_id, ps.kills, ps.deaths, ps.assists, ps.is_radiant,
+               sc.radiant_kills, sc.dire_kills
+        FROM season_match_log sml
+        LEFT JOIN queue_matches qm ON qm.id = sml.queue_match_id
+        LEFT JOIN LATERAL (
+          SELECT s.hero_id, s.kills, s.deaths, s.assists, s.is_radiant, s.match_game_id
+          FROM match_game_player_stats s
+          JOIN match_games g ON g.id = s.match_game_id
+          WHERE g.match_id = qm.match_id AND $3::bigint IS NOT NULL AND s.account_id = $3::bigint
+          ORDER BY g.game_number DESC
+          LIMIT 1
+        ) ps ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT COALESCE(SUM(ms.kills) FILTER (WHERE ms.is_radiant), 0)::int AS radiant_kills,
+                 COALESCE(SUM(ms.kills) FILTER (WHERE NOT ms.is_radiant), 0)::int AS dire_kills
+          FROM match_game_player_stats ms
+          WHERE ms.match_game_id = ps.match_game_id
+        ) sc ON TRUE
+        WHERE sml.season_id = $1 AND sml.player_id = $2
+        ORDER BY sml.created_at ASC, sml.id ASC
+      `, [seasonId, playerId, steam32])
       res.json({ rows })
     } catch (e) {
       res.status(500).json({ error: e.message })

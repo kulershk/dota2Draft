@@ -207,6 +207,9 @@ type PointsRow = {
   id: number; queue_match_id: number | null; won: boolean | null;
   points_before: number; points_after: number; delta: number;
   reason: string | null; created_at: string;
+  hero_id: number | null; kills: number | null; deaths: number | null;
+  assists: number | null; is_radiant: boolean | null;
+  radiant_kills: number | null; dire_kills: number | null;
 }
 const selectedSeasonId = ref<number | null>(null)
 const pointsHistory = ref<PointsRow[]>([])
@@ -265,6 +268,25 @@ const pointsSummary = computed(() => {
 // adjustments) have none and aren't clickable.
 function pointMatchRoute(row: PointsRow) {
   return row.queue_match_id ? { name: 'queue-match', params: { id: row.queue_match_id } } : null
+}
+
+// Hover tooltip for the win/loss strip — shows hero, KDA and the scoreline of
+// that game. We track the hovered row plus the horizontal centre of its
+// segment (clamped so the tooltip doesn't spill past the card edges).
+const hoverRow = ref<PointsRow | null>(null)
+const hoverLeft = ref(0)
+function onStripEnter(e: MouseEvent, row: PointsRow) {
+  const seg = e.currentTarget as HTMLElement
+  // The flex row is statically positioned, so the segment's offsetParent is the
+  // relative strip wrapper — offsetLeft is already relative to it.
+  const wrapWidth = (seg.offsetParent as HTMLElement | null)?.clientWidth ?? seg.offsetWidth
+  const centre = seg.offsetLeft + seg.offsetWidth / 2
+  hoverLeft.value = Math.max(80, Math.min(centre, wrapWidth - 80))
+  hoverRow.value = row
+}
+function onStripLeave() { hoverRow.value = null }
+function hasGameStats(row: PointsRow | null): boolean {
+  return !!row && row.kills != null && row.deaths != null && row.assists != null
 }
 
 // Chart.js dataset: a single blue line of cumulative points over time,
@@ -852,21 +874,70 @@ const streakBadge = computed(() => {
                 <!-- Win/loss strip: one segment per shown game, green=win,
                      red=loss. Real games link to the match; synthetic rows
                      (Friday bonus, admin adjust) render as a plain segment.
-                     Padded to match the chart's plotting area (see plugin). -->
-                <div class="flex items-stretch gap-[3px] mt-3 h-2.5"
-                     :style="{ paddingLeft: stripPad.left + 'px', paddingRight: stripPad.right + 'px' }">
-                  <component
-                    :is="pointMatchRoute(row) ? 'router-link' : 'div'"
-                    v-for="row in recentPoints"
-                    :key="row.id"
-                    :to="pointMatchRoute(row) ?? undefined"
-                    class="flex-1 rounded-sm transition-transform"
-                    :class="[
-                      row.won === true ? 'bg-green-500' : row.won === false ? 'bg-red-500' : 'bg-muted-foreground/40',
-                      pointMatchRoute(row) ? 'cursor-pointer hover:scale-y-150' : '',
-                    ]"
-                    :title="`${row.won === true ? t('profileWin') : row.won === false ? t('profileLoss') : '—'} · ${row.delta >= 0 ? '+' : ''}${r1(row.delta)} · ${formatDate(row.created_at)}`"
-                  />
+                     Padded to match the chart's plotting area (see plugin).
+                     Hovering a segment reveals a tooltip with hero + KDA +
+                     scoreline; the wrapper is relative so the tooltip anchors
+                     to it. -->
+                <div class="relative mt-3">
+                  <div class="flex items-stretch gap-[3px] h-2.5"
+                       :style="{ paddingLeft: stripPad.left + 'px', paddingRight: stripPad.right + 'px' }">
+                    <component
+                      :is="pointMatchRoute(row) ? 'router-link' : 'div'"
+                      v-for="row in recentPoints"
+                      :key="row.id"
+                      :to="pointMatchRoute(row) ?? undefined"
+                      class="flex-1 rounded-sm transition-transform origin-bottom"
+                      :class="[
+                        row.won === true ? 'bg-green-500' : row.won === false ? 'bg-red-500' : 'bg-muted-foreground/40',
+                        pointMatchRoute(row) ? 'cursor-pointer' : '',
+                        hoverRow?.id === row.id ? 'scale-y-[2]' : '',
+                      ]"
+                      @mouseenter="onStripEnter($event, row)"
+                      @mouseleave="onStripLeave"
+                    />
+                  </div>
+
+                  <!-- Floating tooltip -->
+                  <div
+                    v-if="hoverRow"
+                    class="absolute z-20 -translate-x-1/2 pointer-events-none w-max max-w-[240px]"
+                    :style="{ left: hoverLeft + 'px', bottom: 'calc(100% + 8px)' }"
+                  >
+                    <div class="rounded-lg border border-border bg-popover shadow-xl px-3 py-2 flex flex-col gap-1.5">
+                      <!-- Result + points delta + date -->
+                      <div class="flex items-center gap-2 text-xs">
+                        <span class="font-bold" :class="hoverRow.won === true ? 'text-green-400' : hoverRow.won === false ? 'text-red-400' : 'text-muted-foreground'">
+                          {{ hoverRow.won === true ? t('profileWin') : hoverRow.won === false ? t('profileLoss') : '—' }}
+                        </span>
+                        <span class="font-mono font-bold" :class="hoverRow.delta >= 0 ? 'text-green-400' : 'text-red-400'">
+                          {{ hoverRow.delta >= 0 ? '+' : '' }}{{ r1(hoverRow.delta) }}
+                        </span>
+                        <span class="text-muted-foreground/70 ml-auto whitespace-nowrap">{{ formatDate(hoverRow.created_at) }}</span>
+                      </div>
+
+                      <!-- Hero + KDA + score (only when the game is parsed) -->
+                      <div v-if="hasGameStats(hoverRow)" class="flex items-center gap-2">
+                        <img v-if="hoverRow.hero_id && dota.heroImg(hoverRow.hero_id)"
+                             :src="dota.heroImg(hoverRow.hero_id)!"
+                             :alt="dota.heroName(hoverRow.hero_id) || ''"
+                             class="w-9 h-[22px] rounded object-cover border border-border/60" />
+                        <div class="flex flex-col leading-tight min-w-0">
+                          <span v-if="hoverRow.hero_id" class="text-[11px] font-semibold text-foreground truncate">{{ dota.heroName(hoverRow.hero_id) || `Hero #${hoverRow.hero_id}` }}</span>
+                          <span class="text-[11px] font-mono text-muted-foreground">
+                            {{ t('profileKdaShort') }} {{ hoverRow.kills }}/{{ hoverRow.deaths }}/{{ hoverRow.assists }}
+                          </span>
+                        </div>
+                        <span v-if="hoverRow.radiant_kills != null" class="ml-auto text-xs font-mono font-bold whitespace-nowrap">
+                          <span class="text-green-400">{{ hoverRow.radiant_kills }}</span>
+                          <span class="text-muted-foreground/50"> - </span>
+                          <span class="text-red-400">{{ hoverRow.dire_kills }}</span>
+                        </span>
+                      </div>
+                      <div v-else class="text-[11px] text-muted-foreground/70">{{ t('seasonPointsNoStats') }}</div>
+                    </div>
+                    <!-- Caret -->
+                    <div class="w-2 h-2 bg-popover border-r border-b border-border rotate-45 mx-auto -mt-1"></div>
+                  </div>
                 </div>
               </template>
             </div>
