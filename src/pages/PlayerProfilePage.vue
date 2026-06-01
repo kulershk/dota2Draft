@@ -900,43 +900,59 @@ const streakBadge = computed(() => {
                   <!-- Floating tooltip -->
                   <div
                     v-if="hoverRow"
-                    class="absolute z-20 -translate-x-1/2 pointer-events-none w-max max-w-[240px]"
-                    :style="{ left: hoverLeft + 'px', bottom: 'calc(100% + 8px)' }"
+                    class="absolute z-20 -translate-x-1/2 pointer-events-none w-max"
+                    :style="{ left: hoverLeft + 'px', bottom: 'calc(100% + 9px)' }"
                   >
-                    <div class="rounded-lg border border-border bg-popover shadow-xl px-3 py-2 flex flex-col gap-1.5">
-                      <!-- Result + points delta + date -->
-                      <div class="flex items-center gap-2 text-xs">
-                        <span class="font-bold" :class="hoverRow.won === true ? 'text-green-400' : hoverRow.won === false ? 'text-red-400' : 'text-muted-foreground'">
-                          {{ hoverRow.won === true ? t('profileWin') : hoverRow.won === false ? t('profileLoss') : '—' }}
-                        </span>
-                        <span class="font-mono font-bold" :class="hoverRow.delta >= 0 ? 'text-green-400' : 'text-red-400'">
-                          {{ hoverRow.delta >= 0 ? '+' : '' }}{{ r1(hoverRow.delta) }}
-                        </span>
-                        <span class="text-muted-foreground/70 ml-auto whitespace-nowrap">{{ formatDate(hoverRow.created_at) }}</span>
-                      </div>
-
-                      <!-- Hero + KDA + score (only when the game is parsed) -->
-                      <div v-if="hasGameStats(hoverRow)" class="flex items-center gap-2">
+                    <div class="rounded-xl border border-border bg-popover shadow-2xl overflow-hidden min-w-[196px]">
+                      <!-- Header: hero portrait + name/KDA + result chip -->
+                      <div class="flex items-center gap-2.5 p-2.5">
                         <img v-if="hoverRow.hero_id && dota.heroImg(hoverRow.hero_id)"
                              :src="dota.heroImg(hoverRow.hero_id)!"
                              :alt="dota.heroName(hoverRow.hero_id) || ''"
-                             class="w-9 h-[22px] rounded object-cover border border-border/60" />
-                        <div class="flex flex-col leading-tight min-w-0">
-                          <span v-if="hoverRow.hero_id" class="text-[11px] font-semibold text-foreground truncate">{{ dota.heroName(hoverRow.hero_id) || `Hero #${hoverRow.hero_id}` }}</span>
-                          <span class="text-[11px] font-mono text-muted-foreground">
-                            {{ t('profileKdaShort') }} {{ hoverRow.kills }}/{{ hoverRow.deaths }}/{{ hoverRow.assists }}
+                             class="w-9 h-9 rounded-md object-cover border border-primary/40 shrink-0" />
+                        <div v-else class="w-9 h-9 rounded-md bg-accent/50 border border-border/40 shrink-0 flex items-center justify-center">
+                          <Swords class="w-4 h-4 text-muted-foreground" />
+                        </div>
+                        <div class="flex flex-col min-w-0 gap-0.5">
+                          <span class="text-xs font-bold text-foreground truncate leading-tight">
+                            {{ hoverRow.hero_id ? (dota.heroName(hoverRow.hero_id) || `Hero #${hoverRow.hero_id}`) : t('seasonPointsNoStats') }}
+                          </span>
+                          <span v-if="hasGameStats(hoverRow)" class="text-[11px] font-mono leading-tight tracking-tight">
+                            <span class="font-bold text-foreground">{{ hoverRow.kills }}</span>
+                            <span class="text-muted-foreground/40">/</span>
+                            <span class="font-bold text-red-400">{{ hoverRow.deaths }}</span>
+                            <span class="text-muted-foreground/40">/</span>
+                            <span class="font-bold text-sky-400">{{ hoverRow.assists }}</span>
+                            <span class="text-muted-foreground/50 ml-1">{{ t('profileKdaShort') }}</span>
                           </span>
                         </div>
-                        <span v-if="hoverRow.radiant_kills != null" class="ml-auto text-xs font-mono font-bold whitespace-nowrap">
-                          <span class="text-green-400">{{ hoverRow.radiant_kills }}</span>
-                          <span class="text-muted-foreground/50"> - </span>
-                          <span class="text-red-400">{{ hoverRow.dire_kills }}</span>
+                        <span class="ml-auto self-start inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-extrabold tracking-wider"
+                              :class="hoverRow.won === true ? 'bg-green-500/15 text-green-400' : hoverRow.won === false ? 'bg-red-500/15 text-red-400' : 'bg-muted-foreground/10 text-muted-foreground'">
+                          <Check v-if="hoverRow.won === true" class="w-3 h-3" />
+                          <X v-else-if="hoverRow.won === false" class="w-3 h-3" />
+                          {{ hoverRow.won === true ? t('profileWin') : hoverRow.won === false ? t('profileLoss') : '—' }}
                         </span>
                       </div>
-                      <div v-else class="text-[11px] text-muted-foreground/70">{{ t('seasonPointsNoStats') }}</div>
+
+                      <!-- Footer: points delta · scoreline · date -->
+                      <div class="flex items-center gap-3 px-2.5 py-1.5 bg-muted/40 border-t border-border/70 text-[11px] font-mono">
+                        <span class="inline-flex items-center gap-1">
+                          <span class="text-muted-foreground/60">{{ t('seasonPointsLabel') }}</span>
+                          <span class="font-bold" :class="hoverRow.delta >= 0 ? 'text-green-400' : 'text-red-400'">
+                            {{ hoverRow.delta >= 0 ? '+' : '' }}{{ r1(hoverRow.delta) }}
+                          </span>
+                        </span>
+                        <span v-if="hoverRow.radiant_kills != null" class="inline-flex items-center gap-1">
+                          <Swords class="w-3 h-3 text-muted-foreground/50" />
+                          <span class="font-bold text-green-400">{{ hoverRow.radiant_kills }}</span>
+                          <span class="text-muted-foreground/40">-</span>
+                          <span class="font-bold text-red-400">{{ hoverRow.dire_kills }}</span>
+                        </span>
+                        <span class="ml-auto text-muted-foreground/70 whitespace-nowrap">{{ formatDate(hoverRow.created_at) }}</span>
+                      </div>
                     </div>
                     <!-- Caret -->
-                    <div class="w-2 h-2 bg-popover border-r border-b border-border rotate-45 mx-auto -mt-1"></div>
+                    <div class="w-2.5 h-2.5 bg-popover border-r border-b border-border rotate-45 mx-auto -mt-[6px]"></div>
                   </div>
                 </div>
               </template>
