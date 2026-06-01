@@ -887,9 +887,15 @@ onUnmounted(() => {
                       <span class="text-xs font-semibold">{{ queue.teamsFormed.value?.team1?.[0]?.name || '—' }}'s team</span>
                     </div>
                   </div>
-                  <span class="text-[10px] font-bold tracking-wider bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 px-2 py-1 rounded-full">
-                    {{ (queue.teamsFormed.value?.team1 || []).filter(p => isInLobby(p.steamId)).length }}/{{ teamSize }} {{ t('queueLobbyInLobby') }}
-                  </span>
+                  <div class="flex items-center gap-2">
+                    <span v-if="teamAvgMmr(queue.teamsFormed.value?.team1)"
+                      class="text-[10px] font-mono font-bold bg-accent text-muted-foreground px-2 py-1 rounded-full whitespace-nowrap">
+                      avg {{ teamAvgMmr(queue.teamsFormed.value?.team1) }}
+                    </span>
+                    <span class="text-[10px] font-bold tracking-wider bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 px-2 py-1 rounded-full">
+                      {{ (queue.teamsFormed.value?.team1 || []).filter(p => isInLobby(p.steamId)).length }}/{{ teamSize }} {{ t('queueLobbyInLobby') }}
+                    </span>
+                  </div>
                 </div>
                 <div class="flex flex-col">
                   <div v-for="(p, idx) in (queue.teamsFormed.value?.team1 || [])" :key="p.playerId"
@@ -934,9 +940,15 @@ onUnmounted(() => {
                       <span class="text-xs font-semibold">{{ queue.teamsFormed.value?.team2?.[0]?.name || '—' }}'s team</span>
                     </div>
                   </div>
-                  <span class="text-[10px] font-bold tracking-wider bg-red-500/15 text-red-400 border border-red-500/30 px-2 py-1 rounded-full">
-                    {{ (queue.teamsFormed.value?.team2 || []).filter(p => isInLobby(p.steamId)).length }}/{{ teamSize }} {{ t('queueLobbyInLobby') }}
-                  </span>
+                  <div class="flex items-center gap-2">
+                    <span v-if="teamAvgMmr(queue.teamsFormed.value?.team2)"
+                      class="text-[10px] font-mono font-bold bg-accent text-muted-foreground px-2 py-1 rounded-full whitespace-nowrap">
+                      avg {{ teamAvgMmr(queue.teamsFormed.value?.team2) }}
+                    </span>
+                    <span class="text-[10px] font-bold tracking-wider bg-red-500/15 text-red-400 border border-red-500/30 px-2 py-1 rounded-full">
+                      {{ (queue.teamsFormed.value?.team2 || []).filter(p => isInLobby(p.steamId)).length }}/{{ teamSize }} {{ t('queueLobbyInLobby') }}
+                    </span>
+                  </div>
                 </div>
                 <div class="flex flex-col">
                   <div v-for="(p, idx) in (queue.teamsFormed.value?.team2 || [])" :key="p.playerId"
