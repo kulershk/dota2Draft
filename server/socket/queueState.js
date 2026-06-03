@@ -42,7 +42,11 @@ export function getPoolQueueCount(poolId) {
 
 export function getPoolQueuePlayers(poolId) {
   const q = poolQueues.get(poolId)
-  return q ? [...q.values()] : []
+  if (!q) return []
+  // Order by logical enqueue time so the displayed waiting list matches the
+  // order ready-check selection uses (auto-requeue carries the match-end
+  // timestamp). Stable sort keeps insertion order for equal timestamps.
+  return [...q.values()].sort((a, b) => (a.enqueuedAt ?? 0) - (b.enqueuedAt ?? 0))
 }
 
 export function clearPickTimer(queueMatchId) {

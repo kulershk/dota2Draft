@@ -68,7 +68,11 @@ const CHAT_TEXT_MAX = 300
 // sockets). Returns { ok: true, banner? } on success or { ok: false, error,
 // banner? } on failure. `banner` carries ban info for the socket emitter to
 // show the banner on the requesting socket only.
-async function _doEnqueue(io, playerId, poolId) {
+// `priorityAt` overrides the queue-ordering timestamp. Manual joins use the
+// current time; auto-requeue passes the match-end moment so re-queuing players
+// rank ahead of anyone who clicks Join after the match ended (but behind
+// players already waiting) — see startReadyCheck, which orders by enqueuedAt.
+async function _doEnqueue(io, playerId, poolId, priorityAt = null) {
   const pool = await queryOne('SELECT * FROM queue_pools WHERE id = $1 AND enabled = true', [poolId])
   if (!pool) return { ok: false, error: 'Queue pool not found or disabled' }
 
@@ -153,6 +157,10 @@ async function _doEnqueue(io, playerId, poolId) {
     mmr: player.mmr,
     groupIds,
     groups,
+    // Logical position in line. Map insertion order alone is unfair to
+    // auto-requeue (it inserts late due to its async perk/validation chain),
+    // so ready-check selection sorts by this instead.
+    enqueuedAt: priorityAt ?? Date.now(),
   })
   playerInQueue.set(playerId, poolId)
   broadcastPresence(playerId)
@@ -172,8 +180,8 @@ async function _doEnqueue(io, playerId, poolId) {
 // the player's currently-connected sockets so future queue events reach
 // them in real time; if nothing is connected they'll see the queued state
 // on next reload via getState.
-export async function enqueuePlayerForRequeue(io, playerId, poolId) {
-  const result = await _doEnqueue(io, playerId, poolId)
+export async function enqueuePlayerForRequeue(io, playerId, poolId, priorityAt = null) {
+  const result = await _doEnqueue(io, playerId, poolId, priorityAt)
   if (!result.ok) {
     console.log(`[auto-requeue] skipped player=${playerId} pool=${poolId}: ${result.error}`)
     return result
@@ -195,6 +203,11 @@ export async function enqueuePlayerForRequeue(io, playerId, poolId) {
 // as "Already in an active match".
 export async function autoRequeueEligible(io, playerIds, poolId) {
   if (!Array.isArray(playerIds) || !playerIds.length || !poolId) return
+  // Stamp every player from this match with the SAME match-end moment so they
+  // share one logical place in line — ahead of anyone who clicks Join after the
+  // match ended, behind players already waiting. Captured before any await so
+  // the slow validation chain below can't push their position later.
+  const priorityAt = Date.now()
   try {
     const flagRows = await query(
       'SELECT id, auto_requeue_enabled FROM players WHERE id = ANY($1::int[])',
@@ -210,7 +223,7 @@ export async function autoRequeueEligible(io, playerIds, poolId) {
         continue
       }
       if (!(await hasPerk(pid, PERK.AUTO_REQUEUE))) continue
-      enqueuePlayerForRequeue(io, pid, poolId).catch(e => {
+      enqueuePlayerForRequeue(io, pid, poolId, priorityAt).catch(e => {
         console.error('[auto-requeue] failed for player', pid, ':', e?.message)
       })
     }
@@ -787,12 +800,13 @@ async function startReadyCheck(poolId, io) {
   const totalPlayers = teamSize * 2
   if (q.size < totalPlayers) return
 
-  // Pull top N players out of the queue (oldest first — Map insertion order)
-  const players = []
-  for (const [, info] of q) {
-    players.push(info)
-    if (players.length >= totalPlayers) break
-  }
+  // Pull top N players out of the queue, oldest first by logical enqueue time.
+  // Sorting by enqueuedAt (rather than raw Map order) is what makes auto-requeue
+  // fair: a re-queuing player carries the match-end timestamp, so a spammer who
+  // clicks Join afterward can't jump the line just because their async path was
+  // shorter. Array sort is stable, so equal timestamps keep insertion order.
+  const ordered = [...q.values()].sort((a, b) => (a.enqueuedAt ?? 0) - (b.enqueuedAt ?? 0))
+  const players = ordered.slice(0, totalPlayers)
 
   // Custom per-season group rules — each group with min_per_match > 0
   // demands at least that many of its members (plus, optionally, members
@@ -825,12 +839,7 @@ async function startReadyCheck(poolId, io) {
       // sitting in the lobby.
       if (rule.require_peer_when_present && ownCount === 0) continue
       if (count >= min) continue
-      const reservoir = []
-      let seen = 0
-      for (const [, info] of q) {
-        if (seen++ < totalPlayers) continue
-        if (isEligible(info)) reservoir.push(info)
-      }
+      const reservoir = ordered.slice(totalPlayers).filter(isEligible)
       for (let i = players.length - 1; i >= 0 && count < min; i--) {
         if (isEligible(players[i])) continue
         const replacement = reservoir.shift()
