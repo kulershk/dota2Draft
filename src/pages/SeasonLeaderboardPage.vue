@@ -40,6 +40,7 @@ interface LeaderRow {
   losses: number
   current_winstreak: number
   last_match_at: string | null
+  profile_banner_url: string | null
 }
 
 interface FridayPlayer {
@@ -187,6 +188,20 @@ function avatarRingStyle(row: LeaderRow): Record<string, string> {
 function avatarRingTitle(row: LeaderRow): string {
   return (row.groups || []).map(g => g.name).join(', ')
 }
+// Subscriber profile banner painted behind the player's row — same perk that
+// paints draft tiles in the queue. The card-coloured gradient keeps the left
+// (rank + name) fully readable and lets the banner show through toward the
+// stats on the right, mirroring the draft tile's left-readable → right-fade.
+// Returns undefined for non-subscribers so their row renders plain.
+function bannerRowStyle(row: LeaderRow): Record<string, string> | undefined {
+  if (!row.profile_banner_url) return undefined
+  return {
+    backgroundImage:
+      `linear-gradient(90deg, rgb(var(--card) / 0.93) 0%, rgb(var(--card) / 0.78) 55%, rgb(var(--card) / 0.52) 100%), url("${row.profile_banner_url}")`,
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+  }
+}
 // Unique groups across the visible page — drives the legend.
 const visibleGroups = computed(() => {
   const map = new Map<number, LeaderGroupRef>()
@@ -294,7 +309,7 @@ onUnmounted(detachSocket)
               :to="{ name: 'player-profile', params: { id: row.player_id } }"
               custom v-slot="{ navigate }"
             >
-              <tr class="border-t border-border/40 hover:bg-accent/20 cursor-pointer" @click="navigate">
+              <tr class="border-t border-border/40 hover:bg-accent/20 cursor-pointer" :style="bannerRowStyle(row)" @click="navigate">
                 <td class="px-4 py-2.5 text-right font-mono tabular-nums" :class="i < 3 ? 'text-amber-400 font-bold' : 'text-muted-foreground'">{{ i + 1 }}</td>
                 <td class="px-4 py-2.5">
                   <div class="flex items-center gap-2">

@@ -3660,7 +3660,7 @@
       "get": {
         "tags": ["Seasons"],
         "summary": "Public leaderboard for a season",
-        "description": "Filters out players below the season's `min_games_for_leaderboard` setting. Sorted by points DESC, then games DESC, then name ASC. Each row carries a `groups` array (highest-priority first: captain groups, then groups with matchmaking rules, then display-only) so the UI can colour the avatar ring.",
+        "description": "Filters out players below the season's `min_games_for_leaderboard` setting. Sorted by points DESC, then games DESC, then name ASC. Each row carries a `groups` array (highest-priority first: captain groups, then groups with matchmaking rules, then display-only) so the UI can colour the avatar ring, plus `profile_banner_url` (the player's uploaded banner, or null) — non-null only while the player has the active `profile_banner` subscription perk, letting the UI paint it behind their row.",
         "parameters": [
           { "name": "slug",   "in": "path",  "required": true, "schema": { "type": "string" } },
           { "name": "limit",  "in": "query", "schema": { "type": "integer", "default": 50, "maximum": 200 } },
