@@ -249,6 +249,9 @@ onMounted(() => {
         <ExternalLink class="w-4 h-4" />
         {{ t('subscriptionBuyJoinDiscord') }}
       </a>
+      <p class="text-xs text-muted-foreground/80 italic border-t border-border/40 pt-3 mt-1">
+        {{ t('subscriptionBuyNote') }}
+      </p>
     </div>
 
     <div v-if="!isLoggedIn" class="card px-6 py-10 text-center text-sm text-muted-foreground">

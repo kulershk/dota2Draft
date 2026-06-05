@@ -1956,6 +1956,7 @@ export default {
   subscriptionBuyCmdPrefix: 'В нашем Discord введите',
   subscriptionBuyCmdHint: 'чтобы открыть приватный тикет — сотрудник поможет завершить покупку.',
   subscriptionBuyJoinDiscord: 'Открыть Discord',
+  subscriptionBuyNote: 'Привилегии в основном косметические — подписки лишь помогают покрыть расходы на сервер и инструменты. Спасибо за поддержку проекта! 💛',
   subscriptionLoginRequired: 'Войдите, чтобы управлять подпиской.',
   subscriptionBalance: 'Ваш баланс',
   subscriptionCurrentPlan: 'Текущий план',

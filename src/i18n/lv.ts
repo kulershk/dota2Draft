@@ -2065,6 +2065,7 @@ export default {
   subscriptionBuyCmdPrefix: 'Mūsu Discord ieraksti',
   subscriptionBuyCmdHint: 'lai atvērtu privātu pieteikumu — komandas pārstāvis palīdzēs pabeigt pirkumu.',
   subscriptionBuyJoinDiscord: 'Atvērt Discord',
+  subscriptionBuyNote: 'Privilēģijas galvenokārt ir kosmētiskas — abonementi tikai palīdz segt servera un rīku izmaksas. Paldies, ka atbalsti projektu! 💛',
   subscriptionLoginRequired: 'Piesakies, lai pārvaldītu savu abonementu.',
   subscriptionBalance: 'Tavs atlikums',
   subscriptionCurrentPlan: 'Pašreizējais plāns',

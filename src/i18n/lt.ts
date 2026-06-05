@@ -2065,6 +2065,7 @@ export default {
   subscriptionBuyCmdPrefix: 'Mūsų Discord įrašykite',
   subscriptionBuyCmdHint: 'kad atidarytumėte privatų bilietą — komandos narys padės užbaigti pirkimą.',
   subscriptionBuyJoinDiscord: 'Atidaryti Discord',
+  subscriptionBuyNote: 'Privilegijos daugiausia yra kosmetinės — prenumeratos tik padeda padengti serverio ir įrankių išlaidas. Ačiū, kad palaikai projektą! 💛',
   subscriptionLoginRequired: 'Prisijunk, kad valdytum savo prenumeratą.',
   subscriptionBalance: 'Tavo likutis',
   subscriptionCurrentPlan: 'Dabartinis planas',

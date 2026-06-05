@@ -2077,6 +2077,7 @@ export default {
   subscriptionBuyCmdPrefix: 'In our Discord, type',
   subscriptionBuyCmdHint: 'to open a private ticket — a staff member will help you complete the purchase.',
   subscriptionBuyJoinDiscord: 'Open Discord',
+  subscriptionBuyNote: 'Perks are mostly cosmetic — subscriptions just help cover our server costs and tools. Thanks for supporting the project! 💛',
   subscriptionLoginRequired: 'Log in to manage your subscription.',
   subscriptionBalance: 'Your balance',
   subscriptionCurrentPlan: 'Current plan',
