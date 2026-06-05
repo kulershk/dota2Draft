@@ -277,15 +277,26 @@ watch(() => store.currentUser.value?.id, (uid) => {
   }
 })
 
-// Poll friend presence (online / in queue / in match) on a short interval so
-// the sidebar reflects queue/match transitions without a full reload.
+// Poll friend presence (online / in queue / in match) as a BACKSTOP only —
+// friend:presence pushes already handle live queue/match transitions in real
+// time, so this just catches the rare uninstrumented ones. Two guards keep it
+// from hammering /api/friends: a relaxed 60s cadence, and never firing while
+// the tab is hidden (idle background tabs were the bulk of the traffic). A tab
+// regaining focus refreshes once immediately so a returning user isn't stale.
 let presenceTimer: ReturnType<typeof setInterval> | null = null
+function onPresenceVisible() {
+  if (!document.hidden) friendStore.refreshPresence()
+}
 function startPresencePoll() {
   if (presenceTimer) return
-  presenceTimer = setInterval(() => friendStore.refreshPresence(), 20000)
+  presenceTimer = setInterval(() => {
+    if (!document.hidden) friendStore.refreshPresence()
+  }, 60000)
+  document.addEventListener('visibilitychange', onPresenceVisible)
 }
 function stopPresencePoll() {
   if (presenceTimer) { clearInterval(presenceTimer); presenceTimer = null }
+  document.removeEventListener('visibilitychange', onPresenceVisible)
 }
 onUnmounted(stopPresencePoll)
 

@@ -3,8 +3,8 @@
 // When a player's presence changes (connects/disconnects, joins/leaves a
 // queue, enters/leaves a match) we push their new state to every accepted
 // friend's per-user room so the friends sidebar updates without a refetch.
-// The 20s presence poll in the client remains as a backstop for the rare
-// transitions that aren't instrumented here.
+// The client's presence poll (60s, paused while the tab is hidden) remains as
+// a backstop for the rare transitions that aren't instrumented here.
 
 import { query } from '../db.js'
 import { getOnlinePlayerIds } from './state.js'
