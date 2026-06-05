@@ -1031,6 +1031,70 @@ class BotPool {
     }
   }
 
+  // A bot that has sat 'available' for a long stretch may be holding a silently-
+  // dead Dota GC session — the first lobby we then hand it fails with a GC
+  // "context deadline exceeded" and burns a match attempt. Proactively recycle
+  // (disconnect → reconnect) bots that have been idle-available past the
+  // threshold AND aren't tied to any active lobby, so the session stays fresh.
+  // The "available since" timestamp comes from bot_status_history (the row where
+  // the bot entered its current status); bots with no such row are skipped.
+  async _cleanupIdleAvailableBots() {
+    try {
+      const idle = await query(`
+        SELECT b.id, b.username, h.created_at AS status_since
+          FROM lobby_bots b
+          JOIN LATERAL (
+            SELECT created_at FROM bot_status_history
+             WHERE bot_id = b.id AND status = b.status
+             ORDER BY id DESC LIMIT 1
+          ) h ON TRUE
+         WHERE b.status = 'available'
+           AND h.created_at < NOW() - INTERVAL '1 hour'
+           AND NOT EXISTS (
+             SELECT 1 FROM match_lobbies ml
+              WHERE ml.bot_id = b.id
+                AND ml.status IN ('creating', 'waiting', 'launching', 'active')
+                AND ml.dota_match_id IS NULL
+           )
+      `)
+      if (idle.length === 0) return
+      console.log(`[Bot] Recycling ${idle.length} idle-available bot(s) (>1h since last status change)`)
+      // Stagger restarts 5s apart so several bots sharing an IP don't trip
+      // Steam's login rate-limit when they reconnect at once (same cadence as
+      // the auto-connect path in _sendSync).
+      let delay = 0
+      for (const bot of idle) {
+        setTimeout(async () => {
+          try {
+            // Re-check it's still free right before we pull it — a match may
+            // have grabbed the bot between the query above and now.
+            const inUse = await queryOne(
+              `SELECT 1 FROM match_lobbies
+                WHERE bot_id = $1
+                  AND status IN ('creating', 'waiting', 'launching', 'active')
+                  AND dota_match_id IS NULL`,
+              [bot.id]
+            )
+            const cur = await queryOne('SELECT status FROM lobby_bots WHERE id = $1', [bot.id])
+            if (inUse || cur?.status !== 'available') {
+              console.log(`[Bot] Skipping idle-recycle of bot ${bot.id} — no longer idle-available`)
+              return
+            }
+            await this.disconnectBot(bot.id)
+            await new Promise((r) => setTimeout(r, 2000))
+            await this.connectBot(bot.id)
+            console.log(`[Bot] Recycled idle bot ${bot.id} (${bot.username})`)
+          } catch (e) {
+            console.error(`[Bot] Failed to recycle idle bot ${bot.id}:`, e.message)
+          }
+        }, delay)
+        delay += 5000
+      }
+    } catch (e) {
+      console.error('[Bot] Idle-available recycle error:', e.message)
+    }
+  }
+
   // Safety net: find unresolved games that don't have a pending fetch_match_stats
   // job and enqueue one. Catches games missed during server restarts, manual
   // dotabuff_id edits, or if _scheduleStatsFetch failed.

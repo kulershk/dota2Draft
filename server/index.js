@@ -248,6 +248,15 @@ initDb().then(async () => {
   })
   registerSchedule('cleanup_stuck_connecting_bots', { everyMs: 60_000 })
 
+  // Recycle bots that have sat 'available' (idle, not in any active lobby) for
+  // >1h, to refresh a possibly-stale GC session before a real match needs it.
+  // Checked every 10 min; the 1h threshold lives in _cleanupIdleAvailableBots.
+  registerHandler('cleanup_idle_available_bots', async () => {
+    await botPool._cleanupIdleAvailableBots()
+    return { ok: true }
+  })
+  registerSchedule('cleanup_idle_available_bots', { everyMs: 10 * 60_000 })
+
   // Re-charge dotacoins-funded subscriptions whose period has ended, and lapse
   // the ones that ran out of auto-renew or balance. Hourly is plenty for a
   // 30-day cadence; the job only acts on subs already past expires_at.
