@@ -5,6 +5,7 @@ import {
   playerInQueue, playerInMatch,
   pendingReadyChecks, playerInReadyCheck, nextReadyCheckId,
   getPoolQueue, getPoolQueueCount, getPoolQueuePlayers, clearPickTimer,
+  compareQueueOrder,
 } from './queueState.js'
 import { botPool } from '../services/botPool.js'
 import { discordBot } from '../services/discordBotClient.js'
@@ -71,7 +72,13 @@ const CHAT_TEXT_MAX = 300
 // `priorityAt` overrides the queue-ordering timestamp. Manual joins use the
 // current time; auto-requeue passes the match-end moment so re-queuing players
 // rank ahead of anyone who clicks Join after the match ended (but behind
-// players already waiting) — see startReadyCheck, which orders by enqueuedAt.
+// players already waiting) — see startReadyCheck for the ordering.
+//
+// A non-null `priorityAt` is ALSO the signal that this is the perk-gated
+// auto-requeue path (the only caller that passes it), so it earns priority
+// tier 0. Manual joins — including any script that emits queue:join — are tier
+// 1 and can never reach tier 0, because the perk gate lives on the server in
+// autoRequeueEligible, not on the emitted event.
 async function _doEnqueue(io, playerId, poolId, priorityAt = null) {
   const pool = await queryOne('SELECT * FROM queue_pools WHERE id = $1 AND enabled = true', [poolId])
   if (!pool) return { ok: false, error: 'Queue pool not found or disabled' }
@@ -161,6 +168,14 @@ async function _doEnqueue(io, playerId, poolId, priorityAt = null) {
     // auto-requeue (it inserts late due to its async perk/validation chain),
     // so ready-check selection sorts by this instead.
     enqueuedAt: priorityAt ?? Date.now(),
+    // Priority tier: 0 = perk auto-requeue, 1 = everyone else. Only breaks ties
+    // WITHIN a time bucket (see startReadyCheck), so it can't leapfrog players
+    // who were already waiting in an earlier bucket.
+    priorityTier: priorityAt != null ? 0 : 1,
+    // Random in-bucket tiebreak, stamped once so the order is stable across
+    // re-sorts. This — not who emitted queue:join first — decides ties, which
+    // is what removes the scripted-join advantage.
+    tiebreak: Math.random(),
   })
   playerInQueue.set(playerId, poolId)
   broadcastPresence(playerId)
@@ -800,12 +815,12 @@ async function startReadyCheck(poolId, io) {
   const totalPlayers = teamSize * 2
   if (q.size < totalPlayers) return
 
-  // Pull top N players out of the queue, oldest first by logical enqueue time.
-  // Sorting by enqueuedAt (rather than raw Map order) is what makes auto-requeue
-  // fair: a re-queuing player carries the match-end timestamp, so a spammer who
-  // clicks Join afterward can't jump the line just because their async path was
-  // shorter. Array sort is stable, so equal timestamps keep insertion order.
-  const ordered = [...q.values()].sort((a, b) => (a.enqueuedAt ?? 0) - (b.enqueuedAt ?? 0))
+  // Pull top N players out of the queue using the canonical compound ordering
+  // (time bucket → priority tier → random tiebreak). See compareQueueOrder in
+  // queueState.js — it's the same comparator the displayed waiting list uses,
+  // and it's what stops a script that emits queue:join the instant a match ends
+  // from jumping a human who clicks a second or two later.
+  const ordered = [...q.values()].sort(compareQueueOrder)
   const players = ordered.slice(0, totalPlayers)
 
   // Custom per-season group rules — each group with min_per_match > 0
