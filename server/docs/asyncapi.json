@@ -909,6 +909,7 @@
                     "steamId": { "type": "string" },
                     "avatarUrl": { "type": "string", "nullable": true },
                     "mmr": { "type": "integer" },
+                    "profileBannerUrl": { "type": "string", "nullable": true, "description": "Player's uploaded banner, non-null only while their active subscription grants the profile_banner perk. Painted faintly behind the player's tile in the Players-in-Queue grid." },
                     "shadowPool": { "type": "integer", "enum": [0, 1, 2], "description": "0 = none, 1 = soft shadow (label only), 2 = hard shadow (only selected into a match-of-10 when at least one other shadow-flagged player is in the same group)" }
                   }
                 }

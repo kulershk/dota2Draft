@@ -1625,10 +1625,13 @@ onUnmounted(() => {
                   <router-link
                     v-for="p in queue.queuePlayers.value" :key="p.playerId"
                     :to="{ name: 'player-profile', params: { id: p.playerId } }"
-                    class="flex flex-col items-center gap-2.5 min-w-0 px-2.5 py-3.5 rounded-[10px] bg-[#0F172A] border-2 border-border/40 hover:border-primary/40 hover:bg-[#111d33] transition-colors"
+                    class="relative isolate overflow-hidden flex flex-col items-center gap-2.5 min-w-0 px-2.5 py-3.5 rounded-[10px] bg-[#0F172A] border-2 border-border/40 hover:border-primary/40 hover:bg-[#111d33] transition-colors"
                     :style="tileBorderStyle(p)"
                     :title="tileBorderTitle(p) || t('queuePlayerCardOpenProfile')"
                   >
+                    <!-- Subscriber profile banner, faded behind the tile -->
+                    <div v-if="p.profileBannerUrl" class="draft-tile-banner"
+                      :style="{ backgroundImage: `url(${p.profileBannerUrl})` }" />
                     <img
                       v-if="p.avatarUrl"
                       :src="p.avatarUrl"
