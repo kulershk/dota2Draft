@@ -46,6 +46,17 @@ async function botPost(path) {
   return res.json()
 }
 
+async function botPostJson(path, body) {
+  const res = await fetch(`${BOT_BASE}${path}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${BOT_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data?.error || `bot ${path} ${res.status}`)
+  return data
+}
+
 router.get('/api/admin/discord/settings', async (req, res) => {
   const admin = await requirePermission(req, res, 'manage_discord_settings')
   if (!admin) return
@@ -124,6 +135,22 @@ router.get('/api/admin/discord/members', async (req, res) => {
   if (!admin) return
   try {
     const data = await botGet('/internal/members')
+    res.json(data)
+  } catch (err) {
+    res.status(502).json({ error: err.message })
+  }
+})
+
+// Post an admin-authored message/embeds to a guild channel via the bot (the
+// "Announcer" tab). manage_discord_settings only — this can @mention and post
+// as the bot, so it's gated the same as the rest of the Discord config.
+router.post('/api/admin/discord/announce', async (req, res) => {
+  const admin = await requirePermission(req, res, 'manage_discord_settings')
+  if (!admin) return
+  const { channelId, content, embeds } = req.body || {}
+  if (!channelId) return res.status(400).json({ error: 'channelId required' })
+  try {
+    const data = await botPostJson('/internal/send-message', { channelId, content, embeds })
     res.json(data)
   } catch (err) {
     res.status(502).json({ error: err.message })

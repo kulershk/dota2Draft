@@ -3126,6 +3126,35 @@
         }
       }
     },
+    "/api/admin/discord/announce": {
+      "post": {
+        "tags": ["Discord"],
+        "summary": "Send an admin-authored message/embeds to a channel via the bot",
+        "security": [{ "bearerAuth": [] }],
+        "description": "Requires manage_discord_settings. Proxies the bot's POST /internal/send-message, which posts as the bot. Body: { channelId (required), content?, embeds? } — `embeds` are passed straight through as Discord API embed objects (max 10); at least one of content/embeds is required. Backs the Announcer tab on the admin Discord settings page.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["channelId"],
+                "properties": {
+                  "channelId": { "type": "string" },
+                  "content": { "type": "string" },
+                  "embeds": { "type": "array", "items": { "type": "object" }, "maxItems": 10 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "{ ok: true, messageId, channelId }" },
+          "400": { "description": "channelId missing, or neither content nor embeds provided" },
+          "502": { "description": "Bot unreachable or Discord rejected the message (e.g. malformed embed)" }
+        }
+      }
+    },
     "/api/admin/discord/members": {
       "get": {
         "tags": ["Discord"],

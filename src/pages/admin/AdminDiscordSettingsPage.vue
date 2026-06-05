@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { MessageSquare, Save, RefreshCw, ShieldCheck, Hash, Volume2, AlertTriangle, CheckCircle2, Swords, Puzzle, Settings as SettingsIcon, Trophy, UserPlus, Hand, Smile, Plus, Trash2, ExternalLink } from 'lucide-vue-next'
+import { MessageSquare, Save, RefreshCw, ShieldCheck, Hash, Volume2, AlertTriangle, CheckCircle2, Swords, Puzzle, Settings as SettingsIcon, Trophy, UserPlus, Hand, Smile, Plus, Trash2, ExternalLink, Megaphone, Eye, Send } from 'lucide-vue-next'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
@@ -161,6 +161,74 @@ function messageLink(row: ReactionRoleRow): string {
   return `https://discord.com/channels/${row.guild_id}/${row.channel_id}/${row.message_id}`
 }
 
+// ─── Announcer (paste embed JSON → preview → send via bot) ─────
+const announceChannelId = ref('')
+const announceJson = ref('')
+const announceSending = ref(false)
+const announceResult = ref('')
+const announceError = ref('')
+
+// Accept any of: a full message payload { content?, embeds? }, a bare embed
+// object ({ title/description/... }), or an array of embeds — normalise to
+// { content, embeds }. Parsing drives both the live preview and the send.
+const parsedAnnounce = computed<{ content?: string; embeds: any[]; error: string | null }>(() => {
+  const raw = announceJson.value.trim()
+  if (!raw) return { embeds: [], error: null }
+  let obj: any
+  try { obj = JSON.parse(raw) } catch { return { embeds: [], error: t('discordAnnouncerInvalidJson') } }
+  if (Array.isArray(obj)) return { embeds: obj, error: null }
+  if (obj && typeof obj === 'object') {
+    if (Array.isArray(obj.embeds) || typeof obj.content === 'string') {
+      return { content: obj.content, embeds: Array.isArray(obj.embeds) ? obj.embeds : [], error: null }
+    }
+    return { embeds: [obj], error: null } // looks like a bare embed
+  }
+  return { embeds: [], error: t('discordAnnouncerInvalidJson') }
+})
+
+// Discord renders a missing/zero embed color as a neutral grey bar.
+function embedBarColor(c: any): string {
+  const n = Number(c)
+  if (!Number.isFinite(n) || n <= 0) return '#4f545c'
+  return '#' + (n & 0xffffff).toString(16).padStart(6, '0')
+}
+
+// Prefill with the buy-dotacoins embed so the format is obvious at a glance.
+function loadAnnounceExample() {
+  announceJson.value = JSON.stringify({
+    embeds: [{
+      title: '💰 Buy dotacoins',
+      color: 16097699,
+      description: 'Top up your **dotacoins** with **PayPal** or **Revolut**.\n\nTo buy, just type `/buydotacoins` in the server — it opens a private ticket and a staff member will help you finish up.',
+      fields: [
+        { name: 'Rate', value: '`1 dotacoin = €0.01`\n€1 = 100 dotacoins', inline: true },
+        { name: 'Pay with', value: 'PayPal · Revolut', inline: true },
+        { name: 'Good to know', value: 'Perks are mostly **cosmetic** — subscriptions only help cover **server costs & tools**. 💛', inline: false },
+      ],
+      footer: { text: 'Link your Discord to your dota.lv account so we credit the right profile.' },
+    }],
+  }, null, 2)
+}
+
+async function sendAnnounce() {
+  announceError.value = ''
+  announceResult.value = ''
+  if (!announceChannelId.value) { announceError.value = t('discordAnnouncerNoChannel'); return }
+  const p = parsedAnnounce.value
+  if (p.error) { announceError.value = p.error; return }
+  if (!p.content && p.embeds.length === 0) { announceError.value = t('discordAnnouncerEmpty'); return }
+  announceSending.value = true
+  try {
+    await api.sendDiscordMessage({ channelId: announceChannelId.value, content: p.content, embeds: p.embeds })
+    announceResult.value = t('discordAnnouncerSent')
+    setTimeout(() => { announceResult.value = '' }, 4000)
+  } catch (err) {
+    announceError.value = (err as Error).message
+  } finally {
+    announceSending.value = false
+  }
+}
+
 async function refreshFromBot() {
   refreshing.value = true
   errorMsg.value = ''
@@ -303,6 +371,15 @@ async function save() {
         >
           <Swords class="w-4 h-4" />
           <span>{{ t('discordMatchVoiceSection') }}</span>
+        </button>
+
+        <button
+          class="flex items-center gap-2 px-3 py-2 text-sm rounded-md whitespace-nowrap transition-colors text-left"
+          :class="activeTab === 'announcer' ? 'bg-primary/10 text-primary font-medium' : 'text-muted-foreground hover:bg-accent/30 hover:text-foreground'"
+          @click="activeTab = 'announcer'"
+        >
+          <Megaphone class="w-4 h-4" />
+          <span>{{ t('discordAnnouncerSection') }}</span>
         </button>
       </nav>
 
@@ -539,6 +616,86 @@ async function save() {
                 <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('discordMatchCleanupDelay') }}</label>
                 <input type="number" v-model.number="matchCleanupDelay" min="0" max="120" class="input-field w-full max-w-[120px]" />
                 <p class="text-[11px] text-muted-foreground mt-1">{{ t('discordMatchCleanupDelayHint') }}</p>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- ========== ANNOUNCER ========== -->
+        <template v-if="activeTab === 'announcer'">
+          <div class="card">
+            <div class="flex items-center gap-2 px-5 py-3 border-b border-border">
+              <Megaphone class="w-4 h-4 text-foreground" />
+              <span class="text-sm font-semibold text-foreground">{{ t('discordAnnouncerSection') }}</span>
+            </div>
+            <div class="px-5 py-4 flex flex-col gap-4">
+              <p class="text-[11px] text-muted-foreground">{{ t('discordAnnouncerHint') }}</p>
+
+              <div>
+                <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t('discordAnnouncerChannel') }}</label>
+                <select v-model="announceChannelId" class="input-field w-full">
+                  <option value="">{{ t('discordChannelNone') }}</option>
+                  <option v-for="c in textChannels" :key="c.id" :value="c.id">#{{ c.name }}</option>
+                </select>
+              </div>
+
+              <div>
+                <div class="flex items-center justify-between mb-1">
+                  <label class="block text-xs font-medium text-muted-foreground">{{ t('discordAnnouncerJson') }}</label>
+                  <button class="text-[11px] text-primary hover:underline" @click="loadAnnounceExample">{{ t('discordAnnouncerLoadExample') }}</button>
+                </div>
+                <textarea
+                  v-model="announceJson"
+                  rows="12"
+                  spellcheck="false"
+                  class="input-field w-full font-mono text-xs leading-relaxed"
+                  :placeholder="'{ &quot;content&quot;: &quot;...&quot;, &quot;embeds&quot;: [ { &quot;title&quot;: &quot;...&quot; } ] }'"
+                />
+                <p v-if="parsedAnnounce.error" class="text-[11px] text-destructive mt-1">{{ parsedAnnounce.error }}</p>
+              </div>
+
+              <div class="flex items-center gap-3">
+                <button class="btn-primary text-sm" :disabled="announceSending || !!parsedAnnounce.error" @click="sendAnnounce">
+                  <Send class="w-4 h-4" />
+                  {{ announceSending ? t('loading') : t('discordAnnouncerSend') }}
+                </button>
+                <span v-if="announceResult" class="text-sm text-green-500 flex items-center gap-1"><CheckCircle2 class="w-4 h-4" /> {{ announceResult }}</span>
+                <span v-if="announceError" class="text-sm text-destructive flex items-center gap-1"><AlertTriangle class="w-4 h-4" /> {{ announceError }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Live preview (approximate; markdown is shown as raw text) -->
+          <div class="card">
+            <div class="flex items-center gap-2 px-5 py-3 border-b border-border">
+              <Eye class="w-4 h-4 text-foreground" />
+              <span class="text-sm font-semibold text-foreground">{{ t('discordAnnouncerPreview') }}</span>
+            </div>
+            <div class="px-5 py-4">
+              <div v-if="!announceJson.trim()" class="text-sm text-muted-foreground text-center py-6">{{ t('discordAnnouncerPreviewEmpty') }}</div>
+              <div v-else-if="parsedAnnounce.error" class="text-sm text-destructive text-center py-6">{{ parsedAnnounce.error }}</div>
+              <div v-else class="rounded-lg bg-[#313338] p-4">
+                <div v-if="parsedAnnounce.content" class="text-sm text-[#dbdee1] whitespace-pre-wrap mb-2">{{ parsedAnnounce.content }}</div>
+                <div
+                  v-for="(em, i) in parsedAnnounce.embeds" :key="i"
+                  class="flex rounded overflow-hidden bg-[#2b2d31] mb-2 max-w-[440px]"
+                >
+                  <div class="w-1 shrink-0" :style="{ backgroundColor: embedBarColor(em.color) }" />
+                  <div class="flex-1 p-3 flex flex-col gap-1.5 min-w-0">
+                    <div v-if="em.author?.name" class="text-xs font-semibold text-white/90">{{ em.author.name }}</div>
+                    <div v-if="em.title" class="text-sm font-bold" :class="em.url ? 'text-[#00a8fc]' : 'text-white'">{{ em.title }}</div>
+                    <div v-if="em.description" class="text-[13px] text-[#dbdee1] whitespace-pre-wrap break-words">{{ em.description }}</div>
+                    <div v-if="Array.isArray(em.fields) && em.fields.length" class="grid grid-cols-3 gap-2 mt-1">
+                      <div v-for="(f, fi) in em.fields" :key="fi" :class="f.inline ? 'col-span-1' : 'col-span-3'" class="min-w-0">
+                        <div class="text-xs font-semibold text-white break-words">{{ f.name }}</div>
+                        <div class="text-[13px] text-[#dbdee1] whitespace-pre-wrap break-words">{{ f.value }}</div>
+                      </div>
+                    </div>
+                    <img v-if="em.image?.url" :src="em.image.url" class="rounded mt-2 max-w-full" />
+                    <div v-if="em.footer?.text" class="text-[11px] text-white/60 mt-1">{{ em.footer.text }}</div>
+                  </div>
+                  <img v-if="em.thumbnail?.url" :src="em.thumbnail.url" class="w-14 h-14 rounded object-cover m-3 shrink-0" />
+                </div>
               </div>
             </div>
           </div>

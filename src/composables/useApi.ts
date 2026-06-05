@@ -391,6 +391,11 @@ export function useApi() {
       request(`/api/admin/users/${playerId}/discord`, { method: 'DELETE' }),
     getDiscordHealth: () =>
       request('/api/admin/discord/health') as Promise<{ reachable: boolean; ready?: boolean; bot?: string | null; settingsLoaded?: boolean; error?: string }>,
+    sendDiscordMessage: (payload: { channelId: string; content?: string; embeds?: any[] }) =>
+      request('/api/admin/discord/announce', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }) as Promise<{ ok: boolean; messageId: string; channelId: string }>,
     getDiscordPlugins: () =>
       request('/api/admin/discord/plugins') as Promise<{
         plugins: Array<{ name: string; description: string; class: string; enabled: boolean }>

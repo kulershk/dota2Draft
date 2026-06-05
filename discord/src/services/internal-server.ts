@@ -284,6 +284,44 @@ export function startInternalServer(client: Client): void {
     res.json({ ok: true })
   })
 
+  // Post an admin-authored message (plain content and/or rich embeds) to a
+  // guild channel as the bot. Backs the "Announcer" tab in the admin Discord
+  // settings page — the admin pastes the embed JSON, previews it, and sends.
+  // Embeds are passed straight through as Discord API embed objects; Discord
+  // validates them and any error is surfaced back to the UI.
+  app.post('/internal/send-message', async (req, res) => {
+    const { channelId, content, embeds } = req.body ?? {}
+    if (channelId == null || String(channelId).length === 0) {
+      res.status(400).json({ error: 'channelId required' })
+      return
+    }
+    const hasContent = typeof content === 'string' && content.trim().length > 0
+    const hasEmbeds = Array.isArray(embeds) && embeds.length > 0
+    if (!hasContent && !hasEmbeds) {
+      res.status(400).json({ error: 'content or embeds required' })
+      return
+    }
+    if (Array.isArray(embeds) && embeds.length > 10) {
+      res.status(400).json({ error: 'a message can have at most 10 embeds' })
+      return
+    }
+    try {
+      const channel = await client.channels.fetch(String(channelId))
+      if (!channel || !channel.isTextBased() || !('send' in channel)) {
+        res.status(400).json({ error: 'channel not found or not a text channel' })
+        return
+      }
+      const msg = await (channel as any).send({
+        content: hasContent ? content : undefined,
+        embeds: hasEmbeds ? embeds : undefined,
+      })
+      res.json({ ok: true, messageId: msg.id, channelId: String(channelId) })
+    } catch (err) {
+      Logger.error('POST /internal/send-message failed', err)
+      res.status(500).json({ error: (err as Error).message })
+    }
+  })
+
   app.post('/internal/tournament/announce', (req, res) => {
     const payload = req.body
     if (!payload || typeof payload.id !== 'number' || typeof payload.name !== 'string') {
