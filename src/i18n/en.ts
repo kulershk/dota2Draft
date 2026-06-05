@@ -730,7 +730,7 @@ export default {
   discordReactionRolesMissingFields: 'Please fill in the message link, emoji and role.',
   discordMatchVoiceSection: 'Match voice channels',
   discordAnnouncerSection: 'Announcer',
-  discordAnnouncerHint: 'Paste a message payload as JSON, preview it, and send it to a channel as the bot. Accepts a full payload { "content", "embeds": [...] }, a single embed object, or an array of embeds.',
+  discordAnnouncerHint: 'Paste a message payload as JSON, preview it, and send it to a channel as the bot. You can paste a full payload with "content" and "embeds", a single embed object, or an array of embeds.',
   discordAnnouncerChannel: 'Channel',
   discordAnnouncerJson: 'Message JSON',
   discordAnnouncerLoadExample: 'Load example',

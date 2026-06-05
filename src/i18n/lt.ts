@@ -729,7 +729,7 @@ export default {
   discordReactionRolesMissingFields: 'Užpildyk žinutės nuorodą, jaustuką ir vaidmenį.',
   discordMatchVoiceSection: 'Mačų balso kanalai',
   discordAnnouncerSection: 'Skelbimai',
-  discordAnnouncerHint: 'Įklijuok žinutės duomenis JSON formatu, peržiūrėk ir išsiųsk į kanalą kaip botas. Priimama pilna struktūra { "content", "embeds": [...] }, vienas embed objektas arba embed masyvas.',
+  discordAnnouncerHint: 'Įklijuok žinutės duomenis JSON formatu, peržiūrėk ir išsiųsk į kanalą kaip botas. Gali įklijuoti pilną struktūrą su "content" ir "embeds", vieną embed objektą arba embed masyvą.',
   discordAnnouncerChannel: 'Kanalas',
   discordAnnouncerJson: 'Žinutės JSON',
   discordAnnouncerLoadExample: 'Įkelti pavyzdį',

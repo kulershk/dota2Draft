@@ -729,7 +729,7 @@ export default {
   discordReactionRolesMissingFields: 'Lūdzu aizpildi ziņas saiti, emocijzīmi un lomu.',
   discordMatchVoiceSection: 'Spēļu balss kanāli',
   discordAnnouncerSection: 'Paziņojumi',
-  discordAnnouncerHint: 'Ielīmē ziņojuma datus JSON formātā, apskati priekšskatījumu un nosūti to kanālā kā botu. Pieņem pilnu objektu { "content", "embeds": [...] }, vienu embed objektu vai embed masīvu.',
+  discordAnnouncerHint: 'Ielīmē ziņojuma datus JSON formātā, apskati priekšskatījumu un nosūti to kanālā kā botu. Vari ielīmēt pilnu objektu ar "content" un "embeds", vienu embed objektu vai embed masīvu.',
   discordAnnouncerChannel: 'Kanāls',
   discordAnnouncerJson: 'Ziņojuma JSON',
   discordAnnouncerLoadExample: 'Ielādēt paraugu',

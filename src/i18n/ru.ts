@@ -1138,7 +1138,7 @@ export default {
   discordPluginLabel_tournamentAnnounce: 'Анонс турниров',
   discordMatchVoiceSection: 'Голосовые каналы матчей',
   discordAnnouncerSection: 'Анонсы',
-  discordAnnouncerHint: 'Вставьте данные сообщения в формате JSON, посмотрите предпросмотр и отправьте в канал от имени бота. Принимается полный объект { "content", "embeds": [...] }, один embed-объект или массив embed.',
+  discordAnnouncerHint: 'Вставьте данные сообщения в формате JSON, посмотрите предпросмотр и отправьте в канал от имени бота. Можно вставить полный объект с "content" и "embeds", один embed-объект или массив embed.',
   discordAnnouncerChannel: 'Канал',
   discordAnnouncerJson: 'JSON сообщения',
   discordAnnouncerLoadExample: 'Загрузить пример',
