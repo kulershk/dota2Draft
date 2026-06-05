@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Crown, Coins, Check, CheckCircle2, Loader2, Sparkles } from 'lucide-vue-next'
+import { Crown, Coins, Check, CheckCircle2, Loader2, Sparkles, ExternalLink } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { fmtDateTime } from '@/utils/format'
@@ -60,6 +60,9 @@ const balance = ref(0)
 const trial = ref<TrialState>({ used_plan_ids: [], active_counts: {} })
 const loading = ref(true)
 const error = ref('')
+// Discord invite for the "buy dotacoins" card — links to the same site setting
+// the homepage Discord card uses. Empty string just hides the button.
+const discordUrl = ref('')
 
 const confirmPlan = ref<Plan | null>(null)
 const subscribing = ref(false)
@@ -203,7 +206,12 @@ async function confirmCancel() {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  load()
+  const { cached, fresh } = api.getSiteSettingsCached()
+  if (cached?.site_discord_url) discordUrl.value = cached.site_discord_url
+  fresh.then((d: any) => { discordUrl.value = d?.site_discord_url || '' }).catch(() => {})
+})
 </script>
 
 <template>
@@ -223,6 +231,24 @@ onMounted(load)
           {{ balance.toLocaleString() }}
         </span>
       </div>
+    </div>
+
+    <!-- Buy dotacoins via Discord — informational, shown to everyone -->
+    <div class="card p-5 flex flex-col gap-3 border-amber-500/30">
+      <div class="flex items-center gap-2">
+        <Coins class="w-5 h-5 text-amber-400" />
+        <h2 class="text-base font-bold text-foreground">{{ t('subscriptionBuyTitle') }}</h2>
+      </div>
+      <p class="text-sm text-muted-foreground">{{ t('subscriptionBuyBody') }}</p>
+      <div class="flex items-center gap-2 text-sm flex-wrap">
+        <span class="text-muted-foreground">{{ t('subscriptionBuyCmdPrefix') }}</span>
+        <code class="px-2 py-0.5 rounded bg-accent/50 border border-border/50 font-mono text-amber-300">/buydotacoins</code>
+        <span class="text-muted-foreground">{{ t('subscriptionBuyCmdHint') }}</span>
+      </div>
+      <a v-if="discordUrl" :href="discordUrl" target="_blank" rel="noopener" class="btn-secondary text-sm self-start">
+        <ExternalLink class="w-4 h-4" />
+        {{ t('subscriptionBuyJoinDiscord') }}
+      </a>
     </div>
 
     <div v-if="!isLoggedIn" class="card px-6 py-10 text-center text-sm text-muted-foreground">

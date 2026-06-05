@@ -858,6 +858,22 @@ export async function initDb() {
       UNIQUE (message_id, emoji)
     );
     CREATE INDEX IF NOT EXISTS idx_drr_message ON discord_reaction_roles(message_id);
+
+    -- One row per dotacoin-purchase support ticket opened via the Discord
+    -- /buydotacoins command. Written by the bot (NOT the server). Used to dedupe
+    -- (a user can't spam-open multiple channels) and to record who opened what.
+    -- opener_player_id is the linked dota.lv account when known.
+    CREATE TABLE IF NOT EXISTS discord_buy_tickets (
+      id                SERIAL PRIMARY KEY,
+      channel_id        TEXT NOT NULL UNIQUE,
+      opener_discord_id TEXT NOT NULL,
+      opener_player_id  INTEGER REFERENCES players(id) ON DELETE SET NULL,
+      guild_id          TEXT NOT NULL,
+      status            TEXT NOT NULL DEFAULT 'open',
+      created_at        TIMESTAMP NOT NULL DEFAULT NOW(),
+      closed_at         TIMESTAMP NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_dbt_opener_open ON discord_buy_tickets(opener_discord_id) WHERE status = 'open';
   `)
 
   // Drop FK constraints on winner_captain_id so queue matches can store player IDs
