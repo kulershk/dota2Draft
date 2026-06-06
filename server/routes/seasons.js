@@ -560,6 +560,94 @@ export default function createSeasonsRouter(io) {
     }
   })
 
+  // ── Admin: wintrade / collusion detection (suspicious player pairs) ──
+  // Self-joins season_match_log on queue_match_id within the season to build,
+  // for every unordered player pair (a_id < b_id), their record as TEAMMATES
+  // (same team) and as OPPONENTS (different team), plus the net season points
+  // that moved between them in head-to-head games. Four boolean flags surface
+  // the classic win-trade signatures; rows are ranked by how many flags they
+  // trip. Synthetic rows (queue_match_id IS NULL: Friday bonus, manual adjust)
+  // are excluded. Optional playerId narrows to pairs involving that player so
+  // the UI can investigate one player. Thresholds below are tunable constants.
+  const WT_LOPSIDED_MIN_GAMES = 5     // min opposed games before a one-sided H2H counts
+  const WT_LOPSIDED_DOMINANCE = 0.85  // dominant side wins ≥85% of opposed games
+  const WT_DUO_MIN_GAMES      = 5     // min games together before a high duo win% counts
+  const WT_DUO_WINPCT         = 80    // pair wins ≥80% when on the same team
+  const WT_TRANSFER_POINTS    = 150   // net points moved one way in head-to-heads
+  const WT_FREQUENT_MULTIPLE  = 3     // co-appear ≥3× the average pair's encounters
+  router.get('/api/admin/seasons/:id/wintrade', async (req, res) => {
+    const admin = await requireSeasonPermission(req, res, Number(req.params.id))
+    if (!admin) return
+    try {
+      const minEncounters = Math.max(1, Number(req.query.minEncounters) || 5)
+      const playerId = req.query.playerId ? Number(req.query.playerId) : null
+      const limit = Math.min(Number(req.query.limit) || 100, 500)
+      const rows = await query(`
+        WITH log AS (
+          SELECT queue_match_id, player_id, team, won, delta
+          FROM season_match_log
+          WHERE season_id = $1 AND queue_match_id IS NOT NULL AND team IS NOT NULL
+        ),
+        pairs AS (
+          SELECT l1.player_id AS a_id, l2.player_id AS b_id,
+                 (l1.team = l2.team) AS same_team,
+                 l1.won AS a_won, l1.delta AS a_delta, l2.delta AS b_delta
+          FROM log l1
+          JOIN log l2 ON l1.queue_match_id = l2.queue_match_id
+                     AND l1.player_id < l2.player_id
+        ),
+        agg AS (
+          SELECT a_id, b_id,
+            COUNT(*) FILTER (WHERE same_team)::int                   AS teammate_games,
+            COUNT(*) FILTER (WHERE same_team AND a_won)::int         AS teammate_wins,
+            COUNT(*) FILTER (WHERE NOT same_team)::int               AS opponent_games,
+            COUNT(*) FILTER (WHERE NOT same_team AND a_won)::int     AS a_beats_b,
+            COUNT(*) FILTER (WHERE NOT same_team AND NOT a_won)::int AS b_beats_a,
+            (COALESCE(SUM(a_delta) FILTER (WHERE NOT same_team),0)
+              - COALESCE(SUM(b_delta) FILTER (WHERE NOT same_team),0))::real AS net_points_a_from_b,
+            COUNT(*)::int                                            AS total_encounters
+          FROM pairs GROUP BY a_id, b_id
+        ),
+        scored AS (
+          SELECT *,
+            AVG(total_encounters) OVER ()                           AS avg_encounters,
+            CASE WHEN teammate_games > 0
+                 THEN ROUND((teammate_wins::numeric / teammate_games) * 100, 1)::float8 END AS teammate_winpct,
+            CASE WHEN opponent_games > 0
+                 THEN (GREATEST(a_beats_b, b_beats_a)::numeric / opponent_games)::float8 END  AS h2h_dominance
+          FROM agg
+        )
+        SELECT s.a_id, s.b_id, s.teammate_games, s.teammate_wins, s.teammate_winpct,
+               s.opponent_games, s.a_beats_b, s.b_beats_a, s.net_points_a_from_b,
+               s.total_encounters, s.h2h_dominance,
+               (s.opponent_games >= ${WT_LOPSIDED_MIN_GAMES} AND s.h2h_dominance >= ${WT_LOPSIDED_DOMINANCE}) AS flag_lopsided,
+               (s.teammate_games >= ${WT_DUO_MIN_GAMES} AND s.teammate_winpct >= ${WT_DUO_WINPCT})            AS flag_duo,
+               (s.opponent_games >= ${WT_LOPSIDED_MIN_GAMES} AND ABS(s.net_points_a_from_b) >= ${WT_TRANSFER_POINTS}) AS flag_transfer,
+               (s.total_encounters >= GREATEST($2, ${WT_FREQUENT_MULTIPLE} * s.avg_encounters))               AS flag_frequent,
+               pa.name AS a_name, COALESCE(pa.display_name, pa.name) AS a_display_name,
+               pa.avatar_url AS a_avatar_url, pa.mmr AS a_mmr,
+               pb.name AS b_name, COALESCE(pb.display_name, pb.name) AS b_display_name,
+               pb.avatar_url AS b_avatar_url, pb.mmr AS b_mmr
+        FROM scored s
+        JOIN players pa ON pa.id = s.a_id
+        JOIN players pb ON pb.id = s.b_id
+        WHERE s.total_encounters >= $2
+          AND ($3::int IS NULL OR s.a_id = $3 OR s.b_id = $3)
+        ORDER BY
+          ((s.opponent_games >= ${WT_LOPSIDED_MIN_GAMES} AND s.h2h_dominance >= ${WT_LOPSIDED_DOMINANCE})::int
+           + (s.teammate_games >= ${WT_DUO_MIN_GAMES} AND s.teammate_winpct >= ${WT_DUO_WINPCT})::int
+           + (s.opponent_games >= ${WT_LOPSIDED_MIN_GAMES} AND ABS(s.net_points_a_from_b) >= ${WT_TRANSFER_POINTS})::int
+           + (s.total_encounters >= GREATEST($2, ${WT_FREQUENT_MULTIPLE} * s.avg_encounters))::int) DESC,
+          GREATEST(COALESCE(s.h2h_dominance, 0), COALESCE(s.teammate_winpct, 0) / 100) DESC,
+          s.total_encounters DESC
+        LIMIT $4
+      `, [req.params.id, minEncounters, playerId, limit])
+      res.json({ rows })
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
   // ── Admin: manual point adjustment ──
   router.post('/api/admin/seasons/:id/adjust', async (req, res) => {
     const admin = await requireSeasonPermission(req, res, Number(req.params.id))

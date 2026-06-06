@@ -1025,6 +1025,10 @@ export async function initDb() {
   `)
   try { await execute(`CREATE INDEX IF NOT EXISTS season_match_log_season_player_idx ON season_match_log (season_id, player_id, created_at DESC)`) } catch {}
   try { await execute(`CREATE INDEX IF NOT EXISTS season_match_log_match_idx ON season_match_log (queue_match_id)`) } catch {}
+  // Wintrade detection self-joins the log on queue_match_id within one season
+  // (admin tab). Partial composite index keeps that pairwise scan season-scoped
+  // and skips the synthetic (NULL queue_match_id) rows it never reads.
+  try { await execute(`CREATE INDEX IF NOT EXISTS season_match_log_season_match_idx ON season_match_log (season_id, queue_match_id) WHERE queue_match_id IS NOT NULL`) } catch {}
 
   // Wire seasons to queue pools and (snapshot) to queue matches.
   try { await execute(`ALTER TABLE queue_pools   ADD COLUMN season_id INTEGER NULL REFERENCES seasons(id) ON DELETE SET NULL`) } catch {}

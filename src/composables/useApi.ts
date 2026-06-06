@@ -919,6 +919,14 @@ export function useApi() {
       const tail = qs.toString() ? `?${qs}` : ''
       return request(`/api/admin/seasons/${id}/audit${tail}`)
     },
+    getAdminSeasonWintrade: (id: number, params?: { playerId?: number; minEncounters?: number; limit?: number }) => {
+      const qs = new URLSearchParams()
+      if (params?.playerId) qs.set('playerId', String(params.playerId))
+      if (params?.minEncounters) qs.set('minEncounters', String(params.minEncounters))
+      if (params?.limit) qs.set('limit', String(params.limit))
+      const tail = qs.toString() ? `?${qs}` : ''
+      return request(`/api/admin/seasons/${id}/wintrade${tail}`)
+    },
     adjustSeasonPoints: (id: number, data: { player_id: number; delta: number; reason?: string }) =>
       request(`/api/admin/seasons/${id}/adjust`, { method: 'POST', body: JSON.stringify(data) }),
     recomputeSeason: (id: number) =>

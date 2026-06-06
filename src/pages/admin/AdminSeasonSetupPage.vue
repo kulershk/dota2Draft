@@ -52,6 +52,16 @@ interface AuditRow {
   created_at: string
 }
 
+// One row per unordered player pair (a_id < b_id) from the wintrade endpoint.
+interface WintradeRow {
+  a_id: number; a_name: string; a_display_name: string; a_avatar_url: string | null; a_mmr: number
+  b_id: number; b_name: string; b_display_name: string; b_avatar_url: string | null; b_mmr: number
+  teammate_games: number; teammate_wins: number; teammate_winpct: number | null
+  opponent_games: number; a_beats_b: number; b_beats_a: number
+  net_points_a_from_b: number; total_encounters: number; h2h_dominance: number | null
+  flag_lopsided: boolean; flag_duo: boolean; flag_transfer: boolean; flag_frequent: boolean
+}
+
 const SETTING_DEFAULTS = {
   starting_points: 1000,
   k_win: 30,
@@ -70,7 +80,7 @@ const api = useApi()
 
 const seasonId = computed(() => Number(route.params.id))
 
-const tab = ref<'settings' | 'leaderboard' | 'audit' | 'flags'>('settings')
+const tab = ref<'settings' | 'leaderboard' | 'audit' | 'wintrade' | 'flags'>('settings')
 const season = ref<SeasonRow | null>(null)
 const loading = ref(true)
 const error = ref<string | null>(null)
@@ -112,6 +122,16 @@ const auditSearchResults = ref<Array<{ id: number; name: string; display_name?: 
 const auditPlayerId = ref<number | null>(null)
 const auditPlayerLabel = ref('')
 let auditSearchTimer: ReturnType<typeof setTimeout> | undefined
+
+// Wintrade detection — per-player investigator + season-wide overview.
+const wintrade = ref<WintradeRow[]>([])
+const wintradeLoading = ref(false)
+const wintradeMinEncounters = ref(5)
+const wtSearchQuery = ref('')
+const wtSearchResults = ref<Array<{ id: number; name: string; display_name?: string | null; avatar_url?: string | null; mmr?: number }>>([])
+const wtPlayerId = ref<number | null>(null)
+const wtPlayerLabel = ref('')
+let wtSearchTimer: ReturnType<typeof setTimeout> | undefined
 
 // Adjust modal
 const adjustOpen = ref(false)
@@ -345,9 +365,91 @@ function auditGoPage(delta: number) {
   loadAudit()
 }
 
+// ── Wintrade detection ──
+async function loadWintrade() {
+  wintradeLoading.value = true
+  try {
+    const res: any = await api.getAdminSeasonWintrade(seasonId.value, {
+      playerId: wtPlayerId.value ?? undefined,
+      minEncounters: wintradeMinEncounters.value,
+    })
+    wintrade.value = res?.rows ?? []
+  } finally {
+    wintradeLoading.value = false
+  }
+}
+function onWtSearchInput() {
+  if (wtSearchTimer) clearTimeout(wtSearchTimer)
+  const q = wtSearchQuery.value.trim()
+  if (q.length < 2) { wtSearchResults.value = []; return }
+  wtSearchTimer = setTimeout(async () => {
+    try {
+      const res: any = await api.searchPlayers(q)
+      wtSearchResults.value = Array.isArray(res) ? res : (res?.players || [])
+    } catch {
+      wtSearchResults.value = []
+    }
+  }, 200)
+}
+function selectWtPlayer(p: { id: number; name: string; display_name?: string | null }) {
+  wtPlayerId.value = p.id
+  wtPlayerLabel.value = p.display_name || p.name
+  wtSearchQuery.value = ''
+  wtSearchResults.value = []
+  loadWintrade()
+}
+function clearWtPlayer() {
+  wtPlayerId.value = null
+  wtPlayerLabel.value = ''
+  loadWintrade()
+}
+// Orient a symmetric pair row to the selected player ("self" = the picked
+// player, "other" = their partner in that pair).
+function wtPartner(row: WintradeRow) {
+  const aIsP = row.a_id === wtPlayerId.value
+  return {
+    id: aIsP ? row.b_id : row.a_id,
+    name: aIsP ? row.b_display_name : row.a_display_name,
+    avatar: aIsP ? row.b_avatar_url : row.a_avatar_url,
+    mmr: aIsP ? row.b_mmr : row.a_mmr,
+    selfBeatsOther: aIsP ? row.a_beats_b : row.b_beats_a,
+    otherBeatsSelf: aIsP ? row.b_beats_a : row.a_beats_b,
+    netForSelf: aIsP ? row.net_points_a_from_b : -row.net_points_a_from_b,
+    teammate_games: row.teammate_games,
+    teammate_wins: row.teammate_wins,
+    teammate_losses: row.teammate_games - row.teammate_wins,
+    teammate_winpct: row.teammate_winpct,
+    opponent_games: row.opponent_games,
+    total_encounters: row.total_encounters,
+    flag_lopsided: row.flag_lopsided,
+    flag_duo: row.flag_duo,
+    flag_transfer: row.flag_transfer,
+    flag_frequent: row.flag_frequent,
+  }
+}
+const wtTeammates = computed(() => {
+  if (!wtPlayerId.value) return []
+  return wintrade.value.map(wtPartner).filter(r => r.teammate_games > 0)
+    .sort((a, b) => (b.teammate_winpct ?? 0) - (a.teammate_winpct ?? 0) || b.teammate_games - a.teammate_games)
+})
+const wtOpponents = computed(() => {
+  if (!wtPlayerId.value) return []
+  return wintrade.value.map(wtPartner).filter(r => r.opponent_games > 0)
+    .sort((a, b) => Math.abs(b.netForSelf) - Math.abs(a.netForSelf) || b.opponent_games - a.opponent_games)
+})
+function wtFlags(r: { flag_lopsided: boolean; flag_duo: boolean; flag_transfer: boolean; flag_frequent: boolean }): string[] {
+  const out: string[] = []
+  if (r.flag_lopsided) out.push(t('seasonWintradeFlag_lopsided'))
+  if (r.flag_duo) out.push(t('seasonWintradeFlag_duo'))
+  if (r.flag_transfer) out.push(t('seasonWintradeFlag_transfer'))
+  if (r.flag_frequent) out.push(t('seasonWintradeFlag_frequent'))
+  return out
+}
+
 watch(tab, (newTab) => {
   if (newTab === 'leaderboard') loadLeader()
   if (newTab === 'audit') loadAudit()
+  if (newTab === 'wintrade') loadWintrade()
   if (newTab === 'flags') loadGroups()
 })
 
@@ -498,7 +600,7 @@ onMounted(load)
     <!-- Tabs -->
     <div class="flex items-center gap-1 border-b border-border/40">
       <button
-        v-for="t_ in (['settings', 'leaderboard', 'audit', 'flags'] as const)" :key="t_"
+        v-for="t_ in (['settings', 'leaderboard', 'audit', 'wintrade', 'flags'] as const)" :key="t_"
         type="button"
         class="px-4 py-2 text-sm border-b-2 transition-colors"
         :class="tab === t_ ? 'border-primary text-foreground font-semibold' : 'border-transparent text-muted-foreground hover:text-foreground'"
@@ -774,6 +876,187 @@ onMounted(load)
         <button type="button" class="px-2 py-1 rounded-md bg-accent/40 hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed" :disabled="(auditPage + 1) * AUDIT_PAGE_SIZE >= auditTotal" @click="auditGoPage(1)">
           <ChevronRight class="w-4 h-4" />
         </button>
+      </div>
+    </div>
+
+    <!-- Wintrade detection tab — per-player investigator + suspicious-pairs overview -->
+    <div v-else-if="tab === 'wintrade'" class="flex flex-col gap-4">
+      <!-- Filter bar: player search (clone of audit) + min-games -->
+      <div class="card p-4 flex flex-col gap-3">
+        <p class="text-xs text-muted-foreground">{{ t('seasonWintradeDesc') }}</p>
+        <div class="flex items-center gap-3 flex-wrap">
+          <span v-if="wtPlayerId" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-accent/40 text-xs">
+            {{ wtPlayerLabel }}
+            <button type="button" class="text-muted-foreground hover:text-foreground" :aria-label="t('cancel')" @click="clearWtPlayer">✕</button>
+          </span>
+          <div v-else class="relative w-64">
+            <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+            <input
+              v-model="wtSearchQuery"
+              type="text"
+              :placeholder="t('seasonAuditPlayerFilter')"
+              class="w-full bg-accent/40 border border-border/40 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary/40"
+              @input="onWtSearchInput"
+            />
+            <div v-if="wtSearchResults.length" class="absolute z-20 mt-1 w-full flex flex-col border border-border/30 rounded-lg overflow-hidden bg-card shadow-lg">
+              <button
+                v-for="p in wtSearchResults" :key="p.id"
+                type="button"
+                class="px-3 py-1.5 flex items-center gap-2 text-left hover:bg-accent/40 transition-colors"
+                @click="selectWtPlayer(p)"
+              >
+                <img v-if="p.avatar_url" :src="p.avatar_url" class="w-5 h-5 rounded-full" />
+                <div v-else class="w-5 h-5 rounded-full bg-accent" />
+                <span class="text-xs flex-1 truncate">{{ p.display_name || p.name }}</span>
+                <span class="text-[10px] text-muted-foreground">{{ p.mmr ?? 0 }} MMR</span>
+              </button>
+            </div>
+          </div>
+          <label class="flex items-center gap-2 text-xs text-muted-foreground">
+            {{ t('seasonWintradeMinEncounters') }}
+            <input
+              v-model.number="wintradeMinEncounters"
+              type="number" min="1"
+              class="w-16 bg-accent/40 border border-border/40 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary/40"
+              @change="loadWintrade"
+            />
+          </label>
+        </div>
+      </div>
+
+      <div v-if="wintradeLoading" class="card p-4 text-sm text-muted-foreground">{{ t('loading') }}…</div>
+
+      <!-- Per-player view -->
+      <template v-else-if="wtPlayerId">
+        <div v-if="wintrade.length === 0" class="card text-center text-muted-foreground py-10 text-sm">{{ t('seasonWintradeEmpty') }}</div>
+        <template v-else>
+          <!-- Wins most with (teammates) -->
+          <div v-if="wtTeammates.length" class="card overflow-hidden">
+            <div class="px-4 py-3 border-b border-border/40 text-sm font-semibold">{{ t('seasonWintradeWinsWith') }}</div>
+            <table class="w-full text-sm">
+              <thead class="bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th class="text-left px-4 py-2">{{ t('player') }}</th>
+                  <th class="text-right px-4 py-2">{{ t('seasonWintradeTogether') }}</th>
+                  <th class="text-right px-4 py-2">{{ t('seasonWintradeEncounters') }}</th>
+                  <th class="text-left px-4 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="r in wtTeammates" :key="'tm' + r.id" class="border-t border-border/40 hover:bg-accent/20">
+                  <td class="px-4 py-2">
+                    <div class="flex items-center gap-2">
+                      <img v-if="r.avatar" :src="r.avatar" class="w-6 h-6 rounded-full" />
+                      <div v-else class="w-6 h-6 rounded-full bg-accent" />
+                      <span class="font-semibold">{{ r.name }}</span>
+                      <span class="text-[11px] text-muted-foreground font-mono">{{ r.mmr }} MMR</span>
+                    </div>
+                  </td>
+                  <td class="px-4 py-2 text-right font-mono tabular-nums">
+                    <span class="text-green-500">{{ r.teammate_wins }}</span>
+                    <span class="text-muted-foreground">-</span>
+                    <span class="text-red-500">{{ r.teammate_losses }}</span>
+                    <span v-if="r.teammate_winpct != null" class="text-muted-foreground ml-1">({{ r.teammate_winpct }}%)</span>
+                  </td>
+                  <td class="px-4 py-2 text-right font-mono tabular-nums text-muted-foreground">{{ r.total_encounters }}</td>
+                  <td class="px-4 py-2">
+                    <span v-for="f in wtFlags(r)" :key="f" class="inline-block px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 text-[10px] font-semibold mr-1">{{ f }}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Head-to-head (opponents) -->
+          <div v-if="wtOpponents.length" class="card overflow-hidden">
+            <div class="px-4 py-3 border-b border-border/40 text-sm font-semibold">{{ t('seasonWintradeH2H') }}</div>
+            <table class="w-full text-sm">
+              <thead class="bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th class="text-left px-4 py-2">{{ t('player') }}</th>
+                  <th class="text-right px-4 py-2">{{ t('seasonRecord') }}</th>
+                  <th class="text-right px-4 py-2">{{ t('seasonWintradeNetPoints') }}</th>
+                  <th class="text-right px-4 py-2">{{ t('seasonWintradeEncounters') }}</th>
+                  <th class="text-left px-4 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="r in wtOpponents" :key="'op' + r.id" class="border-t border-border/40 hover:bg-accent/20">
+                  <td class="px-4 py-2">
+                    <div class="flex items-center gap-2">
+                      <img v-if="r.avatar" :src="r.avatar" class="w-6 h-6 rounded-full" />
+                      <div v-else class="w-6 h-6 rounded-full bg-accent" />
+                      <span class="font-semibold">{{ r.name }}</span>
+                      <span class="text-[11px] text-muted-foreground font-mono">{{ r.mmr }} MMR</span>
+                    </div>
+                  </td>
+                  <td class="px-4 py-2 text-right font-mono tabular-nums">
+                    <span class="text-green-500">{{ r.selfBeatsOther }}</span>
+                    <span class="text-muted-foreground">–</span>
+                    <span class="text-red-500">{{ r.otherBeatsSelf }}</span>
+                  </td>
+                  <td class="px-4 py-2 text-right font-mono font-bold tabular-nums" :class="r.netForSelf > 0 ? 'text-green-500' : (r.netForSelf < 0 ? 'text-red-500' : '')">
+                    {{ fmtSignedDelta(r.netForSelf) }}
+                  </td>
+                  <td class="px-4 py-2 text-right font-mono tabular-nums text-muted-foreground">{{ r.opponent_games }}</td>
+                  <td class="px-4 py-2">
+                    <span v-for="f in wtFlags(r)" :key="f" class="inline-block px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 text-[10px] font-semibold mr-1">{{ f }}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </template>
+      </template>
+
+      <!-- Season-wide overview (no player selected) -->
+      <div v-else class="card overflow-hidden">
+        <div class="px-4 py-3 border-b border-border/40 flex items-center gap-2 flex-wrap">
+          <span class="text-sm font-semibold">{{ t('seasonWintradeOverviewTitle') }}</span>
+          <span class="text-[11px] text-muted-foreground ml-auto">{{ t('seasonWintradePickPlayer') }}</span>
+        </div>
+        <div v-if="wintrade.length === 0" class="text-center text-muted-foreground py-10 text-sm">{{ t('seasonWintradeEmpty') }}</div>
+        <table v-else class="w-full text-xs">
+          <thead class="bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground">
+            <tr>
+              <th class="text-left px-3 py-2">{{ t('seasonWintradePair') }}</th>
+              <th class="text-right px-3 py-2">{{ t('seasonWintradeTogether') }}</th>
+              <th class="text-right px-3 py-2">{{ t('seasonWintradeH2H') }}</th>
+              <th class="text-right px-3 py-2">{{ t('seasonWintradeNetPoints') }}</th>
+              <th class="text-right px-3 py-2">{{ t('seasonWintradeEncounters') }}</th>
+              <th class="text-left px-3 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in wintrade" :key="row.a_id + '-' + row.b_id" class="border-t border-border/40 hover:bg-accent/20">
+              <td class="px-3 py-2">
+                <div class="flex items-center gap-1.5">
+                  <img v-if="row.a_avatar_url" :src="row.a_avatar_url" class="w-5 h-5 rounded-full" />
+                  <div v-else class="w-5 h-5 rounded-full bg-accent" />
+                  <span class="font-semibold">{{ row.a_display_name }}</span>
+                  <span class="text-muted-foreground">vs</span>
+                  <img v-if="row.b_avatar_url" :src="row.b_avatar_url" class="w-5 h-5 rounded-full" />
+                  <div v-else class="w-5 h-5 rounded-full bg-accent" />
+                  <span class="font-semibold">{{ row.b_display_name }}</span>
+                </div>
+              </td>
+              <td class="px-3 py-2 text-right font-mono tabular-nums">
+                <span class="text-green-500">{{ row.teammate_wins }}</span>
+                <span class="text-muted-foreground">-</span>
+                <span class="text-red-500">{{ row.teammate_games - row.teammate_wins }}</span>
+                <span v-if="row.teammate_winpct != null" class="text-muted-foreground ml-1">({{ row.teammate_winpct }}%)</span>
+              </td>
+              <td class="px-3 py-2 text-right font-mono tabular-nums">{{ row.a_beats_b }}–{{ row.b_beats_a }}</td>
+              <td class="px-3 py-2 text-right font-mono font-bold tabular-nums" :class="row.net_points_a_from_b > 0 ? 'text-green-500' : (row.net_points_a_from_b < 0 ? 'text-red-500' : '')">
+                {{ fmtSignedDelta(row.net_points_a_from_b) }}
+              </td>
+              <td class="px-3 py-2 text-right font-mono tabular-nums text-muted-foreground">{{ row.total_encounters }}</td>
+              <td class="px-3 py-2">
+                <span v-for="f in wtFlags(row)" :key="f" class="inline-block px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 text-[10px] font-semibold mr-1">{{ f }}</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
 

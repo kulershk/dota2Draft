@@ -3965,6 +3965,21 @@
         "responses": { "200": { "description": "{ rows, total } — rows are newest-first (paginated by limit/offset); total is the full count for the same filter, for page-number pagination" } }
       }
     },
+    "/api/admin/seasons/{id}/wintrade": {
+      "get": {
+        "tags": ["Seasons"],
+        "summary": "Admin: wintrade / collusion detection (suspicious player pairs)",
+        "description": "Self-joins season_match_log on queue_match_id within the season to aggregate, per unordered player pair (a_id < b_id, deduped), their record as teammates (same team) and opponents (different team) plus net season points transferred between them in head-to-head games. Synthetic rows (queue_match_id NULL: Friday bonus, manual adjust) are excluded. Returns four boolean flags — flag_lopsided (one side wins ≥85% of ≥5 opposed games), flag_duo (pair wins ≥80% of ≥5 games together), flag_transfer (≥150 net points moved one way), flag_frequent (co-appear ≥3× the average pair) — and ranks rows by how many flags they trip. Optional playerId narrows to pairs involving that player.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id",            "in": "path",  "required": true, "schema": { "type": "integer" } },
+          { "name": "minEncounters", "in": "query", "schema": { "type": "integer", "default": 5, "minimum": 1 } },
+          { "name": "playerId",      "in": "query", "schema": { "type": "integer" } },
+          { "name": "limit",         "in": "query", "schema": { "type": "integer", "default": 100, "maximum": 500 } }
+        ],
+        "responses": { "200": { "description": "{ rows } — one row per pair (a_id < b_id) with teammate/opponent counts, head-to-head wins each way, net_points_a_from_b (signed from A's perspective), the four flags, and both players' name/avatar/mmr; ordered by flag-count then dominance then encounters" } }
+      }
+    },
     "/api/admin/seasons/{id}/adjust": {
       "post": {
         "tags": ["Seasons"],
