@@ -427,24 +427,68 @@ function wtPartner(row: WintradeRow) {
     flag_frequent: row.flag_frequent,
   }
 }
-const wtTeammates = computed(() => {
-  if (!wtPlayerId.value) return []
-  return wintrade.value.map(wtPartner).filter(r => r.teammate_games > 0)
-    .sort((a, b) => (b.teammate_winpct ?? 0) - (a.teammate_winpct ?? 0) || b.teammate_games - a.teammate_games)
-})
-const wtOpponents = computed(() => {
-  if (!wtPlayerId.value) return []
-  return wintrade.value.map(wtPartner).filter(r => r.opponent_games > 0)
-    .sort((a, b) => Math.abs(b.netForSelf) - Math.abs(a.netForSelf) || b.opponent_games - a.opponent_games)
-})
-function wtFlags(r: { flag_lopsided: boolean; flag_duo: boolean; flag_transfer: boolean; flag_frequent: boolean }): string[] {
-  const out: string[] = []
-  if (r.flag_lopsided) out.push(t('seasonWintradeFlag_lopsided'))
-  if (r.flag_duo) out.push(t('seasonWintradeFlag_duo'))
-  if (r.flag_transfer) out.push(t('seasonWintradeFlag_transfer'))
-  if (r.flag_frequent) out.push(t('seasonWintradeFlag_frequent'))
+// Sortable columns. Each of the three tables keeps its own { key, dir };
+// clicking a header toggles direction or switches column.
+type WtSortDir = 'asc' | 'desc'
+type WtSort = { key: string; dir: WtSortDir }
+const wtOverviewSort = ref<WtSort>({ key: 'flags', dir: 'desc' })
+const wtTeammateSort = ref<WtSort>({ key: 'winpct', dir: 'desc' })
+const wtOpponentSort = ref<WtSort>({ key: 'net', dir: 'desc' })
+function wtToggleSort(s: WtSort, key: string) {
+  if (s.key === key) s.dir = s.dir === 'asc' ? 'desc' : 'asc'
+  else { s.key = key; s.dir = 'desc' }
+}
+function wtSortArrow(s: WtSort, key: string): string {
+  return s.key === key ? (s.dir === 'asc' ? ' ▲' : ' ▼') : ''
+}
+function wtFlagCount(r: { flag_lopsided: boolean; flag_duo: boolean; flag_transfer: boolean; flag_frequent: boolean }): number {
+  return (r.flag_lopsided ? 1 : 0) + (r.flag_duo ? 1 : 0) + (r.flag_transfer ? 1 : 0) + (r.flag_frequent ? 1 : 0)
+}
+// Each raised flag → a badge with an explanatory tooltip.
+function wtFlags(r: { flag_lopsided: boolean; flag_duo: boolean; flag_transfer: boolean; flag_frequent: boolean }): Array<{ label: string; title: string }> {
+  const out: Array<{ label: string; title: string }> = []
+  if (r.flag_lopsided) out.push({ label: t('seasonWintradeFlag_lopsided'), title: t('seasonWintradeFlag_lopsidedDesc') })
+  if (r.flag_duo) out.push({ label: t('seasonWintradeFlag_duo'), title: t('seasonWintradeFlag_duoDesc') })
+  if (r.flag_transfer) out.push({ label: t('seasonWintradeFlag_transfer'), title: t('seasonWintradeFlag_transferDesc') })
+  if (r.flag_frequent) out.push({ label: t('seasonWintradeFlag_frequent'), title: t('seasonWintradeFlag_frequentDesc') })
   return out
 }
+
+type WtPartner = ReturnType<typeof wtPartner>
+const wintradeSorted = computed<WintradeRow[]>(() => {
+  const { key, dir } = wtOverviewSort.value
+  const mul = dir === 'asc' ? 1 : -1
+  const val = (r: WintradeRow): number => {
+    switch (key) {
+      case 'together': return r.teammate_winpct ?? -1
+      case 'h2h': return r.h2h_dominance ?? -1
+      case 'net': return Math.abs(r.net_points_a_from_b)
+      case 'games': return r.total_encounters
+      default: return wtFlagCount(r)
+    }
+  }
+  return [...wintrade.value].sort((a, b) => (val(a) - val(b)) * mul || b.total_encounters - a.total_encounters)
+})
+const wtTeammates = computed<WtPartner[]>(() => {
+  if (!wtPlayerId.value) return []
+  const { key, dir } = wtTeammateSort.value
+  const mul = dir === 'asc' ? 1 : -1
+  const val = (r: WtPartner): number => key === 'games' ? r.total_encounters : (r.teammate_winpct ?? -1)
+  return wintrade.value.map(wtPartner).filter(r => r.teammate_games > 0)
+    .sort((a, b) => (val(a) - val(b)) * mul || b.teammate_games - a.teammate_games)
+})
+const wtOpponents = computed<WtPartner[]>(() => {
+  if (!wtPlayerId.value) return []
+  const { key, dir } = wtOpponentSort.value
+  const mul = dir === 'asc' ? 1 : -1
+  const val = (r: WtPartner): number => {
+    if (key === 'games') return r.opponent_games
+    if (key === 'h2h') return r.opponent_games > 0 ? Math.max(r.selfBeatsOther, r.otherBeatsSelf) / r.opponent_games : 0
+    return Math.abs(r.netForSelf)
+  }
+  return wintrade.value.map(wtPartner).filter(r => r.opponent_games > 0)
+    .sort((a, b) => (val(a) - val(b)) * mul || b.opponent_games - a.opponent_games)
+})
 
 watch(tab, (newTab) => {
   if (newTab === 'leaderboard') loadLeader()
@@ -881,9 +925,12 @@ onMounted(load)
 
     <!-- Wintrade detection tab — per-player investigator + suspicious-pairs overview -->
     <div v-else-if="tab === 'wintrade'" class="flex flex-col gap-4">
-      <!-- Filter bar: player search (clone of audit) + min-games -->
-      <div class="card p-4 flex flex-col gap-3">
+      <!-- Filter bar: player search (clone of audit) + min-games.
+           overflow-visible + relative z-20 so the search dropdown floats over
+           the table card below instead of being clipped by .card's overflow. -->
+      <div class="card p-4 flex flex-col gap-3 overflow-visible relative z-20">
         <p class="text-xs text-muted-foreground">{{ t('seasonWintradeDesc') }}</p>
+        <p class="text-[11px] text-muted-foreground/80">{{ t('seasonWintradeLegend') }}</p>
         <div class="flex items-center gap-3 flex-wrap">
           <span v-if="wtPlayerId" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-accent/40 text-xs">
             {{ wtPlayerLabel }}
@@ -937,9 +984,9 @@ onMounted(load)
               <thead class="bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <th class="text-left px-4 py-2">{{ t('player') }}</th>
-                  <th class="text-right px-4 py-2">{{ t('seasonWintradeTogether') }}</th>
-                  <th class="text-right px-4 py-2">{{ t('seasonWintradeEncounters') }}</th>
-                  <th class="text-left px-4 py-2"></th>
+                  <th class="text-right px-4 py-2 cursor-pointer select-none hover:text-foreground" :title="t('seasonWintradeTogetherHelp')" @click="wtToggleSort(wtTeammateSort, 'winpct')">{{ t('seasonWintradeTogether') }}{{ wtSortArrow(wtTeammateSort, 'winpct') }}</th>
+                  <th class="text-right px-4 py-2 cursor-pointer select-none hover:text-foreground" :title="t('seasonWintradeEncountersHelp')" @click="wtToggleSort(wtTeammateSort, 'games')">{{ t('seasonWintradeEncounters') }}{{ wtSortArrow(wtTeammateSort, 'games') }}</th>
+                  <th class="text-left px-4 py-2" :title="t('seasonWintradeFlagsHelp')">{{ t('seasonWintradeFlags') }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -960,7 +1007,7 @@ onMounted(load)
                   </td>
                   <td class="px-4 py-2 text-right font-mono tabular-nums text-muted-foreground">{{ r.total_encounters }}</td>
                   <td class="px-4 py-2">
-                    <span v-for="f in wtFlags(r)" :key="f" class="inline-block px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 text-[10px] font-semibold mr-1">{{ f }}</span>
+                    <span v-for="f in wtFlags(r)" :key="f.label" :title="f.title" class="inline-block px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 text-[10px] font-semibold mr-1 cursor-help">{{ f.label }}</span>
                   </td>
                 </tr>
               </tbody>
@@ -974,10 +1021,10 @@ onMounted(load)
               <thead class="bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <th class="text-left px-4 py-2">{{ t('player') }}</th>
-                  <th class="text-right px-4 py-2">{{ t('seasonRecord') }}</th>
-                  <th class="text-right px-4 py-2">{{ t('seasonWintradeNetPoints') }}</th>
-                  <th class="text-right px-4 py-2">{{ t('seasonWintradeEncounters') }}</th>
-                  <th class="text-left px-4 py-2"></th>
+                  <th class="text-right px-4 py-2 cursor-pointer select-none hover:text-foreground" :title="t('seasonWintradeH2HHelp')" @click="wtToggleSort(wtOpponentSort, 'h2h')">{{ t('seasonRecord') }}{{ wtSortArrow(wtOpponentSort, 'h2h') }}</th>
+                  <th class="text-right px-4 py-2 cursor-pointer select-none hover:text-foreground" :title="t('seasonWintradeNetPointsHelp')" @click="wtToggleSort(wtOpponentSort, 'net')">{{ t('seasonWintradeNetPoints') }}{{ wtSortArrow(wtOpponentSort, 'net') }}</th>
+                  <th class="text-right px-4 py-2 cursor-pointer select-none hover:text-foreground" :title="t('seasonWintradeEncountersHelp')" @click="wtToggleSort(wtOpponentSort, 'games')">{{ t('seasonWintradeEncounters') }}{{ wtSortArrow(wtOpponentSort, 'games') }}</th>
+                  <th class="text-left px-4 py-2" :title="t('seasonWintradeFlagsHelp')">{{ t('seasonWintradeFlags') }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1000,7 +1047,7 @@ onMounted(load)
                   </td>
                   <td class="px-4 py-2 text-right font-mono tabular-nums text-muted-foreground">{{ r.opponent_games }}</td>
                   <td class="px-4 py-2">
-                    <span v-for="f in wtFlags(r)" :key="f" class="inline-block px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 text-[10px] font-semibold mr-1">{{ f }}</span>
+                    <span v-for="f in wtFlags(r)" :key="f.label" :title="f.title" class="inline-block px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 text-[10px] font-semibold mr-1 cursor-help">{{ f.label }}</span>
                   </td>
                 </tr>
               </tbody>
@@ -1020,24 +1067,26 @@ onMounted(load)
           <thead class="bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground">
             <tr>
               <th class="text-left px-3 py-2">{{ t('seasonWintradePair') }}</th>
-              <th class="text-right px-3 py-2">{{ t('seasonWintradeTogether') }}</th>
-              <th class="text-right px-3 py-2">{{ t('seasonWintradeH2H') }}</th>
-              <th class="text-right px-3 py-2">{{ t('seasonWintradeNetPoints') }}</th>
-              <th class="text-right px-3 py-2">{{ t('seasonWintradeEncounters') }}</th>
-              <th class="text-left px-3 py-2"></th>
+              <th class="text-right px-3 py-2 cursor-pointer select-none hover:text-foreground" :title="t('seasonWintradeTogetherHelp')" @click="wtToggleSort(wtOverviewSort, 'together')">{{ t('seasonWintradeTogether') }}{{ wtSortArrow(wtOverviewSort, 'together') }}</th>
+              <th class="text-right px-3 py-2 cursor-pointer select-none hover:text-foreground" :title="t('seasonWintradeH2HHelp')" @click="wtToggleSort(wtOverviewSort, 'h2h')">{{ t('seasonWintradeH2H') }}{{ wtSortArrow(wtOverviewSort, 'h2h') }}</th>
+              <th class="text-right px-3 py-2 cursor-pointer select-none hover:text-foreground" :title="t('seasonWintradeNetPointsHelp')" @click="wtToggleSort(wtOverviewSort, 'net')">{{ t('seasonWintradeNetPoints') }}{{ wtSortArrow(wtOverviewSort, 'net') }}</th>
+              <th class="text-right px-3 py-2 cursor-pointer select-none hover:text-foreground" :title="t('seasonWintradeEncountersHelp')" @click="wtToggleSort(wtOverviewSort, 'games')">{{ t('seasonWintradeEncounters') }}{{ wtSortArrow(wtOverviewSort, 'games') }}</th>
+              <th class="text-left px-3 py-2 cursor-pointer select-none hover:text-foreground" :title="t('seasonWintradeFlagsHelp')" @click="wtToggleSort(wtOverviewSort, 'flags')">{{ t('seasonWintradeFlags') }}{{ wtSortArrow(wtOverviewSort, 'flags') }}</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in wintrade" :key="row.a_id + '-' + row.b_id" class="border-t border-border/40 hover:bg-accent/20">
+            <tr v-for="row in wintradeSorted" :key="row.a_id + '-' + row.b_id" class="border-t border-border/40 hover:bg-accent/20">
               <td class="px-3 py-2">
                 <div class="flex items-center gap-1.5">
                   <img v-if="row.a_avatar_url" :src="row.a_avatar_url" class="w-5 h-5 rounded-full" />
                   <div v-else class="w-5 h-5 rounded-full bg-accent" />
                   <span class="font-semibold">{{ row.a_display_name }}</span>
+                  <span class="text-[10px] text-muted-foreground font-mono">{{ row.a_mmr }}</span>
                   <span class="text-muted-foreground">vs</span>
                   <img v-if="row.b_avatar_url" :src="row.b_avatar_url" class="w-5 h-5 rounded-full" />
                   <div v-else class="w-5 h-5 rounded-full bg-accent" />
                   <span class="font-semibold">{{ row.b_display_name }}</span>
+                  <span class="text-[10px] text-muted-foreground font-mono">{{ row.b_mmr }}</span>
                 </div>
               </td>
               <td class="px-3 py-2 text-right font-mono tabular-nums">
@@ -1052,7 +1101,7 @@ onMounted(load)
               </td>
               <td class="px-3 py-2 text-right font-mono tabular-nums text-muted-foreground">{{ row.total_encounters }}</td>
               <td class="px-3 py-2">
-                <span v-for="f in wtFlags(row)" :key="f" class="inline-block px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 text-[10px] font-semibold mr-1">{{ f }}</span>
+                <span v-for="f in wtFlags(row)" :key="f.label" :title="f.title" class="inline-block px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 text-[10px] font-semibold mr-1 cursor-help">{{ f.label }}</span>
               </td>
             </tr>
           </tbody>
