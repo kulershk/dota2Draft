@@ -80,7 +80,7 @@ interface BannerSlot {
 const BANNER_SLOTS: BannerSlot[] = [
   { key: 'profile',     field: 'profile_banner_url',     w: 1200, h: 300, labelKey: 'bannerSlotProfile',     descKey: 'bannerSlotProfileDesc' },
   { key: 'leaderboard', field: 'leaderboard_banner_url', w: 1200, h: 200, labelKey: 'bannerSlotLeaderboard', descKey: 'bannerSlotLeaderboardDesc' },
-  { key: 'queue',       field: 'queue_banner_url',       w: 1000, h: 200, labelKey: 'bannerSlotQueue',       descKey: 'bannerSlotQueueDesc' },
+  { key: 'queue',       field: 'queue_banner_url',       w: 360,  h: 400, labelKey: 'bannerSlotQueue',       descKey: 'bannerSlotQueueDesc' },
 ]
 // Perk gate mirrors the server: only an active plan granting profile_banner
 // unlocks the manager. Read from the live subscription so it reacts to a fresh
