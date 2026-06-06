@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Crown, Coins, Check, CheckCircle2, Loader2, Sparkles, ExternalLink } from 'lucide-vue-next'
+import { Crown, Coins, Check, CheckCircle2, Loader2, Sparkles, ExternalLink, ImagePlus, X } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { fmtDateTime } from '@/utils/format'
 import ModalOverlay from '@/components/common/ModalOverlay.vue'
+import ImageCropper from '@/components/common/ImageCropper.vue'
 
 interface Plan {
   id: number
@@ -63,6 +64,79 @@ const error = ref('')
 // Discord invite for the "buy dotacoins" card — links to the same site setting
 // the homepage Discord card uses. Empty string just hides the button.
 const discordUrl = ref('')
+
+// ── Profile banners (profile_banner perk) ──
+// The perk grants three independent banners, one per surface. Each slot crops
+// to that surface's aspect (matching server/routes/users.js BANNER_SLOTS) and
+// stores to its own column on the player, surfaced via store.currentUser.
+interface BannerSlot {
+  key: 'profile' | 'leaderboard' | 'queue'
+  field: 'profile_banner_url' | 'leaderboard_banner_url' | 'queue_banner_url'
+  w: number
+  h: number
+  labelKey: string
+  descKey: string
+}
+const BANNER_SLOTS: BannerSlot[] = [
+  { key: 'profile',     field: 'profile_banner_url',     w: 1200, h: 300, labelKey: 'bannerSlotProfile',     descKey: 'bannerSlotProfileDesc' },
+  { key: 'leaderboard', field: 'leaderboard_banner_url', w: 1200, h: 200, labelKey: 'bannerSlotLeaderboard', descKey: 'bannerSlotLeaderboardDesc' },
+  { key: 'queue',       field: 'queue_banner_url',       w: 600,  h: 400, labelKey: 'bannerSlotQueue',       descKey: 'bannerSlotQueueDesc' },
+]
+// Perk gate mirrors the server: only an active plan granting profile_banner
+// unlocks the manager. Read from the live subscription so it reacts to a fresh
+// subscribe/cancel without a full reload.
+const hasBannerPerk = computed(() => mySub.value?.plan_perks?.profile_banner === true)
+const bannerError = ref('')
+const bannerBusySlot = ref<string | null>(null)
+const bannerFileInput = ref<HTMLInputElement | null>(null)
+const pendingSlot = ref<BannerSlot | null>(null)
+const cropSlot = ref<BannerSlot | null>(null)
+const cropFile = ref<File | null>(null)
+
+function bannerUrlFor(slot: BannerSlot): string | null {
+  return (store.currentUser.value as any)?.[slot.field] || null
+}
+function triggerBannerPick(slot: BannerSlot) {
+  bannerError.value = ''
+  pendingSlot.value = slot
+  bannerFileInput.value?.click()
+}
+function onBannerPicked(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = '' // allow re-picking the same file later
+  if (!file || !pendingSlot.value) return
+  cropFile.value = file
+  cropSlot.value = pendingSlot.value
+}
+async function handleBannerCrop(blob: Blob) {
+  const slot = cropSlot.value
+  cropSlot.value = null
+  if (!slot) return
+  const file = new File([blob], `${slot.key}-banner.png`, { type: 'image/png' })
+  bannerBusySlot.value = slot.key
+  bannerError.value = ''
+  try {
+    const r = await api.uploadBanner(slot.key, file)
+    if (store.currentUser.value) (store.currentUser.value as any)[slot.field] = r.url
+  } catch (e: any) {
+    bannerError.value = e?.message || t('bannerUploadFailed')
+  } finally {
+    bannerBusySlot.value = null
+  }
+}
+async function removeBanner(slot: BannerSlot) {
+  bannerBusySlot.value = slot.key
+  bannerError.value = ''
+  try {
+    await api.deleteBanner(slot.key)
+    if (store.currentUser.value) (store.currentUser.value as any)[slot.field] = null
+  } catch (e: any) {
+    bannerError.value = e?.message || t('bannerUploadFailed')
+  } finally {
+    bannerBusySlot.value = null
+  }
+}
 
 const confirmPlan = ref<Plan | null>(null)
 const subscribing = ref(false)
@@ -317,6 +391,61 @@ onMounted(() => {
           </div>
         </div>
 
+        <!-- Profile banners (profile_banner perk): one per surface -->
+        <div v-if="mySub && hasBannerPerk" class="card overflow-hidden">
+          <div class="flex items-center gap-2 px-5 py-3 border-b border-border">
+            <ImagePlus class="w-4 h-4 text-primary" />
+            <span class="text-sm font-semibold text-foreground">{{ t('bannerManagerTitle') }}</span>
+          </div>
+          <div class="px-5 py-4 flex flex-col gap-5">
+            <p class="text-xs text-muted-foreground -mt-1">{{ t('bannerManagerSubtitle') }}</p>
+            <p v-if="bannerError" class="text-xs text-destructive">{{ bannerError }}</p>
+
+            <div v-for="slot in BANNER_SLOTS" :key="slot.key" class="flex flex-col sm:flex-row sm:items-center gap-3">
+              <div class="sm:w-44 shrink-0">
+                <div class="text-sm font-semibold text-foreground">{{ t(slot.labelKey) }}</div>
+                <div class="text-xs text-muted-foreground mt-0.5">{{ t(slot.descKey) }}</div>
+              </div>
+
+              <!-- Preview at the slot's true aspect so the user sees the real crop -->
+              <div
+                class="flex-1 min-w-0 rounded-lg overflow-hidden border border-border bg-accent/30 relative"
+                :style="{ aspectRatio: `${slot.w} / ${slot.h}`, maxWidth: '420px' }"
+              >
+                <img v-if="bannerUrlFor(slot)" :src="bannerUrlFor(slot)!" class="w-full h-full object-cover" :alt="t(slot.labelKey)" />
+                <div v-else class="w-full h-full flex items-center justify-center text-[11px] text-muted-foreground">
+                  {{ t('bannerSlotEmpty') }}
+                </div>
+                <div v-if="bannerBusySlot === slot.key" class="absolute inset-0 bg-black/40 flex items-center justify-center">
+                  <Loader2 class="w-5 h-5 animate-spin text-white" />
+                </div>
+              </div>
+
+              <div class="flex sm:flex-col gap-2 shrink-0">
+                <button
+                  class="btn-secondary text-xs justify-center"
+                  :disabled="bannerBusySlot === slot.key"
+                  @click="triggerBannerPick(slot)"
+                >
+                  <ImagePlus class="w-3.5 h-3.5" />
+                  {{ bannerUrlFor(slot) ? t('bannerChange') : t('bannerUpload') }}
+                </button>
+                <button
+                  v-if="bannerUrlFor(slot)"
+                  class="btn-secondary text-xs justify-center text-destructive hover:bg-destructive/10"
+                  :disabled="bannerBusySlot === slot.key"
+                  @click="removeBanner(slot)"
+                >
+                  <X class="w-3.5 h-3.5" />
+                  {{ t('bannerRemove') }}
+                </button>
+              </div>
+            </div>
+
+            <input ref="bannerFileInput" type="file" accept="image/*" class="hidden" @change="onBannerPicked" />
+          </div>
+        </div>
+
         <!-- Plan catalogue -->
         <div v-if="visiblePlans.length === 0 && !mySub" class="card px-6 py-10 text-center text-sm text-muted-foreground">
           {{ t('subscriptionNoPlans') }}
@@ -462,5 +591,17 @@ onMounted(() => {
         </div>
       </div>
     </ModalOverlay>
+
+    <!-- Banner crop step — aspect/output sized per the slot being edited -->
+    <ImageCropper
+      v-if="cropSlot"
+      :show="!!cropSlot"
+      :image-file="cropFile"
+      :aspect-ratio="cropSlot.w / cropSlot.h"
+      :output-width="cropSlot.w"
+      :output-height="cropSlot.h"
+      @crop="handleBannerCrop"
+      @close="cropSlot = null"
+    />
   </div>
 </template>

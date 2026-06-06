@@ -83,7 +83,7 @@ async function _doEnqueue(io, playerId, poolId, priorityAt = null) {
   const pool = await queryOne('SELECT * FROM queue_pools WHERE id = $1 AND enabled = true', [poolId])
   if (!pool) return { ok: false, error: 'Queue pool not found or disabled' }
 
-  const player = await queryOne('SELECT id, name, display_name, steam_id, avatar_url, mmr, mmr_verified_at, profile_banner_url FROM players WHERE id = $1', [playerId])
+  const player = await queryOne('SELECT id, name, display_name, steam_id, avatar_url, mmr, mmr_verified_at, queue_banner_url FROM players WHERE id = $1', [playerId])
   // Group memberships drive both visual marking and the matchmaking
   // rules (min_per_match, require_peer_when_present, captains_drawn_from,
   // peer_group_ids). The IDs feed the rule resolver at match-formation
@@ -155,13 +155,13 @@ async function _doEnqueue(io, playerId, poolId, priorityAt = null) {
     return { ok: false, error: 'Already in an active match' }
   }
 
-  // Surface the player's uploaded banner so the "Players in Queue" grid can
+  // Surface the player's queue-slot banner so the "Players in Queue" grid can
   // paint it behind their tile while waiting — same profile_banner perk that
   // paints draft tiles. Gated by the active perk (one extra query per join, not
   // a hot path), so a lapsed sub shows no banner without deleting the file.
   const profileBannerUrl =
-    player.profile_banner_url && (await hasPerk(playerId, PERK.PROFILE_BANNER))
-      ? player.profile_banner_url
+    player.queue_banner_url && (await hasPerk(playerId, PERK.PROFILE_BANNER))
+      ? player.queue_banner_url
       : null
 
   const q = getPoolQueue(poolId)
@@ -1078,15 +1078,15 @@ async function startQueueMatch(poolId, io, preselectedPlayers = null, preselecte
     const ids = players.map(p => p.playerId)
     if (ids.length) {
       const prefRows = await query(
-        'SELECT id, preferred_roles, profile_banner_url FROM players WHERE id = ANY($1::int[])',
+        'SELECT id, preferred_roles, queue_banner_url FROM players WHERE id = ANY($1::int[])',
         [ids]
       )
       const prefById = Object.fromEntries(prefRows.map(r => [r.id, r.preferred_roles || []]))
-      // Surface each subscriber's uploaded banner so the draft board can paint
+      // Surface each subscriber's queue-slot banner so the draft board can paint
       // it behind their tile. Gated by the active profile_banner perk — same
       // rule the profile page uses — so a lapsed sub hides the banner without
       // deleting the file. Non-subscribers get null and render the plain tile.
-      const bannerById = Object.fromEntries(prefRows.map(r => [r.id, r.profile_banner_url || null]))
+      const bannerById = Object.fromEntries(prefRows.map(r => [r.id, r.queue_banner_url || null]))
       const bannerPerk = await getProfileBannerPlayers(ids)
       for (const p of players) p.preferredRoles = sanitizeRoles(prefById[p.playerId] || [])
       for (const p of players) {

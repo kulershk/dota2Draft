@@ -104,7 +104,7 @@ export default function createSeasonsRouter(io) {
         SELECT sr.player_id, sr.points, sr.peak_points, sr.games_played, sr.wins, sr.losses, sr.last_match_at,
           sr.current_winstreak, sr.peak_winstreak,
           p.name, COALESCE(p.display_name, p.name) AS display_name, p.avatar_url, p.mmr, p.mmr_verified_at,
-          p.profile_banner_url
+          p.leaderboard_banner_url
         FROM season_rankings sr
         JOIN players p ON p.id = sr.player_id
         WHERE sr.season_id = $1 AND sr.games_played >= $2
@@ -135,13 +135,15 @@ export default function createSeasonsRouter(io) {
         }
         for (const r of rows) r.groups = byPid[r.player_id] || []
 
-        // Profile-banner perk: surface each subscriber's uploaded banner so the
-        // leaderboard can paint it behind their row, same as the queue draft
-        // board. Gated by the active perk (same rule queue.js uses), so a lapsed
-        // sub hides the banner without deleting the file; everyone else gets null.
+        // Profile-banner perk: surface each subscriber's leaderboard-slot banner
+        // so the leaderboard can paint it behind their row. Gated by the active
+        // perk (same rule queue.js uses), so a lapsed sub hides the banner
+        // without deleting the file; everyone else gets null. Returned as the
+        // generic `banner_url` the frontend reads — the column is slot-specific.
         const bannerPerk = await getProfileBannerPlayers(playerIds)
         for (const r of rows) {
-          r.profile_banner_url = bannerPerk.has(r.player_id) ? (r.profile_banner_url || null) : null
+          r.banner_url = bannerPerk.has(r.player_id) ? (r.leaderboard_banner_url || null) : null
+          delete r.leaderboard_banner_url
         }
       } else {
         for (const r of rows) r.groups = []

@@ -214,47 +214,69 @@ router.get('/api/players/search', async (req, res) => {
   res.json(results)
 })
 
-// ── Profile banner (profile_banner subscription perk) ──────────────────
-// Self-serve: the authed player uploads/removes their own banner. Gated on an
-// active plan granting profile_banner. Resized to a fixed 1200×300 PNG so the
-// profile header layout is identical regardless of the source image.
-router.post('/api/me/profile-banner', upload.single('banner'), async (req, res) => {
+// ── Profile banners (profile_banner subscription perk) ─────────────────
+// Self-serve: the authed player uploads/removes their own banners. Gated on an
+// active plan granting profile_banner. The perk grants three independent
+// slots, one per surface; each is resized to that surface's fixed aspect on
+// upload so every surface's layout is identical regardless of the source image.
+//
+// `col` is read from this map (never from the request) so the slot name in the
+// URL can be used verbatim in SQL without injection risk; an unknown slot 404s
+// before any DB/file work. The `profile` slot reuses the original
+// profile_banner_url column so existing banners keep working unchanged.
+const BANNER_SLOTS = {
+  profile:     { col: 'profile_banner_url',     w: 1200, h: 300 }, // profile header (4:1)
+  leaderboard: { col: 'leaderboard_banner_url', w: 1200, h: 200 }, // season leaderboard row (6:1)
+  queue:       { col: 'queue_banner_url',       w: 600,  h: 400 }, // queue / draft tile (3:2)
+}
+
+router.post('/api/me/banners/:slot', upload.single('banner'), async (req, res) => {
+  const slot = BANNER_SLOTS[req.params.slot]
+  if (!slot) {
+    if (req.file) { try { fs.unlinkSync(req.file.path) } catch {} }
+    return res.status(404).json({ error: 'Unknown banner slot' })
+  }
   const player = await getAuthPlayer(req)
-  if (!player) return res.status(401).json({ error: 'Not authenticated' })
+  if (!player) {
+    if (req.file) { try { fs.unlinkSync(req.file.path) } catch {} }
+    return res.status(401).json({ error: 'Not authenticated' })
+  }
   if (!(await hasPerk(player.id, PERK.PROFILE_BANNER))) {
     if (req.file) { try { fs.unlinkSync(req.file.path) } catch {} }
     return res.status(403).json({ error: 'Your subscription does not include a profile banner' })
   }
   if (!req.file) return res.status(400).json({ error: 'no file uploaded' })
 
-  const current = await queryOne('SELECT profile_banner_url FROM players WHERE id = $1', [player.id])
-  const resizedFilename = `profile_banner_${player.id}_${Date.now()}.png`
+  const current = await queryOne(`SELECT ${slot.col} AS url FROM players WHERE id = $1`, [player.id])
+  const resizedFilename = `${req.params.slot}_banner_${player.id}_${Date.now()}.png`
   const resizedPath = join(uploadsDir, resizedFilename)
   await sharp(req.file.path)
-    .resize(1200, 300, { fit: 'cover', position: 'center' })
+    .resize(slot.w, slot.h, { fit: 'cover', position: 'center' })
     .png()
     .toFile(resizedPath)
   if (req.file.path !== resizedPath) { try { fs.unlinkSync(req.file.path) } catch {} }
 
-  if (current?.profile_banner_url) {
-    const oldPath = join(uploadsDir, current.profile_banner_url.replace('/uploads/', ''))
+  if (current?.url) {
+    const oldPath = join(uploadsDir, current.url.replace('/uploads/', ''))
     try { if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath) } catch {}
   }
 
   const bannerUrl = `/uploads/${resizedFilename}`
-  await execute('UPDATE players SET profile_banner_url = $1 WHERE id = $2', [bannerUrl, player.id])
-  res.json({ profile_banner_url: bannerUrl })
+  await execute(`UPDATE players SET ${slot.col} = $1 WHERE id = $2`, [bannerUrl, player.id])
+  res.json({ slot: req.params.slot, url: bannerUrl })
 })
 
-router.delete('/api/me/profile-banner', async (req, res) => {
+router.delete('/api/me/banners/:slot', async (req, res) => {
+  const slot = BANNER_SLOTS[req.params.slot]
+  if (!slot) return res.status(404).json({ error: 'Unknown banner slot' })
   const player = await getAuthPlayer(req)
   if (!player) return res.status(401).json({ error: 'Not authenticated' })
-  const current = await queryOne('SELECT profile_banner_url FROM players WHERE id = $1', [player.id])
-  if (current?.profile_banner_url) {
-    const oldPath = join(uploadsDir, current.profile_banner_url.replace('/uploads/', ''))
+  const current = await queryOne(`SELECT ${slot.col} AS url FROM players WHERE id = $1`, [player.id])
+  if (current?.url) {
+    const oldPath = join(uploadsDir, current.url.replace('/uploads/', ''))
     try { if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath) } catch {}
   }
-  await execute('UPDATE players SET profile_banner_url = NULL WHERE id = $1', [player.id])
+  await execute(`UPDATE players SET ${slot.col} = NULL WHERE id = $1`, [player.id])
   res.json({ ok: true })
 })
 

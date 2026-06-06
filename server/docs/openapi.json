@@ -2208,12 +2208,15 @@
         "responses": { "200": { "description": "Replaced", "content": { "application/json": { "schema": { "type": "object", "properties": { "image_url": { "type": "string" } } } } } }, "404": { "description": "Not found" } }
       }
     },
-    "/api/me/profile-banner": {
+    "/api/me/banners/{slot}": {
       "post": {
         "tags": ["Users"],
-        "summary": "Upload my profile banner (profile_banner perk)",
+        "summary": "Upload one of my profile banners (profile_banner perk)",
         "security": [{ "bearerAuth": [] }],
-        "description": "Self-serve. Requires an active subscription whose plan grants the `profile_banner` perk (403 otherwise). Multipart/form-data with field `banner`. PNG / JPG / GIF / WebP up to 5 MB. Server resizes to 1200×300 PNG (cover/center) and replaces any existing banner file.",
+        "description": "Self-serve. The `profile_banner` perk grants three independent banner slots, one per surface. Requires an active subscription whose plan grants the perk (403 otherwise). Multipart/form-data with field `banner`. PNG / JPG / GIF / WebP up to 5 MB. The server resizes (cover/center) to the slot's fixed aspect and replaces any existing banner file for that slot: `profile` → 1200×300 (profile header), `leaderboard` → 1200×200 (season leaderboard row), `queue` → 600×400 (queue / draft tile).",
+        "parameters": [
+          { "name": "slot", "in": "path", "required": true, "schema": { "type": "string", "enum": ["profile", "leaderboard", "queue"] } }
+        ],
         "requestBody": {
           "content": {
             "multipart/form-data": {
@@ -2230,21 +2233,26 @@
         "responses": {
           "200": {
             "description": "Uploaded",
-            "content": { "application/json": { "schema": { "type": "object", "properties": { "profile_banner_url": { "type": "string" } } } } }
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "slot": { "type": "string" }, "url": { "type": "string" } } } } }
           },
           "400": { "description": "No file uploaded" },
           "401": { "description": "Not authenticated" },
-          "403": { "description": "Subscription does not include a profile banner" }
+          "403": { "description": "Subscription does not include a profile banner" },
+          "404": { "description": "Unknown banner slot" }
         }
       },
       "delete": {
         "tags": ["Users"],
-        "summary": "Remove my profile banner",
+        "summary": "Remove one of my profile banners",
         "security": [{ "bearerAuth": [] }],
-        "description": "Unlinks the file and clears profile_banner_url for the authenticated player.",
+        "description": "Unlinks the file and clears the column for the given slot (`profile`, `leaderboard`, or `queue`) for the authenticated player.",
+        "parameters": [
+          { "name": "slot", "in": "path", "required": true, "schema": { "type": "string", "enum": ["profile", "leaderboard", "queue"] } }
+        ],
         "responses": {
           "200": { "description": "Removed" },
-          "401": { "description": "Not authenticated" }
+          "401": { "description": "Not authenticated" },
+          "404": { "description": "Unknown banner slot" }
         }
       }
     },

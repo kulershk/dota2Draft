@@ -40,7 +40,7 @@ interface LeaderRow {
   losses: number
   current_winstreak: number
   last_match_at: string | null
-  profile_banner_url: string | null
+  banner_url: string | null
 }
 
 interface FridayPlayer {
@@ -194,10 +194,10 @@ function avatarRingTitle(row: LeaderRow): string {
 // stats on the right, mirroring the draft tile's left-readable → right-fade.
 // Returns undefined for non-subscribers so their row renders plain.
 function bannerRowStyle(row: LeaderRow): Record<string, string> | undefined {
-  if (!row.profile_banner_url) return undefined
+  if (!row.banner_url) return undefined
   return {
     backgroundImage:
-      `linear-gradient(90deg, rgb(var(--card) / 0.93) 0%, rgb(var(--card) / 0.78) 55%, rgb(var(--card) / 0.52) 100%), url("${row.profile_banner_url}")`,
+      `linear-gradient(90deg, rgb(var(--card) / 0.93) 0%, rgb(var(--card) / 0.78) 55%, rgb(var(--card) / 0.52) 100%), url("${row.banner_url}")`,
     backgroundSize: 'cover',
     backgroundPosition: 'center',
   }

@@ -161,10 +161,14 @@ router.get('/api/auth/me', async (req, res) => {
     // Player-level perk preferences. Persisted across sessions; perk gating
     // is checked separately on every server-side use site.
     auto_requeue_enabled: !!player.auto_requeue_enabled,
-    // Raw banner URL so the owner can preview/manage it; the profile_banner
-    // perk in `subscription.perks` controls whether the upload UI is offered
-    // and whether the banner is shown to other viewers.
+    // Raw banner URLs so the owner can preview/manage all three slots on the
+    // subscription page; the profile_banner perk in `subscription.perks`
+    // controls whether the manager is offered and whether the banners are
+    // shown to other viewers. profile = header, leaderboard = season row,
+    // queue = draft/queue tile.
     profile_banner_url: player.profile_banner_url || null,
+    leaderboard_banner_url: player.leaderboard_banner_url || null,
+    queue_banner_url: player.queue_banner_url || null,
     // Chosen avatar decoration id (the avatar_decoration perk gates the picker).
     avatar_decoration_id: player.avatar_decoration_id || null,
   })

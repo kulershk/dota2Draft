@@ -1485,6 +1485,14 @@ export async function initDb() {
   // an active plan granting the perk — so a lapsed sub hides the banner without
   // losing the uploaded file.
   try { await execute(`ALTER TABLE players ADD COLUMN profile_banner_url TEXT NULL`) } catch {}
+  // The profile_banner perk now grants three independent banners, one per
+  // surface: profile_banner_url = profile header, leaderboard_banner_url =
+  // season leaderboard rows, queue_banner_url = queue/draft tiles. Each is
+  // cropped to that surface's aspect on upload (server/routes/users.js). Older
+  // rows keep their single profile_banner_url as the header banner; the other
+  // two start NULL until the player uploads them.
+  try { await execute(`ALTER TABLE players ADD COLUMN leaderboard_banner_url TEXT NULL`) } catch {}
+  try { await execute(`ALTER TABLE players ADD COLUMN queue_banner_url TEXT NULL`) } catch {}
 
   // Chosen avatar decoration (the avatar_decoration perk) — a raw id into
   // avatar_decorations, NOT an FK (mirrors how lobbyLeagueId stores a raw id),

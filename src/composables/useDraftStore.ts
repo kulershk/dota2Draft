@@ -164,6 +164,8 @@ export interface CurrentUser {
   } | null
   auto_requeue_enabled: boolean
   profile_banner_url: string | null
+  leaderboard_banner_url: string | null
+  queue_banner_url: string | null
   avatar_decoration_id: number | null
 }
 
