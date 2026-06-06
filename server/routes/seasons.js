@@ -333,7 +333,17 @@ export default function createSeasonsRouter(io) {
           WHERE ms.match_game_id = ps.match_game_id
         ) sc ON TRUE
         WHERE sml.season_id = $1 AND sml.player_id = $2
-        ORDER BY sml.created_at ASC, sml.id ASC
+        -- Friday top-3 bonuses are stored dated to their Friday at NOON (the
+        -- idempotency index keys on DATE(created_at)), but the prize is earned
+        -- after that Friday's games — and its points_before reflects the
+        -- end-of-Friday total. Sort those synthetic rows to the END of their
+        -- Friday (next midnight) so they fall AFTER the day's games instead of
+        -- ahead of them, keeping the running-total line continuous.
+        ORDER BY
+          (CASE WHEN sml.reason = 'friday_top_bonus'
+                THEN DATE(sml.created_at) + INTERVAL '1 day'
+                ELSE sml.created_at END) ASC,
+          sml.id ASC
       `, [seasonId, playerId, steam32])
       res.json({ rows })
     } catch (e) {
@@ -358,7 +368,14 @@ export default function createSeasonsRouter(io) {
           team_avg_mmr, opponent_avg_mmr, expected_win, k_used, reason, created_at
         FROM season_match_log
         WHERE season_id = $1 AND player_id = $2
-        ORDER BY created_at DESC
+        -- Same as the points-history graph: place Friday top-3 bonuses (dated
+        -- to their Friday noon for idempotency) at the END of their Friday so
+        -- they list after that day's games, not interleaved before them.
+        ORDER BY
+          (CASE WHEN reason = 'friday_top_bonus'
+                THEN DATE(created_at) + INTERVAL '1 day'
+                ELSE created_at END) DESC,
+          id DESC
         LIMIT 25
       `, [s.id, playerId])
       res.json({ ranking: row || null, recent: log })
