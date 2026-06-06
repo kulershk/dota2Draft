@@ -2031,6 +2031,7 @@ export default {
   bannerSlotQueue: 'Плитка очереди',
   bannerSlotQueueDesc: 'За вашей плиткой в очереди и на доске драфта.',
   bannerSlotEmpty: 'Баннера ещё нет',
+  bannerRecommendedSize: 'Рекомендуется {w}×{h} px',
   bannerUpload: 'Загрузить',
   bannerChange: 'Изменить',
   bannerRemove: 'Удалить',

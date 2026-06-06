@@ -405,6 +405,7 @@ onMounted(() => {
               <div class="sm:w-44 shrink-0">
                 <div class="text-sm font-semibold text-foreground">{{ t(slot.labelKey) }}</div>
                 <div class="text-xs text-muted-foreground mt-0.5">{{ t(slot.descKey) }}</div>
+                <div class="text-[11px] font-mono text-muted-foreground/80 mt-1">{{ t('bannerRecommendedSize', { w: slot.w, h: slot.h }) }}</div>
               </div>
 
               <!-- Preview at the slot's true aspect so the user sees the real crop -->

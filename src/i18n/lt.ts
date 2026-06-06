@@ -2140,6 +2140,7 @@ export default {
   bannerSlotQueue: 'Eilės plytelė',
   bannerSlotQueueDesc: 'Už tavo plytelės eilėje ir drafto lentoje.',
   bannerSlotEmpty: 'Banerio dar nėra',
+  bannerRecommendedSize: 'Rekomenduojama {w}×{h} px',
   bannerUpload: 'Įkelti',
   bannerChange: 'Keisti',
   bannerRemove: 'Pašalinti',

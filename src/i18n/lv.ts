@@ -2140,6 +2140,7 @@ export default {
   bannerSlotQueue: 'Rindas elements',
   bannerSlotQueueDesc: 'Aiz tava elementa rindā un drafta tāfelē.',
   bannerSlotEmpty: 'Vēl nav banera',
+  bannerRecommendedSize: 'Ieteicams {w}×{h} px',
   bannerUpload: 'Augšupielādēt',
   bannerChange: 'Mainīt',
   bannerRemove: 'Noņemt',

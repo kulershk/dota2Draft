@@ -2152,6 +2152,7 @@ export default {
   bannerSlotQueue: 'Queue tile',
   bannerSlotQueueDesc: 'Behind your tile in the queue and draft board.',
   bannerSlotEmpty: 'No banner yet',
+  bannerRecommendedSize: 'Recommended {w}×{h} px',
   bannerUpload: 'Upload',
   bannerChange: 'Change',
   bannerRemove: 'Remove',
