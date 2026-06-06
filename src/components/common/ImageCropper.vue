@@ -84,6 +84,14 @@ watch(() => props.show, (val) => {
   }
 })
 
+// Callers that mount the cropper lazily (e.g. `v-if="slot"`) pass show=true at
+// mount time, so the watch above never sees a false→true transition. Init here
+// too so the image loads regardless of whether the component is always-mounted
+// (toggled via :show) or created on demand.
+onMounted(() => {
+  if (props.show && props.imageFile) nextTick(initCropper)
+})
+
 onUnmounted(destroyCropper)
 </script>
 
