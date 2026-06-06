@@ -227,7 +227,7 @@ router.get('/api/players/search', async (req, res) => {
 const BANNER_SLOTS = {
   profile:     { col: 'profile_banner_url',     w: 1200, h: 300 }, // profile header (4:1)
   leaderboard: { col: 'leaderboard_banner_url', w: 1200, h: 200 }, // season leaderboard row (6:1)
-  queue:       { col: 'queue_banner_url',       w: 600,  h: 400 }, // queue / draft tile (3:2)
+  queue:       { col: 'queue_banner_url',       w: 1000, h: 200 }, // queue / draft tile — a wide, short row (5:1)
 }
 
 router.post('/api/me/banners/:slot', upload.single('banner'), async (req, res) => {
