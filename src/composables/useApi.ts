@@ -896,7 +896,7 @@ export function useApi() {
           points_before: number; points_after: number; delta: number;
           reason: string | null; created_at: string;
           hero_id: number | null; kills: number | null; deaths: number | null;
-          assists: number | null; is_radiant: boolean | null;
+          assists: number | null; is_radiant: boolean | null; duration_seconds: number | null;
           radiant_kills: number | null; dire_kills: number | null;
         }>
       }>,

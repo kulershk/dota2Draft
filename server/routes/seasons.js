@@ -314,12 +314,12 @@ export default function createSeasonsRouter(io) {
       const rows = await query(`
         SELECT sml.id, sml.queue_match_id, sml.won, sml.points_before, sml.points_after,
                sml.delta, sml.reason, sml.created_at,
-               ps.hero_id, ps.kills, ps.deaths, ps.assists, ps.is_radiant,
+               ps.hero_id, ps.kills, ps.deaths, ps.assists, ps.is_radiant, ps.duration_seconds,
                sc.radiant_kills, sc.dire_kills
         FROM season_match_log sml
         LEFT JOIN queue_matches qm ON qm.id = sml.queue_match_id
         LEFT JOIN LATERAL (
-          SELECT s.hero_id, s.kills, s.deaths, s.assists, s.is_radiant, s.match_game_id
+          SELECT s.hero_id, s.kills, s.deaths, s.assists, s.is_radiant, s.duration_seconds, s.match_game_id
           FROM match_game_player_stats s
           JOIN match_games g ON g.id = s.match_game_id
           WHERE g.match_id = qm.match_id AND $3::bigint IS NOT NULL AND s.account_id = $3::bigint

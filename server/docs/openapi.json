@@ -3829,7 +3829,7 @@
       "get": {
         "tags": ["Seasons"],
         "summary": "A player's full points-change timeline for one season",
-        "description": "Returns every season_match_log row for the (player, season) ordered chronologically (created_at ASC, id ASC) so the client can plot a points-over-time graph. Each row carries points_before, points_after, delta, won and created_at, plus the player's per-game stats for that match (hero_id, kills, deaths, assists, is_radiant) and the game's team kill totals (radiant_kills, dire_kills) — null for synthetic rows (Friday bonus, admin adjust) or unparsed games. The first row's points_before is the season's starting points.",
+        "description": "Returns every season_match_log row for the (player, season) ordered chronologically (created_at ASC, id ASC) so the client can plot a points-over-time graph. Each row carries points_before, points_after, delta, won and created_at, plus the player's per-game stats for that match (hero_id, kills, deaths, assists, is_radiant, duration_seconds) and the game's team kill totals (radiant_kills, dire_kills) — null for synthetic rows (Friday bonus, admin adjust) or unparsed games. The first row's points_before is the season's starting points.",
         "parameters": [
           { "name": "playerId", "in": "path", "required": true, "schema": { "type": "integer" } },
           { "name": "seasonId", "in": "path", "required": true, "schema": { "type": "integer" } }

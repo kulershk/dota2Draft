@@ -160,7 +160,7 @@ type PointsRow = {
   points_before: number; points_after: number; delta: number;
   reason: string | null; created_at: string;
   hero_id: number | null; kills: number | null; deaths: number | null;
-  assists: number | null; is_radiant: boolean | null;
+  assists: number | null; is_radiant: boolean | null; duration_seconds: number | null;
   radiant_kills: number | null; dire_kills: number | null;
 }
 const selectedSeasonId = ref<number | null>(null)
@@ -232,6 +232,39 @@ const pointsSummary = computed(() => {
   return {
     start: anchor, current, change: r1(current - anchor),
     peak: r1(peak), low: r1(trough), wins, losses, games: rows.length,
+  }
+})
+
+// Full-season totals (not just the last 30 shown on the graph). Aggregated
+// from every real game row in the season — synthetic rows (Friday bonus, admin
+// adjust) have no queue_match_id and are skipped. KDA and time-played come from
+// the per-row stat line the points-history endpoint attaches (the deciding game
+// of a series); rows from unparsed games carry null KDA/duration and only count
+// toward the win/loss record. Win rate and matches always reflect the season's
+// full game record.
+const seasonStats = computed(() => {
+  const rows = pointsHistory.value.filter(r => r.queue_match_id != null && r.won != null)
+  if (rows.length === 0) return null
+  let wins = 0, k = 0, d = 0, a = 0, dur = 0, kdaGames = 0
+  for (const row of rows) {
+    if (row.won === true) wins++
+    if (row.kills != null && row.deaths != null && row.assists != null) {
+      k += row.kills; d += row.deaths; a += row.assists; kdaGames++
+    }
+    if (row.duration_seconds != null) dur += row.duration_seconds
+  }
+  const matches = rows.length
+  return {
+    matches,
+    wins,
+    losses: matches - wins,
+    winRate: (wins / matches) * 100,
+    kdaGames,
+    kda: kdaGames > 0 ? (k + a) / Math.max(d, 1) : null,
+    avgK: kdaGames > 0 ? k / kdaGames : 0,
+    avgD: kdaGames > 0 ? d / kdaGames : 0,
+    avgA: kdaGames > 0 ? a / kdaGames : 0,
+    hours: dur / 3600,
   }
 })
 
@@ -801,6 +834,46 @@ const streakBadge = computed(() => {
                   {{ s.season_name }}
                 </option>
               </select>
+            </div>
+
+            <!-- Season totals: win rate / matches / KDA / time played for the
+                 whole selected season (the summary strip below is scoped to the
+                 last games shown on the graph). -->
+            <div v-if="seasonStats" class="grid grid-cols-2 sm:grid-cols-4 gap-px bg-border">
+              <div class="bg-card px-4 py-2.5">
+                <div class="flex items-center gap-1.5">
+                  <Percent class="w-3 h-3 text-green-500" />
+                  <p class="text-[10px] font-mono tracking-widest text-muted-foreground/70 uppercase">{{ t('profileWinRate') }}</p>
+                </div>
+                <p class="text-base font-bold text-foreground mt-0.5">
+                  {{ seasonStats.winRate.toFixed(1) }}<span class="text-xs text-muted-foreground">%</span>
+                  <span class="text-[11px] font-normal text-muted-foreground ml-1.5">{{ seasonStats.wins }}W · {{ seasonStats.losses }}L</span>
+                </p>
+              </div>
+              <div class="bg-card px-4 py-2.5">
+                <div class="flex items-center gap-1.5">
+                  <Swords class="w-3 h-3 text-orange-500" />
+                  <p class="text-[10px] font-mono tracking-widest text-muted-foreground/70 uppercase">{{ t('profileMatches') }}</p>
+                </div>
+                <p class="text-base font-bold text-foreground mt-0.5">{{ seasonStats.matches.toLocaleString() }}</p>
+              </div>
+              <div class="bg-card px-4 py-2.5">
+                <div class="flex items-center gap-1.5">
+                  <Target class="w-3 h-3 text-purple-400" />
+                  <p class="text-[10px] font-mono tracking-widest text-muted-foreground/70 uppercase">{{ t('profileKdaLast10') }}</p>
+                </div>
+                <p class="text-base font-bold text-foreground mt-0.5">
+                  {{ seasonStats.kda != null ? seasonStats.kda.toFixed(2) : '—' }}
+                  <span v-if="seasonStats.kda != null" class="text-[11px] font-normal text-muted-foreground ml-1.5">{{ t('profileAvgKdaHint', { k: seasonStats.avgK.toFixed(1), d: seasonStats.avgD.toFixed(1), a: seasonStats.avgA.toFixed(1) }) }}</span>
+                </p>
+              </div>
+              <div class="bg-card px-4 py-2.5">
+                <div class="flex items-center gap-1.5">
+                  <Clock class="w-3 h-3 text-primary" />
+                  <p class="text-[10px] font-mono tracking-widest text-muted-foreground/70 uppercase">{{ t('profileHoursPlayed') }}</p>
+                </div>
+                <p class="text-base font-bold text-foreground mt-0.5">{{ fmtHours(seasonStats.hours) }}<span class="text-xs text-muted-foreground">{{ t('profileHoursSuffix') }}</span></p>
+              </div>
             </div>
 
             <!-- Summary stats strip -->
