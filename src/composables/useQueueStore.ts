@@ -433,24 +433,17 @@ export function useQueueStore() {
 
   initSocket()
 
-  // admin=true lists ALL pools (including disabled ones) via the
-  // permission-gated admin endpoint — used by the ?admin view on the queue
-  // page. Falls back to the public set if the caller isn't a queue admin.
-  async function fetchPools(admin = false) {
+  async function fetchPools() {
     try {
-      pools.value = admin ? await api.getAdminQueuePools() : await api.getQueuePools()
+      pools.value = await api.getQueuePools()
+      // Seed per-pool counts from the REST snapshot so badges are populated
+      // before the first socket broadcast arrives.
+      const seeded: Record<number, number> = {}
+      for (const p of pools.value) seeded[p.id] = (p as any).queue_count || 0
+      poolCounts.value = { ...seeded, ...poolCounts.value }
     } catch {
-      try {
-        pools.value = admin ? await api.getQueuePools() : []
-      } catch {
-        pools.value = []
-      }
+      pools.value = []
     }
-    // Seed per-pool counts from the REST snapshot so badges are populated
-    // before the first socket broadcast arrives.
-    const seeded: Record<number, number> = {}
-    for (const p of pools.value) seeded[p.id] = (p as any).queue_count || 0
-    poolCounts.value = { ...seeded, ...poolCounts.value }
   }
 
   function joinQueue(poolId: number) {
