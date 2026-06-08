@@ -530,8 +530,13 @@ function onLiveStats(payload: any) {
   if (Number.isFinite(Number(payload.dire_score)))    qm.team2_kills = Number(payload.dire_score)
 }
 
+// ?admin in the URL shows ALL rooms (including disabled pools) for queue
+// admins. The endpoint is permission-gated server-side, so non-admins who add
+// the param just get the normal public set.
+const adminView = router.currentRoute.value.query.admin !== undefined
+
 onMounted(async () => {
-  await queue.fetchPools()
+  await queue.fetchPools(adminView)
   if (queue.pools.value.length > 0) {
     // If we're already queued or in an active match on some pool, preselect
     // that one instead of clobbering state with pools[0]. Otherwise fall back
@@ -678,13 +683,18 @@ onUnmounted(() => {
             v-for="pool in queue.pools.value" :key="pool.id"
             type="button"
             class="flex items-center gap-1.5 px-6 py-3.5 text-sm transition-colors whitespace-nowrap border-b-2"
-            :class="selectedPoolId === pool.id
-              ? 'text-primary font-semibold border-primary'
-              : 'text-text-tertiary border-transparent hover:text-foreground'"
+            :class="[
+              selectedPoolId === pool.id
+                ? 'text-primary font-semibold border-primary'
+                : 'text-text-tertiary border-transparent hover:text-foreground',
+              (pool as any).enabled === false ? 'opacity-50' : '',
+            ]"
             @click="selectPool(pool.id)"
           >
             <Shield class="w-3.5 h-3.5" />
             <span>{{ pool.name }}</span>
+            <!-- Disabled rooms only surface in the ?admin view -->
+            <EyeOff v-if="(pool as any).enabled === false" class="w-3 h-3 text-muted-foreground" />
             <span class="text-[10px] font-semibold tabular-nums px-1.5 py-0.5 rounded-full min-w-[1.25rem] text-center"
               :class="selectedPoolId === pool.id
                 ? 'bg-primary/15 text-primary'
