@@ -296,10 +296,15 @@ function initSocket() {
   })
 
   socket.on('queue:teamsFormed', (data: { queueMatchId: number; team1: QueuePlayer[]; team2: QueuePlayer[] }) => {
+    // A fresh matchup (e.g. admin recreate) supersedes any prior cancellation —
+    // clear it so the cancelled banner doesn't mask the new teams/lobby UI.
+    cancelled.value = null
     teamsFormed.value = { team1: data.team1, team2: data.team2 }
   })
 
   socket.on('queue:lobbyCreated', (data: { queueMatchId: number; matchId: number; lobbyInfo: { gameName: string; password: string }; lobbyExpiresAt?: number; playersJoined?: Array<string | { steamId: string }> }) => {
+    // The new lobby (and its password) supersedes any prior cancellation banner.
+    cancelled.value = null
     lobbyInfo.value = { matchId: data.matchId, gameName: data.lobbyInfo.gameName, password: data.lobbyInfo.password, expiresAt: data.lobbyExpiresAt || 0 }
     lobbyPlayersJoined.value = normalizeJoined(data.playersJoined)
   })
