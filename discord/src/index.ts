@@ -11,16 +11,12 @@ import { loadSettings, startSettingsRefresh } from './services/settings.js'
 import { startInternalServer } from './services/internal-server.js'
 import { restoreLiveMatches } from './services/match-voice.js'
 
-async function main(): Promise<void> {
-  try {
-    await dbPing()
-    Logger.info('Connected to database')
-    await loadSettings()
-    startSettingsRefresh()
-  } catch (err) {
-    Logger.error('Database ping failed (continuing anyway)', err)
-  }
+// The current gateway client, or null while (re)connecting. Published only
+// after a fully-successful login + init so the internal server's readiness
+// gate doesn't expose a half-initialised client.
+let activeClient: Client | null = null
 
+function buildClient(): Client {
   // Guilds + GuildVoiceStates are non-privileged (needed for /queue match
   // voice channels — listing/moving members in voice).
   // GuildMembers is privileged — opt in via ENABLE_GUILD_MEMBERS_INTENT=true
@@ -42,28 +38,6 @@ async function main(): Promise<void> {
     partials: [Partials.Message, Partials.Channel, Partials.Reaction],
   })
   client.on('error', (e) => Logger.error('client error', e))
-
-  await client.login(env.DISCORD_BOT_TOKEN)
-  await new Promise<void>((res) => client.once('clientReady', () => res()))
-  Logger.info(`Logged in as ${client.user?.tag}`)
-
-  PluginManager.setClient(client)
-  await PluginManager.load()
-  PluginManager.bindHooks()
-
-  await CommandManager.load()
-  await CommandManager.registerCommands(client)
-
-  CronManager.setClient(client)
-  await CronManager.load()
-  CronManager.start(client)
-
-  // Re-hydrate match-voice state from DB BEFORE the internal HTTP server
-  // starts accepting traffic, so an inbound /internal/match/end for a
-  // crash-resumed match finds its entry in liveMatches.
-  await restoreLiveMatches(client)
-
-  startInternalServer(client)
 
   client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.isChatInputCommand()) {
@@ -104,6 +78,69 @@ async function main(): Promise<void> {
       }
     }
   })
+
+  return client
+}
+
+// Connect to Discord and run the post-login init, retrying forever on failure.
+// A bad token or a Discord gateway outage must NOT take the process down: the
+// internal HTTP server is already listening, so /admin/discord keeps loading
+// and shows "bot not ready" (with the cause in these logs) instead of a 502.
+async function connectAndInit(): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    const client = buildClient()
+    try {
+      await client.login(env.DISCORD_BOT_TOKEN)
+      await new Promise<void>((res) => client.once('clientReady', () => res()))
+      Logger.info(`Logged in as ${client.user?.tag}`)
+
+      PluginManager.setClient(client)
+      await PluginManager.load()
+      PluginManager.bindHooks()
+
+      await CommandManager.load()
+      await CommandManager.registerCommands(client)
+
+      CronManager.setClient(client)
+      await CronManager.load()
+      CronManager.start(client)
+
+      // Re-hydrate match-voice state from DB before we publish the client, so
+      // an inbound /internal/match/end for a crash-resumed match finds its
+      // entry in liveMatches (until published, that route returns 503).
+      await restoreLiveMatches(client)
+
+      activeClient = client
+      Logger.info('Bot fully initialised')
+      return
+    } catch (err) {
+      const delayMs = Math.min(60_000, 5_000 * attempt)
+      Logger.error(`Discord login/init failed (attempt ${attempt}); retrying in ${delayMs}ms`, err)
+      activeClient = null
+      try { await client.destroy() } catch {}
+      await new Promise((r) => setTimeout(r, delayMs))
+    }
+  }
+}
+
+async function main(): Promise<void> {
+  try {
+    await dbPing()
+    Logger.info('Connected to database')
+    await loadSettings()
+    startSettingsRefresh()
+  } catch (err) {
+    Logger.error('Database ping failed (continuing anyway)', err)
+  }
+
+  // Start the internal HTTP server FIRST, before logging in to Discord. This
+  // keeps /internal/health (and the admin Discord page) reachable even while
+  // the bot is still connecting or retrying a failed login — the readiness
+  // gate degrades client-dependent routes to 503 instead of the whole server
+  // being unreachable (which surfaced as a 502 in the admin UI).
+  startInternalServer(() => activeClient)
+
+  await connectAndInit()
 }
 
 const shutdown = (sig: string) => {

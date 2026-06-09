@@ -107,22 +107,52 @@ function resolveGuildId(): string {
   return Settings.get('guild_id', env.DISCORD_GUILD_ID)
 }
 
-export function startInternalServer(client: Client): void {
+// `getClient` resolves the *current* gateway client. It returns null while the
+// bot is still connecting (or retrying a failed login), so the HTTP server can
+// start — and answer /internal/health — before Discord is reachable. This is
+// what keeps the admin Discord page from getting a 502: the server is always
+// up, it just reports `ready: false` until the bot connects.
+export function startInternalServer(getClient: () => Client | null): void {
   const app = express()
   app.use(express.json())
 
   app.get('/internal/health', (_req, res) => {
+    const client = getClient()
     res.json({
       ok: true,
-      ready: client.isReady(),
-      bot: client.user?.tag ?? null,
+      ready: client?.isReady() ?? false,
+      bot: client?.user?.tag ?? null,
       settingsLoaded: Settings.isLoaded(),
     })
   })
 
   app.use('/internal', bearerAuth)
 
+  // Routes below need a live gateway connection. While the bot is still
+  // connecting the client is null / not ready — fail fast with 503 so the
+  // admin UI shows "bot not ready" instead of the handler throwing a confusing
+  // 500. Health + plugins (static metadata) stay reachable regardless, so the
+  // page can always render the bot's status.
+  const READY_REQUIRED = new Set([
+    '/internal/roles',
+    '/internal/channels',
+    '/internal/members',
+    '/internal/match/start',
+    '/internal/match/end',
+    '/internal/send-message',
+    '/internal/event',
+    '/internal/tournament/announce',
+  ])
+  app.use((req, res, next) => {
+    if (READY_REQUIRED.has(req.path) && !getClient()?.isReady()) {
+      res.status(503).json({ error: 'bot not ready' })
+      return
+    }
+    next()
+  })
+
   app.get('/internal/roles', async (_req, res) => {
+    const client = getClient()!
     const guildId = resolveGuildId()
     if (!guildId) {
       res.status(400).json({ error: 'guild_id not configured' })
@@ -155,6 +185,7 @@ export function startInternalServer(client: Client): void {
   })
 
   app.get('/internal/channels', async (_req, res) => {
+    const client = getClient()!
     const guildId = resolveGuildId()
     if (!guildId) {
       res.status(400).json({ error: 'guild_id not configured' })
@@ -189,6 +220,7 @@ export function startInternalServer(client: Client): void {
   })
 
   app.post('/internal/match/start', async (req, res) => {
+    const client = getClient()!
     try {
       const { matchId, queueMatchId, team1, team2 } = req.body ?? {}
       if (!matchId || !team1?.playerIds || !team2?.playerIds) {
@@ -216,6 +248,7 @@ export function startInternalServer(client: Client): void {
   })
 
   app.post('/internal/match/end', async (req, res) => {
+    const client = getClient()!
     const { matchId, immediate } = req.body ?? {}
     if (!matchId) {
       res.status(400).json({ error: 'matchId required' })
@@ -238,6 +271,7 @@ export function startInternalServer(client: Client): void {
   })
 
   app.get('/internal/members', async (_req, res) => {
+    const client = getClient()!
     const guildId = resolveGuildId()
     if (!guildId) {
       res.status(400).json({ error: 'guild_id not configured' })
@@ -275,6 +309,7 @@ export function startInternalServer(client: Client): void {
   // every plugin with a matching `@EventHook on<MyEvent>` handler. No
   // dedicated bot endpoint needed for new event types.
   app.post('/internal/event', (req, res) => {
+    const client = getClient()!
     const { type, payload } = req.body ?? {}
     if (typeof type !== 'string' || !type.length) {
       res.status(400).json({ error: 'type (string) required' })
@@ -290,6 +325,7 @@ export function startInternalServer(client: Client): void {
   // Embeds are passed straight through as Discord API embed objects; Discord
   // validates them and any error is surfaced back to the UI.
   app.post('/internal/send-message', async (req, res) => {
+    const client = getClient()!
     const { channelId, content, embeds } = req.body ?? {}
     if (channelId == null || String(channelId).length === 0) {
       res.status(400).json({ error: 'channelId required' })
@@ -323,6 +359,7 @@ export function startInternalServer(client: Client): void {
   })
 
   app.post('/internal/tournament/announce', (req, res) => {
+    const client = getClient()!
     const payload = req.body
     if (!payload || typeof payload.id !== 'number' || typeof payload.name !== 'string') {
       res.status(400).json({ error: 'id (number) and name (string) required' })
