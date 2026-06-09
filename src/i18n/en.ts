@@ -1604,6 +1604,8 @@ export default {
   seasonPrizes: 'Prizes',
   seasonPrizesHint: 'Prize for each finishing-place range on the Overall leaderboard. Shown to players (free text); not paid out automatically.',
   seasonPrizesEmpty: 'No prize tiers yet — add one to show prizes on the Overall leaderboard.',
+  seasonPrizesInfo: 'Prizes info',
+  seasonPrizesInfoHint: 'Rich-text shown next to the prize tiers on the Overall leaderboard. Displays on its own if no prize tiers are set.',
   seasonAddPrizeTier: 'Add tier',
   seasonPrizeFrom: 'From',
   seasonPrizeTo: 'To',

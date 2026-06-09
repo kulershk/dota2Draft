@@ -3865,7 +3865,7 @@
       "post": {
         "tags": ["Seasons"],
         "summary": "Admin: create a season",
-        "description": "Slug auto-generated from name if omitted. Settings JSON accepts: starting_points (default 1000), k_win (30), k_loss (15), mmr_scale (1500), min_points (0), max_points (null), min_games_for_leaderboard (5), strength_basis ('mmr' default — team strength = avg Dota MMR; or 'points' — team strength = avg season points), prizes (array of { from, to, prize } place-range tiers shown on the Overall leaderboard — free text, not auto-paid; invalid rows dropped, max 50). Requires manage_seasons.",
+        "description": "Slug auto-generated from name if omitted. Settings JSON accepts: starting_points (default 1000), k_win (30), k_loss (15), mmr_scale (1500), min_points (0), max_points (null), min_games_for_leaderboard (5), strength_basis ('mmr' default — team strength = avg Dota MMR; or 'points' — team strength = avg season points), prizes (array of { from, to, prize } place-range tiers shown on the Overall leaderboard — free text, not auto-paid; invalid rows dropped, max 50), prizes_info (free rich-text HTML shown next to the prize tiers; rendered on its own when no tiers are set; max 10000 chars). Requires manage_seasons.",
         "security": [{ "bearerAuth": [] }],
         "requestBody": {
           "required": true,
@@ -3902,7 +3902,8 @@
                         "prize": { "type": "string", "maxLength": 120 }
                       }
                     }
-                  }
+                  },
+                  "prizes_info": { "type": "string", "maxLength": 10000, "description": "Free rich-text (HTML) shown next to the prize tiers on the Overall leaderboard; rendered on its own when no tiers are set. Stored raw, sanitized client-side on render." }
                 }
               }
             }

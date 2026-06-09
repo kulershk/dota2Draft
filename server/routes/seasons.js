@@ -52,6 +52,12 @@ function sanitizeSettings(input) {
       .filter(Boolean)
       .slice(0, 50)
   }
+  // Free rich-text (HTML) shown next to the prize tiers on the Overall
+  // leaderboard. Stored raw; sanitized client-side via v-safe-html on render.
+  // Always honoured when a string is sent (empty string clears it).
+  if (typeof input.prizes_info === 'string') {
+    out.prizes_info = input.prizes_info.slice(0, 10000)
+  }
   return out
 }
 

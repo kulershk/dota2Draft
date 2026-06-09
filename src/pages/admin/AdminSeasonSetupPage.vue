@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { ArrowLeft, Save, RotateCcw, Trophy, Pencil, History, Medal, Search, ChevronLeft, ChevronRight } from 'lucide-vue-next'
 import { useApi } from '@/composables/useApi'
 import { toLocalDatetime, localDatetimeToISO } from '@/utils/format'
+import RichTextEditor from '@/components/common/RichTextEditor.vue'
 
 interface SeasonRow {
   id: number
@@ -105,6 +106,10 @@ interface PrizeTier { from: number | null; to: number | null; prize: string }
 const prizeTiers = ref<PrizeTier[]>([])
 function addPrizeTier() { prizeTiers.value.push({ from: null, to: null, prize: '' }) }
 function removePrizeTier(i: number) { prizeTiers.value.splice(i, 1) }
+
+// Free rich-text shown next to the prize tiers on the Overall leaderboard.
+// Kept separate from the typed settings form; merged into settings on save.
+const prizesInfo = ref('')
 
 // Leaderboard
 const leader = ref<LeaderRow[]>([])
@@ -297,6 +302,7 @@ async function load() {
     prizeTiers.value = Array.isArray(s.settings?.prizes)
       ? s.settings.prizes.map((p: any) => ({ from: p.from ?? null, to: p.to ?? null, prize: String(p.prize ?? '') }))
       : []
+    prizesInfo.value = String(s.settings?.prizes_info ?? '')
   } catch (e: any) {
     error.value = e.message || 'Failed to load season'
   } finally {
@@ -515,6 +521,7 @@ async function handleSave() {
     payload.settings.prizes = prizeTiers.value
       .filter(p => p.from != null && p.to != null && String(p.prize).trim())
       .map(p => ({ from: Number(p.from), to: Number(p.to), prize: String(p.prize).trim() }))
+    payload.settings.prizes_info = prizesInfo.value.trim()
     await api.updateSeason(seasonId.value, payload)
     saveMsg.value = t('saved')
     setTimeout(() => { saveMsg.value = null }, 2000)
@@ -764,6 +771,13 @@ onMounted(load)
           </div>
         </div>
         <p v-else class="text-xs text-muted-foreground italic">{{ t('seasonPrizesEmpty') }}</p>
+
+        <!-- Free rich-text shown alongside the prize tiers on the leaderboard -->
+        <div class="mt-4">
+          <h4 class="text-sm font-bold mb-1">{{ t('seasonPrizesInfo') }}</h4>
+          <p class="text-[11px] text-muted-foreground mb-2">{{ t('seasonPrizesInfoHint') }}</p>
+          <RichTextEditor v-model="prizesInfo" />
+        </div>
       </div>
 
       <div class="flex items-center justify-between border-t border-border/40 pt-4 flex-wrap gap-3">

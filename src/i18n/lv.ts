@@ -1596,6 +1596,8 @@ export default {
   seasonPrizes: 'Balvas',
   seasonPrizesHint: 'Balva katram vietu diapazonam kopvērtējuma topā. Tiek rādīta spēlētājiem (brīvs teksts); netiek izmaksāta automātiski.',
   seasonPrizesEmpty: 'Vēl nav balvu līmeņu — pievieno vienu, lai rādītu balvas kopvērtējuma topā.',
+  seasonPrizesInfo: 'Balvu informācija',
+  seasonPrizesInfoHint: 'Teksts, kas tiek rādīts blakus balvu līmeņiem kopvērtējuma topā. Ja balvu līmeņu nav, tiek rādīts atsevišķi.',
   seasonAddPrizeTier: 'Pievienot līmeni',
   seasonPrizeFrom: 'No',
   seasonPrizeTo: 'Līdz',

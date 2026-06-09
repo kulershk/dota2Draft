@@ -128,6 +128,10 @@ function fmtPrizeRange(p: { from: number; to: number }): string {
   return p.from === p.to ? `${p.from}` : `${p.from}–${p.to}`
 }
 
+// Free rich-text (HTML) shown next to the prize tiers. Rendered on its own
+// when no prize tiers are configured.
+const prizesInfo = computed(() => String((season.value as any)?.settings?.prizes_info || '').trim())
+
 function selectTab(t: string) {
   tab.value = t
   showAll.value = false
@@ -277,13 +281,26 @@ onUnmounted(detachSocket)
 
       <!-- ─── OVERALL TAB ─── -->
       <template v-if="tab === 'overall'">
-      <div v-if="prizeTiers.length" class="card p-4 mb-3">
-        <h3 class="text-sm font-semibold mb-2 flex items-center gap-1.5"><Trophy class="w-4 h-4 text-amber-400" /> {{ t('seasonPrizes') }}</h3>
-        <div class="flex flex-col gap-1">
-          <div v-for="(tier, idx) in prizeTiers" :key="idx" class="flex items-center gap-3 text-sm">
-            <span class="font-mono tabular-nums text-amber-400 font-semibold min-w-[3.5rem]">#{{ fmtPrizeRange(tier) }}</span>
-            <span class="text-foreground">{{ tier.prize }}</span>
+      <div v-if="prizeTiers.length || prizesInfo" class="card p-4 mb-3">
+        <div class="flex flex-col md:flex-row md:items-start gap-4 md:gap-6">
+          <!-- Prize tiers -->
+          <div v-if="prizeTiers.length" class="flex-1 min-w-0">
+            <h3 class="text-sm font-semibold mb-2 flex items-center gap-1.5"><Trophy class="w-4 h-4 text-amber-400" /> {{ t('seasonPrizes') }}</h3>
+            <div class="flex flex-col gap-1">
+              <div v-for="(tier, idx) in prizeTiers" :key="idx" class="flex items-center gap-3 text-sm">
+                <span class="font-mono tabular-nums text-amber-400 font-semibold min-w-[3.5rem]">#{{ fmtPrizeRange(tier) }}</span>
+                <span class="text-foreground">{{ tier.prize }}</span>
+              </div>
+            </div>
           </div>
+          <!-- Divider, only when both sides are present -->
+          <div v-if="prizeTiers.length && prizesInfo" class="hidden md:block w-px self-stretch bg-border/60" />
+          <!-- Free rich-text info -->
+          <div
+            v-if="prizesInfo"
+            class="flex-1 min-w-0 prose prose-sm dark:prose-invert max-w-none text-muted-foreground leading-relaxed"
+            v-safe-html="prizesInfo"
+          />
         </div>
       </div>
       <div v-if="rows.length === 0" class="card p-8 text-center text-muted-foreground">

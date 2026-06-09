@@ -1596,6 +1596,8 @@ export default {
   seasonPrizes: 'Prizai',
   seasonPrizesHint: 'Prizas kiekvienam vietų ruožui bendroje įskaitoje. Rodomas žaidėjams (laisvas tekstas); automatiškai neišmokamas.',
   seasonPrizesEmpty: 'Prizų pakopų dar nėra — pridėk vieną, kad prizai būtų rodomi bendroje įskaitoje.',
+  seasonPrizesInfo: 'Prizų informacija',
+  seasonPrizesInfoHint: 'Tekstas, rodomas šalia prizų pakopų bendroje įskaitoje. Jei prizų pakopų nėra, rodomas atskirai.',
   seasonAddPrizeTier: 'Pridėti pakopą',
   seasonPrizeFrom: 'Nuo',
   seasonPrizeTo: 'Iki',
