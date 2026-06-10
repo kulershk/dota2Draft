@@ -50,6 +50,8 @@ type Bot struct {
 	guardIsTwoFactor bool   // true = mobile auth, false = email
 	sentryHash       steam.SentryHash
 	loginKey         string
+	usedTokenLogin   bool // last logon attempt used the refresh token
+	loginFailedHard  bool // logon rejected (bad token/password) — don't auto-reconnect
 	activeLobbyID    string // lobby DB ID for event routing
 	expectedTeams         map[uint64]string // steamID64 → "radiant"/"dire"
 	gameStartedCh         chan struct{} // signals when game has started
@@ -101,6 +103,9 @@ func (b *Bot) setStatus(status string, errMsg ...string) {
 
 func (b *Bot) Connect() {
 	b.log(fmt.Sprintf("Connecting as %s...", b.Username))
+	b.mu.Lock()
+	b.loginFailedHard = false
+	b.mu.Unlock()
 	b.setStatus(StatusConnecting)
 
 	b.steamClient = steam.NewClient()
@@ -120,6 +125,7 @@ func (b *Bot) handleSteamEvents() {
 				SentryFileHash:         b.sentryHash,
 				ShouldRememberPassword: true,
 			}
+			b.usedTokenLogin = false
 			if b.pendingGuardCode != "" {
 				code := b.pendingGuardCode
 				b.pendingGuardCode = ""
@@ -131,6 +137,13 @@ func (b *Bot) handleSteamEvents() {
 					b.log("Connected to Steam. Logging in with email code...")
 					details.AuthCode = code
 				}
+			} else if b.RefreshToken != "" {
+				// Preferred path: Steam rejects legacy password logons with
+				// InvalidPassword, so a token minted via the modern auth flow
+				// is the only way in.
+				b.log("Connected to Steam. Logging in with refresh token...")
+				details.AccessToken = b.RefreshToken
+				b.usedTokenLogin = true
 			} else if b.loginKey != "" {
 				b.log("Connected to Steam. Logging in with saved login key...")
 				details.LoginKey = b.loginKey
@@ -208,7 +221,24 @@ func (b *Bot) handleSteamEvents() {
 				}()
 			} else {
 				b.log(fmt.Sprintf("Login failed: %v", result))
-				b.setStatus(StatusError, fmt.Sprintf("Login failed: %v", result))
+				b.mu.Lock()
+				b.loginFailedHard = true
+				b.mu.Unlock()
+				if b.usedTokenLogin {
+					// Token rejected (expired/revoked). Tell Node so it wipes
+					// the stored token and mints a fresh one before retrying.
+					b.send("bot_status", protocol.BotStatusEvent{
+						BotID:        b.ID,
+						Status:       StatusError,
+						Error:        fmt.Sprintf("Login failed: %v (refresh token rejected)", result),
+						TokenInvalid: true,
+					})
+					b.mu.Lock()
+					b.Status = StatusError
+					b.mu.Unlock()
+				} else {
+					b.setStatus(StatusError, fmt.Sprintf("Login failed: %v", result))
+				}
 			}
 
 		case *steam.MachineAuthUpdateEvent:
@@ -273,10 +303,18 @@ func (b *Bot) handleSteamEvents() {
 			b.mu.Lock()
 			waiting := b.pendingAuth
 			status := b.Status
+			failedHard := b.loginFailedHard
 			b.mu.Unlock()
 			if waiting {
 				b.log("Disconnected (waiting for Steam Guard code)")
 				continue // don't exit the event loop, we'll reconnect after code
+			}
+			if failedHard {
+				// Steam rejected our credentials outright — retrying with the
+				// same ones is pointless and risks rate-limiting. Node retries
+				// after refreshing the token, or an admin reconnects manually.
+				b.log("Not auto-reconnecting after login rejection")
+				return
 			}
 			// If we were online or connecting, auto-reconnect with a fresh client.
 			// Add jitter (3-8s) so multiple bots on the same IP don't all hit

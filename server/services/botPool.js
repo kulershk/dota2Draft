@@ -28,6 +28,7 @@ class BotPool {
     this.lobbyTeamIds = new Map() // lobbyId -> { radiant, dire }
     this._matchDetailsPending = new Map() // matchId -> { resolve, reject, timer }
     this._botsListPending = null // single resolver for an in-flight list_bots request
+    this._tokenRetryAt = new Map() // botId -> last automatic token-refresh reconnect (rate limit)
   }
 
   async init(io, wss) {
@@ -202,6 +203,21 @@ class BotPool {
     if (data.refreshToken) updates.refresh_token = data.refreshToken
     if (data.sentryHash) updates.sentry_hash = data.sentryHash
     if (data.loginKey) updates.login_key = data.loginKey
+
+    // Go's logon with the stored refresh token was rejected (expired/revoked).
+    // Wipe it and reconnect once with a freshly minted token — rate-limited so
+    // a bad password can't turn into a mint/reject loop against Steam.
+    if (data.tokenInvalid) {
+      updates.refresh_token = null
+      const last = this._tokenRetryAt.get(botId) || 0
+      if (Date.now() - last > 10 * 60 * 1000) {
+        this._tokenRetryAt.set(botId, Date.now())
+        setTimeout(() => {
+          this.connectBot(botId).catch(e =>
+            console.error(`[Bot ${botId}] Reconnect with fresh token failed:`, e.message))
+        }, 3000)
+      }
+    }
 
     // Don't let a GC-reconnect flicker reset a busy bot to available if it
     // still has an active lobby. This prevents createQueueLobby from picking
@@ -1554,13 +1570,99 @@ class BotPool {
     if (!bot) throw new Error('Bot not found')
     await execute("UPDATE lobby_bots SET status = 'connecting', error_message = NULL WHERE id = $1", [botId])
     if (this.io) this.io.to('perm:manage_bots').emit('bot:statusChanged', { botId, status: 'connecting' })
+
+    let refreshToken = ''
+    try {
+      refreshToken = await this._ensureRefreshToken(bot)
+    } catch (e) {
+      const msg = `Could not obtain Steam refresh token: ${e.message}`
+      await execute("UPDATE lobby_bots SET status = 'error', error_message = $2 WHERE id = $1", [botId, msg])
+      if (this.io) this.io.to('perm:manage_bots').emit('bot:statusChanged', { botId, status: 'error', errorMessage: msg })
+      throw new Error(msg)
+    }
+
     this._sendToGo('connect_bot', {
       botId: String(botId),
       username: bot.username,
       password: bot.password,
-      refreshToken: bot.refresh_token || '',
+      refreshToken,
       sentryHash: bot.sentry_hash || '',
       loginKey: bot.login_key || '',
+    })
+  }
+
+  // Steam no longer accepts legacy password logons on the CM protocol, so the
+  // Go service logs bots in with a refresh token from the modern auth flow.
+  // Mint one here whenever the stored token is missing or near expiry.
+  async _ensureRefreshToken(bot) {
+    const stored = bot.refresh_token || ''
+    const exp = this._jwtExpiry(stored)
+    if (stored && exp && exp - Date.now() > 24 * 3600 * 1000) return stored
+
+    if (!bot.password) throw new Error('no password stored for this bot')
+    console.log(`[Bot ${bot.id}] Minting fresh Steam refresh token for ${bot.username}...`)
+    const token = await this._mintRefreshToken(bot.username, bot.password)
+    await execute('UPDATE lobby_bots SET refresh_token = $2 WHERE id = $1', [bot.id, token])
+    const newExp = this._jwtExpiry(token)
+    console.log(`[Bot ${bot.id}] Refresh token minted${newExp ? ` (expires ${new Date(newExp).toISOString()})` : ''}`)
+    return token
+  }
+
+  _jwtExpiry(token) {
+    try {
+      const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString())
+      return payload.exp ? payload.exp * 1000 : null
+    } catch {
+      return null
+    }
+  }
+
+  async _mintRefreshToken(accountName, password) {
+    // Platform type matters: only a SteamClient-platform token is valid for a
+    // CM (game client) logon — a WebBrowser token gets rejected.
+    const session = new LoginSession(EAuthTokenPlatformType.SteamClient)
+    return await new Promise((resolve, reject) => {
+      const cleanup = () => {
+        try { session.removeAllListeners() } catch {}
+        try { session.cancelLoginAttempt() } catch {}
+      }
+      const timer = setTimeout(() => {
+        cleanup()
+        reject(new Error('login timed out'))
+      }, 60000)
+
+      session.on('authenticated', () => {
+        clearTimeout(timer)
+        const token = session.refreshToken
+        cleanup()
+        if (token) resolve(token)
+        else reject(new Error('Steam issued no refresh token'))
+      })
+      session.on('error', (err) => {
+        clearTimeout(timer)
+        cleanup()
+        reject(err)
+      })
+      session.on('timeout', () => {
+        clearTimeout(timer)
+        cleanup()
+        reject(new Error('login session timed out'))
+      })
+
+      session.startWithCredentials({ accountName, password })
+        .then((startResult) => {
+          if (startResult && startResult.actionRequired) {
+            clearTimeout(timer)
+            cleanup()
+            const types = (startResult.validActions || []).map(a => a.type).join(',')
+            reject(new Error(`Steam Guard required (${types || 'unknown'})`))
+          }
+        })
+        .catch((err) => {
+          clearTimeout(timer)
+          cleanup()
+          reject(err)
+        })
     })
   }
 

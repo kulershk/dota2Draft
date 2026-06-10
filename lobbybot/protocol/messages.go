@@ -149,6 +149,9 @@ type BotStatusEvent struct {
 	RefreshToken string `json:"refreshToken,omitempty"`
 	SentryHash   string `json:"sentryHash,omitempty"`
 	LoginKey     string `json:"loginKey,omitempty"`
+	// TokenInvalid signals that a refresh-token logon was rejected — Node
+	// should discard the stored token and mint a fresh one before reconnecting.
+	TokenInvalid bool `json:"tokenInvalid,omitempty"`
 }
 
 type BotLogEvent struct {
