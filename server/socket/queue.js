@@ -1302,14 +1302,26 @@ async function finalizeQueueMatch(queueMatchId, io) {
 
   match.status = 'lobby_creating'
 
+  // Coin-flip sides. captain1 is always the lower-MMR captain (first pick), and
+  // everything downstream pairs captain1 ↔ team1 ↔ Radiant (lobby payload, UI,
+  // kill feed, winner fallback, ELO), so without this the higher-MMR captain
+  // would land Dire every single game. Swapping which captain is captain1 once
+  // picking is done randomizes sides while keeping the captainN ↔ teamN pairing
+  // intact everywhere. The DB captain ids are updated below in the same UPDATE.
+  if (Math.random() < 0.5) {
+    ;[match.captain1, match.captain2] = [match.captain2, match.captain1]
+    ;[match.captain1Picks, match.captain2Picks] = [match.captain2Picks, match.captain1Picks]
+  }
+
   const team1 = [match.captain1, ...match.captain1Picks]
   const team2 = [match.captain2, ...match.captain2Picks]
 
-  // Update queue_matches with team picks
+  // Update queue_matches with team picks (+ captain ids, which may have swapped)
   await execute(`
-    UPDATE queue_matches SET team1_players = $1, team2_players = $2, status = 'lobby_creating'
-    WHERE id = $3
-  `, [JSON.stringify(team1), JSON.stringify(team2), queueMatchId])
+    UPDATE queue_matches SET team1_players = $1, team2_players = $2,
+      captain1_player_id = $3, captain2_player_id = $4, status = 'lobby_creating'
+    WHERE id = $5
+  `, [JSON.stringify(team1), JSON.stringify(team2), match.captain1.playerId, match.captain2.playerId, queueMatchId])
 
   io.to(`queue-match:${queueMatchId}`).emit('queue:teamsFormed', {
     queueMatchId,

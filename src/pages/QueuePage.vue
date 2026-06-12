@@ -1009,7 +1009,7 @@ onUnmounted(() => {
                 <span class="text-[15px] font-bold truncate">
                   {{ t('queueRoundOf', { current: queue.pickState.value.pickIndex + 1, total: queue.activeMatch.value.pickOrder.length }) }}
                   ·
-                  {{ queue.pickState.value.currentPicker === 1 ? t('queueRadiantCaptainPicks') : t('queueDireCaptainPicks') }}
+                  {{ queue.pickState.value.currentPicker === 1 ? t('queueTeam1CaptainPicks') : t('queueTeam2CaptainPicks') }}
                 </span>
               </div>
             </div>
@@ -1040,7 +1040,7 @@ onUnmounted(() => {
                   <span class="text-[15px] font-bold truncate">{{ currentPickerCaptain.name }}</span>
                   <span class="flex items-center gap-1 text-[9px] font-bold text-amber-400 bg-amber-500/15 px-1.5 py-0.5 rounded shrink-0">
                     <Crown class="w-2.5 h-2.5" />
-                    CPT · {{ queue.pickState.value.currentPicker === 1 ? t('queueRadiant') : t('queueDire') }}
+                    CPT · {{ queue.pickState.value.currentPicker === 1 ? t('queueTeam1') : t('queueTeam2') }}
                   </span>
                 </div>
               </div>
@@ -1114,11 +1114,11 @@ onUnmounted(() => {
             <div class="flex items-center gap-2.5 shrink-0">
               <span class="flex items-center gap-1.5">
                 <span class="w-2 h-2 rounded-full bg-cyan-400" />
-                <span class="text-[11px] text-slate-400 font-medium">{{ t('queueRadiant') }}</span>
+                <span class="text-[11px] text-slate-400 font-medium">{{ t('queueTeam1') }}</span>
               </span>
               <span class="flex items-center gap-1.5">
                 <span class="w-2 h-2 rounded-full bg-red-500" />
-                <span class="text-[11px] text-slate-400 font-medium">{{ t('queueDire') }}</span>
+                <span class="text-[11px] text-slate-400 font-medium">{{ t('queueTeam2') }}</span>
               </span>
             </div>
           </div>
@@ -1158,7 +1158,7 @@ onUnmounted(() => {
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-[1fr_minmax(380px,420px)_1fr] lg:min-h-[340px]">
-              <!-- Team 1 (Radiant) -->
+              <!-- Team 1 (Radiant/Dire decided by coin flip once picks finish) -->
               <div class="flex flex-col order-2 lg:order-1">
                 <!-- Header -->
                 <div class="px-5 py-4 border-b border-border/30 flex items-center justify-between gap-2 flex-wrap">
@@ -1168,7 +1168,7 @@ onUnmounted(() => {
                       <ShieldCheck class="w-5 h-5 text-cyan-400" />
                     </div>
                     <div class="flex flex-col min-w-0">
-                      <span class="text-[10px] font-bold tracking-[0.1em] text-cyan-400">{{ t('queueRadiant') }}</span>
+                      <span class="text-[10px] font-bold tracking-[0.1em] text-cyan-400">{{ t('queueTeam1') }}</span>
                       <span class="text-[13px] font-semibold truncate">{{ t('queueTeamOf', { name: queue.activeMatch.value.captain1.name }) }}</span>
                     </div>
                   </div>
@@ -1362,7 +1362,7 @@ onUnmounted(() => {
                 </div>
               </div>
 
-              <!-- Team 2 (Dire) -->
+              <!-- Team 2 (Radiant/Dire decided by coin flip once picks finish) -->
               <div class="flex flex-col order-3">
                 <!-- Header -->
                 <div class="px-5 py-4 border-b border-border/30 flex items-center justify-between gap-2 flex-wrap">
@@ -1372,7 +1372,7 @@ onUnmounted(() => {
                       <ShieldCheck class="w-5 h-5 text-red-400" />
                     </div>
                     <div class="flex flex-col min-w-0">
-                      <span class="text-[10px] font-bold tracking-[0.1em] text-red-400">{{ t('queueDire') }}</span>
+                      <span class="text-[10px] font-bold tracking-[0.1em] text-red-400">{{ t('queueTeam2') }}</span>
                       <span class="text-[13px] font-semibold truncate">{{ t('queueTeamOf', { name: queue.activeMatch.value.captain2.name }) }}</span>
                     </div>
                   </div>
