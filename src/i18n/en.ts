@@ -1388,6 +1388,7 @@ export default {
   queueTeam2CaptainPicks: 'Team 2 captain picks',
   queueTeam1: 'Team 1',
   queueTeam2: 'Team 2',
+  queueCoinFlipTitle: 'Coin flip — choosing sides',
   queuePickingNow: 'PICKING NOW',
   queueTimeLeft: 'TIME LEFT',
   queueTeamOf: "{name}'s team",

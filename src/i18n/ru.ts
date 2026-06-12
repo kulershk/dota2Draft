@@ -1309,6 +1309,7 @@ export default {
   queueTeam2CaptainPicks: 'Выбор капитана команды 2',
   queueTeam1: 'Команда 1',
   queueTeam2: 'Команда 2',
+  queueCoinFlipTitle: 'Бросок монеты — выбор сторон',
   queuePickingNow: 'ВЫБИРАЕТ СЕЙЧАС',
   queueTimeLeft: 'ОСТАЛОСЬ',
   queueTeamOf: 'Команда {name}',

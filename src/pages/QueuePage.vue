@@ -76,6 +76,25 @@ const hasShadowPlayersInQueue = computed(() =>
   queue.queuePlayers.value.some(p => (p.groups || []).length > 0)
 )
 
+// ── Coin-flip side reveal ──
+// The server coin-flips Radiant/Dire when picking ends; the store sets
+// `coinFlip` only on the live picking → teams transition. Spin the coin for a
+// couple of seconds, reveal which captain got which side, then auto-dismiss
+// onto the teams-formed screen (click skips ahead).
+const coinFlipPhase = ref<'spinning' | 'revealed'>('spinning')
+let coinFlipTimers: ReturnType<typeof setTimeout>[] = []
+watch(queue.coinFlip, (cf) => {
+  coinFlipTimers.forEach(clearTimeout)
+  coinFlipTimers = []
+  if (!cf) return
+  // Flip happened while this page wasn't mounted and is old news — skip it.
+  if (Date.now() - cf.at > 15000) { queue.dismissCoinFlip(); return }
+  coinFlipPhase.value = 'spinning'
+  coinFlipTimers.push(setTimeout(() => { coinFlipPhase.value = 'revealed' }, 2200))
+  coinFlipTimers.push(setTimeout(() => queue.dismissCoinFlip(), 6500))
+}, { immediate: true })
+onUnmounted(() => { coinFlipTimers.forEach(clearTimeout) })
+
 // Border style for a player tile — the highest-priority group's colour.
 // Server already orders the array, so we just take the first entry.
 // boxShadow inset trick lets us render an arbitrary hex colour where a
@@ -559,6 +578,49 @@ onUnmounted(() => {
 
 <template>
   <div class="flex flex-col flex-1">
+    <!-- Coin-flip side reveal (plays once when picking ends; click to skip) -->
+    <Transition name="coinflip-fade">
+      <div v-if="queue.coinFlip.value"
+        class="fixed inset-0 z-[90] flex flex-col items-center justify-center gap-8 bg-background/90 backdrop-blur-sm px-4 cursor-pointer"
+        @click="queue.dismissCoinFlip()">
+        <span class="text-xs font-bold tracking-[0.25em] text-muted-foreground uppercase">{{ t('queueCoinFlipTitle') }}</span>
+
+        <div class="coin-scene">
+          <div class="coin" :class="coinFlipPhase === 'spinning' ? 'coin-spinning' : 'coin-landing'">
+            <div class="coin-face coin-face-radiant"><ShieldCheck class="w-12 h-12" /></div>
+            <div class="coin-face coin-face-dire"><Swords class="w-12 h-12" /></div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-4 md:gap-8 transition-all duration-500"
+          :class="coinFlipPhase === 'revealed' ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'">
+          <!-- Radiant captain -->
+          <div class="flex flex-col items-center gap-2 px-6 py-4 rounded-xl bg-card border border-cyan-500/40 coinflip-card-radiant">
+            <img v-if="queue.coinFlip.value.radiant.avatarUrl" :src="queue.coinFlip.value.radiant.avatarUrl"
+              class="w-12 h-12 rounded-full object-cover ring-2 ring-cyan-500" />
+            <div v-else class="w-12 h-12 rounded-full bg-cyan-500/20 ring-2 ring-cyan-500 flex items-center justify-center">
+              <span class="text-cyan-400 font-bold">{{ (queue.coinFlip.value.radiant.name || '?')[0].toUpperCase() }}</span>
+            </div>
+            <span class="text-sm font-semibold max-w-[150px] truncate">{{ t('queueTeamOf', { name: queue.coinFlip.value.radiant.name }) }}</span>
+            <span class="text-[10px] font-bold tracking-[0.15em] text-cyan-400">{{ t('queueRadiant').toUpperCase() }}</span>
+          </div>
+
+          <span class="text-sm font-bold text-muted-foreground">VS</span>
+
+          <!-- Dire captain -->
+          <div class="flex flex-col items-center gap-2 px-6 py-4 rounded-xl bg-card border border-red-500/40 coinflip-card-dire">
+            <img v-if="queue.coinFlip.value.dire.avatarUrl" :src="queue.coinFlip.value.dire.avatarUrl"
+              class="w-12 h-12 rounded-full object-cover ring-2 ring-red-500" />
+            <div v-else class="w-12 h-12 rounded-full bg-red-500/20 ring-2 ring-red-500 flex items-center justify-center">
+              <span class="text-red-400 font-bold">{{ (queue.coinFlip.value.dire.name || '?')[0].toUpperCase() }}</span>
+            </div>
+            <span class="text-sm font-semibold max-w-[150px] truncate">{{ t('queueTeamOf', { name: queue.coinFlip.value.dire.name }) }}</span>
+            <span class="text-[10px] font-bold tracking-[0.15em] text-red-400">{{ t('queueDire').toUpperCase() }}</span>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
     <!-- Ready-check failure banner -->
     <div
       v-if="queue.readyCheckFailed.value"
@@ -1917,5 +1979,68 @@ onUnmounted(() => {
 @keyframes phase-your-turn {
   0%, 100% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.5); }
   50% { box-shadow: 0 0 0 6px rgba(34, 211, 238, 0); }
+}
+
+/* ── Coin-flip side reveal ── */
+.coinflip-fade-enter-active,
+.coinflip-fade-leave-active {
+  transition: opacity 0.4s ease;
+}
+.coinflip-fade-enter-from,
+.coinflip-fade-leave-to {
+  opacity: 0;
+}
+.coin-scene {
+  width: 110px;
+  height: 110px;
+  perspective: 700px;
+}
+.coin {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+}
+.coin-spinning {
+  animation: coin-spin 0.4s linear infinite;
+}
+/* Two extra full turns, decelerating onto the Radiant face. */
+.coin-landing {
+  animation: coin-land 1.1s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes coin-spin {
+  from { transform: rotateY(0deg); }
+  to { transform: rotateY(360deg); }
+}
+@keyframes coin-land {
+  from { transform: rotateY(0deg); }
+  to { transform: rotateY(720deg); }
+}
+.coin-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.coin-face-radiant {
+  background: radial-gradient(circle at 35% 30%, #67e8f9 0%, #22d3ee 45%, #0e7490 100%);
+  color: #042f3a;
+  box-shadow: 0 0 40px rgba(34, 211, 238, 0.5), inset 0 0 0 6px rgba(255, 255, 255, 0.18);
+}
+.coin-face-dire {
+  transform: rotateY(180deg);
+  background: radial-gradient(circle at 35% 30%, #fca5a5 0%, #ef4444 45%, #7f1d1d 100%);
+  color: #3f0a0a;
+  box-shadow: 0 0 40px rgba(239, 68, 68, 0.5), inset 0 0 0 6px rgba(255, 255, 255, 0.15);
+}
+.coinflip-card-radiant {
+  box-shadow: 0 0 24px rgba(34, 211, 238, 0.25);
+}
+.coinflip-card-dire {
+  box-shadow: 0 0 24px rgba(239, 68, 68, 0.25);
 }
 </style>

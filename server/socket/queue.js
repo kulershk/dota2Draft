@@ -1323,10 +1323,14 @@ async function finalizeQueueMatch(queueMatchId, io) {
     WHERE id = $5
   `, [JSON.stringify(team1), JSON.stringify(team2), match.captain1.playerId, match.captain2.playerId, queueMatchId])
 
+  // justFormed marks the one live "picks ended" emit — rehydrate re-emits of
+  // queue:teamsFormed omit it, so the client plays the side coin-flip reveal
+  // exactly once.
   io.to(`queue-match:${queueMatchId}`).emit('queue:teamsFormed', {
     queueMatchId,
     team1,
     team2,
+    justFormed: true,
   })
 
   // Create a match row (no competition_id)

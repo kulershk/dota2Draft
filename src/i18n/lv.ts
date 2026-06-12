@@ -1380,6 +1380,7 @@ export default {
   queueTeam2CaptainPicks: '2. komandas kapteinis izvēlas',
   queueTeam1: '1. komanda',
   queueTeam2: '2. komanda',
+  queueCoinFlipTitle: 'Monētas mešana — pušu izloze',
   queuePickingNow: 'IZVĒLAS TAGAD',
   queueTimeLeft: 'ATLIKUSAIS LAIKS',
   queueTeamOf: '{name} komanda',

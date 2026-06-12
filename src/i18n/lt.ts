@@ -1380,6 +1380,7 @@ export default {
   queueTeam2CaptainPicks: '2 komandos kapitonas renkasi',
   queueTeam1: '1 komanda',
   queueTeam2: '2 komanda',
+  queueCoinFlipTitle: 'Monetos metimas — pusių traukimas',
   queuePickingNow: 'RENKASI DABAR',
   queueTimeLeft: 'LIKĘS LAIKAS',
   queueTeamOf: '{name} komanda',

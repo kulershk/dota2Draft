@@ -91,6 +91,11 @@ const queuePlayers = ref<QueuePlayer[]>([])
 const activeMatch = ref<QueueMatchFound | null>(null)
 const pickState = ref<QueuePickState | null>(null)
 const teamsFormed = ref<{ team1: QueuePlayer[]; team2: QueuePlayer[] } | null>(null)
+// Sides are coin-flipped server-side when picking ends. Set only on the live
+// "picks just ended" emit (justFormed flag — never on rehydrate re-emits) so
+// the page plays the Radiant/Dire coin-flip reveal exactly once per match.
+// `at` lets the page skip the reveal if it mounts long after the flip.
+const coinFlip = ref<{ radiant: QueuePlayer; dire: QueuePlayer; at: number } | null>(null)
 const lobbyInfo = ref<{ matchId: number; gameName: string; password: string; expiresAt: number } | null>(null)
 const lobbyPlayersJoined = ref<string[]>([])
 const queueError = ref<string | null>(null)
@@ -191,6 +196,7 @@ function initSocket() {
     activeMatch.value = data
     pickState.value = null
     teamsFormed.value = null
+    coinFlip.value = null
     lobbyInfo.value = null
     cancelled.value = null
     readyCheck.value = null
@@ -295,11 +301,16 @@ function initSocket() {
     )
   })
 
-  socket.on('queue:teamsFormed', (data: { queueMatchId: number; team1: QueuePlayer[]; team2: QueuePlayer[] }) => {
+  socket.on('queue:teamsFormed', (data: { queueMatchId: number; team1: QueuePlayer[]; team2: QueuePlayer[]; justFormed?: boolean }) => {
     // A fresh matchup (e.g. admin recreate) supersedes any prior cancellation —
     // clear it so the cancelled banner doesn't mask the new teams/lobby UI.
     cancelled.value = null
     teamsFormed.value = { team1: data.team1, team2: data.team2 }
+    // Live "picks just ended" emit → play the coin-flip reveal.
+    // team1 is always Radiant, team2 always Dire.
+    if (data.justFormed && data.team1[0] && data.team2[0]) {
+      coinFlip.value = { radiant: data.team1[0], dire: data.team2[0], at: Date.now() }
+    }
   })
 
   socket.on('queue:lobbyCreated', (data: { queueMatchId: number; matchId: number; lobbyInfo: { gameName: string; password: string }; lobbyExpiresAt?: number; playersJoined?: Array<string | { steamId: string }> }) => {
@@ -334,6 +345,7 @@ function initSocket() {
     activeMatch.value = null
     pickState.value = null
     teamsFormed.value = null
+    coinFlip.value = null
     lobbyInfo.value = null
     lobbyPlayersJoined.value = []
   })
@@ -409,6 +421,7 @@ function initSocket() {
     activeMatch.value = null
     pickState.value = null
     teamsFormed.value = null
+    coinFlip.value = null
     lobbyInfo.value = null
     cancelled.value = null
   })
@@ -526,8 +539,13 @@ export function useQueueStore() {
     activeMatch.value = null
     pickState.value = null
     teamsFormed.value = null
+    coinFlip.value = null
     lobbyInfo.value = null
     cancelled.value = null
+  }
+
+  function dismissCoinFlip() {
+    coinFlip.value = null
   }
 
   function setRolePreferences(roles: string[]) {
@@ -593,6 +611,8 @@ export function useQueueStore() {
     activeMatch,
     pickState,
     teamsFormed,
+    coinFlip,
+    dismissCoinFlip,
     postMatch,
     dismissPostMatch,
     lobbyInfo,

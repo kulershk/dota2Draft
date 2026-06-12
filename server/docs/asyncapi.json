@@ -977,6 +977,22 @@
         }
       }
     },
+    "queue:teamsFormed": {
+      "subscribe": {
+        "summary": "Broadcast to queue-match:${queueMatchId}: final rosters after picking ends. team1 is always Radiant, team2 always Dire (sides are coin-flipped server-side when picking finishes). justFormed is true only on the single live end-of-picking emit — rehydrate re-emits (page refresh / queue:getState) omit it; the client uses it to play the side coin-flip reveal exactly once.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "queueMatchId": { "type": "integer" },
+              "team1": { "type": "array", "items": { "type": "object" }, "description": "Radiant roster, captain first" },
+              "team2": { "type": "array", "items": { "type": "object" }, "description": "Dire roster, captain first" },
+              "justFormed": { "type": "boolean", "description": "Present and true only on the live end-of-picking emit" }
+            }
+          }
+        }
+      }
+    },
     "queue:gameStarted": {
       "subscribe": {
         "summary": "Broadcast: Dota match ID captured for a queue match (queue-match:${queueMatchId}). Frontend should clear lobby banner.",
