@@ -23,8 +23,19 @@ export default function createLobbyRouter(io) {
     try {
       const admin = await requirePermission(req, res, 'manage_bots')
       if (!admin) return
+      // Reconcile the cached DB statuses against Go's LIVE state before reading,
+      // so the page reflects reality instead of a possibly-stale column (e.g.
+      // after a restart that reset everything to offline, or a dropped status
+      // event). Best-effort: falls back to the cached values if Go is
+      // unreachable or slow. `goConnected` + `syncedAt` let the UI flag whether
+      // it's showing live status or last-known cache.
+      const synced = await botPool._syncBotStatusesFromGo().catch(() => false)
       const bots = await botPool.getBotStatuses()
-      res.json(bots)
+      res.json({
+        bots,
+        goConnected: botPool.isGoConnected(),
+        syncedAt: synced ? new Date().toISOString() : null,
+      })
     } catch (e) {
       res.status(500).json({ error: e.message })
     }

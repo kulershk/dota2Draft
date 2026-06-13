@@ -22,9 +22,19 @@ const logContainer = ref<HTMLElement | null>(null)
 const expandedTimelineBotId = ref<number | null>(null)
 const botHistory = ref<Record<number, any[]>>({})
 
+// Whether the Go lobby-bot service is reachable, and when the statuses below
+// were last reconciled against its live state. Drives the "live vs last-known"
+// banner so an admin isn't misled by a stale cached status (the exact symptom
+// where a bot is connected & ready but the page shows it Offline).
+const goConnected = ref(true)
+const syncedAt = ref<string | null>(null)
+
 async function fetchBots() {
   try {
-    bots.value = await api.getBots()
+    const res: any = await api.getBots()
+    bots.value = res?.bots ?? []
+    goConnected.value = res?.goConnected !== false
+    syncedAt.value = res?.syncedAt ?? null
   } catch { bots.value = [] }
 }
 
@@ -346,6 +356,18 @@ onUnmounted(() => {
     </div>
 
     <p class="text-sm text-muted-foreground">{{ t('botManagementDesc') }}</p>
+
+    <!-- Go bot service connectivity: tells "live status" from "last-known cache" -->
+    <div class="flex items-center gap-2 text-xs -mt-2">
+      <span class="flex items-center gap-1.5 font-medium" :class="goConnected ? 'text-green-500' : 'text-red-500'">
+        <span class="w-1.5 h-1.5 rounded-full" :class="goConnected ? 'bg-green-500' : 'bg-red-500'" />
+        {{ goConnected ? t('botServiceConnected') : t('botServiceDisconnected') }}
+      </span>
+      <span class="text-muted-foreground">·</span>
+      <span class="text-muted-foreground">
+        {{ goConnected && syncedAt ? t('botStatusLiveAsOf', { time: fmtDateTime(new Date(syncedAt)) }) : t('botStatusLastKnown') }}
+      </span>
+    </div>
 
     <!-- Bulk avatar upload -->
     <div class="card p-5">

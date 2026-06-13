@@ -28,6 +28,7 @@ class BotPool {
     this.lobbyTeamIds = new Map() // lobbyId -> { radiant, dire }
     this._matchDetailsPending = new Map() // matchId -> { resolve, reject, timer }
     this._botsListPending = null // single resolver for an in-flight list_bots request
+    this._botsListInflight = null // coalesces concurrent _syncBotStatusesFromGo callers
     this._tokenRetryAt = new Map() // botId -> last automatic token-refresh reconnect (rate limit)
   }
 
@@ -288,24 +289,41 @@ class BotPool {
     if (resolve) resolve(Array.isArray(data?.bots) ? data.bots : [])
   }
 
+  // Whether the Go lobby-bot service is currently connected over WS. Lets the
+  // admin page tell "live status" from "last-known cache" when Go is down.
+  isGoConnected() {
+    return !!(this.goWs && this.goWs.readyState === 1)
+  }
+
   // Ask Go for every bot's LIVE status and write it into lobby_bots, so the
   // DB can't hand out a bot Go can't actually host. Routed through _onBotStatus
   // so the busy-with-active-lobby guard still applies (no double-booking).
-  // Best-effort: if Go is unreachable or slow, we fall back to the cached DB.
+  // Best-effort: returns true if we reconciled from Go, false if Go was
+  // unreachable/slow (callers fall back to the cached DB). Concurrent callers
+  // (lobby assignment + admin page loads) coalesce onto one round-trip.
   async _syncBotStatusesFromGo() {
-    if (!this.goWs || this.goWs.readyState !== 1) return
-    const bots = await new Promise((resolve) => {
-      const timer = setTimeout(() => { this._botsListPending = null; resolve(null) }, 3000)
-      this._botsListPending = (list) => { clearTimeout(timer); resolve(list) }
-      try {
-        this._sendToGo('list_bots', {})
-      } catch {
-        clearTimeout(timer); this._botsListPending = null; resolve(null)
+    if (!this.isGoConnected()) return false
+    if (this._botsListInflight) return this._botsListInflight
+    this._botsListInflight = (async () => {
+      const bots = await new Promise((resolve) => {
+        const timer = setTimeout(() => { this._botsListPending = null; resolve(null) }, 3000)
+        this._botsListPending = (list) => { clearTimeout(timer); resolve(list) }
+        try {
+          this._sendToGo('list_bots', {})
+        } catch {
+          clearTimeout(timer); this._botsListPending = null; resolve(null)
+        }
+      })
+      if (!Array.isArray(bots)) return false
+      for (const b of bots) {
+        try { await this._onBotStatus({ botId: b.botId, status: b.status }) } catch {}
       }
-    })
-    if (!Array.isArray(bots)) return
-    for (const b of bots) {
-      try { await this._onBotStatus({ botId: b.botId, status: b.status }) } catch {}
+      return true
+    })()
+    try {
+      return await this._botsListInflight
+    } finally {
+      this._botsListInflight = null
     }
   }
 
