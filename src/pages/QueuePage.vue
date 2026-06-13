@@ -659,23 +659,40 @@ onUnmounted(() => {
       <p class="text-muted-foreground text-sm mt-0.5">{{ t('queueDesc') }}</p>
     </div>
 
-    <!-- Post-match panel: visible after queue:gameStarted clears the active
-         match so the player can still file toxic/grief reports during the
-         pool's report window. Cleared on next queue:matchFound. -->
+    <!-- Current-match panel: shown once queue:gameStarted (or a live-game
+         rehydrate) clears the active match. While the Dota game is live it reads
+         as "live game in progress" with a link back to the match room; after it
+         ends (queue:liveStatsEnd) it falls back to the finished/report framing.
+         Lets the player file toxic/grief reports throughout. Cleared on next
+         queue:matchFound or dismiss. -->
     <div v-if="queue.postMatch.value && !queue.activeMatch.value"
          class="max-w-[1200px] mx-auto w-full px-4 md:px-8 pb-4">
-      <div class="card overflow-hidden border border-amber-500/30">
-        <div class="px-5 py-3 border-b border-border/40 flex items-center justify-between bg-amber-500/5">
-          <div class="flex items-center gap-2">
-            <Shield class="w-4 h-4 text-amber-400" />
-            <span class="text-sm font-semibold">{{ t('queuePostMatchTitle') }}</span>
-            <span class="text-[11px] text-muted-foreground">{{ t('queuePostMatchHint') }}</span>
+      <div class="card overflow-hidden border"
+           :class="queue.postMatch.value.live ? 'border-green-500/40' : 'border-amber-500/30'">
+        <div class="px-5 py-3 border-b border-border/40 flex items-center justify-between gap-3 flex-wrap"
+             :class="queue.postMatch.value.live ? 'bg-green-500/5' : 'bg-amber-500/5'">
+          <div class="flex items-center gap-2 min-w-0">
+            <template v-if="queue.postMatch.value.live">
+              <span class="w-2 h-2 rounded-full bg-green-500 shrink-0 phase-live-dot" />
+              <span class="text-sm font-semibold">{{ t('queueLiveGameTitle') }}</span>
+              <span class="text-[11px] text-muted-foreground truncate">{{ t('queueLiveGameHint') }}</span>
+            </template>
+            <template v-else>
+              <Shield class="w-4 h-4 text-amber-400 shrink-0" />
+              <span class="text-sm font-semibold">{{ t('queuePostMatchTitle') }}</span>
+              <span class="text-[11px] text-muted-foreground truncate">{{ t('queuePostMatchHint') }}</span>
+            </template>
           </div>
-          <div class="flex items-center gap-3">
+          <div class="flex items-center gap-3 shrink-0">
             <router-link
               :to="{ name: 'queue-match', params: { id: queue.postMatch.value.queueMatchId } }"
-              class="text-xs text-primary hover:underline"
-            >{{ t('queuePostMatchOpen') }}</router-link>
+              :class="queue.postMatch.value.live
+                ? 'inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-green-500/15 text-green-400 border border-green-500/30 hover:bg-green-500/25 transition-colors'
+                : 'text-xs text-primary hover:underline'"
+            >
+              <Swords v-if="queue.postMatch.value.live" class="w-3.5 h-3.5" />
+              {{ queue.postMatch.value.live ? t('queueGoToMatchRoom') : t('queuePostMatchOpen') }}
+            </router-link>
             <button type="button" class="text-xs text-muted-foreground hover:text-foreground" @click="queue.dismissPostMatch()">
               {{ t('dismiss') }}
             </button>

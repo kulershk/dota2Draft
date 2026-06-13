@@ -993,6 +993,25 @@
         }
       }
     },
+    "queue:liveMatchActive": {
+      "subscribe": {
+        "summary": "Private (single socket): sent during rehydration (queue:getState / queue:getMyState) when the player's queue match already has a live Dota game (a lobby captured dota_match_id). Restores the compact 'live game in progress' block — with rosters, a link to the match room, and report buttons — instead of the full lobby UI, which would wrongly re-show the room name/password mid-game. The server sends this INSTEAD OF queue:matchFound/teamsFormed/lobbyCreated for a started game.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "queueMatchId": { "type": "integer" },
+              "poolId": { "type": "integer" },
+              "team1": { "type": "array", "items": { "type": "object" }, "description": "Radiant roster, captain first" },
+              "team2": { "type": "array", "items": { "type": "object" }, "description": "Dire roster, captain first" },
+              "captain1Id": { "type": "integer" },
+              "captain2Id": { "type": "integer" },
+              "dotaMatchId": { "type": "string", "description": "Dota 2 match id of the in-progress game" }
+            }
+          }
+        }
+      }
+    },
     "queue:gameStarted": {
       "subscribe": {
         "summary": "Broadcast: Dota match ID captured for a queue match (queue-match:${queueMatchId}). Frontend should clear lobby banner.",

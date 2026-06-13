@@ -101,9 +101,12 @@ const lobbyPlayersJoined = ref<string[]>([])
 const queueError = ref<string | null>(null)
 const cancelled = ref<string | null>(null)
 
-// Snapshot of the just-finished inhouse match, kept around after
-// queue:gameStarted clears activeMatch/teamsFormed so the player still has
-// a UI surface for filing toxic / grief reports during the report window.
+// Snapshot of the in-progress / just-finished inhouse match, kept around after
+// queue:gameStarted clears activeMatch/teamsFormed so the player still has a UI
+// surface for filing toxic / grief reports and a link back to the match room.
+// `live` is true while the Dota game is in progress (set on gameStarted /
+// liveMatchActive, flipped false on queue:liveStatsEnd) so the queue page can
+// show "live game in progress" vs the finished/report framing.
 // Cleared when a new match begins or the user dismisses it.
 export interface PostMatchSnapshot {
   queueMatchId: number
@@ -113,6 +116,7 @@ export interface PostMatchSnapshot {
   captain1Id: number
   captain2Id: number
   snapshotAt: number
+  live: boolean
 }
 const postMatch = ref<PostMatchSnapshot | null>(null)
 
@@ -403,8 +407,9 @@ function initSocket() {
 
   socket.on('queue:gameStarted', (_data: { queueMatchId: number; dotaMatchId: string }) => {
     // Snapshot the just-started match BEFORE clearing the active-match
-    // state so the QueuePage can keep showing the rosters with Report
-    // buttons during the post-match window.
+    // state so the QueuePage can keep showing the rosters with a link to the
+    // match room + Report buttons while the game is live and during the
+    // post-match report window. live=true → "live game in progress" framing.
     const am = activeMatch.value
     const tf = teamsFormed.value
     if (am && tf) {
@@ -416,6 +421,7 @@ function initSocket() {
         captain1Id: am.captain1.playerId,
         captain2Id: am.captain2.playerId,
         snapshotAt: Date.now(),
+        live: true,
       }
     }
     activeMatch.value = null
@@ -424,6 +430,43 @@ function initSocket() {
     coinFlip.value = null
     lobbyInfo.value = null
     cancelled.value = null
+  })
+
+  // Rehydration of an already-live game (page reload mid-match). The server
+  // sends this instead of matchFound/teamsFormed/lobbyCreated once the Dota
+  // game has launched, so we restore the compact "live game" block directly —
+  // no full lobby UI (which would wrongly re-show name/password mid-game) and
+  // no spurious ready-sound from activeMatch flipping.
+  socket.on('queue:liveMatchActive', (data: {
+    queueMatchId: number; poolId: number
+    team1: QueuePlayer[]; team2: QueuePlayer[]
+    captain1Id: number; captain2Id: number; dotaMatchId?: string
+  }) => {
+    cancelled.value = null
+    activeMatch.value = null
+    pickState.value = null
+    teamsFormed.value = null
+    coinFlip.value = null
+    lobbyInfo.value = null
+    postMatch.value = {
+      queueMatchId: data.queueMatchId,
+      poolId: data.poolId,
+      team1: data.team1,
+      team2: data.team2,
+      captain1Id: data.captain1Id,
+      captain2Id: data.captain2Id,
+      snapshotAt: Date.now(),
+      live: true,
+    }
+  })
+
+  // The live-stats poller stopped → the Dota game ended. Drop the "live"
+  // framing on our snapshot so the block reads as a finished match (report
+  // window) instead of claiming a game is still in progress.
+  socket.on('queue:liveStatsEnd', (data: { queueMatchId?: number }) => {
+    if (postMatch.value && data?.queueMatchId === postMatch.value.queueMatchId) {
+      postMatch.value = { ...postMatch.value, live: false }
+    }
   })
 
   socket.on('queue:chatHistory', (data: { poolId: number; messages: QueueChatMessage[] }) => {

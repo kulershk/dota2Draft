@@ -507,10 +507,29 @@ export function registerQueueHandlers(socket, io) {
       const match = activeQueueMatches.get(inMatchId)
       if (match) {
         socket.join(`queue-match:${inMatchId}`)
-        socket.emit('queue:matchFound', buildMatchFoundPayload(match))
-        if (match.status === 'picking') {
+        // If the Dota game already launched, restore the compact "live game"
+        // block (queue:liveMatchActive) instead of the full lobby UI — the
+        // latter would wrongly re-show the room name/password for a game
+        // already in progress, and flicker activeMatch (re-triggering the
+        // ready sound). Skip the lookup during picking (can't be live yet).
+        const liveDotaId = match.status !== 'picking'
+          ? await queueLiveDotaMatchId(inMatchId).catch(() => null)
+          : null
+        if (liveDotaId) {
+          socket.emit('queue:liveMatchActive', {
+            queueMatchId: inMatchId,
+            poolId: match.poolId,
+            team1: [match.captain1, ...match.captain1Picks],
+            team2: [match.captain2, ...match.captain2Picks],
+            captain1Id: match.captain1.playerId,
+            captain2Id: match.captain2.playerId,
+            dotaMatchId: liveDotaId,
+          })
+        } else if (match.status === 'picking') {
+          socket.emit('queue:matchFound', buildMatchFoundPayload(match))
           socket.emit('queue:pickState', buildPickStatePayload(match))
         } else {
+          socket.emit('queue:matchFound', buildMatchFoundPayload(match))
           const team1 = [match.captain1, ...match.captain1Picks]
           const team2 = [match.captain2, ...match.captain2Picks]
           socket.emit('queue:teamsFormed', { queueMatchId: inMatchId, team1, team2 })
@@ -664,11 +683,29 @@ export function registerQueueHandlers(socket, io) {
       const match = activeQueueMatches.get(qmId)
       if (match) {
         socket.join(`queue-match:${qmId}`)
-        socket.emit('queue:matchFound', buildMatchFoundPayload(match))
 
-        if (match.status === 'picking') {
+        // If the Dota game already launched, restore the compact "live game"
+        // block (queue:liveMatchActive) instead of the full lobby UI — the
+        // latter would wrongly re-show the room name/password for a game
+        // already in progress. Skip the lookup during picking (can't be live).
+        const liveDotaId = match.status !== 'picking'
+          ? await queueLiveDotaMatchId(qmId).catch(() => null)
+          : null
+        if (liveDotaId) {
+          socket.emit('queue:liveMatchActive', {
+            queueMatchId: qmId,
+            poolId: match.poolId,
+            team1: [match.captain1, ...match.captain1Picks],
+            team2: [match.captain2, ...match.captain2Picks],
+            captain1Id: match.captain1.playerId,
+            captain2Id: match.captain2.playerId,
+            dotaMatchId: liveDotaId,
+          })
+        } else if (match.status === 'picking') {
+          socket.emit('queue:matchFound', buildMatchFoundPayload(match))
           socket.emit('queue:pickState', buildPickStatePayload(match))
         } else {
+          socket.emit('queue:matchFound', buildMatchFoundPayload(match))
           // Teams are already formed (lobby_creating or live)
           const team1 = [match.captain1, ...match.captain1Picks]
           const team2 = [match.captain2, ...match.captain2Picks]
@@ -1478,6 +1515,22 @@ async function cancelQueueMatch(queueMatchId, reason, io) {
   // Auto-requeue subscribers AFTER playerInMatch is cleared, otherwise
   // _doEnqueue rejects them as already in a match.
   autoRequeueEligible(io, allPlayerIds, poolId).catch(() => {})
+}
+
+// The Dota match id once a queue match's game has launched (a lobby row
+// captured a dota_match_id), else null. Lets the rehydrate paths tell the
+// lobby phase from a live game: a live game restores the compact
+// queue:liveMatchActive block instead of the full lobby UI.
+async function queueLiveDotaMatchId(queueMatchId) {
+  const row = await queryOne(
+    `SELECT ml.dota_match_id
+       FROM match_lobbies ml
+       JOIN queue_matches qm ON qm.match_id = ml.match_id
+      WHERE qm.id = $1 AND ml.dota_match_id IS NOT NULL
+      ORDER BY ml.id DESC LIMIT 1`,
+    [queueMatchId]
+  )
+  return row?.dota_match_id || null
 }
 
 function buildMatchFoundPayload(match) {
