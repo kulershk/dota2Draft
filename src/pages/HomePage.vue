@@ -612,8 +612,15 @@ onUnmounted(() => {
               </div>
               <div class="flex flex-col justify-between gap-1 flex-1 min-w-0 h-[84px]">
                 <div class="flex flex-col gap-1 min-w-0">
-                  <span class="text-[13px] font-bold text-[#F1F5F9] leading-[1.2] truncate">{{ streamer.twitch_username }}</span>
-                  <span class="text-[11px] text-[#94A3B8] leading-[1.3] line-clamp-2">{{ streamer.stream.title }}</span>
+                  <!-- Community member: the linked player account that's streaming -->
+                  <div class="flex items-center gap-1.5 min-w-0">
+                    <img v-if="streamer.avatar_url" :src="streamer.avatar_url" class="w-4 h-4 rounded object-cover bg-[#1E293B] shrink-0" alt="" />
+                    <span class="text-[13px] font-bold text-[#F1F5F9] leading-[1.2] truncate">{{ streamer.name }}</span>
+                  </div>
+                  <span class="flex items-center gap-1 text-[10px] font-semibold text-[#9146FF] leading-[1.2] truncate">
+                    <Twitch class="w-2.5 h-2.5 shrink-0" />{{ streamer.twitch_username }}
+                  </span>
+                  <span class="text-[11px] text-[#94A3B8] leading-[1.3] line-clamp-1">{{ streamer.stream.title }}</span>
                 </div>
                 <div class="flex items-center gap-1.5">
                   <Eye class="w-2.5 h-2.5 text-[#64748B] shrink-0" />
