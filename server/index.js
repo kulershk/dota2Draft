@@ -257,6 +257,16 @@ initDb().then(async () => {
   })
   registerSchedule('cleanup_idle_available_bots', { everyMs: 10 * 60_000 })
 
+  // Keep auto_connect bots logged in. _sendSync only revives an offline/errored
+  // auto_connect bot on a server restart / Go WS reconnect, so without this a
+  // bot that drops while Go stays up would sit Offline forever. Retry every
+  // 5 min (skips bots in an active lobby; staggered inside the method).
+  registerHandler('reconnect_auto_connect_bots', async () => {
+    await botPool._reconnectAutoConnectBots()
+    return { ok: true }
+  })
+  registerSchedule('reconnect_auto_connect_bots', { everyMs: 5 * 60_000 })
+
   // Re-charge dotacoins-funded subscriptions whose period has ended, and lapse
   // the ones that ran out of auto-renew or balance. Hourly is plenty for a
   // 30-day cadence; the job only acts on subs already past expires_at.

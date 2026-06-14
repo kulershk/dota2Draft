@@ -1141,6 +1141,56 @@ class BotPool {
     }
   }
 
+  // Auto-connect bots are meant to stay logged in, but the ONLY place that
+  // reconnects an offline/errored one is _sendSync (server restart / Go WS
+  // reconnect). If the Go service stays connected while a bot drops to
+  // 'offline'/'error', nothing brings it back — so an auto_connect bot can sit
+  // Offline indefinitely. This periodic job closes that gap: reconnect
+  // auto_connect bots that are offline/error and not tied to an active lobby,
+  // staggered 5s apart so several bots on one IP don't trip Steam's login
+  // rate-limit at once.
+  async _reconnectAutoConnectBots() {
+    try {
+      // Reconcile against Go first so we don't reconnect a bot Go already holds
+      // live behind a stale 'offline' row (the Go-side Connect() guard is a
+      // second line of defence against a duplicate session).
+      await this._syncBotStatusesFromGo().catch(() => {})
+      const bots = await query(`
+        SELECT b.id, b.username
+          FROM lobby_bots b
+         WHERE b.auto_connect = TRUE
+           AND b.status IN ('offline', 'error')
+           AND NOT EXISTS (
+             SELECT 1 FROM match_lobbies ml
+              WHERE ml.bot_id = b.id
+                AND ml.status IN ('creating', 'waiting', 'launching', 'active')
+                AND ml.dota_match_id IS NULL
+           )
+         ORDER BY b.id
+      `)
+      if (bots.length === 0) return
+      console.log(`[Bot] Auto-reconnecting ${bots.length} offline auto-connect bot(s) (staggered 5s apart)`)
+      let delay = 0
+      for (const bot of bots) {
+        setTimeout(async () => {
+          // Re-check right before connecting — a deploy, manual action, or the
+          // previous tick may have brought it back in the meantime.
+          const cur = await queryOne('SELECT status FROM lobby_bots WHERE id = $1', [bot.id])
+          if (!cur || (cur.status !== 'offline' && cur.status !== 'error')) return
+          try {
+            console.log(`[Bot] Auto-reconnecting bot ${bot.id} (${bot.username})`)
+            await this.connectBot(bot.id)
+          } catch (e) {
+            console.error(`[Bot] Auto-reconnect failed for ${bot.id}:`, e.message)
+          }
+        }, delay)
+        delay += 5000
+      }
+    } catch (e) {
+      console.error('[Bot] Auto-reconnect error:', e.message)
+    }
+  }
+
   // Safety net: find unresolved games that don't have a pending fetch_match_stats
   // job and enqueue one. Catches games missed during server restarts, manual
   // dotabuff_id edits, or if _scheduleStatsFetch failed.
