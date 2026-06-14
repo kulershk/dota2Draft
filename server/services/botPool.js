@@ -173,10 +173,22 @@ class BotPool {
       })),
     })
 
+    // Before auto-connecting, reconcile against Go's LIVE in-memory state.
+    // init() reset every row to 'offline' on this (re)start, but the Go service
+    // may still hold these bots fully connected. Auto-connecting them off the
+    // stale 'offline' would call Bot.Connect() a second time on a live account,
+    // spinning up a duplicate Steam/GC session that orphans the first — the
+    // duelling goroutines then race b.Status and commonly leave it stuck
+    // 'offline', so the admin page shows Offline even though the bot is ready.
+    // Trust Go's returned states: only connect bots it does NOT already have
+    // live. Best-effort — if Go can't be reached we fall back to the cached rows.
+    await this._syncBotStatusesFromGo().catch(() => {})
+    const current = await query('SELECT id, username, status, auto_connect FROM lobby_bots')
+
     // Auto-connect bots that have auto_connect enabled.
     // Stagger connections by 5s each to avoid Steam rate-limiting / IP throttle
     // when multiple bots share the same IP.
-    const toConnect = bots.filter(b => b.auto_connect && (b.status === 'offline' || b.status === 'error'))
+    const toConnect = current.filter(b => b.auto_connect && (b.status === 'offline' || b.status === 'error'))
     if (toConnect.length > 0) {
       console.log(`[Bot] Auto-connecting ${toConnect.length} bot(s) (staggered 5s apart)`)
       let delay = 0

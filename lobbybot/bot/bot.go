@@ -102,6 +102,24 @@ func (b *Bot) setStatus(status string, errMsg ...string) {
 }
 
 func (b *Bot) Connect() {
+	// Guard against double-connect. A second Connect() on a bot that's already
+	// live (non-terminal status) would create a duplicate Steam client + event
+	// loop on the same account, orphaning the first session; the two goroutines
+	// then race b.Status and can leave the bot stuck reporting 'offline' even
+	// though it's connected. This fires after a Node restart, when the freshly
+	// reset DB makes Node auto-connect bots the Go service still holds live.
+	// Legitimate restarts (RecoverGCSession, idle-recycle, manual reconnect, the
+	// internal reconnect loop) all Disconnect() first, which sets StatusOffline,
+	// so they pass this guard. We re-report status so Node reconciles its cache.
+	b.mu.Lock()
+	cur := b.Status
+	b.mu.Unlock()
+	if cur != StatusOffline && cur != StatusError {
+		b.log(fmt.Sprintf("Connect() ignored — bot already %s", cur))
+		b.ResendStatus()
+		return
+	}
+
 	b.log(fmt.Sprintf("Connecting as %s...", b.Username))
 	b.mu.Lock()
 	b.loginFailedHard = false
