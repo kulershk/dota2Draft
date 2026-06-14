@@ -162,10 +162,36 @@ async function toggleLogs(botId: number) {
   scrollLogsToBottom()
 }
 
+// The log panel lives inside the per-bot v-for, so a plain string ref never
+// binds to a single element (Vue 3). Capture the element of the currently
+// expanded bot via a function ref instead, so auto-scroll actually works.
+function setLogContainer(el: any, botId: number) {
+  if (expandedBotId.value === botId) logContainer.value = (el as HTMLElement | null)
+}
+
 function scrollLogsToBottom() {
   if (logContainer.value) {
     logContainer.value.scrollTop = logContainer.value.scrollHeight
   }
+}
+
+// True when the view is already pinned near the newest line, so incoming logs
+// keep following the tail — but if the admin scrolled up to read history, we
+// leave them where they are instead of yanking them back down.
+function isLogAtBottom() {
+  const el = logContainer.value
+  if (!el) return true
+  return el.scrollHeight - el.scrollTop - el.clientHeight < 60
+}
+
+// Color a log line by what it's telling us — errors red, good news green,
+// in-progress/waiting blue, everything else neutral.
+function logColor(message = '') {
+  const m = message.toLowerCase()
+  if (m.includes('error') || m.includes('failed') || m.includes('reject') || m.includes('lost') || m.includes('timed out')) return 'text-red-400'
+  if (m.includes('ready') || m.includes('available') || m.includes('created') || m.includes('connected') || m.includes('welcomed') || m.includes('captured')) return 'text-green-400'
+  if (m.includes('waiting') || m.includes('invit') || m.includes('connecting') || m.includes('reconnect') || m.includes('logging in')) return 'text-blue-400'
+  return 'text-gray-300'
 }
 
 async function toggleTimeline(botId: number) {
@@ -282,11 +308,12 @@ function onBotStatusChanged(data: any) {
 
 function onBotLog(data: any) {
   if (!botLogs.value[data.botId]) botLogs.value[data.botId] = []
+  // Measure stickiness BEFORE appending — once the new row renders, scrollHeight
+  // changes and we can no longer tell whether we were at the tail.
+  const stick = expandedBotId.value === data.botId && isLogAtBottom()
   botLogs.value[data.botId].push({ time: data.time, message: data.message })
   if (botLogs.value[data.botId].length > 500) botLogs.value[data.botId].shift()
-  if (expandedBotId.value === data.botId) {
-    nextTick(scrollLogsToBottom)
-  }
+  if (stick) nextTick(scrollLogsToBottom)
 }
 
 function onSteamGuardRequired(data: any) {
@@ -582,23 +609,18 @@ onUnmounted(() => {
       <!-- Logs panel -->
       <div v-if="expandedBotId === bot.id" class="border-t border-border">
         <div
-          ref="logContainer"
-          class="bg-[#0d1117] text-[13px] font-mono p-4 max-h-[300px] overflow-y-auto flex flex-col gap-0.5 scroll-smooth"
+          :ref="el => setLogContainer(el, bot.id)"
+          class="bg-[#0d1117] text-[12.5px] font-mono p-3 max-h-[400px] overflow-y-auto scroll-smooth"
         >
-          <div v-if="!(botLogs[bot.id]?.length)" class="text-gray-500 text-center py-4">
+          <div v-if="!(botLogs[bot.id]?.length)" class="text-gray-500 text-center py-6">
             {{ t('noLogs') }}
           </div>
-          <div v-for="(log, idx) in botLogs[bot.id]" :key="idx" class="flex gap-2 leading-tight py-px">
-            <span class="text-gray-600 shrink-0 select-none">{{ log.time?.slice(11, 19) }}</span>
-            <span
-              :class="log.message?.includes('Error') || log.message?.includes('error') || log.message?.includes('failed') || log.message?.includes('Failed')
-                ? 'text-red-400'
-                : log.message?.includes('ready') || log.message?.includes('Ready') || log.message?.includes('available') || log.message?.includes('created') || log.message?.includes('Connected')
-                  ? 'text-green-400'
-                  : log.message?.includes('waiting') || log.message?.includes('Waiting') || log.message?.includes('Invit')
-                    ? 'text-blue-400'
-                    : 'text-gray-300'"
-            >{{ log.message }}</span>
+          <div
+            v-for="(log, idx) in botLogs[bot.id]" :key="idx"
+            class="flex gap-3 px-2 py-[3px] rounded hover:bg-white/[0.04] transition-colors"
+          >
+            <span class="text-gray-500 shrink-0 select-none tabular-nums">{{ log.time?.slice(11, 19) }}</span>
+            <span class="min-w-0 break-words whitespace-pre-wrap leading-relaxed" :class="logColor(log.message)">{{ log.message }}</span>
           </div>
         </div>
       </div>
