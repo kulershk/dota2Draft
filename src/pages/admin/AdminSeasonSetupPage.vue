@@ -138,12 +138,19 @@ const wtPlayerId = ref<number | null>(null)
 const wtPlayerLabel = ref('')
 let wtSearchTimer: ReturnType<typeof setTimeout> | undefined
 
-// Adjust modal
+// Adjust modal — opened either from a leaderboard row (player pre-selected)
+// or via the "Adjust points" button (search any player, incl. not-yet-ranked).
+interface AdjustTarget { player_id: number; display_name: string; points?: number; avatar_url?: string | null }
 const adjustOpen = ref(false)
-const adjustPlayer = ref<LeaderRow | null>(null)
+const adjustPlayer = ref<AdjustTarget | null>(null)
 const adjustDelta = ref(0)
 const adjustReason = ref('')
 const adjustSaving = ref(false)
+// Search mode is on when the modal was opened without a pre-selected player.
+const adjustSearchMode = ref(false)
+const adjustSearchQuery = ref('')
+const adjustSearchResults = ref<Array<{ id: number; name: string; display_name?: string | null; avatar_url?: string | null; mmr?: number }>>([])
+let adjustSearchTimer: ReturnType<typeof setTimeout> | undefined
 
 // ── Custom groups ────────────────────────────────────────────────
 // Admin-defined per-season groups with optional matchmaking rules.
@@ -599,7 +606,56 @@ function openAdjust(row: LeaderRow) {
   adjustPlayer.value = row
   adjustDelta.value = 0
   adjustReason.value = ''
+  adjustSearchMode.value = false
+  adjustSearchQuery.value = ''
+  adjustSearchResults.value = []
   adjustOpen.value = true
+}
+
+// Open the modal with no pre-selected player — pick any player by search.
+function openAdjustAny() {
+  adjustPlayer.value = null
+  adjustDelta.value = 0
+  adjustReason.value = ''
+  adjustSearchMode.value = true
+  adjustSearchQuery.value = ''
+  adjustSearchResults.value = []
+  adjustOpen.value = true
+}
+
+function onAdjustSearchInput() {
+  if (adjustSearchTimer) clearTimeout(adjustSearchTimer)
+  const q = adjustSearchQuery.value.trim()
+  if (q.length < 2) { adjustSearchResults.value = []; return }
+  adjustSearchTimer = setTimeout(async () => {
+    try {
+      const res: any = await api.searchPlayers(q)
+      adjustSearchResults.value = Array.isArray(res) ? res : (res?.players || [])
+    } catch {
+      adjustSearchResults.value = []
+    }
+  }, 200)
+}
+
+function selectAdjustPlayer(p: { id: number; name: string; display_name?: string | null; avatar_url?: string | null }) {
+  // Reuse the player's current leaderboard points if they're already ranked,
+  // so the modal shows their balance; otherwise points stays undefined and the
+  // backend will start them from the season's starting_points.
+  const existing = leader.value.find((r) => r.player_id === p.id)
+  adjustPlayer.value = {
+    player_id: p.id,
+    display_name: p.display_name || p.name,
+    points: existing ? existing.points : undefined,
+    avatar_url: p.avatar_url ?? existing?.avatar_url ?? null,
+  }
+  adjustSearchQuery.value = ''
+  adjustSearchResults.value = []
+}
+
+function clearAdjustPlayer() {
+  adjustPlayer.value = null
+  adjustSearchQuery.value = ''
+  adjustSearchResults.value = []
 }
 
 async function submitAdjust() {
@@ -807,6 +863,11 @@ onMounted(load)
 
     <!-- Leaderboard tab -->
     <div v-else-if="tab === 'leaderboard'" class="card overflow-hidden">
+      <div class="px-4 py-3 border-b border-border/40 flex items-center justify-end">
+        <button type="button" class="btn-primary text-sm inline-flex items-center gap-1.5" @click="openAdjustAny">
+          <Pencil class="w-3.5 h-3.5" />{{ t('seasonAdjustAny') }}
+        </button>
+      </div>
       <div v-if="leaderLoading" class="text-sm text-muted-foreground p-4">{{ t('loading') }}…</div>
       <div v-else-if="leader.length === 0" class="text-center text-muted-foreground py-10">
         <Trophy class="w-10 h-10 mx-auto mb-3 opacity-40" />
@@ -1289,20 +1350,52 @@ onMounted(load)
     <div v-if="adjustOpen" class="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" @click.self="adjustOpen = false">
       <div class="card w-full max-w-md p-6">
         <h2 class="text-lg font-bold mb-1">{{ t('seasonAdjust') }}</h2>
-        <p class="text-xs text-muted-foreground mb-4">{{ adjustPlayer?.display_name }} — {{ fmtPoints(adjustPlayer?.points || 0) }} pts</p>
+
+        <!-- Player picker (search mode, before a player is chosen) -->
+        <div v-if="adjustSearchMode && !adjustPlayer" class="relative mt-3 mb-1">
+          <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+          <input
+            v-model="adjustSearchQuery"
+            type="text"
+            :placeholder="t('seasonAdjustSearch')"
+            class="w-full bg-accent/40 border border-border/40 rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40"
+            @input="onAdjustSearchInput"
+          />
+          <div v-if="adjustSearchResults.length" class="absolute z-20 mt-1 w-full flex flex-col border border-border/30 rounded-lg overflow-hidden bg-card shadow-lg">
+            <button
+              v-for="p in adjustSearchResults" :key="p.id"
+              type="button"
+              class="px-3 py-1.5 flex items-center gap-2 text-left hover:bg-accent/40 transition-colors"
+              @click="selectAdjustPlayer(p)"
+            >
+              <img v-if="p.avatar_url" :src="p.avatar_url" class="w-5 h-5 rounded-full" />
+              <div v-else class="w-5 h-5 rounded-full bg-accent" />
+              <span class="text-xs flex-1 truncate">{{ p.display_name || p.name }}</span>
+              <span class="text-[10px] text-muted-foreground">{{ p.mmr ?? 0 }} MMR</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Selected player -->
+        <p v-if="adjustPlayer" class="text-xs text-muted-foreground mb-4 flex items-center gap-1.5">
+          <span class="text-foreground font-semibold">{{ adjustPlayer.display_name }}</span>
+          <span>— {{ adjustPlayer.points != null ? `${fmtPoints(adjustPlayer.points)} pts` : t('seasonAdjustNotRanked') }}</span>
+          <button v-if="adjustSearchMode" type="button" class="ml-1 text-primary hover:underline" @click="clearAdjustPlayer">{{ t('seasonAdjustChange') }}</button>
+        </p>
+
         <div class="flex flex-col gap-3">
           <label class="block">
             <span class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{{ t('seasonDelta') }}</span>
-            <input v-model.number="adjustDelta" type="number" step="any" class="mt-1 w-full bg-accent/40 border border-border/40 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-primary/40" />
+            <input v-model.number="adjustDelta" type="number" step="any" :disabled="!adjustPlayer" class="mt-1 w-full bg-accent/40 border border-border/40 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-50" />
           </label>
           <label class="block">
             <span class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{{ t('seasonReason') }}</span>
-            <input v-model="adjustReason" type="text" :placeholder="t('seasonReasonPlaceholder')" class="mt-1 w-full bg-accent/40 border border-border/40 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40" />
+            <input v-model="adjustReason" type="text" :placeholder="t('seasonReasonPlaceholder')" :disabled="!adjustPlayer" class="mt-1 w-full bg-accent/40 border border-border/40 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-50" />
           </label>
         </div>
         <div class="flex justify-end gap-2 mt-5">
           <button type="button" class="px-3 py-2 text-sm rounded-md hover:bg-accent" @click="adjustOpen = false">{{ t('cancel') }}</button>
-          <button type="button" class="btn-primary px-3 py-2 text-sm" :disabled="!adjustDelta || adjustSaving" @click="submitAdjust">
+          <button type="button" class="btn-primary px-3 py-2 text-sm" :disabled="!adjustPlayer || !adjustDelta || adjustSaving" @click="submitAdjust">
             {{ adjustSaving ? `${t('saving')}…` : t('apply') }}
           </button>
         </div>
