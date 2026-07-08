@@ -8,15 +8,15 @@ Every finding below was verified by reading the actual code. Status legend: ☐ 
 
 ## 🔴 Critical
 
-- ☐ **C1 — Unauthenticated lobby GET leaks the lobby password** — `server/routes/lobby.js:222`
+- ☑ **C1 — Unauthenticated lobby GET leaks the lobby password** — `server/routes/lobby.js:222`
   No `requireCompPermission` (unlike the POST at `:202`). Runs `SELECT *` and returns the row incl. `match_lobbies.password` (`db.js:662`). Also does DB writes (`UPDATE … status`, lines 235/243) for anonymous callers. Sequential `matchId`/`gameNumber` → anyone can read the password and join a private game.
   **Fix:** add `requireCompPermission(req, res, compId)` + verify match belongs to `compId`; return only the fields the client needs (never `password` to non-owners).
 
-- ☐ **C2 — IDOR on launch / cancel / reset** — `server/routes/lobby.js:252, 274, 296`
+- ☑ **C2 — IDOR on launch / cancel / reset** — `server/routes/lobby.js:252, 274, 296`
   Permission is checked against `compId`, but the lobby is looked up by `matchId + gameNumber` only — the match is never verified to belong to `compId`. A manager of comp A can launch/cancel/hard-delete comp B's and queue lobbies.
   **Fix:** add `AND competition_id = $compId` (or a `matches` ownership check like the create route at `:212`) to each lookup.
 
-- ☐ **C3 — Hardcoded `"waiting"` clobbers real lobby status** — `lobbybot/bot/bot.go:936`
+- ☑ **C3 — Hardcoded `"waiting"` clobbers real lobby status** — `lobbybot/bot/bot.go:936`
   Line 759 sends the correctly-derived `cointoss`/`active`/`waiting`; line 936 then sends a hardcoded `"waiting"` on every cache tick, overwriting it. Re-breaks commit `0f505d1`. Live games display "waiting".
   **Fix:** delete the trailing hardcoded send (the derived send at 759 already covers it), or reuse the derived `lobbyStatus`.
 
@@ -32,7 +32,7 @@ Every finding below was verified by reading the actual code. Status legend: ☐ 
 
 ## 🟠 High
 
-- ☐ **H1 — Stale WS `close` nulls the live connection** — `server/services/botPool.js:58`
+- ☑ **H1 — Stale WS `close` nulls the live connection** — `server/services/botPool.js:58`
   `ws.on('close')` does `this.goWs = null` unconditionally; a superseded socket's late close wipes the live reconnected one. All Node→Go commands break until next reconnect.
   **Fix:** `if (this.goWs === ws) this.goWs = null`.
 
@@ -40,11 +40,11 @@ Every finding below was verified by reading the actual code. Status legend: ☐ 
   `_findAvailableBotId` is a bare `SELECT … LIMIT 1`; ~15 awaits pass before the bot is marked `busy`. Concurrent tournament+queue creates claim the same bot.
   **Fix:** atomic claim — `UPDATE lobby_bots SET status='busy' WHERE id=(SELECT … FOR UPDATE SKIP LOCKED) RETURNING id`, or a single `UPDATE … WHERE status='available' … RETURNING`.
 
-- ☐ **H3 — `parseCompSettings` destroys legal zero values** — `server/helpers/competition.js:36, 39`
+- ☑ **H3 — `parseCompSettings` destroys legal zero values** — `server/helpers/competition.js:36, 39`
   `Number(x) || default` collapses `lobbyServerRegion 0` (US West)→3 and `lobbyDotaTvDelay 0` (None)→1. Settings page round-trips → permanent corruption on next save.
   **Fix:** use a `numOr(v, default)` helper that only falls back on `null`/`undefined`/`NaN`, not on `0`.
 
-- ☐ **H4 — Queue region 0 (US West) coerced to 3** — `server/services/botPool.js:2044` (+INSERTs `2097`, `2213`, `2302`)
+- ☑ **H4 — Queue region 0 (US West) coerced to 3** — `server/services/botPool.js:2044` (+INSERTs `2097`, `2213`, `2302`)
   `pool.lobby_server_region || 3` rewrites 0→3; queue pools can never host US West, and the stored value is corrupted too.
   **Fix:** `pool.lobby_server_region ?? 3` at every site.
 
@@ -100,7 +100,7 @@ Every finding below was verified by reading the actual code. Status legend: ☐ 
   `radiantWin := outcome == 2`; Unknown(0) and NotScored(64–69) become bogus Dire victories.
   **Fix:** switch on outcome — 2=radiant, 3=dire, else "not scored" (don't record a winner).
 
-- ☐ **M10 — Lobby reset orphans the bot** — `server/routes/lobby.js:306`
+- ☑ **M10 — Lobby reset orphans the bot** — `server/routes/lobby.js:306`
   Deletes `match_lobbies` rows without `cancelLobby`; Go lobby stays live, bot stuck `busy`.
   **Fix:** call `botPool.cancelLobby(lobby.id)` for each active lobby before/instead of the raw DELETE.
 
@@ -108,15 +108,15 @@ Every finding below was verified by reading the actual code. Status legend: ☐ 
   DB awaits outside try/catch → transient DB error = unhandled rejection = server crash. And the `:71` bot-availability pre-check reads the stale DB mirror (no Go reconcile) while `createLobby` reconciles → both-ready captains falsely told "no bot available".
   **Fix:** wrap each async handler body in try/catch; drop the redundant `:71` pre-check (or reconcile first).
 
-- ☐ **M12 — `/ws/lobbybot` fails open** — `server/index.js:197`
+- ☑ **M12 — `/ws/lobbybot` fails open** — `server/index.js:197`
   `if (expected && token !== expected)` — when `BOT_SERVICE_TOKEN` is unset/empty, no check; any client can impersonate the Go service.
   **Fix:** reject the upgrade when the token is unconfigured (fail closed).
 
-- ☐ **M13 — `POST /api/admin/bots` returns the plaintext password** — `server/routes/lobby.js:51` + `botPool.js:1631`
+- ☑ **M13 — `POST /api/admin/bots` returns the plaintext password** — `server/routes/lobby.js:51` + `botPool.js:1631`
   `addBot` does `RETURNING *`; route does `res.json(bot)` → password in response body.
   **Fix:** return only safe fields (`id, username, status, …`), never `password`.
 
-- ☐ **M14 — Docs out of date (violates CLAUDE.md rule)** — `server/docs/openapi.json`, `server/docs/asyncapi.json`
+- ☑ **M14 — Docs out of date (violates CLAUDE.md rule)** — `server/docs/openapi.json`, `server/docs/asyncapi.json`
   13 of 18 `lobby.js` routes missing from `openapi.json`; `lobby:teamIds`, `lobby:matchIdCaptured`, `queue:cancelled`, `queue:error` missing from `asyncapi.json`.
   **Fix:** document every route/event per the project rule (fold into the relevant fix commits).
 
@@ -128,7 +128,7 @@ Every finding below was verified by reading the actual code. Status legend: ☐ 
   Frontend subscribes to it; server never sends it (grep-confirmed) → Guard modal never auto-opens.
   **Fix:** emit the event from the status handler when a bot enters `awaiting_guard`, or open the modal off the status badge.
 
-- ☐ **L2 — Avatar upload buffers before auth** — `server/routes/lobby.js:169`
+- ☑ **L2 — Avatar upload buffers before auth** — `server/routes/lobby.js:169`
   `multer` runs before the permission check → unauth clients can buffer 5 MB.
   **Fix:** check permission before the multer middleware (or apply an auth guard ahead of it).
 
