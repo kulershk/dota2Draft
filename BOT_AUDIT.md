@@ -37,7 +37,7 @@ Every finding below was verified by reading the actual code. Status legend: ☐ 
   `ws.on('close')` does `this.goWs = null` unconditionally; a superseded socket's late close wipes the live reconnected one. All Node→Go commands break until next reconnect.
   **Fix:** `if (this.goWs === ws) this.goWs = null`.
 
-- ☐ **H2 — Non-atomic bot claim → double-booking** — `server/services/botPool.js:349` + `1994` / `2099`
+- ☑ **H2 — Non-atomic bot claim → double-booking** — `server/services/botPool.js:349` + `1994` / `2099`
   `_findAvailableBotId` is a bare `SELECT … LIMIT 1`; ~15 awaits pass before the bot is marked `busy`. Concurrent tournament+queue creates claim the same bot.
   **Fix:** atomic claim — `UPDATE lobby_bots SET status='busy' WHERE id=(SELECT … FOR UPDATE SKIP LOCKED) RETURNING id`, or a single `UPDATE … WHERE status='available' … RETURNING`.
 
@@ -49,7 +49,7 @@ Every finding below was verified by reading the actual code. Status legend: ☐ 
   `pool.lobby_server_region || 3` rewrites 0→3; queue pools can never host US West, and the stored value is corrupted too.
   **Fix:** `pool.lobby_server_region ?? 3` at every site.
 
-- ☐ **H5 — DotaTV delay values wrong** — `lobbybot/bot/bot.go:1102`
+- ☑ **H5 — DotaTV delay values wrong** — `lobbybot/bot/bot.go:1102`
   UI int cast verbatim into `LobbyDotaTVDelay` (seconds: 0=10s, 1=120s, 2=300s, 3=900s). Default "10 min" → 2 min; "2 min" → 15 min; "None" → 10s. CLAUDE.md table is also wrong.
   **Fix:** map UI value → correct enum explicitly; fix the CLAUDE.md table and the UI options to match the real GC enum.
 
@@ -57,7 +57,7 @@ Every finding below was verified by reading the actual code. Status legend: ☐ 
   The adjacent `GCConnectionStatusChanged` handler (`:293`) guards on `activeLobbyID==""`, but `ClientWelcomed` does not → a GC re-welcome mid-lobby double-books the bot.
   **Fix:** same `if b.activeLobbyID == ""` guard before `setStatus(StatusAvailable)`.
 
-- ☐ **H7 — Reconcile wipes `error_message`** — `server/services/botPool.js:215` (via `331`)
+- ☑ **H7 — Reconcile wipes `error_message`** — `server/services/botPool.js:215` (via `331`)
   `_syncBotStatusesFromGo` calls `_onBotStatus({botId, status})` with no `error`, and `_onBotStatus` does `else updates.error_message = null`. Every admin-page load erases the error text it should display.
   **Fix:** only clear `error_message` when a status event actually carries error info / on an explicit non-error status; don't null it during a bare reconcile.
 
@@ -77,7 +77,7 @@ Every finding below was verified by reading the actual code. Status legend: ☐ 
   Lock released between reading `Status` and acting; two near-simultaneous connects spawn duplicate Steam clients/event loops.
   **Fix:** hold `b.mu` across the check *and* the `setStatus(StatusConnecting)` transition (compare-and-set).
 
-- ☐ **M4 — Auto-reconnect has no failure backoff** — `server/services/botPool.js:1174`
+- ☑ **M4 — Auto-reconnect has no failure backoff** — `server/services/botPool.js:1174`
   `_reconnectAutoConnectBots` retries `error`/`offline` bots every 5 min, re-minting Steam tokens for bad-credential/guard-stuck bots forever → Steam rate-limit risk.
   **Fix:** track consecutive failures per bot and exponentially back off / stop after N; skip bots in `awaiting_guard`.
 
@@ -85,11 +85,11 @@ Every finding below was verified by reading the actual code. Status legend: ☐ 
   Per-bot buffered(1) channel; a stale token makes the next lobby "start" instantly and get abandoned.
   **Fix:** drain the channel when a new lobby starts (`runLobby`), or make it per-lobby.
 
-- ☐ **M6 — `CancelLobby` frees the bot while `runLobby` is still cleaning up** — `lobbybot/lobby/manager.go:414`
+- ☑ **M6 — `CancelLobby` frees the bot while `runLobby` is still cleaning up** — `lobbybot/lobby/manager.go:414`
   `SetBusy(false)` runs immediately; the still-running `runLobby` then clears `activeLobbyID`/`expectedTeams` of whatever new lobby the bot was reassigned to.
   **Fix:** let `runLobby` own the free/cleanup (signal via ctx and wait), don't double-free in `CancelLobby`.
 
-- ☐ **M7 — `autoAssignTeams` toggle is dead** — `lobbybot/lobby/manager.go:120`
+- ☑ **M7 — `autoAssignTeams` toggle is dead** — `lobbybot/lobby/manager.go:120`
   Stored but never read; kick-enforcement runs unconditionally.
   **Fix:** gate the enforcement block on `lobby.AutoAssignTeams`, or remove the option.
 
@@ -97,7 +97,7 @@ Every finding below was verified by reading the actual code. Status legend: ☐ 
   No GC/connection health check → a bot with a dead GC session gets the next match.
   **Fix:** only go `available` if GC session is live; otherwise `connecting_gc`/`error`.
 
-- ☐ **M9 — Match outcome ≠ 2 recorded as Dire win** — `lobbybot/bot/bot.go:485`
+- ☑ **M9 — Match outcome ≠ 2 recorded as Dire win** — `lobbybot/bot/bot.go:485`
   `radiantWin := outcome == 2`; Unknown(0) and NotScored(64–69) become bogus Dire victories.
   **Fix:** switch on outcome — 2=radiant, 3=dire, else "not scored" (don't record a winner).
 
@@ -105,7 +105,7 @@ Every finding below was verified by reading the actual code. Status legend: ☐ 
   Deletes `match_lobbies` rows without `cancelLobby`; Go lobby stays live, bot stuck `busy`.
   **Fix:** call `botPool.cancelLobby(lobby.id)` for each active lobby before/instead of the raw DELETE.
 
-- ☐ **M11 — matchReady handlers crash-prone + stale bot pre-check** — `server/socket/matchReady.js:45–71`
+- ☑ **M11 — matchReady handlers crash-prone + stale bot pre-check** — `server/socket/matchReady.js:45–71`
   DB awaits outside try/catch → transient DB error = unhandled rejection = server crash. And the `:71` bot-availability pre-check reads the stale DB mirror (no Go reconcile) while `createLobby` reconciles → both-ready captains falsely told "no bot available".
   **Fix:** wrap each async handler body in try/catch; drop the redundant `:71` pre-check (or reconcile first).
 
@@ -125,7 +125,7 @@ Every finding below was verified by reading the actual code. Status legend: ☐ 
 
 ## 🟢 Low
 
-- ☐ **L1 — `bot:steamGuardRequired` never emitted** — `src/pages/admin/AdminBotsPage.vue:329`
+- ☑ **L1 — `bot:steamGuardRequired` never emitted** — `src/pages/admin/AdminBotsPage.vue:329`
   Frontend subscribes to it; server never sends it (grep-confirmed) → Guard modal never auto-opens.
   **Fix:** emit the event from the status handler when a bot enters `awaiting_guard`, or open the modal off the status badge.
 
@@ -136,15 +136,21 @@ Every finding below was verified by reading the actual code. Status legend: ☐ 
 - ☐ **L3 — Series score never carried** — `lobbybot/bot/bot.go:1113`
   Only `SeriesType` is set; `RadiantSeriesWins`/`DireSeriesWins` never set → game 2+ of a Bo3 shows 0-0.
   **Fix:** pass the current series score into the lobby details for games ≥ 2.
+  **Deferred:** needs new payload fields + Node computing the running series score from prior games. Cosmetic only (the in-lobby series counter); real results are tracked in the DB. Left for a dedicated change.
 
 - ☐ **L4 — Lobby timeout counts until game start, not player assembly** — `lobbybot/lobby/manager.go:248`
   A full, unlaunched lobby is destroyed at `timeoutMinutes`.
   **Fix:** reset/stop the timeout once all expected players have joined.
+  **Deferred:** requires runLobby to learn "all expected players joined" (a new bot→manager signal) and restructure the select's timer. Behaviour-changing in the lobby lifecycle; wants runtime testing. Workaround today: raise `lobbyTimeoutMinutes`. Left for a dedicated change.
 
 ---
 
-## Suggested order
+## Status
 
-1. **Batch A (high-impact, low-risk):** C1, C2, C3, H1, H3, H4 — plus M10, M12, M13, M14 docs as they're touched.
-2. **Batch B (Go concurrency, needs care):** C4, C5, H6, M1, M2, M3, M8.
-3. **Batch C (remaining correctness/UX):** H2, H5, H7, M4–M9, M11, L1–L4.
+**28 of 30 fixed** across four themed commits on branch `fix/bot-pipeline-audit`. Remaining: L3, L4 (both low severity, deferred with notes above). One documented non-crash residual under C5 (poll-vs-watcher field races) also left for a race-detector pass.
+
+## Order used
+
+1. **Batch A (high-impact, low-risk):** C1, C2, C3, H1, H3, H4, M10, M12, M13, M14, L2.
+2. **Batch B (Go concurrency):** C4, C5, H6, M1, M2, M3, M5, M8.
+3. **Batch C (remaining correctness/UX):** H2, H5, H7, M4, M6, M7, M9, M11, L1.
