@@ -14,33 +14,33 @@ import (
 type SendFunc func(msgType string, data interface{}) error
 
 type Lobby struct {
-	ID                  string
-	GameName            string
-	Password            string
-	ServerRegion        int
-	GameMode            int
-	AutoAssignTeams     bool
-	LeagueID            int
-	DotaTvDelay         int
-	Cheats              bool
-	AllowSpectating     bool
-	PauseSetting        int
-	SelectionPriority   int
-	CmPick              int
-	PenaltyRadiant      int
-	PenaltyDire         int
-	SeriesType          int
+	ID                    string
+	GameName              string
+	Password              string
+	ServerRegion          int
+	GameMode              int
+	AutoAssignTeams       bool
+	LeagueID              int
+	DotaTvDelay           int
+	Cheats                bool
+	AllowSpectating       bool
+	PauseSetting          int
+	SelectionPriority     int
+	CmPick                int
+	PenaltyRadiant        int
+	PenaltyDire           int
+	SeriesType            int
 	RadiantName           string
 	DireName              string
 	ExpectedRadiantTeamId int
 	ExpectedDireTeamId    int
 	ExpectedPlayers       []protocol.LobbyPlayer
-	JoinedPlayers   []protocol.LobbyPlayer
-	Bot             *bot.Bot
-	Status          string
-	MatchID         string
-	TimeoutMinutes  int
-	cancel          context.CancelFunc
+	JoinedPlayers         []protocol.LobbyPlayer
+	Bot                   *bot.Bot
+	Status                string
+	MatchID               string
+	TimeoutMinutes        int
+	cancel                context.CancelFunc
 }
 
 type Manager struct {
@@ -112,31 +112,31 @@ func (m *Manager) CreateLobby(cmd protocol.CreateLobbyCmd) error {
 	}
 
 	lobby := &Lobby{
-		ID:                cmd.LobbyID,
-		GameName:          cmd.GameName,
-		Password:          cmd.Password,
-		ServerRegion:      cmd.ServerRegion,
-		GameMode:          gameMode,
-		AutoAssignTeams:   cmd.AutoAssignTeams,
-		LeagueID:          cmd.LeagueID,
-		DotaTvDelay:       cmd.DotaTvDelay,
-		Cheats:            cmd.Cheats,
-		AllowSpectating:   cmd.AllowSpectating,
-		PauseSetting:      cmd.PauseSetting,
-		SelectionPriority: cmd.SelectionPriority,
-		CmPick:            cmd.CmPick,
-		PenaltyRadiant:    cmd.PenaltyRadiant,
-		PenaltyDire:       cmd.PenaltyDire,
-		SeriesType:        cmd.SeriesType,
+		ID:                    cmd.LobbyID,
+		GameName:              cmd.GameName,
+		Password:              cmd.Password,
+		ServerRegion:          cmd.ServerRegion,
+		GameMode:              gameMode,
+		AutoAssignTeams:       cmd.AutoAssignTeams,
+		LeagueID:              cmd.LeagueID,
+		DotaTvDelay:           cmd.DotaTvDelay,
+		Cheats:                cmd.Cheats,
+		AllowSpectating:       cmd.AllowSpectating,
+		PauseSetting:          cmd.PauseSetting,
+		SelectionPriority:     cmd.SelectionPriority,
+		CmPick:                cmd.CmPick,
+		PenaltyRadiant:        cmd.PenaltyRadiant,
+		PenaltyDire:           cmd.PenaltyDire,
+		SeriesType:            cmd.SeriesType,
 		RadiantName:           cmd.RadiantName,
 		DireName:              cmd.DireName,
 		ExpectedRadiantTeamId: cmd.ExpectedRadiantTeamId,
 		ExpectedDireTeamId:    cmd.ExpectedDireTeamId,
 		ExpectedPlayers:       cmd.Players,
-		Bot:             b,
-		Status:          "creating",
-		TimeoutMinutes:  cmd.TimeoutMinutes,
-		cancel:          cancel,
+		Bot:                   b,
+		Status:                "creating",
+		TimeoutMinutes:        cmd.TimeoutMinutes,
+		cancel:                cancel,
 	}
 	m.lobbies[cmd.LobbyID] = lobby
 	m.mu.Unlock()
@@ -160,6 +160,7 @@ func (m *Manager) runLobby(ctx context.Context, lobby *Lobby) {
 	// Set active lobby ID, expected team assignments, and expected team IDs on bot
 	lobby.Bot.SetActiveLobbyID(lobby.ID)
 	lobby.Bot.SetExpectedTeams(lobby.ExpectedPlayers)
+	lobby.Bot.SetEnforceTeams(lobby.AutoAssignTeams)
 	lobby.Bot.SetExpectedTeamIds(lobby.ExpectedRadiantTeamId, lobby.ExpectedDireTeamId)
 
 	botLog(fmt.Sprintf("Creating lobby '%s' (region: %d, mode: %d)", lobby.GameName, lobby.ServerRegion, lobby.GameMode))
@@ -300,6 +301,9 @@ func (m *Manager) RejoinLobby(cmd protocol.RejoinLobbyCmd) error {
 	b.SetBusy(true)
 	b.SetActiveLobbyID(cmd.LobbyID)
 	b.SetExpectedTeams(cmd.Players)
+	// On rejoin the original per-lobby setting isn't re-sent; default to enforcing
+	// so recovery keeps players on their expected teams.
+	b.SetEnforceTeams(true)
 
 	log.Printf("[Lobby %s] Rejoining — bot %s re-watching lobby (in Dota lobby: %v)", cmd.LobbyID, cmd.BotID, inLobby)
 	m.send("bot_log", protocol.BotLogEvent{
@@ -404,22 +408,27 @@ func (m *Manager) CancelLobby(lobbyID string) error {
 			Message: fmt.Sprintf("ACTION: CancelLobby(%s)", lobbyID),
 		})
 	}
+
+	// Only cancel the context. runLobby (or the rejoin watcher) owns the teardown
+	// on ctx.Done — DestroyLobby, free the bot, removeLobby. Doing that teardown
+	// here as well would double-free the bot and let the delayed runLobby cleanup
+	// destroy/clear a lobby the freed bot was meanwhile reassigned to.
 	if lobby.cancel != nil {
 		lobby.cancel()
-	}
-	if lobby.Bot != nil {
+	} else if lobby.Bot != nil {
+		// No watcher context (shouldn't happen) — free the bot directly so it
+		// isn't stranded busy.
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		lobby.Bot.DestroyLobby(ctx)
 		lobby.Bot.SetBusy(false)
+		m.removeLobby(lobbyID)
 	}
 
 	m.send("lobby_status", protocol.LobbyStatusEvent{
 		LobbyID: lobbyID,
 		Status:  "cancelled",
 	})
-
-	m.removeLobby(lobbyID)
 	return nil
 }
 

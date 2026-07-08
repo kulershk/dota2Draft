@@ -64,6 +64,7 @@ type Bot struct {
 	launchSent            bool // prevent repeated LaunchLobby calls
 	gameStartedSent       bool // game_started already sent for the current lobby (reset per lobby in SetActiveLobbyID)
 	gcReady               bool // GC session is live (welcomed / HAVE_SESSION); gates going back to 'available'
+	enforceTeams          bool // kick players onto their expected team (lobbyAutoAssignTeams); off = free team pick
 }
 
 func NewBot(id, username, password, refreshToken string, send SendFunc) *Bot {
@@ -552,7 +553,14 @@ func (b *Bot) RequestMatchDetails(matchID uint64) (*protocol.MatchDetailsEvent, 
 
 	m := resp.Match
 	outcome := m.GetMatchOutcome()
-	// EMatchOutcome: 2 = radiant win, 3 = dire win
+	// EMatchOutcome: 2 = RadVictory, 3 = DireVictory. Anything else — 0 (Unknown)
+	// or 64-69 (NotScored_*: never started, leaver, server crash, cancelled, …) —
+	// has no valid winner. Erroring here (instead of defaulting to a Dire win)
+	// keeps the caller from recording a bogus result; the game stays unresolved
+	// and can be retried / handled manually.
+	if outcome != 2 && outcome != 3 {
+		return nil, fmt.Errorf("match %d not decisively scored (outcome=%d)", m.GetMatchId(), outcome)
+	}
 	radiantWin := outcome == 2
 
 	players := make([]protocol.MatchDetailsPlayer, 0, len(m.Players))
@@ -970,12 +978,13 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 	// Disconnect/reconnect clears them mid-iteration.
 	b.mu.Lock()
 	expectedTeams := b.expectedTeams
+	enforce := b.enforceTeams
 	dc := b.dotaClient
 	sc := b.steamClient
 	b.mu.Unlock()
 
 	if lobbyState != gcccm.CSODOTALobby_RUN &&
-		expectedTeams != nil && dc != nil && sc != nil {
+		enforce && expectedTeams != nil && dc != nil && sc != nil {
 		for _, m := range newMembers {
 			playerID := m.GetId()
 			currentTeam := m.GetTeam()
@@ -1124,6 +1133,15 @@ func (b *Bot) SetBusy(busy bool) {
 	b.mu.Unlock()
 	b.log(fmt.Sprintf("ACTION: SetBusy(%v) → status=%s", busy, status))
 	b.send("bot_status", protocol.BotStatusEvent{BotID: b.ID, Status: status})
+}
+
+// SetEnforceTeams controls whether processLobbyUpdate kicks players onto their
+// expected team (the lobbyAutoAssignTeams setting). When false, players pick
+// their own Radiant/Dire slots freely and the bot does not enforce.
+func (b *Bot) SetEnforceTeams(v bool) {
+	b.mu.Lock()
+	b.enforceTeams = v
+	b.mu.Unlock()
 }
 
 func (b *Bot) SetExpectedTeamIds(radiant, dire int) {
