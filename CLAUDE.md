@@ -102,7 +102,7 @@ Per-competition lobby (Dota 2 in-game lobby) configuration. Stored as JSONB on `
 | --- | --- | --- |
 | `lobbyGameMode` | `2` (CM) | `1` AP · `2` CM · `3` RD · `4` SD · `5` AR · `8` Reverse CM · `11` MO · `12` LP · `16` CD · `18` ABD · `20` ARDM · `21` 1v1 · `22` AD · `23` Turbo |
 | `lobbyServerRegion` | `3` (EU West) | `0` US West · `1` US East · `3` EU West · `5` SE Asia · `7` Australia · `8` EU East · `9` S. America · `10` Russia |
-| `lobbyDotaTvDelay` | `1` (10 min) | `0` None · `1` 10 min · `2` 5 min · `3` 2 min |
+| `lobbyDotaTvDelay` | `1` (2 min) | `0` 10 sec · `1` 2 min · `2` 5 min · `3` 15 min — values are the raw Valve `LobbyDotaTVDelay` enum (`LobbyDotaTV_10/120/300/900`, i.e. seconds), sent verbatim to the GC |
 | `lobbySelectionPriority` | `0` (Manual) | `0` Manual · `1` Automatic |
 | `lobbyCmPick` | `0` (Random) | `0` Random · `1` Radiant · `2` Dire — only applied when `lobbySelectionPriority === 0` |
 | `lobbyPauseSetting` | `0` (Unlimited) | `0` Unlimited · `1` Limited · `2` Disabled |

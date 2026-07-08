@@ -1147,10 +1147,10 @@ onUnmounted(() => {
         <div class="flex flex-col gap-1">
           <label class="text-xs text-muted-foreground">{{ t('lobbyDotaTvDelay') }}</label>
           <select class="input-field" v-model.number="form.lobby_dotv_delay">
-            <option :value="0">{{ t('dotaTvNone') }}</option>
-            <option :value="1">{{ t('dotaTv10min') }}</option>
+            <option :value="0">{{ t('dotaTv10sec') }}</option>
+            <option :value="1">{{ t('dotaTv2min') }}</option>
             <option :value="2">{{ t('dotaTv5min') }}</option>
-            <option :value="3">{{ t('dotaTv2min') }}</option>
+            <option :value="3">{{ t('dotaTv15min') }}</option>
           </select>
         </div>
         <div class="flex flex-col gap-1">

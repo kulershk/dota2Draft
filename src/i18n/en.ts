@@ -1180,10 +1180,10 @@ export default {
   lobbyLeagueId: 'League Ticket ID',
   lobbyLeagueIdHint: 'Dota 2 league ID for DotaTV broadcasting. Leave 0 for no league.',
   lobbyDotaTvDelay: 'DotaTV Delay',
-  dotaTvNone: 'No DotaTV',
-  dotaTv10min: '10 minutes (default)',
+  dotaTv10sec: '10 seconds',
+  dotaTv2min: '2 minutes (default)',
   dotaTv5min: '5 minutes',
-  dotaTv2min: '2 minutes',
+  dotaTv15min: '15 minutes',
 
   matchReadyUp: 'Ready',
   matchReadyLabel: 'Ready!',

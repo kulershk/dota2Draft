@@ -292,9 +292,16 @@ function onBotStatusChanged(data: any) {
     // Only reset the "in state for" clock when the status actually
     // changed — a repeat event for the same status keeps the original
     // start time.
-    if (bot.status !== data.status) bot.status_since = new Date().toISOString()
+    const changed = bot.status !== data.status
+    if (changed) bot.status_since = new Date().toISOString()
     bot.status = data.status
     bot.error_message = data.errorMessage || null
+    // Auto-open the Steam Guard modal when a bot first needs a code. The server
+    // signals this via the 'awaiting_guard' status (there is no separate event).
+    if (changed && data.status === 'awaiting_guard') {
+      steamGuardBotId.value = data.botId
+      showSteamGuard.value = true
+    }
   }
   if (expandedTimelineBotId.value === data.botId && botHistory.value[data.botId]) {
     botHistory.value[data.botId].unshift({
@@ -316,17 +323,11 @@ function onBotLog(data: any) {
   if (stick) nextTick(scrollLogsToBottom)
 }
 
-function onSteamGuardRequired(data: any) {
-  steamGuardBotId.value = data.botId
-  showSteamGuard.value = true
-}
-
 onMounted(() => {
   fetchBots()
   stateTimer = setInterval(() => { nowMs.value = Date.now() }, 1000)
   const socket = getSocket()
   socket.on('bot:statusChanged', onBotStatusChanged)
-  socket.on('bot:steamGuardRequired', onSteamGuardRequired)
   socket.on('bot:log', onBotLog)
 })
 
@@ -334,7 +335,6 @@ onUnmounted(() => {
   if (stateTimer) clearInterval(stateTimer)
   const socket = getSocket()
   socket.off('bot:statusChanged', onBotStatusChanged)
-  socket.off('bot:steamGuardRequired', onSteamGuardRequired)
   socket.off('bot:log', onBotLog)
 })
 </script>

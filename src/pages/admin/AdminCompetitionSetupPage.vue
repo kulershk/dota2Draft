@@ -878,10 +878,10 @@ watch(activeTab, (tab) => {
         <div class="flex flex-col gap-1.5">
           <label class="label-text">{{ t('lobbyDotaTvDelay') }}</label>
           <select class="input-field" :value="localSettings.lobbyDotaTvDelay" @change="localSettings.lobbyDotaTvDelay = Number(($event.target as HTMLSelectElement).value)">
-            <option :value="0">{{ t('dotaTvNone') }}</option>
-            <option :value="1">{{ t('dotaTv10min') }}</option>
+            <option :value="0">{{ t('dotaTv10sec') }}</option>
+            <option :value="1">{{ t('dotaTv2min') }}</option>
             <option :value="2">{{ t('dotaTv5min') }}</option>
-            <option :value="3">{{ t('dotaTv2min') }}</option>
+            <option :value="3">{{ t('dotaTv15min') }}</option>
           </select>
         </div>
         <label class="flex items-center gap-2 cursor-pointer">
