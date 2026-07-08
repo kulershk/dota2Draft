@@ -30,6 +30,7 @@ class BotPool {
     this._botsListPending = null // single resolver for an in-flight list_bots request
     this._botsListInflight = null // coalesces concurrent _syncBotStatusesFromGo callers
     this._tokenRetryAt = new Map() // botId -> last automatic token-refresh reconnect (rate limit)
+    this._autoReconnectBackoff = new Map() // botId -> { failures, nextAttemptAt } for auto-reconnect backoff
   }
 
   async init(io, wss) {
@@ -215,8 +216,15 @@ class BotPool {
     const updates = { status: data.status }
     if (data.steamId) updates.steam_id = data.steamId
     if (data.displayName) updates.display_name = data.displayName
-    if (data.error) updates.error_message = data.error
-    else updates.error_message = null
+    if (data.error) {
+      updates.error_message = data.error
+    } else if (data.status && data.status !== 'error') {
+      // Clear stale error text once the bot reaches a healthy status. Crucially,
+      // do NOT null it on a bare 'error' status with no error text — that's what
+      // the reconcile from Go sends ({botId, status} only), and nulling it would
+      // erase the very failure reason the admin bots page is trying to display.
+      updates.error_message = null
+    }
     if (data.refreshToken) updates.refresh_token = data.refreshToken
     if (data.sentryHash) updates.sentry_hash = data.sentryHash
     if (data.loginKey) updates.login_key = data.loginKey
@@ -349,9 +357,23 @@ class BotPool {
   // — the next attempt picks them up once they're back.
   async _findAvailableBotId({ excludeBotId = null } = {}) {
     await this._syncBotStatusesFromGo().catch(() => {})
-    const row = excludeBotId
-      ? await queryOne("SELECT id FROM lobby_bots WHERE status = 'available' AND id <> $1 ORDER BY last_used_at NULLS FIRST LIMIT 1", [excludeBotId])
-      : await queryOne("SELECT id FROM lobby_bots WHERE status = 'available' ORDER BY last_used_at NULLS FIRST LIMIT 1")
+    // Atomically CLAIM a live-available bot: flip it to 'busy' in the same
+    // statement so two concurrent lobby creates (e.g. queue + tournament firing
+    // at once) can't both grab the same bot. FOR UPDATE SKIP LOCKED lets
+    // parallel callers pick different rows instead of blocking on each other.
+    // The caller MUST release the bot (status back to 'available') if it then
+    // fails to create the lobby — createLobby/createQueueLobby do this in a
+    // catch; any missed path self-heals on the next reconcile from Go.
+    const claimSql = excludeBotId
+      ? `UPDATE lobby_bots SET status = 'busy', last_used_at = NOW()
+           WHERE id = (SELECT id FROM lobby_bots WHERE status = 'available' AND id <> $1
+                       ORDER BY last_used_at NULLS FIRST LIMIT 1 FOR UPDATE SKIP LOCKED)
+           RETURNING id`
+      : `UPDATE lobby_bots SET status = 'busy', last_used_at = NOW()
+           WHERE id = (SELECT id FROM lobby_bots WHERE status = 'available'
+                       ORDER BY last_used_at NULLS FIRST LIMIT 1 FOR UPDATE SKIP LOCKED)
+           RETURNING id`
+    const row = excludeBotId ? await queryOne(claimSql, [excludeBotId]) : await queryOne(claimSql)
     if (row) return row.id
     let restarted = 0
     try { restarted = (await this.connectAllBots()).count } catch {}
@@ -1172,17 +1194,44 @@ class BotPool {
            )
          ORDER BY b.id
       `)
+      // Drop backoff state for any bot that has recovered (no longer offline/
+      // error), so its failure count resets for next time.
+      const stillDown = new Set(bots.map((b) => b.id))
+      for (const id of [...this._autoReconnectBackoff.keys()]) {
+        if (!stillDown.has(id)) this._autoReconnectBackoff.delete(id)
+      }
       if (bots.length === 0) return
-      console.log(`[Bot] Auto-reconnecting ${bots.length} offline auto-connect bot(s) (staggered 5s apart)`)
+
+      // Only attempt bots whose backoff window has elapsed. A bot with bad
+      // credentials / a Steam block would otherwise be reconnected — and its
+      // refresh token re-minted — every 5 min forever, risking a rate-limit.
+      const now = Date.now()
+      const dueBots = bots.filter((b) => {
+        const bo = this._autoReconnectBackoff.get(b.id)
+        return !bo || now >= bo.nextAttemptAt
+      })
+      if (dueBots.length === 0) return
+      console.log(`[Bot] Auto-reconnecting ${dueBots.length} offline auto-connect bot(s) (staggered 5s apart)`)
       let delay = 0
-      for (const bot of bots) {
+      for (const bot of dueBots) {
         setTimeout(async () => {
-          // Re-check right before connecting — a deploy, manual action, or the
-          // previous tick may have brought it back in the meantime.
-          const cur = await queryOne('SELECT status FROM lobby_bots WHERE id = $1', [bot.id])
-          if (!cur || (cur.status !== 'offline' && cur.status !== 'error')) return
+          // Wrap the whole callback: an unhandled rejection here (e.g. a DB blip
+          // on the status re-check) would otherwise crash the Node process.
           try {
-            console.log(`[Bot] Auto-reconnecting bot ${bot.id} (${bot.username})`)
+            // Re-check right before connecting — a deploy, manual action, or the
+            // previous tick may have brought it back in the meantime.
+            const cur = await queryOne('SELECT status FROM lobby_bots WHERE id = $1', [bot.id])
+            if (!cur || (cur.status !== 'offline' && cur.status !== 'error')) {
+              this._autoReconnectBackoff.delete(bot.id)
+              return
+            }
+            // Record the attempt and schedule the next one with exponential
+            // backoff: 5m, 10m, 20m, 40m, capped at 1h.
+            const prev = this._autoReconnectBackoff.get(bot.id) || { failures: 0 }
+            const failures = prev.failures + 1
+            const backoffMs = Math.min(5 * 60 * 1000 * Math.pow(2, failures - 1), 60 * 60 * 1000)
+            this._autoReconnectBackoff.set(bot.id, { failures, nextAttemptAt: Date.now() + backoffMs })
+            console.log(`[Bot] Auto-reconnecting bot ${bot.id} (${bot.username}) [attempt ${failures}]`)
             await this.connectBot(bot.id)
           } catch (e) {
             console.error(`[Bot] Auto-reconnect failed for ${bot.id}:`, e.message)
@@ -1923,6 +1972,10 @@ class BotPool {
     // Keep the { id } shape so the rest of the flow is unchanged.
     const availableBot = { id: await this._findAvailableBotId() }
 
+    // _findAvailableBotId already flipped this bot to 'busy'. If anything below
+    // fails, release it so it isn't stranded busy with no lobby.
+    let lobbyHandedOff = false
+    try {
     // Resolve players
     const match = await queryOne(`
       SELECT m.*, t1.player_id AS t1_player_id, t2.player_id AS t2_player_id,
@@ -2009,8 +2062,17 @@ class BotPool {
       penaltyRadiant: payload.penaltyRadiant, penaltyDire: payload.penaltyDire, seriesType: payload.seriesType,
     })
     this._sendToGo('create_lobby', payload)
+    lobbyHandedOff = true
 
     return { ...lobby, players_expected: playersExpected }
+    } catch (e) {
+      // A failure before the lobby was handed to Go means the bot we claimed
+      // never got a lobby — release it so it isn't stranded 'busy'.
+      if (!lobbyHandedOff) {
+        await execute("UPDATE lobby_bots SET status = 'available' WHERE id = $1 AND status = 'busy'", [availableBot.id]).catch(() => {})
+      }
+      throw e
+    }
   }
 
   async forceLaunch(lobbyDbId, { skipValidation = false } = {}) {
@@ -2085,6 +2147,10 @@ class BotPool {
     // Keep the { id } shape so the rest of the flow is unchanged.
     const availableBot = { id: await this._findAvailableBotId() }
 
+    // _findAvailableBotId already flipped this bot to 'busy'; release it if we
+    // fail before handing the lobby off to Go.
+    let lobbyHandedOff = false
+    try {
     // Get pool settings
     const pool = await queryOne('SELECT * FROM queue_pools WHERE id = $1', [poolId])
     if (!pool) throw new Error('Queue pool not found')
@@ -2104,7 +2170,14 @@ class BotPool {
     await execute("UPDATE matches SET status = 'live' WHERE id = $1 AND status = 'pending'", [matchId])
 
     this._sendToGo('create_lobby', this._buildGoLobbyPayload(lobby, pool, team1Name, team2Name, playersExpected, opts))
+    lobbyHandedOff = true
     return lobby
+    } catch (e) {
+      if (!lobbyHandedOff) {
+        await execute("UPDATE lobby_bots SET status = 'available' WHERE id = $1 AND status = 'busy'", [availableBot.id]).catch(() => {})
+      }
+      throw e
+    }
   }
 
   // Admin-triggered manual retry. Marks any non-terminal existing lobby for

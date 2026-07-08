@@ -37,8 +37,21 @@ async function isNextGame(matchId, gameNumber) {
 }
 
 export function registerMatchReadyHandlers(socket, io) {
+  // Wrap an async socket handler so a rejected DB await (transient error) is
+  // logged instead of becoming an unhandled promise rejection that crashes the
+  // whole Node process.
+  const safe = (name, fn) =>
+    socket.on(name, async (...args) => {
+      try {
+        await fn(...args)
+      } catch (e) {
+        console.error(`[matchReady] ${name} handler error:`, e.message)
+      }
+    })
+
   // Phase 1: Ready up to create lobby
   socket.on('match:ready', async ({ matchId, gameNumber }) => {
+   try {
     const compId = socketCompetitions.get(socket.id)
     if (!compId || !matchId || !gameNumber) return
 
@@ -67,17 +80,11 @@ export function registerMatchReadyHandlers(socket, io) {
       )
       if (existingLobby) return
 
-      // Check if a bot is available
-      const availableBot = await queryOne(
-        "SELECT id FROM lobby_bots WHERE status = 'available' ORDER BY last_used_at NULLS FIRST LIMIT 1"
-      )
-      if (!availableBot) {
-        const noBotPayload = { matchId, gameNumber, readyCaptainIds: readyIds, noBotAvailable: true }
-        io.to(`comp:${compId}`).to(`match:${matchId}`).emit('match:readyState', noBotPayload)
-        return
-      }
-
-      // Auto-create lobby
+      // Auto-create lobby. Don't pre-check bot availability against the raw DB
+      // mirror here — createLobby reconciles against Go's live state and claims
+      // a bot atomically. A stale-mirror pre-check could falsely report no bot
+      // when Go actually has live ones. "No bots available" surfaces via the
+      // createLobby error below and maps to the noBotAvailable UI state.
       try {
         await botPool.createLobby(compId, matchId, gameNumber, {})
         clearMatchReady(matchId, gameNumber)
@@ -85,14 +92,21 @@ export function registerMatchReadyHandlers(socket, io) {
         io.to(`comp:${compId}`).to(`match:${matchId}`).emit('match:readyState', createdPayload)
       } catch (e) {
         console.error('Auto-create lobby failed:', e.message)
+        const noBot = /no bots?\s+available/i.test(e.message || '')
         io.to(`comp:${compId}`).to(`match:${matchId}`).emit('match:readyState', {
-          matchId, gameNumber, readyCaptainIds: readyIds, lobbyCreateError: e.message || 'Failed to create lobby',
+          matchId, gameNumber, readyCaptainIds: readyIds,
+          ...(noBot
+            ? { noBotAvailable: true }
+            : { lobbyCreateError: e.message || 'Failed to create lobby' }),
         })
       }
     }
+   } catch (e) {
+     console.error('[matchReady] match:ready handler error:', e.message)
+   }
   })
 
-  socket.on('match:unready', async ({ matchId, gameNumber }) => {
+  safe('match:unready', async ({ matchId, gameNumber }) => {
     const compId = socketCompetitions.get(socket.id)
     if (!compId || !matchId || !gameNumber) return
 
@@ -106,7 +120,7 @@ export function registerMatchReadyHandlers(socket, io) {
   })
 
   // Phase 2: Ready up to launch game (lobby is in "waiting" state)
-  socket.on('match:launchReady', async ({ matchId, gameNumber }) => {
+  safe('match:launchReady', async ({ matchId, gameNumber }) => {
     const compId = socketCompetitions.get(socket.id)
     if (!compId || !matchId || !gameNumber) return
 
@@ -151,7 +165,7 @@ export function registerMatchReadyHandlers(socket, io) {
     }
   })
 
-  socket.on('match:launchUnready', async ({ matchId, gameNumber }) => {
+  safe('match:launchUnready', async ({ matchId, gameNumber }) => {
     const compId = socketCompetitions.get(socket.id)
     if (!compId || !matchId || !gameNumber) return
 
