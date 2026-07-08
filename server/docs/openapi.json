@@ -475,6 +475,161 @@
           "403": { "description": "Missing manage_bots permission" },
           "500": { "description": "Server error" }
         }
+      },
+      "post": {
+        "tags": ["Admin"],
+        "summary": "Add a new lobby bot account",
+        "description": "Requires the `manage_bots` permission. Stores the Steam credentials and relays them to the Go lobby-bot service. The response contains only non-sensitive bot fields — the stored Steam password is never returned.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["username", "password"],
+                "properties": {
+                  "username": { "type": "string", "description": "Steam account login name" },
+                  "password": { "type": "string", "description": "Steam account password (write-only; never returned)" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created bot (non-sensitive fields only)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "integer" },
+                    "username": { "type": "string" },
+                    "display_name": { "type": "string", "nullable": true },
+                    "steam_id": { "type": "string", "nullable": true },
+                    "status": { "type": "string" },
+                    "error_message": { "type": "string", "nullable": true },
+                    "auto_connect": { "type": "boolean" },
+                    "last_used_at": { "type": "string", "format": "date-time", "nullable": true },
+                    "created_at": { "type": "string", "format": "date-time" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Missing fields or account already exists" },
+          "403": { "description": "Missing manage_bots permission" }
+        }
+      }
+    },
+    "/api/admin/bots/{botId}": {
+      "delete": {
+        "tags": ["Admin"],
+        "summary": "Remove a lobby bot account",
+        "description": "Requires the `manage_bots` permission. Disconnects the bot in the Go service and deletes the `lobby_bots` row.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "botId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": { "description": "Bot removed", "content": { "application/json": { "schema": { "type": "object", "properties": { "ok": { "type": "boolean" } } } } } },
+          "400": { "description": "Operation failed" },
+          "403": { "description": "Missing manage_bots permission" }
+        }
+      }
+    },
+    "/api/admin/bots/{botId}/logs": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "Get recent in-memory log lines for a bot",
+        "description": "Requires the `manage_bots` permission. Returns the recent log buffer maintained in memory for the bot (not persisted).",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "botId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": {
+            "description": "Log lines",
+            "content": { "application/json": { "schema": { "type": "array", "items": { "type": "object", "properties": { "time": { "type": "string", "format": "date-time" }, "message": { "type": "string" } } } } } }
+          },
+          "403": { "description": "Missing manage_bots permission" },
+          "500": { "description": "Server error" }
+        }
+      }
+    },
+    "/api/admin/bots/{botId}/free": {
+      "post": {
+        "tags": ["Admin"],
+        "summary": "Cancel a bot's active lobbies and force it back to available",
+        "description": "Requires the `manage_bots` permission. Cancels any non-terminal `match_lobbies` rows for the bot, then sets its status to `available` and broadcasts `bot:statusChanged`.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "botId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": { "description": "Bot freed", "content": { "application/json": { "schema": { "type": "object", "properties": { "ok": { "type": "boolean" } } } } } },
+          "400": { "description": "Operation failed" },
+          "403": { "description": "Missing manage_bots permission" }
+        }
+      }
+    },
+    "/api/admin/bots/{botId}/connect": {
+      "post": {
+        "tags": ["Admin"],
+        "summary": "Connect a single bot",
+        "description": "Requires the `manage_bots` permission. Login happens in the background; status updates arrive via `bot:statusChanged`.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "botId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": { "description": "Connect initiated", "content": { "application/json": { "schema": { "type": "object", "properties": { "ok": { "type": "boolean" }, "status": { "type": "string" } } } } } },
+          "400": { "description": "Operation failed" },
+          "403": { "description": "Missing manage_bots permission" }
+        }
+      }
+    },
+    "/api/admin/bots/{botId}/disconnect": {
+      "post": {
+        "tags": ["Admin"],
+        "summary": "Disconnect a single bot",
+        "description": "Requires the `manage_bots` permission.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "botId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": { "description": "Bot disconnected", "content": { "application/json": { "schema": { "type": "object", "properties": { "ok": { "type": "boolean" } } } } } },
+          "400": { "description": "Operation failed" },
+          "403": { "description": "Missing manage_bots permission" }
+        }
+      }
+    },
+    "/api/admin/bots/{botId}/steam-guard": {
+      "post": {
+        "tags": ["Admin"],
+        "summary": "Submit a Steam Guard code for a bot awaiting one",
+        "description": "Requires the `manage_bots` permission. Forwards the code to the Go lobby-bot service so login can proceed.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "botId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "required": ["code"], "properties": { "code": { "type": "string", "description": "Email or mobile-authenticator Steam Guard code" } } } } }
+        },
+        "responses": {
+          "200": { "description": "Code submitted", "content": { "application/json": { "schema": { "type": "object", "properties": { "ok": { "type": "boolean" } } } } } },
+          "400": { "description": "Missing code or operation failed" },
+          "403": { "description": "Missing manage_bots permission" }
+        }
+      }
+    },
+    "/api/admin/bots/{botId}/auto-connect": {
+      "put": {
+        "tags": ["Admin"],
+        "summary": "Toggle whether a bot auto-connects on startup and via the periodic reconnect",
+        "description": "Requires the `manage_bots` permission. Sets the `lobby_bots.auto_connect` flag.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "botId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "required": ["autoConnect"], "properties": { "autoConnect": { "type": "boolean" } } } } }
+        },
+        "responses": {
+          "200": { "description": "Flag updated", "content": { "application/json": { "schema": { "type": "object", "properties": { "ok": { "type": "boolean" } } } } } },
+          "400": { "description": "Operation failed" },
+          "403": { "description": "Missing manage_bots permission" }
+        }
       }
     },
     "/api/admin/bots/{botId}/status-history": {
@@ -610,6 +765,98 @@
           },
           "400": { "description": "Invalid input or upload failed" },
           "403": { "description": "Missing manage_bots permission" }
+        }
+      }
+    },
+    "/api/competitions/{compId}/tournament/matches/{matchId}/games/{gameNumber}/lobby": {
+      "post": {
+        "tags": ["Competitions"],
+        "summary": "Create the in-game lobby for a tournament match game",
+        "description": "Requires competition-management permission for `compId` (owner / helper / `manage_competitions`). Verifies the match belongs to the competition, picks a live-available bot (reconciling against the Go service), and asks it to create the Dota 2 lobby. Lobby progress is broadcast to the `comp:{compId}` / `match:{matchId}` rooms via `lobby:*` socket events.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "matchId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "gameNumber", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": { "application/json": { "schema": { "type": "object", "properties": { "server_region": { "type": "integer" }, "game_name": { "type": "string" }, "password": { "type": "string" } } } } }
+        },
+        "responses": {
+          "200": { "description": "Created lobby row" },
+          "400": { "description": "No bot available, lobby already exists, or other failure" },
+          "403": { "description": "Missing competition permission" },
+          "404": { "description": "Match not found in this competition" }
+        }
+      },
+      "get": {
+        "tags": ["Competitions"],
+        "summary": "Get the current lobby for a tournament match game",
+        "description": "Requires an authenticated user (not admin-gated — players in the match read this to get the lobby password). Scoped to `compId`. The `password` field is included only for match participants (captains / drafted players) and competition managers; other authenticated users receive the lobby without it.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "matchId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "gameNumber", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Lobby row (or { lobby: null }); password omitted for non-participants", "content": { "application/json": { "schema": { "type": "object", "properties": { "lobby": { "type": "object", "nullable": true } } } } } },
+          "401": { "description": "Not authenticated" },
+          "500": { "description": "Server error" }
+        }
+      }
+    },
+    "/api/competitions/{compId}/tournament/matches/{matchId}/games/{gameNumber}/lobby/launch": {
+      "post": {
+        "tags": ["Competitions"],
+        "summary": "Force-launch a waiting tournament lobby",
+        "description": "Requires competition-management permission for `compId`. Scoped to the competition — only a lobby belonging to `compId` (in `waiting` status) can be launched.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "matchId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "gameNumber", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Launch triggered", "content": { "application/json": { "schema": { "type": "object", "properties": { "ok": { "type": "boolean" } } } } } },
+          "403": { "description": "Missing competition permission" },
+          "404": { "description": "No active lobby found for this competition/match/game" }
+        }
+      }
+    },
+    "/api/competitions/{compId}/tournament/matches/{matchId}/games/{gameNumber}/lobby/cancel": {
+      "post": {
+        "tags": ["Competitions"],
+        "summary": "Cancel a tournament lobby",
+        "description": "Requires competition-management permission for `compId`. Scoped to the competition. Tells the Go service to destroy the lobby and frees the bot.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "matchId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "gameNumber", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Lobby cancelled", "content": { "application/json": { "schema": { "type": "object", "properties": { "ok": { "type": "boolean" } } } } } },
+          "403": { "description": "Missing competition permission" },
+          "404": { "description": "No active lobby found for this competition/match/game" }
+        }
+      }
+    },
+    "/api/competitions/{compId}/tournament/matches/{matchId}/games/{gameNumber}/lobby/reset": {
+      "post": {
+        "tags": ["Competitions"],
+        "summary": "Reset (clear) all lobby rows for a tournament match game",
+        "description": "Requires competition-management permission for `compId`. Scoped to the competition. Cancels any still-live lobby first (destroying the Go lobby and freeing the bot) before deleting the `match_lobbies` rows, then broadcasts a null lobby status to the `comp:{compId}` room.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "matchId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "gameNumber", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Lobby rows cleared", "content": { "application/json": { "schema": { "type": "object", "properties": { "ok": { "type": "boolean" } } } } } },
+          "403": { "description": "Missing competition permission" }
         }
       }
     },

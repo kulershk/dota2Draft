@@ -1298,6 +1298,66 @@
         }
       }
     },
+    "lobby:matchIdCaptured": {
+      "subscribe": {
+        "summary": "Broadcast to the lobby's rooms (comp+match or queue-match): the Go bot captured the Dota match ID for this game (the game has started). Clients use it to link to the match / begin polling results.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "matchId": { "type": "integer" },
+              "gameNumber": { "type": "integer" },
+              "dotaMatchId": { "type": "string", "description": "Valve match ID as a string" }
+            }
+          }
+        }
+      }
+    },
+    "lobby:teamIds": {
+      "subscribe": {
+        "summary": "Broadcast to the lobby's rooms: the Go bot detected the Dota team IDs/names configured in the lobby (from GetTeamDetails). Radiant is team index 0, Dire index 1.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "matchId": { "type": "integer" },
+              "gameNumber": { "type": "integer" },
+              "radiantTeamId": { "type": "integer" },
+              "direTeamId": { "type": "integer" },
+              "radiantTeamName": { "type": "string" },
+              "direTeamName": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "queue:cancelled": {
+      "subscribe": {
+        "summary": "Broadcast to queue-match:${queueMatchId}: the queue match was cancelled (e.g. lobby timed out with no-shows, or auto-cancelled after 3h without a resolved result). Clients should clear the match UI.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "queueMatchId": { "type": "integer" },
+              "reason": { "type": "string", "description": "Human-readable cancellation reason" }
+            }
+          }
+        }
+      }
+    },
+    "queue:error": {
+      "subscribe": {
+        "summary": "Broadcast to the queue match's lobby rooms: lobby creation ultimately failed (all retry bots exhausted, or no alternate bot available). Clients should surface the message and tell players to contact an admin.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "message": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
     "queue:rolePreferencesUpdate": {
       "subscribe": {
         "summary": "Broadcast to queue-match:${queueMatchId}: one participant's role preferences changed. Client should merge into its rolePreferences map keyed by playerId.",
