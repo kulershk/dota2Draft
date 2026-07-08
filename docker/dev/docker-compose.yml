@@ -19,6 +19,9 @@ services:
       - DISCORD_BOT_INTERNAL_URL=http://draft-dev-discordbot:3030
       - INTERNAL_TOKEN=${INTERNAL_TOKEN}
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-http://localhost:5173}
+      # Must match the draft-lobbybot service's BOT_SERVICE_TOKEN (both from
+      # docker/dev/.env). If unset, the server rejects the bot WS (fail closed).
+      - BOT_SERVICE_TOKEN=${BOT_SERVICE_TOKEN}
     volumes:
       - ../../src:/app/src
       - ../../server:/app/server

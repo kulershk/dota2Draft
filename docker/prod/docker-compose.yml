@@ -48,6 +48,11 @@ services:
       - INTERNAL_TOKEN=${INTERNAL_TOKEN}
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-https://dota.lv}
       - REQUEST_LOG_DISABLED=${REQUEST_LOG_DISABLED:-false}
+      # Shared secret the Go lobby-bot service must present on /ws/lobbybot.
+      # MUST match the value on the draft-lobbybot service (both read the same
+      # BOT_SERVICE_TOKEN from docker/prod/.env). If unset, the server rejects
+      # the bot service connection (fail closed).
+      - BOT_SERVICE_TOKEN=${BOT_SERVICE_TOKEN}
     volumes:
       - draft_uploads:/app/uploads
     depends_on:
