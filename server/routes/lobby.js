@@ -2,8 +2,56 @@ import { Router } from 'express'
 import multer from 'multer'
 import sharp from 'sharp'
 import { query, queryOne, execute } from '../db.js'
-import { requirePermission, requireCompPermission } from '../middleware/permissions.js'
+import { requirePermission, requireCompPermission, playerCanManageComp } from '../middleware/permissions.js'
+import { getAuthPlayer } from '../middleware/auth.js'
 import { botPool } from '../services/botPool.js'
+
+// A match participant = a captain of either side, or a player drafted onto
+// either side. Participants (and comp managers) may see the lobby password so
+// they can join the in-game lobby; nobody else may.
+async function isMatchParticipant(playerId, matchId) {
+  if (!playerId || !matchId) return false
+  const row = await queryOne(
+    `SELECT 1
+       FROM matches m
+       LEFT JOIN captains c1 ON c1.id = m.team1_captain_id
+       LEFT JOIN captains c2 ON c2.id = m.team2_captain_id
+      WHERE m.id = $1
+        AND ( c1.player_id = $2 OR c2.player_id = $2
+              OR EXISTS ( SELECT 1 FROM competition_players cp
+                           WHERE cp.competition_id = m.competition_id
+                             AND cp.player_id = $2
+                             AND cp.drafted_by IN (m.team1_captain_id, m.team2_captain_id) ) )
+      LIMIT 1`,
+    [matchId, playerId],
+  )
+  return !!row
+}
+
+// Strip credential-ish fields from a lobby row before returning it to a client
+// that isn't allowed to see the password.
+function stripLobbyPassword(lobby) {
+  if (!lobby) return lobby
+  const { password, ...safe } = lobby
+  return safe
+}
+
+// Only bot fields safe to return to an API caller — never the stored Steam
+// password / refresh token / sentry / login key.
+function publicBotFields(bot) {
+  if (!bot) return bot
+  return {
+    id: bot.id,
+    username: bot.username,
+    display_name: bot.display_name,
+    steam_id: bot.steam_id,
+    status: bot.status,
+    error_message: bot.error_message,
+    auto_connect: bot.auto_connect,
+    last_used_at: bot.last_used_at,
+    created_at: bot.created_at,
+  }
+}
 
 const avatarUpload = multer({
   storage: multer.memoryStorage(),
@@ -48,7 +96,7 @@ export default function createLobbyRouter(io) {
       const { username, password } = req.body
       if (!username || !password) return res.status(400).json({ error: 'Username and password required' })
       const bot = await botPool.addBot(username, password)
-      res.json(bot)
+      res.json(publicBotFields(bot))
     } catch (e) {
       res.status(400).json({ error: e.message })
     }
@@ -166,10 +214,15 @@ export default function createLobbyRouter(io) {
     }
   })
 
-  router.post('/api/admin/bots/avatar', avatarUpload.single('avatar'), async (req, res) => {
+  // Auth guard runs BEFORE multer so an unauthenticated client can't make us
+  // buffer a 5 MB upload into memory.
+  const requireManageBots = async (req, res, next) => {
+    const admin = await requirePermission(req, res, 'manage_bots')
+    if (admin) next()
+  }
+
+  router.post('/api/admin/bots/avatar', requireManageBots, avatarUpload.single('avatar'), async (req, res) => {
     try {
-      const admin = await requirePermission(req, res, 'manage_bots')
-      if (!admin) return
       if (!req.file) return res.status(400).json({ error: 'No image file provided' })
 
       // Normalize: square 512x512 JPEG so Steam never rejects it
@@ -221,12 +274,18 @@ export default function createLobbyRouter(io) {
 
   router.get('/api/competitions/:compId/tournament/matches/:matchId/games/:gameNumber/lobby', async (req, res) => {
     try {
+      const compId = Number(req.params.compId)
       const matchId = Number(req.params.matchId)
       const gameNumber = Number(req.params.gameNumber)
 
+      // Must be logged in. This is not admin-gated (players in the match need to
+      // read the lobby to get the password), but it must never be anonymous.
+      const player = await getAuthPlayer(req)
+      if (!player) return res.status(401).json({ error: 'Not authenticated' })
+
       const lobby = await queryOne(
-        "SELECT * FROM match_lobbies WHERE match_id = $1 AND game_number = $2 AND status NOT IN ('cancelled') ORDER BY id DESC LIMIT 1",
-        [matchId, gameNumber]
+        "SELECT * FROM match_lobbies WHERE match_id = $1 AND game_number = $2 AND competition_id = $3 AND status NOT IN ('cancelled') ORDER BY id DESC LIMIT 1",
+        [matchId, gameNumber, compId]
       )
       if (!lobby) return res.json({ lobby: null })
       // Auto-fix stale status: if we have a match ID, lobby is completed
@@ -243,7 +302,11 @@ export default function createLobbyRouter(io) {
           await execute("UPDATE match_lobbies SET status = 'error', error_message = 'Bot disconnected from lobby' WHERE id = $1", [lobby.id])
         }
       }
-      res.json({ lobby })
+      // Only match participants (and comp managers) may see the lobby password.
+      const canSeePassword =
+        (await isMatchParticipant(player.id, matchId)) ||
+        (await playerCanManageComp(player, compId))
+      res.json({ lobby: canSeePassword ? lobby : stripLobbyPassword(lobby) })
     } catch (e) {
       res.status(500).json({ error: e.message })
     }
@@ -259,8 +322,8 @@ export default function createLobbyRouter(io) {
       if (!admin) return
 
       const lobby = await queryOne(
-        "SELECT * FROM match_lobbies WHERE match_id = $1 AND game_number = $2 AND status = 'waiting'",
-        [matchId, gameNumber]
+        "SELECT * FROM match_lobbies WHERE match_id = $1 AND game_number = $2 AND competition_id = $3 AND status = 'waiting'",
+        [matchId, gameNumber, compId]
       )
       if (!lobby) return res.status(404).json({ error: 'No active lobby found' })
 
@@ -281,8 +344,8 @@ export default function createLobbyRouter(io) {
       if (!admin) return
 
       const lobby = await queryOne(
-        "SELECT * FROM match_lobbies WHERE match_id = $1 AND game_number = $2 AND status NOT IN ('completed', 'cancelled')",
-        [matchId, gameNumber]
+        "SELECT * FROM match_lobbies WHERE match_id = $1 AND game_number = $2 AND competition_id = $3 AND status NOT IN ('completed', 'cancelled')",
+        [matchId, gameNumber, compId]
       )
       if (!lobby) return res.status(404).json({ error: 'No active lobby found' })
 
@@ -302,10 +365,22 @@ export default function createLobbyRouter(io) {
       const admin = await requireCompPermission(req, res, compId)
       if (!admin) return
 
-      // Delete all lobbies for this game
+      // Cancel any still-live lobby first so the Go service destroys the in-game
+      // lobby and frees the bot — otherwise a raw DELETE strands the bot 'busy'
+      // with an orphaned live lobby. Scope to this competition so a manager of
+      // one comp can't reset another comp's (or a queue) lobby.
+      const activeLobbies = await query(
+        "SELECT id FROM match_lobbies WHERE match_id = $1 AND game_number = $2 AND competition_id = $3 AND status NOT IN ('completed', 'cancelled')",
+        [matchId, gameNumber, compId]
+      )
+      for (const l of activeLobbies) {
+        await botPool.cancelLobby(l.id).catch((e) => console.error('[Lobby reset] cancel failed:', e.message))
+      }
+
+      // Clear all lobby rows for this game (scoped to the competition)
       await execute(
-        'DELETE FROM match_lobbies WHERE match_id = $1 AND game_number = $2',
-        [matchId, gameNumber]
+        'DELETE FROM match_lobbies WHERE match_id = $1 AND game_number = $2 AND competition_id = $3',
+        [matchId, gameNumber, compId]
       )
 
       if (io) {

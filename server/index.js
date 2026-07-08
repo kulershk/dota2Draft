@@ -194,7 +194,10 @@ server.on('upgrade', (req, socket, head) => {
   if (url.pathname === '/ws/lobbybot') {
     const token = url.searchParams.get('token')
     const expected = process.env.BOT_SERVICE_TOKEN
-    if (expected && token !== expected) {
+    // Fail closed: if the shared secret isn't configured, reject rather than
+    // accept any client as the trusted Go bot service.
+    if (!expected || token !== expected) {
+      if (!expected) console.error('[ws/lobbybot] BOT_SERVICE_TOKEN is not set — rejecting bot service connection')
       socket.destroy()
       return
     }
