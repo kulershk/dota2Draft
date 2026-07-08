@@ -39,40 +39,41 @@ type Bot struct {
 	SteamID      string
 	DisplayName  string
 
-	send             SendFunc
-	mu               sync.Mutex
-	guardCh          chan string
-	cancelCh         chan struct{}
-	steamClient      *steam.Client
-	dotaClient       *dota2.Dota2
-	pendingAuth      bool   // waiting for Steam Guard code
-	pendingGuardCode string // code to use on next connect
-	guardIsTwoFactor bool   // true = mobile auth, false = email
-	sentryHash       steam.SentryHash
-	loginKey         string
-	usedTokenLogin   bool // last logon attempt used the refresh token
-	loginFailedHard  bool // logon rejected (bad token/password) — don't auto-reconnect
-	activeLobbyID    string // lobby DB ID for event routing
-	expectedTeams         map[uint64]string // steamID64 → "radiant"/"dire"
-	gameStartedCh         chan struct{} // signals when game has started
+	send                  SendFunc
+	mu                    sync.Mutex
+	guardCh               chan string
+	cancelCh              chan struct{}
+	steamClient           *steam.Client
+	dotaClient            *dota2.Dota2
+	pendingAuth           bool   // waiting for Steam Guard code
+	pendingGuardCode      string // code to use on next connect
+	guardIsTwoFactor      bool   // true = mobile auth, false = email
+	sentryHash            steam.SentryHash
+	loginKey              string
+	usedTokenLogin        bool                // last logon attempt used the refresh token
+	loginFailedHard       bool                // logon rejected (bad token/password) — don't auto-reconnect
+	activeLobbyID         string              // lobby DB ID for event routing
+	expectedTeams         map[uint64]string   // steamID64 → "radiant"/"dire"
+	gameStartedCh         chan struct{}       // signals when game has started
 	lastLobby             *gcccm.CSODOTALobby // last known lobby state for diffing
-	lobbyCacheCancel      func() // cancel the lobby cache watcher
+	lobbyCacheCancel      func()              // cancel the lobby cache watcher
 	expectedRadiantTeamId int
 	expectedDireTeamId    int
 	detectedRadiantTeamId int
 	detectedDireTeamId    int
 	launchSent            bool // prevent repeated LaunchLobby calls
 	gameStartedSent       bool // game_started already sent for the current lobby (reset per lobby in SetActiveLobbyID)
+	gcReady               bool // GC session is live (welcomed / HAVE_SESSION); gates going back to 'available'
 }
 
 func NewBot(id, username, password, refreshToken string, send SendFunc) *Bot {
 	return &Bot{
-		ID:           id,
-		Username:     username,
-		Password:     password,
-		RefreshToken: refreshToken,
-		Status:       StatusOffline,
-		send:         send,
+		ID:            id,
+		Username:      username,
+		Password:      password,
+		RefreshToken:  refreshToken,
+		Status:        StatusOffline,
+		send:          send,
 		guardCh:       make(chan string, 1),
 		cancelCh:      make(chan struct{}, 1),
 		gameStartedCh: make(chan struct{}, 1),
@@ -113,25 +114,38 @@ func (b *Bot) Connect() {
 	// so they pass this guard. We re-report status so Node reconciles its cache.
 	b.mu.Lock()
 	cur := b.Status
-	b.mu.Unlock()
 	if cur != StatusOffline && cur != StatusError {
+		b.mu.Unlock()
 		b.log(fmt.Sprintf("Connect() ignored — bot already %s", cur))
 		b.ResendStatus()
 		return
 	}
-
-	b.log(fmt.Sprintf("Connecting as %s...", b.Username))
-	b.mu.Lock()
+	// Compare-and-set under the lock: claim the connecting transition here so a
+	// second, near-simultaneous Connect() sees StatusConnecting and bails,
+	// instead of both spawning a Steam client + event loop on the same account.
+	b.Status = StatusConnecting
 	b.loginFailedHard = false
 	b.mu.Unlock()
+
+	// Drain any stale cancel token left buffered by a previous Disconnect(), so
+	// it can't spuriously abort this fresh session's first auto-reconnect.
+	select {
+	case <-b.cancelCh:
+	default:
+	}
+
+	b.log(fmt.Sprintf("Connecting as %s...", b.Username))
 	b.setStatus(StatusConnecting)
 
+	b.mu.Lock()
 	b.steamClient = steam.NewClient()
 	b.steamClient.ConnectionTimeout = 30 * time.Second
+	sc := b.steamClient
+	b.mu.Unlock()
 	go b.handleSteamEvents()
 
 	b.log("Connecting to Steam network...")
-	b.steamClient.Connect()
+	sc.Connect()
 }
 
 func (b *Bot) handleSteamEvents() {
@@ -185,23 +199,36 @@ func (b *Bot) handleSteamEvents() {
 
 			logger := logrus.New()
 			logger.SetLevel(logrus.DebugLevel)
+			b.mu.Lock()
 			b.dotaClient = dota2.New(b.steamClient, logger)
-			b.dotaClient.SetPlaying(true)
+			dc := b.dotaClient
+			b.mu.Unlock()
+			dc.SetPlaying(true)
 
 			b.log("Connecting to Dota 2 Game Coordinator...")
 			// Give Steam a moment to register the game before saying hello
 			go func() {
 				time.Sleep(2 * time.Second)
+				// Snapshot under the lock — a concurrent Disconnect/reconnect can
+				// replace or clear dotaClient, and dereferencing a nil'd pointer
+				// here would panic the whole process.
+				b.mu.Lock()
+				gc := b.dotaClient
+				b.mu.Unlock()
+				if gc == nil {
+					return
+				}
 				b.log("Sending GC Hello...")
-				b.dotaClient.SayHello()
+				gc.SayHello()
 				// Retry hello if no response
 				time.Sleep(5 * time.Second)
 				b.mu.Lock()
 				status := b.Status
+				gc = b.dotaClient
 				b.mu.Unlock()
-				if status == StatusConnectingGC {
+				if gc != nil && status == StatusConnectingGC {
 					b.log("No GC response, retrying hello...")
-					b.dotaClient.SayHello()
+					gc.SayHello()
 				}
 			}()
 
@@ -216,7 +243,9 @@ func (b *Bot) handleSteamEvents() {
 				}
 				b.log(fmt.Sprintf("Steam Guard code required (%s) — waiting for code...", guardType))
 				b.setStatus(StatusAwaitGuard)
+				b.mu.Lock()
 				b.pendingAuth = true
+				b.mu.Unlock()
 
 				// Steam disconnects after failed login, so we need to wait for code
 				// then reconnect and login with it
@@ -224,16 +253,28 @@ func (b *Bot) handleSteamEvents() {
 					select {
 					case code := <-b.guardCh:
 						b.log("Steam Guard code received, reconnecting...")
+						b.mu.Lock()
 						b.pendingAuth = false
 						b.pendingGuardCode = code
+						sc := b.steamClient
+						b.mu.Unlock()
 						// Reconnect — the ConnectedEvent handler will use the code
-						if b.steamClient != nil {
-							b.steamClient.Connect()
+						if sc != nil {
+							sc.Connect()
 						}
 					case <-time.After(5 * time.Minute):
 						b.log("Steam Guard code timed out")
+						// Clear pendingAuth, otherwise the DisconnectedEvent handler
+						// keeps swallowing disconnects as "waiting for code" and the
+						// bot never reconnects.
+						b.mu.Lock()
+						b.pendingAuth = false
+						b.mu.Unlock()
 						b.setStatus(StatusError, "Steam Guard code timed out")
 					case <-b.cancelCh:
+						b.mu.Lock()
+						b.pendingAuth = false
+						b.mu.Unlock()
 						return
 					}
 				}()
@@ -279,7 +320,19 @@ func (b *Bot) handleSteamEvents() {
 
 		case *devents.ClientWelcomed:
 			b.log("Dota 2 GC welcomed! Bot is ready.")
-			b.setStatus(StatusAvailable)
+			// Only advertise available if we're NOT mid-lobby. A GC re-welcome
+			// (reconnect) while busy would otherwise let Node hand this bot a
+			// second match — the same double-bot guard the
+			// GCConnectionStatusChanged handler applies below.
+			b.mu.Lock()
+			b.gcReady = true
+			busy := b.activeLobbyID != ""
+			b.mu.Unlock()
+			if busy {
+				b.log(fmt.Sprintf("GC welcomed but still busy with lobby %s — staying busy", b.activeLobbyID))
+			} else {
+				b.setStatus(StatusAvailable)
+			}
 			// Start lobby cache watcher
 			go b.watchLobbyCacheEvents()
 
@@ -290,10 +343,14 @@ func (b *Bot) handleSteamEvents() {
 				// lobby. GC session can flicker during lobby creation — blindly
 				// resetting to available would let Node reassign us to a second
 				// match, causing double-bot bugs.
-				if b.activeLobbyID == "" {
+				b.mu.Lock()
+				b.gcReady = true
+				idle := b.activeLobbyID == ""
+				b.mu.Unlock()
+				if idle {
 					b.setStatus(StatusAvailable)
 				} else {
-					b.log(fmt.Sprintf("GC session restored but still busy with lobby %s — staying busy", b.activeLobbyID))
+					b.log("GC session restored but still busy with a lobby — staying busy")
 				}
 			} else {
 				// GC session lost (GC_GOING_DOWN / NO_SESSION). A bot with no GC
@@ -306,6 +363,7 @@ func (b *Bot) handleSteamEvents() {
 				// double down-transition GOING_DOWN→NO_SESSION must not clobber
 				// it), and other states are left untouched.
 				b.mu.Lock()
+				b.gcReady = false
 				wasAvailable := b.Status == StatusAvailable
 				b.mu.Unlock()
 				if wasAvailable {
@@ -385,25 +443,32 @@ func (b *Bot) reconnectDelay() time.Duration {
 
 func (b *Bot) reconnect() {
 	b.log("Creating fresh Steam client for reconnect...")
-	// Clean up old dota client if any
-	if b.dotaClient != nil {
-		b.dotaClient.SetPlaying(false)
-		b.dotaClient.Close()
-		b.dotaClient = nil
-	}
-	// Stop old lobby cache watcher
+	// Detach the old dota client + cache watcher under the lock so any concurrent
+	// reader (processLobbyUpdate, the SayHello goroutine) snapshots either the
+	// old client or nil — never a half-torn-down pointer.
 	b.mu.Lock()
+	b.gcReady = false
+	dc := b.dotaClient
+	b.dotaClient = nil
 	if b.lobbyCacheCancel != nil {
 		b.lobbyCacheCancel()
 		b.lobbyCacheCancel = nil
 	}
 	b.mu.Unlock()
+	// Close the old client outside the lock (Close can block).
+	if dc != nil {
+		dc.SetPlaying(false)
+		dc.Close()
+	}
 	// Create fresh client and start new event loop
+	b.mu.Lock()
 	b.steamClient = steam.NewClient()
 	b.steamClient.ConnectionTimeout = 30 * time.Second
+	sc := b.steamClient
+	b.mu.Unlock()
 	go b.handleSteamEvents()
 	b.log("Reconnecting to Steam network...")
-	b.steamClient.Connect()
+	sc.Connect()
 }
 
 func (b *Bot) Disconnect() {
@@ -412,21 +477,26 @@ func (b *Bot) Disconnect() {
 	case b.cancelCh <- struct{}{}:
 	default:
 	}
-	// Stop lobby cache watcher
+	// Detach clients + cache watcher under the lock, then do the blocking
+	// Close/Disconnect outside it. Concurrent readers snapshot the pointers
+	// under the same lock, so they see either a live client or nil.
 	b.mu.Lock()
 	if b.lobbyCacheCancel != nil {
 		b.lobbyCacheCancel()
 		b.lobbyCacheCancel = nil
 	}
+	b.gcReady = false
+	dc := b.dotaClient
+	b.dotaClient = nil
+	sc := b.steamClient
+	b.steamClient = nil
 	b.mu.Unlock()
-	if b.dotaClient != nil {
-		b.dotaClient.SetPlaying(false)
-		b.dotaClient.Close()
-		b.dotaClient = nil
+	if dc != nil {
+		dc.SetPlaying(false)
+		dc.Close()
 	}
-	if b.steamClient != nil {
-		b.steamClient.Disconnect()
-		b.steamClient = nil
+	if sc != nil {
+		sc.Disconnect()
 	}
 	b.setStatus(StatusOffline)
 }
@@ -465,13 +535,14 @@ func (b *Bot) SubmitSteamGuard(code string) {
 }
 
 func (b *Bot) RequestMatchDetails(matchID uint64) (*protocol.MatchDetailsEvent, error) {
-	if b.dotaClient == nil {
+	dc := b.dc()
+	if dc == nil {
 		return nil, fmt.Errorf("dota client not connected")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	resp, err := b.dotaClient.RequestMatchDetails(ctx, matchID)
+	resp, err := dc.RequestMatchDetails(ctx, matchID)
 	if err != nil {
 		return nil, fmt.Errorf("GC request failed: %w", err)
 	}
@@ -550,22 +621,33 @@ func (b *Bot) SetActiveLobbyID(id string) {
 		b.log("ACTION: SetActiveLobbyID cleared")
 	} else {
 		b.log(fmt.Sprintf("ACTION: SetActiveLobbyID(%s)", id))
-		// New lobby starting — re-arm the once-per-lobby game_started guard.
-		// SetActiveLobbyID(non-empty) is the single hook hit on every lobby start
-		// (create + rejoin), so resetting here is fresh regardless of how the
-		// previous lobby ended.
+		// New lobby starting — drain any stale game-start token left buffered on
+		// this bot's gameStartedCh by a previous lobby. gameStartedCh is a
+		// per-bot buffered(1) channel; an undrained token would make runLobby's
+		// select fire immediately and abandon this fresh lobby seconds after
+		// creation. This is the single hook hit on every lobby start.
+		select {
+		case <-b.gameStartedCh:
+		default:
+		}
+	}
+	b.mu.Lock()
+	if id != "" {
+		// Re-arm the once-per-lobby game_started guard.
 		b.gameStartedSent = false
 	}
 	b.activeLobbyID = id
+	b.mu.Unlock()
 }
 
 func (b *Bot) watchLobbyCacheEvents() {
-	if b.dotaClient == nil {
+	dc := b.dc()
+	if dc == nil {
 		b.log("Cannot watch lobby cache: dota client not connected")
 		return
 	}
 
-	eventCh, unsub, err := b.dotaClient.GetCache().SubscribeType(cso.Lobby)
+	eventCh, unsub, err := dc.GetCache().SubscribeType(cso.Lobby)
 	if err != nil {
 		b.log(fmt.Sprintf("Failed to subscribe to lobby cache: %v", err))
 		return
@@ -585,7 +667,11 @@ func (b *Bot) watchLobbyCacheEvents() {
 	// Check if a lobby already exists in cache (e.g. bot was in a lobby before restart)
 	go func() {
 		time.Sleep(3 * time.Second) // give cache time to populate
-		container, err := b.dotaClient.GetCache().GetContainerForTypeID(uint32(cso.Lobby))
+		gc := b.dc()
+		if gc == nil {
+			return
+		}
+		container, err := gc.GetCache().GetContainerForTypeID(uint32(cso.Lobby))
 		if err != nil {
 			return
 		}
@@ -809,10 +895,10 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 			MatchID: fmt.Sprintf("%d", matchID),
 		})
 		// Auto-launch immediately since we have a match ID but lobby is still in UI
-		if lobbyState == gcccm.CSODOTALobby_UI && b.dotaClient != nil && !b.launchSent {
+		if lobbyState == gcccm.CSODOTALobby_UI && b.dc() != nil && !b.launchSent {
 			b.log("Auto-launching after match ID assigned...")
 			b.launchSent = true
-			b.dotaClient.LaunchLobby()
+			b.LaunchLobby()
 		}
 	}
 
@@ -832,9 +918,9 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 			b.log(fmt.Sprintf("Coin toss completed — priority: %s, non-priority: %s — auto-launching...",
 				priorityChoice.String(), nonPriorityChoice.String()))
 			b.launchSent = false // reset so we can launch again after coin toss
-			if b.dotaClient != nil {
+			if b.dc() != nil {
 				b.launchSent = true
-				b.dotaClient.LaunchLobby()
+				b.LaunchLobby()
 			}
 		}
 	}
@@ -876,14 +962,26 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 	// Enforce team assignments — kick players on wrong team back to unassigned.
 	// Skip once the game is running: a concurrent cleanup may have cleared
 	// expectedTeams, and enforcement is pointless after launch anyway.
+	//
+	// Snapshot the shared map + client pointers under the mutex. SetExpectedTeams
+	// (called from the command goroutine) replaces the whole map atomically and
+	// never mutates a published map, so the local reference is safe to read
+	// without the lock; snapshotting the clients avoids a nil-deref if
+	// Disconnect/reconnect clears them mid-iteration.
+	b.mu.Lock()
+	expectedTeams := b.expectedTeams
+	dc := b.dotaClient
+	sc := b.steamClient
+	b.mu.Unlock()
+
 	if lobbyState != gcccm.CSODOTALobby_RUN &&
-		b.expectedTeams != nil && b.dotaClient != nil && b.steamClient != nil {
+		expectedTeams != nil && dc != nil && sc != nil {
 		for _, m := range newMembers {
 			playerID := m.GetId()
 			currentTeam := m.GetTeam()
 
 			// Skip bot itself
-			if playerID == b.steamClient.SteamId().ToUint64() {
+			if playerID == sc.SteamId().ToUint64() {
 				continue
 			}
 			// Skip players not on a team slot
@@ -895,11 +993,11 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 			// Convert 64-bit Steam ID to 32-bit account ID for the kick API
 			accountID := uint32(playerID - 76561197960265728)
 
-			expectedTeam, known := b.expectedTeams[playerID]
+			expectedTeam, known := expectedTeams[playerID]
 			if !known {
 				b.log(fmt.Sprintf("ENFORCE: Unknown player %d on %s — kicking to unassigned",
 					playerID, teamName(currentTeam)))
-				b.dotaClient.KickLobbyMemberFromTeam(accountID)
+				dc.KickLobbyMemberFromTeam(accountID)
 				continue
 			}
 
@@ -912,7 +1010,7 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 			if wrongTeam {
 				b.log(fmt.Sprintf("ENFORCE: Player %d on %s but expected %s — kicking to unassigned",
 					playerID, teamName(currentTeam), expectedTeam))
-				b.dotaClient.KickLobbyMemberFromTeam(accountID)
+				dc.KickLobbyMemberFromTeam(accountID)
 			} else {
 				b.log(fmt.Sprintf("ENFORCE: Player %d on %s — correct", playerID, teamName(currentTeam)))
 			}
@@ -931,17 +1029,25 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 func (b *Bot) SetExpectedTeams(players []protocol.LobbyPlayer) {
 	if players == nil {
 		b.log("ACTION: SetExpectedTeams cleared")
+		b.mu.Lock()
 		b.expectedTeams = nil
+		b.mu.Unlock()
 		return
 	}
 	b.log(fmt.Sprintf("ACTION: SetExpectedTeams(%d players)", len(players)))
-	b.expectedTeams = make(map[uint64]string)
+	// Build the map locally, then publish the whole reference atomically under
+	// the mutex — processLobbyUpdate snapshots it under the same lock and never
+	// mutates it, so there is no concurrent map read+write.
+	m := make(map[uint64]string)
 	for _, p := range players {
 		sid := parseSteamID(p.SteamID)
 		if sid != 0 {
-			b.expectedTeams[sid] = p.Team
+			m[sid] = p.Team
 		}
 	}
+	b.mu.Lock()
+	b.expectedTeams = m
+	b.mu.Unlock()
 }
 
 func (b *Bot) IsAvailable() bool {
@@ -954,6 +1060,15 @@ func (b *Bot) IsInLobby() bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.lastLobby != nil
+}
+
+// dc returns the current Dota 2 client under the lock (nil if disconnected).
+// Callers must nil-check the returned pointer and use it instead of b.dotaClient
+// so a concurrent Disconnect/reconnect can't nil the field mid-call and panic.
+func (b *Bot) dc() *dota2.Dota2 {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.dotaClient
 }
 
 func (b *Bot) GetActiveLobbyID() string {
@@ -996,8 +1111,14 @@ func (b *Bot) SetBusy(busy bool) {
 	b.mu.Lock()
 	if busy {
 		b.Status = StatusBusy
-	} else {
+	} else if b.gcReady {
 		b.Status = StatusAvailable
+	} else {
+		// Freeing the bot, but the GC session isn't live (dropped mid-lobby, or
+		// Steam is mid-reconnect) — don't advertise 'available' or Node would
+		// hand it a match it can't host. Demote to connecting_gc; ClientWelcomed
+		// / HAVE_SESSION promotes it back to available once the session returns.
+		b.Status = StatusConnectingGC
 	}
 	status := b.Status
 	b.mu.Unlock()
@@ -1020,7 +1141,7 @@ func (b *Bot) GameStartedCh() <-chan struct{} {
 }
 
 func (b *Bot) GetDotaClient() *dota2.Dota2 {
-	return b.dotaClient
+	return b.dc()
 }
 
 type LobbyOptions struct {
@@ -1041,7 +1162,11 @@ type LobbyOptions struct {
 }
 
 func (b *Bot) CreatePracticeLobby(gameName, password string, opts LobbyOptions) error {
-	if b.dotaClient == nil {
+	b.mu.Lock()
+	dc := b.dotaClient
+	sc := b.steamClient
+	b.mu.Unlock()
+	if dc == nil || sc == nil {
 		return fmt.Errorf("dota client not connected")
 	}
 
@@ -1105,7 +1230,7 @@ func (b *Bot) CreatePracticeLobby(gameName, password string, opts LobbyOptions) 
 	// Create lobby and wait for GC confirmation
 	createCtx, createCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer createCancel()
-	err := b.dotaClient.LeaveCreateLobby(createCtx, details, true)
+	err := dc.LeaveCreateLobby(createCtx, details, true)
 	if err != nil {
 		return err
 	}
@@ -1116,62 +1241,71 @@ func (b *Bot) CreatePracticeLobby(gameName, password string, opts LobbyOptions) 
 	// causing all subsequent lobby events to be missed. Fire-and-forget both
 	// commands instead; the bot is already in the player pool after lobby
 	// creation anyway, so confirmation isn't required.
-	accountID := uint32(b.steamClient.SteamId().ToUint64() & 0xFFFFFFFF)
-	b.dotaClient.KickLobbyMemberFromTeam(accountID)
-	b.dotaClient.JoinLobbyTeam(gcccm.DOTA_GC_TEAM_DOTA_GC_TEAM_PLAYER_POOL, 0)
+	accountID := uint32(sc.SteamId().ToUint64() & 0xFFFFFFFF)
+	dc.KickLobbyMemberFromTeam(accountID)
+	dc.JoinLobbyTeam(gcccm.DOTA_GC_TEAM_DOTA_GC_TEAM_PLAYER_POOL, 0)
 	b.log("Sent team-pool commands (no wait)")
 	return nil
 }
 
 func (b *Bot) InvitePlayer(steamID64 string) {
-	if b.dotaClient == nil {
+	dc := b.dc()
+	if dc == nil {
 		b.log(fmt.Sprintf("ACTION: InvitePlayer(%s) skipped — dota client not connected", steamID64))
 		return
 	}
 	b.log(fmt.Sprintf("ACTION: InvitePlayer(%s)", steamID64))
 	sid := steamid.SteamId(parseSteamID(steamID64))
-	b.dotaClient.InviteLobbyMember(sid)
+	dc.InviteLobbyMember(sid)
 }
 
 func (b *Bot) LaunchLobby() {
-	if b.dotaClient == nil {
+	dc := b.dc()
+	if dc == nil {
 		b.log("ACTION: LaunchLobby skipped — dota client not connected")
 		return
 	}
 	b.log("ACTION: LaunchLobby")
-	b.dotaClient.LaunchLobby()
+	dc.LaunchLobby()
 }
 
 func (b *Bot) LeaveLobby() {
 	b.log("ACTION: LeaveLobby")
+	b.mu.Lock()
 	b.lastLobby = nil
 	b.detectedRadiantTeamId = 0
 	b.detectedDireTeamId = 0
 	b.launchSent = false
-	if b.dotaClient != nil {
-		b.dotaClient.LeaveLobby()
+	dc := b.dotaClient
+	b.mu.Unlock()
+	if dc != nil {
+		dc.LeaveLobby()
 	}
 }
 
 func (b *Bot) AbandonAndLeaveLobby() {
 	b.log("ACTION: AbandonAndLeaveLobby")
+	b.mu.Lock()
 	b.lastLobby = nil
 	b.detectedRadiantTeamId = 0
 	b.detectedDireTeamId = 0
 	b.launchSent = false
-	if b.dotaClient != nil {
-		b.dotaClient.AbandonLobby()
-		b.dotaClient.LeaveLobby()
+	dc := b.dotaClient
+	b.mu.Unlock()
+	if dc != nil {
+		dc.AbandonLobby()
+		dc.LeaveLobby()
 	}
 }
 
 func (b *Bot) DestroyLobby(ctx context.Context) {
-	if b.dotaClient == nil {
+	dc := b.dc()
+	if dc == nil {
 		b.log("ACTION: DestroyLobby skipped — dota client not connected")
 		return
 	}
 	b.log("ACTION: DestroyLobby")
-	b.dotaClient.DestroyLobby(ctx)
+	dc.DestroyLobby(ctx)
 }
 
 // PollLobbyFromCache reads the current lobby state directly from the cache
@@ -1180,10 +1314,11 @@ func (b *Bot) DestroyLobby(ctx context.Context) {
 // subscriber channels go quiet, so a direct read still catches state changes
 // (match ID assigned, state → RUN, etc).
 func (b *Bot) PollLobbyFromCache() {
-	if b.dotaClient == nil {
+	dc := b.dc()
+	if dc == nil {
 		return
 	}
-	container, err := b.dotaClient.GetCache().GetContainerForTypeID(uint32(cso.Lobby))
+	container, err := dc.GetCache().GetContainerForTypeID(uint32(cso.Lobby))
 	if err != nil {
 		return
 	}

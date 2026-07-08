@@ -20,13 +20,14 @@ Every finding below was verified by reading the actual code. Status legend: ☐ 
   Line 759 sends the correctly-derived `cointoss`/`active`/`waiting`; line 936 then sends a hardcoded `"waiting"` on every cache tick, overwriting it. Re-breaks commit `0f505d1`. Live games display "waiting".
   **Fix:** delete the trailing hardcoded send (the derived send at 759 already covers it), or reuse the derived `lobbyStatus`.
 
-- ☐ **C4 — Concurrent-map panic on `expectedTeams`** — `lobbybot/bot/bot.go:951` / read at `898`
+- ☑ **C4 — Concurrent-map panic on `expectedTeams`** — `lobbybot/bot/bot.go:951` / read at `898`
   `SetExpectedTeams` rebuilds the map with no lock while `processLobbyUpdate` reads it from the GC-event and 15s-poll goroutines → fatal `concurrent map read and map write`, crashes all bots in the process.
   **Fix:** guard `expectedTeams` (and `lastLobby`/`launchSent`/`gameStartedSent`/`activeLobbyID`) with `b.mu`, or snapshot under lock.
 
-- ☐ **C5 — Cross-goroutine nil-deref of `dotaClient`/`steamClient`** — `lobbybot/bot/bot.go:204`
+- ☑ **C5 — Cross-goroutine nil-deref of `dotaClient`/`steamClient`** — `lobbybot/bot/bot.go:204`
   `reconnect`/`Disconnect` set these to nil (392/425/429) while the SayHello goroutine (204) and `processLobbyUpdate` deref them unlocked → nil-pointer panic crashes the process.
-  **Fix:** synchronize client access under `b.mu` (snapshot the pointer under lock before use), or gate on a generation counter.
+  **Fix:** pointer writes now happen under `b.mu`; all deref sites snapshot via `b.dc()` / a locked local before use (SayHello goroutine, `processLobbyUpdate`, `watchLobbyCacheEvents`, `CreatePracticeLobby`, `RequestMatchDetails`, Launch/Leave/Destroy/Invite/Poll). The fatal nil-deref class is closed.
+  **Residual (not a crash):** `lastLobby` / `launchSent` / `gameStartedSent` are still mutated inside `processLobbyUpdate` without `b.mu` while the 15s poll and cache watcher can overlap — a word-sized data race that can at worst duplicate/skip a launch, not panic. Deserves a dedicated lock-audit pass under `go test -race` (no bot tests exist yet). Tracked as a follow-up.
 
 ---
 
@@ -52,7 +53,7 @@ Every finding below was verified by reading the actual code. Status legend: ☐ 
   UI int cast verbatim into `LobbyDotaTVDelay` (seconds: 0=10s, 1=120s, 2=300s, 3=900s). Default "10 min" → 2 min; "2 min" → 15 min; "None" → 10s. CLAUDE.md table is also wrong.
   **Fix:** map UI value → correct enum explicitly; fix the CLAUDE.md table and the UI options to match the real GC enum.
 
-- ☐ **H6 — `ClientWelcomed` unconditionally sets `available`** — `lobbybot/bot/bot.go:282`
+- ☑ **H6 — `ClientWelcomed` unconditionally sets `available`** — `lobbybot/bot/bot.go:282`
   The adjacent `GCConnectionStatusChanged` handler (`:293`) guards on `activeLobbyID==""`, but `ClientWelcomed` does not → a GC re-welcome mid-lobby double-books the bot.
   **Fix:** same `if b.activeLobbyID == ""` guard before `setStatus(StatusAvailable)`.
 
@@ -64,15 +65,15 @@ Every finding below was verified by reading the actual code. Status legend: ☐ 
 
 ## 🟡 Medium
 
-- ☐ **M1 — `pendingAuth` never cleared on guard timeout/cancel** — `lobbybot/bot/bot.go:233, 237`
+- ☑ **M1 — `pendingAuth` never cleared on guard timeout/cancel** — `lobbybot/bot/bot.go:233, 237`
   On 5-min timeout or `cancelCh`, `pendingAuth` stays `true`; later `DisconnectedEvent` (322) sees `waiting=true` and `continue`s forever, never reconnecting.
   **Fix:** set `b.pendingAuth = false` in the timeout and cancel branches.
 
-- ☐ **M2 — Stale `cancelCh` token aborts a future reconnect** — `lobbybot/bot/bot.go:345`
+- ☑ **M2 — Stale `cancelCh` token aborts a future reconnect** — `lobbybot/bot/bot.go:345`
   `cancelCh` is buffered(1); `Disconnect` sends a token (412) that may never be drained. A later transient-blip reconnect select reads it → bot goes offline instead of reconnecting.
   **Fix:** drain `cancelCh` at the start of `Connect`/`reconnect`, or use a fresh cancel channel per session.
 
-- ☐ **M3 — `Connect()` double-connect guard is check-then-act** — `lobbybot/bot/bot.go:117`
+- ☑ **M3 — `Connect()` double-connect guard is check-then-act** — `lobbybot/bot/bot.go:117`
   Lock released between reading `Status` and acting; two near-simultaneous connects spawn duplicate Steam clients/event loops.
   **Fix:** hold `b.mu` across the check *and* the `setStatus(StatusConnecting)` transition (compare-and-set).
 
@@ -80,7 +81,7 @@ Every finding below was verified by reading the actual code. Status legend: ☐ 
   `_reconnectAutoConnectBots` retries `error`/`offline` bots every 5 min, re-minting Steam tokens for bad-credential/guard-stuck bots forever → Steam rate-limit risk.
   **Fix:** track consecutive failures per bot and exponentially back off / stop after N; skip bots in `awaiting_guard`.
 
-- ☐ **M5 — `gameStartedCh` never drained between lobbies** — `lobbybot/lobby/manager.go:242` / `bot.go:78, 866`
+- ☑ **M5 — `gameStartedCh` never drained between lobbies** — `lobbybot/lobby/manager.go:242` / `bot.go:78, 866`
   Per-bot buffered(1) channel; a stale token makes the next lobby "start" instantly and get abandoned.
   **Fix:** drain the channel when a new lobby starts (`runLobby`), or make it per-lobby.
 
@@ -92,7 +93,7 @@ Every finding below was verified by reading the actual code. Status legend: ☐ 
   Stored but never read; kick-enforcement runs unconditionally.
   **Fix:** gate the enforcement block on `lobby.AutoAssignTeams`, or remove the option.
 
-- ☐ **M8 — `SetBusy(false)` always advertises `available`** — `lobbybot/bot/bot.go:1008`
+- ☑ **M8 — `SetBusy(false)` always advertises `available`** — `lobbybot/bot/bot.go:1008`
   No GC/connection health check → a bot with a dead GC session gets the next match.
   **Fix:** only go `available` if GC session is live; otherwise `connecting_gc`/`error`.
 
