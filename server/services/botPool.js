@@ -57,7 +57,11 @@ class BotPool {
 
         ws.on('close', () => {
           console.log('Go lobby bot service disconnected')
-          this.goWs = null
+          // Only clear the reference if THIS socket is still the current one. On
+          // a network flap Go can reconnect (setting this.goWs to the new socket)
+          // before the old socket's 'close' fires; nulling unconditionally would
+          // wipe the live connection and break all Node→Go commands.
+          if (this.goWs === ws) this.goWs = null
         })
 
         ws.on('error', (err) => {
@@ -2041,7 +2045,7 @@ class BotPool {
       botId: lobby.bot_id ? String(lobby.bot_id) : undefined,
       gameName: lobby.game_name,
       password: lobby.password,
-      serverRegion: pool.lobby_server_region || 3,
+      serverRegion: (pool.lobby_server_region ?? 3),
       gameMode: opts.gameModeOverride ?? pool.lobby_game_mode ?? 2,
       autoAssignTeams: pool.lobby_auto_assign_teams !== false,
       leagueId: pool.lobby_league_id || 0,
@@ -2094,7 +2098,7 @@ class BotPool {
     const lobby = await queryOne(`
       INSERT INTO match_lobbies (match_id, game_number, competition_id, bot_id, status, server_region, game_name, password, players_expected)
       VALUES ($1, $2, NULL, $3, 'creating', $4, $5, $6, $7) RETURNING *
-    `, [matchId, gameNumber, availableBot.id, pool.lobby_server_region || 3, gameName, password, JSON.stringify(playersExpected)])
+    `, [matchId, gameNumber, availableBot.id, (pool.lobby_server_region ?? 3), gameName, password, JSON.stringify(playersExpected)])
 
     await execute("UPDATE lobby_bots SET status = 'busy', last_used_at = NOW() WHERE id = $1", [availableBot.id])
     await execute("UPDATE matches SET status = 'live' WHERE id = $1 AND status = 'pending'", [matchId])
@@ -2210,7 +2214,7 @@ class BotPool {
       VALUES ($1, $2, NULL, $3, 'creating', $4, $5, $6, $7) RETURNING *
     `, [
       erroredLobby.match_id, erroredLobby.game_number, nextBot.id,
-      pool.lobby_server_region || 3, gameName, password, JSON.stringify(playersExpected),
+      (pool.lobby_server_region ?? 3), gameName, password, JSON.stringify(playersExpected),
     ])
 
     await execute("UPDATE lobby_bots SET status = 'busy', last_used_at = NOW() WHERE id = $1", [nextBot.id])

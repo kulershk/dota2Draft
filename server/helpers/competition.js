@@ -12,6 +12,14 @@ export function getDefaultFantasyScoring() {
   return JSON.parse(JSON.stringify(DEFAULT_FANTASY_SCORING))
 }
 
+// Coerce to a number, falling back to `dflt` ONLY for null/undefined/NaN — a
+// legitimate 0 (e.g. server region 0 = US West, DotaTV delay 0 = None) is kept,
+// unlike `Number(x) || dflt` which silently rewrites 0 to the default.
+function numOr(v, dflt) {
+  const n = Number(v)
+  return Number.isFinite(n) ? n : dflt
+}
+
 export function parseCompSettings(comp) {
   const s = comp.settings || {}
   return {
@@ -32,19 +40,19 @@ export function parseCompSettings(comp) {
     fantasyEnforceRoles: !!s.fantasyEnforceRoles,
     fantasyScoring: s.fantasyScoring || getDefaultFantasyScoring(),
     fantasyRepeatPenalty: s.fantasyRepeatPenalty != null ? Number(s.fantasyRepeatPenalty) : 0.15,
-    lobbyGameMode: Number(s.lobbyGameMode) || 2,
-    lobbyServerRegion: Number(s.lobbyServerRegion) || 3,
+    lobbyGameMode: numOr(s.lobbyGameMode, 2),
+    lobbyServerRegion: numOr(s.lobbyServerRegion, 3),
     lobbyAutoAssignTeams: s.lobbyAutoAssignTeams !== false,
-    lobbyLeagueId: Number(s.lobbyLeagueId) || 0,
-    lobbyDotaTvDelay: Number(s.lobbyDotaTvDelay) || 1,
+    lobbyLeagueId: numOr(s.lobbyLeagueId, 0),
+    lobbyDotaTvDelay: numOr(s.lobbyDotaTvDelay, 1),
     lobbyCheats: !!s.lobbyCheats,
     lobbyAllowSpectating: s.lobbyAllowSpectating !== false,
-    lobbyPauseSetting: Number(s.lobbyPauseSetting) || 0,
-    lobbySelectionPriority: Number(s.lobbySelectionPriority) || 0,
-    lobbyCmPick: Number(s.lobbyCmPick) || 0,
-    lobbyPenaltyRadiant: Number(s.lobbyPenaltyRadiant) || 0,
-    lobbyPenaltyDire: Number(s.lobbyPenaltyDire) || 0,
-    lobbySeriesType: Number(s.lobbySeriesType) || 0,
+    lobbyPauseSetting: numOr(s.lobbyPauseSetting, 0),
+    lobbySelectionPriority: numOr(s.lobbySelectionPriority, 0),
+    lobbyCmPick: numOr(s.lobbyCmPick, 0),
+    lobbyPenaltyRadiant: numOr(s.lobbyPenaltyRadiant, 0),
+    lobbyPenaltyDire: numOr(s.lobbyPenaltyDire, 0),
+    lobbySeriesType: numOr(s.lobbySeriesType, 0),
     lobbyTimeoutMinutes: Number(s.lobbyTimeoutMinutes) || 10,
     // Team registration mode (captain registers a fixed roster, no auction)
     teamRegistrationMode: !!s.teamRegistrationMode,

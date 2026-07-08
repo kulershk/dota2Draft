@@ -919,26 +919,13 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 		}
 	}
 
-	// Report joined players to Node.js (exclude the bot itself)
-	var joined []protocol.LobbyPlayer
-	for _, m := range newMembers {
-		if b.steamClient != nil && m.GetId() == b.steamClient.SteamId().ToUint64() {
-			continue
-		}
-		team := teamName(m.GetTeam())
-		joined = append(joined, protocol.LobbyPlayer{
-			SteamID: fmt.Sprintf("%d", m.GetId()),
-			Team:    team,
-		})
-	}
-
-	if b.activeLobbyID != "" {
-		b.send("lobby_status", protocol.LobbyStatusEvent{
-			LobbyID:       b.activeLobbyID,
-			Status:        "waiting",
-			PlayersJoined: joined,
-		})
-	}
+	// NOTE: the authoritative lobby_status (with the derived cointoss/active/
+	// waiting state and the radiant/dire roster) was already sent above at the
+	// start of this handler. A second send here previously hardcoded
+	// Status:"waiting", which clobbered the real state back to "waiting" on
+	// every in-game cache tick — the exact regression commit 0f505d1 fixed.
+	// Per-player joins/leaves are reported via the player_joined/player_left
+	// events above, so no additional lobby_status send is needed here.
 }
 
 func (b *Bot) SetExpectedTeams(players []protocol.LobbyPlayer) {

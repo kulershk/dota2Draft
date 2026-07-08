@@ -462,7 +462,7 @@ export default function createQueueRouter(io) {
       `, [
         name, enabled !== false, min_mmr || 0, max_mmr || 0,
         pick_timer || 30, best_of || 1, ts,
-        lobby_server_region || 3, lobby_game_mode || 2, lobby_league_id || 0,
+        lobby_server_region ?? 3, lobby_game_mode || 2, lobby_league_id || 0,
         lobby_dotv_delay ?? 1, !!lobby_cheats, lobby_allow_spectating !== false,
         lobby_pause_setting || 0, lobby_selection_priority || 0, lobby_cm_pick || 0,
         lobby_auto_assign_teams !== false, lobby_penalty_radiant || 0, lobby_penalty_dire || 0,
