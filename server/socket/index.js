@@ -193,7 +193,14 @@ export function initSocket(io) {
       bannedSockets.delete(socket.id)
       // Notify friends the player went offline — only once their last socket
       // is gone (multi-tab users stay online). flagsFor recomputes online.
-      if (pid && ![...socketPlayers.values()].includes(pid)) broadcastPresence(pid)
+      // Stamp last_online first so the offline push (and any friends-list
+      // fetch it triggers) sees the exact disconnect moment instead of a
+      // heartbeat up to 60s stale.
+      if (pid && ![...socketPlayers.values()].includes(pid)) {
+        execute('UPDATE players SET last_online = NOW() WHERE id = $1', [pid])
+          .catch(() => {})
+          .then(() => broadcastPresence(pid))
+      }
 
       if (compId) {
         const onlineMap = compOnlineCaptains.get(compId)

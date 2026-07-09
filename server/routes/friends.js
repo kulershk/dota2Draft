@@ -37,7 +37,8 @@ export default function createFriendsRouter(io) {
     if (!me) return res.status(401).json({ error: 'Not authenticated' })
     const rows = await query(
       `SELECT f.id, f.created_at, f.responded_at,
-              p.id AS p_id, p.name AS p_name, p.display_name AS p_display, p.avatar_url AS p_avatar, p.mmr AS p_mmr
+              p.id AS p_id, p.name AS p_name, p.display_name AS p_display, p.avatar_url AS p_avatar, p.mmr AS p_mmr,
+              p.last_online AS p_last_online
          FROM friendships f
          JOIN players p ON p.id = CASE WHEN f.requester_id = $1 THEN f.addressee_id ELSE f.requester_id END
         WHERE (f.requester_id = $1 OR f.addressee_id = $1) AND f.status = 'accepted'
@@ -56,6 +57,9 @@ export default function createFriendsRouter(io) {
       // ready-check window so the flag doesn't flicker between queue and match.
       in_match: playerInMatch.has(r.p_id),
       in_queue: playerInQueue.has(r.p_id) || playerInReadyCheck.has(r.p_id),
+      // Stamped on login, refreshed by the socket heartbeat, and finalized on
+      // disconnect — drives the "last seen Xm/h/d ago" label for offline friends.
+      last_online: r.p_last_online || null,
     })))
   })
 

@@ -26,16 +26,20 @@ function flagsFor(playerId) {
 }
 
 // Fire-and-forget; a failed lookup just leaves clients on the poll cadence.
+// The scalar subquery piggybacks the player's last_online stamp onto the
+// friend lookup so offline pushes carry a fresh "last seen" without a second
+// round-trip (the disconnect handler stamps it before calling us).
 export function broadcastPresence(playerId) {
   if (!_io || !playerId) return
   query(
-    `SELECT CASE WHEN requester_id = $1 THEN addressee_id ELSE requester_id END AS friend_id
+    `SELECT CASE WHEN requester_id = $1 THEN addressee_id ELSE requester_id END AS friend_id,
+            (SELECT last_online FROM players WHERE id = $1) AS last_online
        FROM friendships
       WHERE (requester_id = $1 OR addressee_id = $1) AND status = 'accepted'`,
     [playerId],
   ).then(rows => {
     if (!rows || rows.length === 0) return
-    const flags = flagsFor(playerId)
+    const flags = { ...flagsFor(playerId), last_online: rows[0].last_online || null }
     for (const r of rows) _io.to(`user:${r.friend_id}`).emit('friend:presence', flags)
   }).catch(() => {})
 }

@@ -56,6 +56,24 @@ export function localDatetimeToISO(localStr: string): string {
   return new Date(localStr).toISOString()
 }
 
+/**
+ * Elapsed time for "last seen" presence labels, split into value + unit so
+ * callers can pick a per-unit translated string (unit abbreviations differ by
+ * locale). Returns null when the timestamp is missing, invalid, or at least
+ * maxDays old — callers fall back to a plain "offline" label then.
+ */
+export function lastSeenParts(dateStr: string | null | undefined, maxDays = 7): { value: number; unit: 'minute' | 'hour' | 'day' } | null {
+  if (!dateStr) return null
+  const t = new Date(dateStr).getTime()
+  if (Number.isNaN(t)) return null
+  const diffMin = Math.floor((getServerNow() - t) / 60000)
+  if (diffMin >= maxDays * 24 * 60) return null
+  if (diffMin < 60) return { value: Math.max(1, diffMin), unit: 'minute' }
+  const diffH = Math.floor(diffMin / 60)
+  if (diffH < 24) return { value: diffH, unit: 'hour' }
+  return { value: Math.floor(diffH / 24), unit: 'day' }
+}
+
 export function formatRelativeTime(dateStr: string | null): string {
   if (!dateStr) return '—'
   const d = new Date(dateStr)

@@ -92,6 +92,7 @@
           "online": { "type": "boolean", "description": "Present only on /api/friends; true when the other player has any active socket." },
           "in_queue": { "type": "boolean", "description": "Present only on /api/friends; true when the other player is currently searching in a queue pool." },
           "in_match": { "type": "boolean", "description": "Present only on /api/friends; true when the other player is in an active queue match. Takes precedence over in_queue." },
+          "last_online": { "type": "string", "format": "date-time", "nullable": true, "description": "Present only on /api/friends; the other player's most recent activity stamp (login, socket heartbeat, disconnect). Drives the 'last seen' label for offline friends; null when never recorded." },
           "player": {
             "type": "object",
             "properties": {

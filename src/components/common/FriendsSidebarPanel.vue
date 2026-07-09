@@ -8,6 +8,7 @@ import { useFriendStore, type FriendEntry } from '@/composables/useFriendStore'
 import { useMessageStore } from '@/composables/useMessageStore'
 import { useDraftStore } from '@/composables/useDraftStore'
 import { useSidePanels } from '@/composables/useSidePanels'
+import { lastSeenParts } from '@/utils/format'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -75,6 +76,16 @@ function presenceFor(f: any): { color: string; label: string; pulse: boolean } {
   if (f.in_match) return { color: '#A855F7', label: t('presenceInMatch'), pulse: false }
   if (f.in_queue) return { color: '#F59E0B', label: t('presenceInQueue'), pulse: true }
   return { color: '#22D3EE', label: t('online'), pulse: false }
+}
+
+// Offline label: "last seen 5 min/3 h/2 d ago" while the absence is recent
+// enough to be meaningful; past 7 days (or with no stamp at all) just
+// "offline". Per-unit keys keep the unit abbreviations translatable.
+// Labels refresh with the friends data (60s presence poll + live pushes).
+const LAST_SEEN_KEYS = { minute: 'lastSeenMinutesAgo', hour: 'lastSeenHoursAgo', day: 'lastSeenDaysAgo' } as const
+function offlineLabelFor(f: any): string {
+  const seen = lastSeenParts(f.last_online)
+  return seen ? t(LAST_SEEN_KEYS[seen.unit], { n: seen.value }) : t('offline')
 }
 
 function nameMatches(name: string | null | undefined): boolean {
@@ -256,7 +267,7 @@ const showEmptyState = computed(() =>
                 </div>
                 <div class="flex-1 min-w-0">
                   <div class="text-[13px] font-bold truncate" style="color:#94A3B8">{{ f.player.display_name || f.player.name }}</div>
-                  <div class="text-[11px] truncate" style="color:#475569">{{ t('offline') }}</div>
+                  <div class="text-[11px] truncate" style="color:#475569">{{ offlineLabelFor(f) }}</div>
                 </div>
               </button>
               <button

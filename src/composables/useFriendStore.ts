@@ -18,6 +18,7 @@ export interface FriendEntry {
   online?: boolean
   in_queue?: boolean
   in_match?: boolean
+  last_online?: string | null
   player: FriendPlayer
 }
 
@@ -61,13 +62,15 @@ async function refreshPresence() {
 // Patch a single friend's live presence from a server push (friend:presence),
 // avoiding a full refetch. Deep reactivity on the ref array makes the in-place
 // flag update flow through to the sidebar.
-function applyPresence(p: { playerId: number; online: boolean; in_queue: boolean; in_match: boolean }) {
+function applyPresence(p: { playerId: number; online: boolean; in_queue: boolean; in_match: boolean; last_online?: string | null }) {
   if (!p?.playerId) return
   const f = friends.value.find(x => x.player.id === p.playerId)
   if (!f) return
   f.online = p.online
   f.in_queue = p.in_queue
   f.in_match = p.in_match
+  // Older server builds don't send last_online — keep the fetched value then.
+  if (p.last_online !== undefined) f.last_online = p.last_online
 }
 
 const pendingCount = computed(() => incoming.value.length)

@@ -48,14 +48,15 @@
               "playerId": { "type": "integer", "description": "The friend whose presence changed" },
               "online": { "type": "boolean" },
               "in_queue": { "type": "boolean", "description": "Searching in a queue pool (includes the ready-check window)" },
-              "in_match": { "type": "boolean", "description": "In an active queue match" }
+              "in_match": { "type": "boolean", "description": "In an active queue match" },
+              "last_online": { "type": "string", "format": "date-time", "nullable": true, "description": "The friend's most recent activity stamp; refreshed just before an offline push so 'last seen' counts from the disconnect moment. Null when never recorded." }
             },
-            "required": ["playerId", "online", "in_queue", "in_match"]
+            "required": ["playerId", "online", "in_queue", "in_match", "last_online"]
           },
           "examples": [
             {
               "name": "Friend started searching",
-              "payload": { "playerId": 42, "online": true, "in_queue": true, "in_match": false }
+              "payload": { "playerId": 42, "online": true, "in_queue": true, "in_match": false, "last_online": "2026-07-09T18:04:11.000Z" }
             }
           ]
         }
