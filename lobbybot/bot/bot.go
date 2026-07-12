@@ -69,10 +69,10 @@ type Bot struct {
 	expectedDireTeamId    int
 	detectedRadiantTeamId int
 	detectedDireTeamId    int
-	launchSent            bool // prevent repeated LaunchLobby calls
-	gameStartedSent       bool // game_started already sent for the current lobby (reset per lobby in SetActiveLobbyID)
-	gcReady               bool // GC session is live (welcomed / HAVE_SESSION); gates going back to 'available'
-	enforceTeams          bool // kick players onto their expected team (lobbyAutoAssignTeams); off = free team pick
+	launchSent            bool   // prevent repeated LaunchLobby calls
+	lastMatchIDSent       uint64 // last match id sent via game_started (0 = none; reset per lobby in SetActiveLobbyID). A relaunch after a failed start gets a new id and re-fires.
+	gcReady               bool   // GC session is live (welcomed / HAVE_SESSION); gates going back to 'available'
+	enforceTeams          bool   // kick players onto their expected team (lobbyAutoAssignTeams); off = free team pick
 }
 
 func NewBot(id, username, password, refreshToken string, send SendFunc) *Bot {
@@ -675,8 +675,8 @@ func (b *Bot) SetActiveLobbyID(id string) {
 	}
 	b.mu.Lock()
 	if id != "" {
-		// Re-arm the once-per-lobby game_started guard.
-		b.gameStartedSent = false
+		// Re-arm the per-lobby game_started guard.
+		b.lastMatchIDSent = 0
 	}
 	b.activeLobbyID = id
 	b.mu.Unlock()
@@ -938,16 +938,17 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 	// send above, which already derives it from the current state — no separate
 	// transition-only send needed (and a duplicate one would just race it).
 
-	// Detect match ID assigned. Use a sticky once-per-lobby guard instead of a
-	// pure edge (old==0 → new!=0): the edge can be missed when the match-id-bearing
-	// cache update is dropped, only seen on the 15s safety poll, or after a rejoin
-	// where the lobby already had a match id — leaving the lobby stuck on
-	// 'waiting'/'active' with no match id captured server-side. Firing once per
-	// lobby is safe — the server's game_started handler is idempotent.
+	// Detect match ID assigned. Fire whenever the match id differs from the one
+	// last reported, instead of a pure edge (old==0 → new!=0): the edge can be
+	// missed when the match-id-bearing cache update is dropped, only seen on the
+	// 15s safety poll, or after a rejoin where the lobby already had a match id.
+	// Tracking the last-sent id (rather than a once-per-lobby bool) also means a
+	// relaunch after a failed start — which gets a NEW match id from the GC —
+	// reaches Node. The server's game_started handler is idempotent per id.
 	b.mu.Lock()
-	fireGameStarted := matchID != 0 && !b.gameStartedSent
+	fireGameStarted := matchID != 0 && matchID != b.lastMatchIDSent
 	if fireGameStarted {
-		b.gameStartedSent = true
+		b.lastMatchIDSent = matchID
 	}
 	b.mu.Unlock()
 	if fireGameStarted {
@@ -1014,16 +1015,26 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 		})
 	}
 
-	// Only signal bot to leave when game is actually running. By the time state
-	// reaches RUN, server_steam_id is virtually always populated, but the
-	// transition above already handled the broadcast — this is just the leave
-	// trigger.
+	// Signal the lobby watcher when the game server starts running. The watcher
+	// does NOT leave immediately — it holds the lobby until the draft actually
+	// starts (see WaitForDraft): if some players fail to load, the match is
+	// aborted and everyone is dumped back into this lobby, which the bot must
+	// still be around to manage.
 	if lobbyState == gcccm.CSODOTALobby_RUN && oldState != gcccm.CSODOTALobby_RUN {
-		b.log("Game is now running — leaving lobby")
+		b.log("Game is now running — waiting for all players to load")
 		select {
 		case b.gameStartedCh <- struct{}{}:
 		default:
 		}
+	}
+	// Game aborted back to the lobby before it got going (players failed to
+	// load). Re-arm the launch guard so the lobby can be launched again; the
+	// watcher's draft-wait sees the state change and resumes watching.
+	if oldState == gcccm.CSODOTALobby_RUN && lobbyState != gcccm.CSODOTALobby_RUN {
+		b.mu.Lock()
+		b.launchSent = false
+		b.mu.Unlock()
+		b.log("Game aborted back to lobby — launch re-armed, waiting for re-launch")
 	}
 
 	// Log current lobby roster
@@ -1238,6 +1249,75 @@ func (b *Bot) GetDetectedTeamIds() (int, int) {
 
 func (b *Bot) GameStartedCh() <-chan struct{} {
 	return b.gameStartedCh
+}
+
+// DraftWaitOutcome is the result of WaitForDraft.
+type DraftWaitOutcome int
+
+const (
+	// DraftStarted — the draft (or a later game phase) is underway: every
+	// player made it through the loading screen, so it's safe to leave.
+	DraftStarted DraftWaitOutcome = iota
+	// DraftWaitExpired — the failsafe elapsed without draft confirmation.
+	DraftWaitExpired
+	// DraftAborted — the lobby left the RUN state before the draft started:
+	// the game was aborted (players failed to load) and everyone was dumped
+	// back into the lobby.
+	DraftAborted
+	// DraftCancelled — the watcher context was cancelled.
+	DraftCancelled
+)
+
+// WaitForDraft blocks after a game launch until it is safe to leave the
+// lobby: the draft has started (all players loaded), the game was aborted
+// back to the lobby, the failsafe expires, or ctx is cancelled. State is read
+// from the GC lobby cache, which the cache watcher + 15s safety poll keep
+// fresh.
+func (b *Bot) WaitForDraft(ctx context.Context, failsafe time.Duration) DraftWaitOutcome {
+	deadline := time.Now().Add(failsafe)
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return DraftCancelled
+		case <-ticker.C:
+		}
+		lob := b.getLastLobby()
+		if lob == nil {
+			// Lobby object vanished from the cache — nothing left to manage.
+			b.log("Lobby gone from GC cache while waiting for draft — leaving")
+			return DraftStarted
+		}
+		if lob.GetState() != gcccm.CSODOTALobby_RUN {
+			return DraftAborted
+		}
+		if gameUnderway(lob.GetGameState()) {
+			b.log(fmt.Sprintf("Draft underway (game state: %s)", lob.GetGameState().String()))
+			return DraftStarted
+		}
+		if time.Now().After(deadline) {
+			return DraftWaitExpired
+		}
+	}
+}
+
+// gameUnderway reports whether the in-game rules state is at or past the
+// draft — i.e. every player made it through the loading screen and the match
+// is genuinely underway. INIT / WAIT_FOR_PLAYERS_TO_LOAD mean players can
+// still fail to load and be dumped back into the lobby.
+func gameUnderway(s gcccm.DOTA_GameState) bool {
+	switch s {
+	case gcccm.DOTA_GameState_DOTA_GAMERULES_STATE_HERO_SELECTION,
+		gcccm.DOTA_GameState_DOTA_GAMERULES_STATE_STRATEGY_TIME,
+		gcccm.DOTA_GameState_DOTA_GAMERULES_STATE_TEAM_SHOWCASE,
+		gcccm.DOTA_GameState_DOTA_GAMERULES_STATE_PLAYER_DRAFT,
+		gcccm.DOTA_GameState_DOTA_GAMERULES_STATE_PRE_GAME,
+		gcccm.DOTA_GameState_DOTA_GAMERULES_STATE_GAME_IN_PROGRESS,
+		gcccm.DOTA_GameState_DOTA_GAMERULES_STATE_POST_GAME:
+		return true
+	}
+	return false
 }
 
 func (b *Bot) GetDotaClient() *dota2.Dota2 {
