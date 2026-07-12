@@ -44,6 +44,10 @@ func (c *Client) WaitConnected() {
 }
 
 func (c *Client) Run() {
+	// Exponential backoff between dial attempts; reset once a connection is
+	// actually established so a long-lived link that drops reconnects fast
+	// instead of inheriting the backoff of dial failures from hours ago.
+	attempt := 0
 	for {
 		select {
 		case <-c.done:
@@ -51,41 +55,36 @@ func (c *Client) Run() {
 		default:
 		}
 
-		err := c.connect()
+		established, err := c.connect()
 		if err != nil {
-			log.Printf("WS connect failed: %v", err)
+			log.Printf("WS connection error: %v", err)
+		}
+		if established {
+			attempt = 0
 		}
 
-		// Reconnect with exponential backoff
-		for attempt := 0; ; attempt++ {
-			select {
-			case <-c.done:
-				return
-			default:
-			}
-
-			delaySec := math.Pow(2, float64(attempt))
-			if delaySec > 15 {
-				delaySec = 15
-			}
-			delay := time.Duration(delaySec) * time.Second
-			log.Printf("Reconnecting in %v...", delay)
-			time.Sleep(delay)
-
-			err := c.connect()
-			if err != nil {
-				log.Printf("WS reconnect failed: %v", err)
-				continue
-			}
-			break
+		delaySec := math.Pow(2, float64(attempt))
+		if delaySec > 15 {
+			delaySec = 15
+		}
+		attempt++
+		delay := time.Duration(delaySec) * time.Second
+		log.Printf("Reconnecting in %v...", delay)
+		select {
+		case <-c.done:
+			return
+		case <-time.After(delay):
 		}
 	}
 }
 
-func (c *Client) connect() error {
+// connect dials the WS and runs the read loop until the connection drops.
+// The bool reports whether a connection was established at all (used to reset
+// the caller's backoff); the error is the dial or read failure.
+func (c *Client) connect() (bool, error) {
 	u, err := url.Parse(c.url)
 	if err != nil {
-		return fmt.Errorf("invalid URL: %w", err)
+		return false, fmt.Errorf("invalid URL: %w", err)
 	}
 	if c.token != "" {
 		q := u.Query()
@@ -96,7 +95,7 @@ func (c *Client) connect() error {
 	log.Printf("Connecting to %s", c.url)
 	conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
-		return fmt.Errorf("dial failed: %w", err)
+		return false, fmt.Errorf("dial failed: %w", err)
 	}
 
 	c.mu.Lock()
@@ -124,7 +123,7 @@ func (c *Client) connect() error {
 			c.connected = false
 			c.conn = nil
 			c.mu.Unlock()
-			return err
+			return true, err
 		}
 
 		var env struct {

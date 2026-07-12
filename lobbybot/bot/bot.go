@@ -39,9 +39,17 @@ type Bot struct {
 	SteamID      string
 	DisplayName  string
 
-	send                  SendFunc
-	mu                    sync.Mutex
-	guardCh               chan string
+	send SendFunc
+	mu   sync.Mutex
+	// processMu serializes the two goroutines that diff lobby state against
+	// lastLobby (the cache-event watcher and the 15s safety poll) so their
+	// read-diff-write sequences can't interleave. Always acquired before b.mu,
+	// never while holding it.
+	processMu sync.Mutex
+	guardCh   chan string
+	// cancelCh belongs to the current connect session; Disconnect closes it so
+	// every waiter (reconnect sleeps, Steam Guard wait) observes cancellation.
+	// Connect creates a fresh one, so a stale close can't abort a new session.
 	cancelCh              chan struct{}
 	steamClient           *steam.Client
 	dotaClient            *dota2.Dota2
@@ -76,7 +84,6 @@ func NewBot(id, username, password, refreshToken string, send SendFunc) *Bot {
 		Status:        StatusOffline,
 		send:          send,
 		guardCh:       make(chan string, 1),
-		cancelCh:      make(chan struct{}, 1),
 		gameStartedCh: make(chan struct{}, 1),
 	}
 }
@@ -89,13 +96,15 @@ func (b *Bot) log(msg string) {
 func (b *Bot) setStatus(status string, errMsg ...string) {
 	b.mu.Lock()
 	b.Status = status
+	steamID := b.SteamID
+	displayName := b.DisplayName
 	b.mu.Unlock()
 
 	evt := protocol.BotStatusEvent{
 		BotID:       b.ID,
 		Status:      status,
-		SteamID:     b.SteamID,
-		DisplayName: b.DisplayName,
+		SteamID:     steamID,
+		DisplayName: displayName,
 	}
 	if len(errMsg) > 0 {
 		evt.Error = errMsg[0]
@@ -126,14 +135,11 @@ func (b *Bot) Connect() {
 	// instead of both spawning a Steam client + event loop on the same account.
 	b.Status = StatusConnecting
 	b.loginFailedHard = false
+	// Fresh cancel channel per session — a Disconnect() aimed at a previous
+	// session closed the previous channel and can't affect this one.
+	cancel := make(chan struct{})
+	b.cancelCh = cancel
 	b.mu.Unlock()
-
-	// Drain any stale cancel token left buffered by a previous Disconnect(), so
-	// it can't spuriously abort this fresh session's first auto-reconnect.
-	select {
-	case <-b.cancelCh:
-	default:
-	}
 
 	b.log(fmt.Sprintf("Connecting as %s...", b.Username))
 	b.setStatus(StatusConnecting)
@@ -143,65 +149,81 @@ func (b *Bot) Connect() {
 	b.steamClient.ConnectionTimeout = 30 * time.Second
 	sc := b.steamClient
 	b.mu.Unlock()
-	go b.handleSteamEvents()
+	go b.handleSteamEvents(sc, cancel)
 
 	b.log("Connecting to Steam network...")
 	sc.Connect()
 }
 
-func (b *Bot) handleSteamEvents() {
-	for event := range b.steamClient.Events() {
+func (b *Bot) handleSteamEvents(sc *steam.Client, cancel <-chan struct{}) {
+	for event := range sc.Events() {
 		switch e := event.(type) {
 		case *steam.ConnectedEvent:
+			// Snapshot credentials under the lock — the guard-code goroutine and
+			// SetSentryHashHex/SetLoginKey write these from other goroutines.
+			b.mu.Lock()
+			code := b.pendingGuardCode
+			b.pendingGuardCode = ""
+			twoFactor := b.guardIsTwoFactor
+			sentry := b.sentryHash
+			refreshToken := b.RefreshToken
+			loginKey := b.loginKey
+			b.mu.Unlock()
+
 			details := &steam.LogOnDetails{
 				Username:               b.Username,
-				SentryFileHash:         b.sentryHash,
+				SentryFileHash:         sentry,
 				ShouldRememberPassword: true,
 			}
 			b.usedTokenLogin = false
-			if b.pendingGuardCode != "" {
-				code := b.pendingGuardCode
-				b.pendingGuardCode = ""
+			if code != "" {
 				details.Password = b.Password
-				if b.guardIsTwoFactor {
+				if twoFactor {
 					b.log("Connected to Steam. Logging in with 2FA code...")
 					details.TwoFactorCode = code
 				} else {
 					b.log("Connected to Steam. Logging in with email code...")
 					details.AuthCode = code
 				}
-			} else if b.RefreshToken != "" {
+			} else if refreshToken != "" {
 				// Preferred path: Steam rejects legacy password logons with
 				// InvalidPassword, so a token minted via the modern auth flow
 				// is the only way in.
 				b.log("Connected to Steam. Logging in with refresh token...")
-				details.AccessToken = b.RefreshToken
+				details.AccessToken = refreshToken
 				b.usedTokenLogin = true
-			} else if b.loginKey != "" {
+			} else if loginKey != "" {
 				b.log("Connected to Steam. Logging in with saved login key...")
-				details.LoginKey = b.loginKey
+				details.LoginKey = loginKey
 			} else {
 				b.log("Connected to Steam. Logging in with password...")
 				details.Password = b.Password
 			}
-			b.steamClient.Auth.LogOn(details)
+			sc.Auth.LogOn(details)
 
 		case *steam.LoggedOnEvent:
-			b.SteamID = b.steamClient.SteamId().String()
-			b.log(fmt.Sprintf("Logged into Steam (SteamID: %s)", b.SteamID))
-			b.log(fmt.Sprintf("Login key: '%s', Sentry: %d bytes", b.loginKey, len(b.sentryHash)))
+			steamID := sc.SteamId().String()
+			b.mu.Lock()
+			b.SteamID = steamID
+			loginKey := b.loginKey
+			sentryLen := len(b.sentryHash)
+			b.mu.Unlock()
+			b.log(fmt.Sprintf("Logged into Steam (SteamID: %s)", steamID))
+			b.log(fmt.Sprintf("Login key: '%s', Sentry: %d bytes", loginKey, sentryLen))
 
 		case *steam.AccountInfoEvent:
+			b.mu.Lock()
 			b.DisplayName = e.PersonaName
+			b.mu.Unlock()
 			b.log(fmt.Sprintf("Account: %s (country: %s)", e.PersonaName, e.Country))
 			b.setStatus(StatusConnectingGC)
 
-			b.steamClient.Social.SetPersonaState(steamlang.EPersonaState_Online)
+			sc.Social.SetPersonaState(steamlang.EPersonaState_Online)
 
 			logger := logrus.New()
 			logger.SetLevel(logrus.DebugLevel)
 			b.mu.Lock()
-			b.dotaClient = dota2.New(b.steamClient, logger)
+			b.dotaClient = dota2.New(sc, logger)
 			dc := b.dotaClient
 			b.mu.Unlock()
 			dc.SetPlaying(true)
@@ -237,14 +259,15 @@ func (b *Bot) handleSteamEvents() {
 			result := e.Result
 			if result == steamlang.EResult_AccountLogonDenied ||
 				result == steamlang.EResult_AccountLoginDeniedNeedTwoFactor {
-				b.guardIsTwoFactor = (result == steamlang.EResult_AccountLoginDeniedNeedTwoFactor)
+				twoFactor := result == steamlang.EResult_AccountLoginDeniedNeedTwoFactor
 				guardType := "email"
-				if b.guardIsTwoFactor {
+				if twoFactor {
 					guardType = "mobile authenticator"
 				}
 				b.log(fmt.Sprintf("Steam Guard code required (%s) — waiting for code...", guardType))
 				b.setStatus(StatusAwaitGuard)
 				b.mu.Lock()
+				b.guardIsTwoFactor = twoFactor
 				b.pendingAuth = true
 				b.mu.Unlock()
 
@@ -257,12 +280,9 @@ func (b *Bot) handleSteamEvents() {
 						b.mu.Lock()
 						b.pendingAuth = false
 						b.pendingGuardCode = code
-						sc := b.steamClient
 						b.mu.Unlock()
 						// Reconnect — the ConnectedEvent handler will use the code
-						if sc != nil {
-							sc.Connect()
-						}
+						sc.Connect()
 					case <-time.After(5 * time.Minute):
 						b.log("Steam Guard code timed out")
 						// Clear pendingAuth, otherwise the DisconnectedEvent handler
@@ -272,7 +292,7 @@ func (b *Bot) handleSteamEvents() {
 						b.pendingAuth = false
 						b.mu.Unlock()
 						b.setStatus(StatusError, "Steam Guard code timed out")
-					case <-b.cancelCh:
+					case <-cancel:
 						b.mu.Lock()
 						b.pendingAuth = false
 						b.mu.Unlock()
@@ -303,19 +323,25 @@ func (b *Bot) handleSteamEvents() {
 
 		case *steam.MachineAuthUpdateEvent:
 			b.log("Machine auth updated — sentry saved")
+			b.mu.Lock()
 			b.sentryHash = e.Hash
+			status := b.Status
+			b.mu.Unlock()
 			b.send("bot_status", protocol.BotStatusEvent{
 				BotID:      b.ID,
-				Status:     b.Status,
+				Status:     status,
 				SentryHash: fmt.Sprintf("%x", e.Hash),
 			})
 
 		case *steam.LoginKeyEvent:
 			b.log("Login key received — won't need 2FA next time")
+			b.mu.Lock()
 			b.loginKey = e.LoginKey
+			status := b.Status
+			b.mu.Unlock()
 			b.send("bot_status", protocol.BotStatusEvent{
 				BotID:    b.ID,
-				Status:   b.Status,
+				Status:   status,
 				LoginKey: e.LoginKey,
 			})
 
@@ -400,14 +426,13 @@ func (b *Bot) handleSteamEvents() {
 				delay := b.reconnectDelay()
 				b.log(fmt.Sprintf("Disconnected from Steam — reconnecting in %s...", delay))
 				b.setStatus(StatusConnecting)
-				time.Sleep(delay)
 				select {
-				case <-b.cancelCh:
+				case <-cancel:
 					b.setStatus(StatusOffline)
 					return
-				default:
+				case <-time.After(delay):
 				}
-				b.reconnect()
+				b.reconnect(cancel)
 				return // exit this event loop; reconnect starts a new one
 			}
 			return
@@ -416,14 +441,13 @@ func (b *Bot) handleSteamEvents() {
 			delay := b.reconnectDelay()
 			b.log(fmt.Sprintf("Steam error: %v — reconnecting in %s...", e, delay))
 			b.setStatus(StatusConnecting)
-			time.Sleep(delay)
 			select {
-			case <-b.cancelCh:
+			case <-cancel:
 				b.setStatus(StatusOffline)
 				return
-			default:
+			case <-time.After(delay):
 			}
-			b.reconnect()
+			b.reconnect(cancel)
 			return // exit this event loop; reconnect starts a new one
 		}
 	}
@@ -442,7 +466,7 @@ func (b *Bot) reconnectDelay() time.Duration {
 	return time.Duration(base) * time.Second
 }
 
-func (b *Bot) reconnect() {
+func (b *Bot) reconnect(cancel <-chan struct{}) {
 	b.log("Creating fresh Steam client for reconnect...")
 	// Detach the old dota client + cache watcher under the lock so any concurrent
 	// reader (processLobbyUpdate, the SayHello goroutine) snapshots either the
@@ -467,21 +491,25 @@ func (b *Bot) reconnect() {
 	b.steamClient.ConnectionTimeout = 30 * time.Second
 	sc := b.steamClient
 	b.mu.Unlock()
-	go b.handleSteamEvents()
+	go b.handleSteamEvents(sc, cancel)
 	b.log("Reconnecting to Steam network...")
 	sc.Connect()
 }
 
 func (b *Bot) Disconnect() {
 	b.log("Disconnecting...")
-	select {
-	case b.cancelCh <- struct{}{}:
-	default:
-	}
 	// Detach clients + cache watcher under the lock, then do the blocking
 	// Close/Disconnect outside it. Concurrent readers snapshot the pointers
 	// under the same lock, so they see either a live client or nil.
+	// Closing cancelCh (instead of a single buffered token) wakes every waiter
+	// of this session — reconnect sleeps and the Steam Guard wait alike — and a
+	// later Connect() creates a fresh channel, so this close can't leak into
+	// the next session.
 	b.mu.Lock()
+	if b.cancelCh != nil {
+		close(b.cancelCh)
+		b.cancelCh = nil
+	}
 	if b.lobbyCacheCancel != nil {
 		b.lobbyCacheCancel()
 		b.lobbyCacheCancel = nil
@@ -515,7 +543,9 @@ func (b *Bot) Disconnect() {
 // available). This mirrors a manual bot restart, so the next lobby attempt
 // works without intervention.
 func (b *Bot) RecoverGCSession(reason string) {
+	b.mu.Lock()
 	sc := b.steamClient
+	b.mu.Unlock()
 	if sc != nil && sc.Connected() {
 		b.log(fmt.Sprintf("Recovering GC session (%s) — forcing reconnect", reason))
 		sc.Disconnect()
@@ -616,12 +646,16 @@ func (b *Bot) RequestMatchDetails(matchID uint64) (*protocol.MatchDetailsEvent, 
 func (b *Bot) SetSentryHashHex(hexStr string) {
 	decoded, err := hex.DecodeString(hexStr)
 	if err == nil && len(decoded) > 0 {
+		b.mu.Lock()
 		b.sentryHash = steam.SentryHash(decoded)
+		b.mu.Unlock()
 	}
 }
 
 func (b *Bot) SetLoginKey(key string) {
+	b.mu.Lock()
 	b.loginKey = key
+	b.mu.Unlock()
 }
 
 func (b *Bot) SetActiveLobbyID(id string) {
@@ -730,6 +764,11 @@ func (b *Bot) watchLobbyCacheEvents() {
 }
 
 func (b *Bot) handleLobbyCacheEvent(event *socache.CacheEvent) {
+	// processMu serializes this handler with PollLobbyFromCache — both diff
+	// against lastLobby and their read-diff-write sequences must not interleave.
+	b.processMu.Lock()
+	defer b.processMu.Unlock()
+
 	switch event.EventType {
 	case socache.EventTypeCreate:
 		lobby := event.Object.(*gcccm.CSODOTALobby)
@@ -737,9 +776,12 @@ func (b *Bot) handleLobbyCacheEvent(event *socache.CacheEvent) {
 			lobby.GetLobbyId(), lobby.GetState().String()))
 		// If bot has no active lobby assignment, wait briefly for rejoin_lobby command
 		// then leave if still unassigned
-		if b.activeLobbyID == "" {
+		b.mu.Lock()
+		assigned := b.activeLobbyID != ""
+		b.mu.Unlock()
+		if !assigned {
 			b.log("CACHE: Found lobby with no active assignment — waiting 5s for rejoin command...")
-			b.lastLobby = lobby
+			b.setLastLobby(lobby)
 			go func() {
 				time.Sleep(5 * time.Second)
 				b.mu.Lock()
@@ -748,9 +790,6 @@ func (b *Bot) handleLobbyCacheEvent(event *socache.CacheEvent) {
 				if !assigned {
 					b.log("CACHE: No rejoin received — leaving stale lobby")
 					b.LeaveLobby()
-					b.mu.Lock()
-					b.lastLobby = nil
-					b.mu.Unlock()
 				} else {
 					b.log("CACHE: Rejoin received — keeping lobby")
 				}
@@ -758,24 +797,29 @@ func (b *Bot) handleLobbyCacheEvent(event *socache.CacheEvent) {
 			return
 		}
 		b.processLobbyUpdate(nil, lobby)
-		b.lastLobby = lobby
+		b.setLastLobby(lobby)
 
 	case socache.EventTypeUpdate:
 		lobby := event.Object.(*gcccm.CSODOTALobby)
 		b.log(fmt.Sprintf("CACHE: Lobby updated (id: %d, state: %s)",
 			lobby.GetLobbyId(), lobby.GetState().String()))
-		b.processLobbyUpdate(b.lastLobby, lobby)
-		b.lastLobby = lobby
+		b.processLobbyUpdate(b.getLastLobby(), lobby)
+		b.setLastLobby(lobby)
 
 	case socache.EventTypeDestroy:
 		b.log("CACHE: Lobby destroyed")
-		b.lastLobby = nil
+		b.setLastLobby(nil)
 	}
 }
 
 func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
+	// Snapshot the lobby assignment once — SetActiveLobbyID writes it from the
+	// command goroutine. All events below route to this snapshot.
+	b.mu.Lock()
+	lobbyID := b.activeLobbyID
+	b.mu.Unlock()
 	// Skip if bot has already left the lobby
-	if b.activeLobbyID == "" {
+	if lobbyID == "" {
 		return
 	}
 
@@ -804,14 +848,14 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 		if _, existed := oldMembers[pid]; !existed {
 			b.log(fmt.Sprintf("Player %d joined lobby → %s", pid, newTeam))
 			b.send("player_joined", protocol.PlayerJoinedEvent{
-				LobbyID: b.activeLobbyID,
+				LobbyID: lobbyID,
 				SteamID: steamId,
 				Team:    newTeam,
 			})
 		} else if oldMembers[pid] != m.GetTeam() {
 			b.log(fmt.Sprintf("Player %d changed team: %s → %s", pid, teamName(oldMembers[pid]), newTeam))
 			b.send("player_joined", protocol.PlayerJoinedEvent{
-				LobbyID: b.activeLobbyID,
+				LobbyID: lobbyID,
 				SteamID: steamId,
 				Team:    newTeam,
 			})
@@ -821,7 +865,7 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 		if _, stillHere := newMembersMap[pid]; !stillHere {
 			b.log(fmt.Sprintf("Player %d left lobby", pid))
 			b.send("player_left", protocol.PlayerLeftEvent{
-				LobbyID: b.activeLobbyID,
+				LobbyID: lobbyID,
 				SteamID: fmt.Sprintf("%d", pid),
 			})
 		}
@@ -851,7 +895,7 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 		lobbyStatus = "active"
 	}
 	b.send("lobby_status", protocol.LobbyStatusEvent{
-		LobbyID:       b.activeLobbyID,
+		LobbyID:       lobbyID,
 		Status:        lobbyStatus,
 		PlayersJoined: joinedPlayers,
 	})
@@ -861,14 +905,19 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 	if len(teamDetails) >= 2 {
 		radiantId := int(teamDetails[0].GetTeamId())
 		direId := int(teamDetails[1].GetTeamId())
-		if radiantId != b.detectedRadiantTeamId || direId != b.detectedDireTeamId {
+		b.mu.Lock()
+		teamIdsChanged := radiantId != b.detectedRadiantTeamId || direId != b.detectedDireTeamId
+		if teamIdsChanged {
 			b.detectedRadiantTeamId = radiantId
 			b.detectedDireTeamId = direId
+		}
+		b.mu.Unlock()
+		if teamIdsChanged {
 			radiantName := teamDetails[0].GetTeamName()
 			direName := teamDetails[1].GetTeamName()
 			b.log(fmt.Sprintf("Team IDs — Radiant: %d (%s), Dire: %d (%s)", radiantId, radiantName, direId, direName))
 			b.send("lobby_team_ids", protocol.LobbyTeamIdsEvent{
-				LobbyID:         b.activeLobbyID,
+				LobbyID:         lobbyID,
 				RadiantTeamId:   radiantId,
 				DireTeamId:      direId,
 				RadiantTeamName: radiantName,
@@ -895,18 +944,30 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 	// where the lobby already had a match id — leaving the lobby stuck on
 	// 'waiting'/'active' with no match id captured server-side. Firing once per
 	// lobby is safe — the server's game_started handler is idempotent.
-	if matchID != 0 && !b.gameStartedSent {
+	b.mu.Lock()
+	fireGameStarted := matchID != 0 && !b.gameStartedSent
+	if fireGameStarted {
 		b.gameStartedSent = true
+	}
+	b.mu.Unlock()
+	if fireGameStarted {
 		b.log(fmt.Sprintf("Match ID assigned: %d", matchID))
 		b.send("game_started", protocol.GameStartedEvent{
-			LobbyID: b.activeLobbyID,
+			LobbyID: lobbyID,
 			MatchID: fmt.Sprintf("%d", matchID),
 		})
 		// Auto-launch immediately since we have a match ID but lobby is still in UI
-		if lobbyState == gcccm.CSODOTALobby_UI && b.dc() != nil && !b.launchSent {
-			b.log("Auto-launching after match ID assigned...")
-			b.launchSent = true
-			b.LaunchLobby()
+		if lobbyState == gcccm.CSODOTALobby_UI && b.dc() != nil {
+			b.mu.Lock()
+			doLaunch := !b.launchSent
+			if doLaunch {
+				b.launchSent = true
+			}
+			b.mu.Unlock()
+			if doLaunch {
+				b.log("Auto-launching after match ID assigned...")
+				b.LaunchLobby()
+			}
 		}
 	}
 
@@ -925,9 +986,12 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 		if bothChosen && wasNotBothChosen {
 			b.log(fmt.Sprintf("Coin toss completed — priority: %s, non-priority: %s — auto-launching...",
 				priorityChoice.String(), nonPriorityChoice.String()))
-			b.launchSent = false // reset so we can launch again after coin toss
-			if b.dc() != nil {
-				b.launchSent = true
+			// Re-arm the launch guard so we can launch again after coin toss
+			dcLive := b.dc() != nil
+			b.mu.Lock()
+			b.launchSent = dcLive
+			b.mu.Unlock()
+			if dcLive {
 				b.LaunchLobby()
 			}
 		}
@@ -945,7 +1009,7 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 	if newServerId != 0 && newServerId != oldServerId {
 		b.log(fmt.Sprintf("Server SteamID assigned: %d", newServerId))
 		b.send("lobby_server_id", protocol.LobbyServerIDEvent{
-			LobbyID:       b.activeLobbyID,
+			LobbyID:       lobbyID,
 			ServerSteamID: fmt.Sprintf("%d", newServerId),
 		})
 	}
@@ -1071,6 +1135,20 @@ func (b *Bot) IsInLobby() bool {
 	return b.lastLobby != nil
 }
 
+// getLastLobby / setLastLobby guard lastLobby with b.mu — it is shared between
+// the cache watcher, the safety poll, IsInLobby, LeaveLobby and ResendLobbyState.
+func (b *Bot) getLastLobby() *gcccm.CSODOTALobby {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.lastLobby
+}
+
+func (b *Bot) setLastLobby(l *gcccm.CSODOTALobby) {
+	b.mu.Lock()
+	b.lastLobby = l
+	b.mu.Unlock()
+}
+
 // dc returns the current Dota 2 client under the lock (nil if disconnected).
 // Callers must nil-check the returned pointer and use it instead of b.dotaClient
 // so a concurrent Disconnect/reconnect can't nil the field mid-call and panic.
@@ -1146,11 +1224,15 @@ func (b *Bot) SetEnforceTeams(v bool) {
 
 func (b *Bot) SetExpectedTeamIds(radiant, dire int) {
 	b.log(fmt.Sprintf("ACTION: SetExpectedTeamIds(radiant=%d, dire=%d)", radiant, dire))
+	b.mu.Lock()
 	b.expectedRadiantTeamId = radiant
 	b.expectedDireTeamId = dire
+	b.mu.Unlock()
 }
 
 func (b *Bot) GetDetectedTeamIds() (int, int) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	return b.detectedRadiantTeamId, b.detectedDireTeamId
 }
 
@@ -1350,8 +1432,11 @@ func (b *Bot) PollLobbyFromCache() {
 	}
 	b.log(fmt.Sprintf("POLL: Cache read — state: %s, matchID: %d, members: %d",
 		lob.GetState().String(), lob.GetMatchId(), len(lob.GetAllMembers())))
-	b.processLobbyUpdate(b.lastLobby, lob)
-	b.lastLobby = lob
+	// Serialize with the cache-event watcher — see handleLobbyCacheEvent.
+	b.processMu.Lock()
+	defer b.processMu.Unlock()
+	b.processLobbyUpdate(b.getLastLobby(), lob)
+	b.setLastLobby(lob)
 }
 
 func parseSteamID(s string) uint64 {

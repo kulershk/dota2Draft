@@ -10,9 +10,9 @@ type Envelope struct {
 
 // Commands (Node → Go)
 type AddBotCmd struct {
-	BotID    string `json:"botId"`
-	Username string `json:"username"`
-	Password string `json:"password"`
+	BotID        string `json:"botId"`
+	Username     string `json:"username"`
+	Password     string `json:"password"`
 	RefreshToken string `json:"refreshToken,omitempty"`
 }
 
@@ -41,38 +41,39 @@ type LobbyPlayer struct {
 }
 
 type CreateLobbyCmd struct {
-	LobbyID             string        `json:"lobbyId"`
-	BotID               string        `json:"botId,omitempty"`
-	GameName            string        `json:"gameName"`
-	Password            string        `json:"password"`
-	ServerRegion        int           `json:"serverRegion"`
-	GameMode            int           `json:"gameMode"`
-	AutoAssignTeams     bool          `json:"autoAssignTeams"`
-	LeagueID            int           `json:"leagueId"`
-	DotaTvDelay         int           `json:"dotaTvDelay"`
-	Cheats              bool          `json:"cheats"`
-	AllowSpectating     bool          `json:"allowSpectating"`
-	PauseSetting        int           `json:"pauseSetting"`
-	SelectionPriority   int           `json:"selectionPriority"`
-	CmPick              int           `json:"cmPick"`
-	PenaltyRadiant      int           `json:"penaltyRadiant"`
-	PenaltyDire         int           `json:"penaltyDire"`
-	SeriesType          int           `json:"seriesType"`
-	RadiantName         string        `json:"radiantName"`
-	DireName            string        `json:"direName"`
-	ExpectedRadiantTeamId int         `json:"expectedRadiantTeamId"`
-	ExpectedDireTeamId    int         `json:"expectedDireTeamId"`
-	Players             []LobbyPlayer `json:"players"`
-	TimeoutMinutes      int           `json:"timeoutMinutes,omitempty"`
+	LobbyID               string        `json:"lobbyId"`
+	BotID                 string        `json:"botId,omitempty"`
+	GameName              string        `json:"gameName"`
+	Password              string        `json:"password"`
+	ServerRegion          int           `json:"serverRegion"`
+	GameMode              int           `json:"gameMode"`
+	AutoAssignTeams       bool          `json:"autoAssignTeams"`
+	LeagueID              int           `json:"leagueId"`
+	DotaTvDelay           int           `json:"dotaTvDelay"`
+	Cheats                bool          `json:"cheats"`
+	AllowSpectating       bool          `json:"allowSpectating"`
+	PauseSetting          int           `json:"pauseSetting"`
+	SelectionPriority     int           `json:"selectionPriority"`
+	CmPick                int           `json:"cmPick"`
+	PenaltyRadiant        int           `json:"penaltyRadiant"`
+	PenaltyDire           int           `json:"penaltyDire"`
+	SeriesType            int           `json:"seriesType"`
+	RadiantName           string        `json:"radiantName"`
+	DireName              string        `json:"direName"`
+	ExpectedRadiantTeamId int           `json:"expectedRadiantTeamId"`
+	ExpectedDireTeamId    int           `json:"expectedDireTeamId"`
+	Players               []LobbyPlayer `json:"players"`
+	TimeoutMinutes        int           `json:"timeoutMinutes,omitempty"`
 }
 
 type RejoinLobbyCmd struct {
-	LobbyID        string        `json:"lobbyId"`
-	BotID          string        `json:"botId"`
-	GameName       string        `json:"gameName"`
-	Password       string        `json:"password"`
-	Players        []LobbyPlayer `json:"players"`
-	TimeoutMinutes int           `json:"timeoutMinutes,omitempty"`
+	LobbyID         string        `json:"lobbyId"`
+	BotID           string        `json:"botId"`
+	GameName        string        `json:"gameName"`
+	Password        string        `json:"password"`
+	AutoAssignTeams bool          `json:"autoAssignTeams"`
+	Players         []LobbyPlayer `json:"players"`
+	TimeoutMinutes  int           `json:"timeoutMinutes,omitempty"`
 }
 
 type CancelLobbyCmd struct {
@@ -90,44 +91,44 @@ type RequestMatchDetailsCmd struct {
 }
 
 type MatchDetailsPlayer struct {
-	AccountID    uint32 `json:"account_id"`
-	PlayerSlot   uint32 `json:"player_slot"`
-	HeroID       int32  `json:"hero_id"`
-	Kills        uint32 `json:"kills"`
-	Deaths       uint32 `json:"deaths"`
-	Assists      uint32 `json:"assists"`
-	LastHits     uint32 `json:"last_hits"`
-	Denies       uint32 `json:"denies"`
-	GoldPerMin   uint32 `json:"gold_per_min"`
-	XpPerMin     uint32 `json:"xp_per_min"`
-	HeroDamage   uint32 `json:"hero_damage"`
-	TowerDamage  uint32 `json:"tower_damage"`
-	HeroHealing  uint32 `json:"hero_healing"`
-	Level        uint32 `json:"level"`
-	NetWorth     uint32 `json:"net_worth"`
-	Item0        int32  `json:"item_0"`
-	Item1        int32  `json:"item_1"`
-	Item2        int32  `json:"item_2"`
-	Item3        int32  `json:"item_3"`
-	Item4        int32  `json:"item_4"`
-	Item5        int32  `json:"item_5"`
-	Backpack0    int32  `json:"backpack_0"`
-	Backpack1    int32  `json:"backpack_1"`
-	Backpack2    int32  `json:"backpack_2"`
-	ItemNeutral  int32  `json:"item_neutral"`
-	IsRadiant    bool   `json:"isRadiant"`
-	Win          int    `json:"win"`
-	PlayerName   string `json:"personaname"`
+	AccountID   uint32 `json:"account_id"`
+	PlayerSlot  uint32 `json:"player_slot"`
+	HeroID      int32  `json:"hero_id"`
+	Kills       uint32 `json:"kills"`
+	Deaths      uint32 `json:"deaths"`
+	Assists     uint32 `json:"assists"`
+	LastHits    uint32 `json:"last_hits"`
+	Denies      uint32 `json:"denies"`
+	GoldPerMin  uint32 `json:"gold_per_min"`
+	XpPerMin    uint32 `json:"xp_per_min"`
+	HeroDamage  uint32 `json:"hero_damage"`
+	TowerDamage uint32 `json:"tower_damage"`
+	HeroHealing uint32 `json:"hero_healing"`
+	Level       uint32 `json:"level"`
+	NetWorth    uint32 `json:"net_worth"`
+	Item0       int32  `json:"item_0"`
+	Item1       int32  `json:"item_1"`
+	Item2       int32  `json:"item_2"`
+	Item3       int32  `json:"item_3"`
+	Item4       int32  `json:"item_4"`
+	Item5       int32  `json:"item_5"`
+	Backpack0   int32  `json:"backpack_0"`
+	Backpack1   int32  `json:"backpack_1"`
+	Backpack2   int32  `json:"backpack_2"`
+	ItemNeutral int32  `json:"item_neutral"`
+	IsRadiant   bool   `json:"isRadiant"`
+	Win         int    `json:"win"`
+	PlayerName  string `json:"personaname"`
 }
 
 type MatchDetailsEvent struct {
-	MatchID     string               `json:"matchId"`
-	RadiantWin  bool                 `json:"radiant_win"`
-	Duration    uint32               `json:"duration"`
-	StartTime   uint32               `json:"start_time"`
-	GameMode    uint32               `json:"game_mode"`
-	Players     []MatchDetailsPlayer `json:"players"`
-	Error       string               `json:"error,omitempty"`
+	MatchID    string               `json:"matchId"`
+	RadiantWin bool                 `json:"radiant_win"`
+	Duration   uint32               `json:"duration"`
+	StartTime  uint32               `json:"start_time"`
+	GameMode   uint32               `json:"game_mode"`
+	Players    []MatchDetailsPlayer `json:"players"`
+	Error      string               `json:"error,omitempty"`
 }
 
 type SyncCmd struct {
@@ -193,11 +194,11 @@ type LobbyServerIDEvent struct {
 }
 
 type LobbyTeamIdsEvent struct {
-	LobbyID          string `json:"lobbyId"`
-	RadiantTeamId    int    `json:"radiantTeamId"`
-	DireTeamId       int    `json:"direTeamId"`
-	RadiantTeamName  string `json:"radiantTeamName"`
-	DireTeamName     string `json:"direTeamName"`
+	LobbyID         string `json:"lobbyId"`
+	RadiantTeamId   int    `json:"radiantTeamId"`
+	DireTeamId      int    `json:"direTeamId"`
+	RadiantTeamName string `json:"radiantTeamName"`
+	DireTeamName    string `json:"direTeamName"`
 }
 
 type LobbyErrorEvent struct {

@@ -288,13 +288,33 @@ class BotPool {
         if (activeLobbies.length > 0) {
           console.log(`[Bot ${botId}] Back online with ${activeLobbies.length} active lobby(s), re-syncing`)
           for (const lobby of activeLobbies) {
-            const comp = await queryOne('SELECT settings FROM competitions WHERE id = $1', [lobby.competition_id])
-            const timeoutMinutes = Number(comp?.settings?.lobbyTimeoutMinutes) || 10
+            // Re-send the auto-assign setting and timeout from the lobby's
+            // source (competition settings or queue pool) so recovery keeps the
+            // original lobby behavior — without autoAssignTeams the Go side
+            // would fall back to a default and could start kicking players in
+            // a free-pick lobby.
+            let autoAssignTeams = true
+            let timeoutMinutes = 10
+            if (lobby.competition_id) {
+              const comp = await queryOne('SELECT settings FROM competitions WHERE id = $1', [lobby.competition_id])
+              autoAssignTeams = comp?.settings?.lobbyAutoAssignTeams !== false
+              timeoutMinutes = Number(comp?.settings?.lobbyTimeoutMinutes) || 10
+            } else {
+              const qm = await queryOne('SELECT pool_id FROM queue_matches WHERE match_id = $1', [lobby.match_id])
+              const pool = qm
+                ? await queryOne('SELECT lobby_auto_assign_teams, lobby_timeout_minutes FROM queue_pools WHERE id = $1', [qm.pool_id])
+                : null
+              if (pool) {
+                autoAssignTeams = pool.lobby_auto_assign_teams !== false
+                timeoutMinutes = Number(pool.lobby_timeout_minutes) || 10
+              }
+            }
             this._sendToGo('rejoin_lobby', {
               lobbyId: String(lobby.id),
               botId: String(botId),
               gameName: lobby.game_name,
               password: lobby.password,
+              autoAssignTeams,
               players: lobby.players_expected || [],
               timeoutMinutes,
             })

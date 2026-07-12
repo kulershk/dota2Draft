@@ -281,9 +281,6 @@ func (m *Manager) RejoinLobby(cmd protocol.RejoinLobbyCmd) error {
 		return fmt.Errorf("bot %s not found", cmd.BotID)
 	}
 
-	inLobby := b.IsInLobby()
-	log.Printf("[Lobby %s] Bot %s rejoin — in Dota lobby: %v", cmd.LobbyID, cmd.BotID, inLobby)
-
 	ctx, cancel := context.WithCancel(context.Background())
 	lobby := &Lobby{
 		ID:              cmd.LobbyID,
@@ -298,43 +295,67 @@ func (m *Manager) RejoinLobby(cmd protocol.RejoinLobbyCmd) error {
 	m.lobbies[cmd.LobbyID] = lobby
 	m.mu.Unlock()
 
+	// Claim the lobby before checking the cache: SetActiveLobbyID also stops the
+	// watcher's "stale lobby with no assignment" sweep from leaving the real
+	// Dota lobby while we wait for the cache to confirm it.
 	b.SetBusy(true)
 	b.SetActiveLobbyID(cmd.LobbyID)
 	b.SetExpectedTeams(cmd.Players)
-	// On rejoin the original per-lobby setting isn't re-sent; default to enforcing
-	// so recovery keeps players on their expected teams.
-	b.SetEnforceTeams(true)
+	b.SetEnforceTeams(cmd.AutoAssignTeams)
 
-	log.Printf("[Lobby %s] Rejoining — bot %s re-watching lobby (in Dota lobby: %v)", cmd.LobbyID, cmd.BotID, inLobby)
+	log.Printf("[Lobby %s] Rejoining — bot %s re-watching lobby", cmd.LobbyID, cmd.BotID)
 	m.send("bot_log", protocol.BotLogEvent{
 		BotID:   cmd.BotID,
-		Message: fmt.Sprintf("Rejoining lobby '%s' after reconnect (in Dota lobby: %v)", cmd.GameName, inLobby),
+		Message: fmt.Sprintf("Rejoining lobby '%s' after reconnect — waiting for GC lobby cache", cmd.GameName),
 	})
 
-	if inLobby {
-		// Bot is still in the Dota lobby — just re-track it
+	go func() {
+		defer func() {
+			b.SetActiveLobbyID("")
+			b.SetExpectedTeams(nil)
+			b.SetBusy(false)
+			m.removeLobby(cmd.LobbyID)
+		}()
+
+		// Wait up to 15s for the SO cache to deliver the lobby. Right after a
+		// service restart the rejoin command arrives milliseconds after
+		// ClientWelcomed — long before the GC has sent the lobby snapshot — so a
+		// single instant IsInLobby() check here always concluded "lost" and tore
+		// down a lobby the bot was still sitting in.
+		inLobby := b.IsInLobby()
+		for i := 0; !inLobby && i < 15; i++ {
+			select {
+			case <-ctx.Done():
+				log.Printf("[Lobby %s] Cancelled while waiting for lobby cache after rejoin", cmd.LobbyID)
+				return
+			case <-time.After(1 * time.Second):
+			}
+			b.PollLobbyFromCache()
+			inLobby = b.IsInLobby()
+		}
+		if !inLobby {
+			// Bot really lost the lobby — report error
+			m.send("bot_log", protocol.BotLogEvent{
+				BotID:   cmd.BotID,
+				Message: fmt.Sprintf("Bot is NOT in Dota lobby anymore — lobby '%s' may need to be recreated", cmd.GameName),
+			})
+			m.send("lobby_error", protocol.LobbyErrorEvent{
+				LobbyID: cmd.LobbyID,
+				Error:   "Bot lost connection to lobby after reconnect",
+			})
+			return
+		}
+
+		// Bot is still in the Dota lobby — re-track it
+		m.send("bot_log", protocol.BotLogEvent{
+			BotID:   cmd.BotID,
+			Message: fmt.Sprintf("Lobby '%s' confirmed via GC cache — re-tracking", cmd.GameName),
+		})
 		m.send("lobby_status", protocol.LobbyStatusEvent{
 			LobbyID: cmd.LobbyID,
 			Status:  "waiting",
 		})
-	} else {
-		// Bot lost the lobby — report error
-		m.send("bot_log", protocol.BotLogEvent{
-			BotID:   cmd.BotID,
-			Message: fmt.Sprintf("Bot is NOT in Dota lobby anymore — lobby '%s' may need to be recreated", cmd.GameName),
-		})
-		m.send("lobby_error", protocol.LobbyErrorEvent{
-			LobbyID: cmd.LobbyID,
-			Error:   "Bot lost connection to lobby after reconnect",
-		})
-		b.SetActiveLobbyID("")
-		b.SetBusy(false)
-		m.removeLobby(cmd.LobbyID)
-		return nil
-	}
 
-	// Run the lobby watcher (waits for game start or cancel)
-	go func() {
 		timeout := lobby.timeoutDuration()
 
 		// Cache polling fallback — see runLobby for rationale
@@ -383,10 +404,6 @@ func (m *Manager) RejoinLobby(cmd protocol.RejoinLobbyCmd) error {
 			destroyCancel()
 			b.LeaveLobby()
 		}
-		b.SetActiveLobbyID("")
-		b.SetExpectedTeams(nil)
-		b.SetBusy(false)
-		m.removeLobby(cmd.LobbyID)
 	}()
 
 	return nil
@@ -453,23 +470,23 @@ func (m *Manager) ForceLaunch(lobbyID string, skipValidation bool) error {
 		if detRadiant == 0 {
 			errMsg := "Radiant has no team selected"
 			m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobbyID, Error: errMsg})
-			return fmt.Errorf(errMsg)
+			return errors.New(errMsg)
 		}
 		if detDire == 0 {
 			errMsg := "Dire has no team selected"
 			m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobbyID, Error: errMsg})
-			return fmt.Errorf(errMsg)
+			return errors.New(errMsg)
 		}
 		// Validate against expected team IDs (saved from first game)
 		if lobby.ExpectedRadiantTeamId != 0 && detRadiant != lobby.ExpectedRadiantTeamId {
 			errMsg := fmt.Sprintf("Wrong Radiant team: expected %d, got %d", lobby.ExpectedRadiantTeamId, detRadiant)
 			m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobbyID, Error: errMsg})
-			return fmt.Errorf(errMsg)
+			return errors.New(errMsg)
 		}
 		if lobby.ExpectedDireTeamId != 0 && detDire != lobby.ExpectedDireTeamId {
 			errMsg := fmt.Sprintf("Wrong Dire team: expected %d, got %d", lobby.ExpectedDireTeamId, detDire)
 			m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobbyID, Error: errMsg})
-			return fmt.Errorf(errMsg)
+			return errors.New(errMsg)
 		}
 	}
 

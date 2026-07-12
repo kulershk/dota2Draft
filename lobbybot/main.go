@@ -2,12 +2,12 @@ package main
 
 import (
 	"encoding/json"
-	"log"
 	"lobbybot/bot"
 	"lobbybot/config"
 	"lobbybot/lobby"
 	"lobbybot/protocol"
 	"lobbybot/ws"
+	"log"
 	"strconv"
 )
 
@@ -29,12 +29,24 @@ func main() {
 	botMgr = bot.NewManager(sendFn)
 	lobbyMgr = lobby.NewManager(botMgr, sendFn)
 
+	// decode unmarshals a command payload; a malformed payload is logged and
+	// skipped instead of silently proceeding with a zero-value command.
+	decode := func(msgType string, data json.RawMessage, v interface{}) bool {
+		if err := json.Unmarshal(data, v); err != nil {
+			log.Printf("Invalid %s payload: %v", msgType, err)
+			return false
+		}
+		return true
+	}
+
 	handler := func(msgType string, data json.RawMessage) {
 		log.Printf("Received command: %s", msgType)
 		switch msgType {
 		case "sync":
 			var cmd protocol.SyncCmd
-			json.Unmarshal(data, &cmd)
+			if !decode(msgType, data, &cmd) {
+				return
+			}
 			log.Printf("Received sync: %d bots, %d lobbies", len(cmd.Bots), len(cmd.Lobbies))
 			for _, b := range cmd.Bots {
 				botMgr.AddBot(b.BotID, b.Username, b.Password, b.RefreshToken)
@@ -43,12 +55,16 @@ func main() {
 
 		case "add_bot":
 			var cmd protocol.AddBotCmd
-			json.Unmarshal(data, &cmd)
+			if !decode(msgType, data, &cmd) {
+				return
+			}
 			botMgr.AddBot(cmd.BotID, cmd.Username, cmd.Password, cmd.RefreshToken)
 
 		case "connect_bot":
 			var cmd protocol.ConnectBotCmd
-			json.Unmarshal(data, &cmd)
+			if !decode(msgType, data, &cmd) {
+				return
+			}
 			botMgr.AddBot(cmd.BotID, cmd.Username, cmd.Password, cmd.RefreshToken)
 			if b := botMgr.GetBot(cmd.BotID); b != nil {
 				if cmd.SentryHash != "" {
@@ -64,7 +80,9 @@ func main() {
 
 		case "disconnect_bot":
 			var cmd protocol.DisconnectBotCmd
-			json.Unmarshal(data, &cmd)
+			if !decode(msgType, data, &cmd) {
+				return
+			}
 			botMgr.DisconnectBot(cmd.BotID)
 
 		case "list_bots":
@@ -74,36 +92,48 @@ func main() {
 
 		case "steam_guard":
 			var cmd protocol.SteamGuardCmd
-			json.Unmarshal(data, &cmd)
+			if !decode(msgType, data, &cmd) {
+				return
+			}
 			botMgr.SubmitSteamGuard(cmd.BotID, cmd.Code)
 
 		case "create_lobby":
 			var cmd protocol.CreateLobbyCmd
-			json.Unmarshal(data, &cmd)
+			if !decode(msgType, data, &cmd) {
+				return
+			}
 			if err := lobbyMgr.CreateLobby(cmd); err != nil {
 				log.Printf("Create lobby error: %v", err)
 			}
 
 		case "rejoin_lobby":
 			var cmd protocol.RejoinLobbyCmd
-			json.Unmarshal(data, &cmd)
+			if !decode(msgType, data, &cmd) {
+				return
+			}
 			if err := lobbyMgr.RejoinLobby(cmd); err != nil {
 				log.Printf("Rejoin lobby error: %v", err)
 			}
 
 		case "cancel_lobby":
 			var cmd protocol.CancelLobbyCmd
-			json.Unmarshal(data, &cmd)
+			if !decode(msgType, data, &cmd) {
+				return
+			}
 			lobbyMgr.CancelLobby(cmd.LobbyID)
 
 		case "force_launch":
 			var cmd protocol.ForceLaunchCmd
-			json.Unmarshal(data, &cmd)
+			if !decode(msgType, data, &cmd) {
+				return
+			}
 			lobbyMgr.ForceLaunch(cmd.LobbyID, cmd.SkipValidation)
 
 		case "request_match_details":
 			var cmd protocol.RequestMatchDetailsCmd
-			json.Unmarshal(data, &cmd)
+			if !decode(msgType, data, &cmd) {
+				return
+			}
 			go func() {
 				matchID, err := strconv.ParseUint(cmd.MatchID, 10, 64)
 				if err != nil {
