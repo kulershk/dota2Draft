@@ -730,6 +730,41 @@ export async function initDb() {
       FOR EACH ROW EXECUTE FUNCTION log_bot_status_change()
   `)
 
+  // Bot operational logs (what the Go bot service reports per bot). Persisted
+  // so the admin log viewer survives Node restarts/deploys — previously the
+  // buffer was in-memory only and a deploy wiped exactly the logs needed to
+  // debug the incident that motivated looking at them. Capped per bot by a
+  // trigger, mirroring bot_status_history.
+  await execute(`
+    CREATE TABLE IF NOT EXISTS bot_logs (
+      id SERIAL PRIMARY KEY,
+      bot_id INTEGER NOT NULL REFERENCES lobby_bots(id) ON DELETE CASCADE,
+      level TEXT NOT NULL DEFAULT 'info',
+      lobby_id INTEGER DEFAULT NULL,
+      message TEXT NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `)
+  await execute(`CREATE INDEX IF NOT EXISTS idx_bot_logs_bot ON bot_logs(bot_id, id DESC)`)
+  await execute(`
+    CREATE OR REPLACE FUNCTION cap_bot_logs() RETURNS trigger AS $$
+    BEGIN
+      DELETE FROM bot_logs
+       WHERE bot_id = NEW.bot_id
+         AND id NOT IN (
+           SELECT id FROM bot_logs WHERE bot_id = NEW.bot_id ORDER BY id DESC LIMIT 500
+         );
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql
+  `)
+  await execute(`DROP TRIGGER IF EXISTS trg_cap_bot_logs ON bot_logs`)
+  await execute(`
+    CREATE TRIGGER trg_cap_bot_logs
+      AFTER INSERT ON bot_logs
+      FOR EACH ROW EXECUTE FUNCTION cap_bot_logs()
+  `)
+
   // ─── Competition helpers ──────────────────────────────────────────────
   // Per-competition collaborators. A user listed here is treated by
   // requireCompPermission as if they were the competition's creator —

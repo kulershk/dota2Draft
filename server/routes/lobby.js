@@ -139,7 +139,7 @@ export default function createLobbyRouter(io) {
     try {
       const admin = await requirePermission(req, res, 'manage_bots')
       if (!admin) return
-      res.json(botPool.getBotLogs(Number(req.params.botId)))
+      res.json(await botPool.getBotLogs(Number(req.params.botId)))
     } catch (e) {
       res.status(500).json({ error: e.message })
     }

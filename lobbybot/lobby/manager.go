@@ -77,20 +77,20 @@ const draftFailsafe = 2 * time.Minute
 // the draft actually starts (all players loaded), with a failsafe, and on an
 // aborted start it resumes watching (the timeout restarts — players are
 // actively in the lobby at that point).
-func (m *Manager) awaitGameStart(ctx context.Context, b *bot.Bot, timeout time.Duration, botLog func(string)) gameWaitResult {
+func (m *Manager) awaitGameStart(ctx context.Context, b *bot.Bot, timeout time.Duration, botLog func(level, msg string)) gameWaitResult {
 	for {
 		select {
 		case <-b.GameStartedCh():
-			botLog("Game launched — staying in lobby until the draft starts (players loading)")
+			botLog("info", "Game launched — staying in lobby until the draft starts (players loading)")
 			switch b.WaitForDraft(ctx, draftFailsafe) {
 			case bot.DraftStarted:
-				botLog("Draft started — all players loaded")
+				botLog("info", "Draft started — all players loaded")
 				return gameWaitStarted
 			case bot.DraftWaitExpired:
-				botLog(fmt.Sprintf("Draft not confirmed within %d minutes — leaving lobby anyway", int(draftFailsafe.Minutes())))
+				botLog("warn", fmt.Sprintf("Draft not confirmed within %d minutes — leaving lobby anyway", int(draftFailsafe.Minutes())))
 				return gameWaitStarted
 			case bot.DraftAborted:
-				botLog("Game start aborted — players returned to the lobby; resuming watch")
+				botLog("warn", "Game start aborted — players returned to the lobby; resuming watch")
 			case bot.DraftCancelled:
 				return gameWaitCancelled
 			}
@@ -194,9 +194,11 @@ func (m *Manager) CreateLobby(cmd protocol.CreateLobbyCmd) error {
 }
 
 func (m *Manager) runLobby(ctx context.Context, lobby *Lobby) {
-	botLog := func(msg string) {
+	botLog := func(level, msg string) {
 		m.send("bot_log", protocol.BotLogEvent{
 			BotID:   lobby.Bot.ID,
+			Level:   level,
+			LobbyID: lobby.ID,
 			Message: msg,
 		})
 		log.Printf("[Lobby %s] %s", lobby.ID, msg)
@@ -208,7 +210,7 @@ func (m *Manager) runLobby(ctx context.Context, lobby *Lobby) {
 	lobby.Bot.SetEnforceTeams(lobby.AutoAssignTeams)
 	lobby.Bot.SetExpectedTeamIds(lobby.ExpectedRadiantTeamId, lobby.ExpectedDireTeamId)
 
-	botLog(fmt.Sprintf("Creating lobby '%s' (region: %d, mode: %d)", lobby.GameName, lobby.ServerRegion, lobby.GameMode))
+	botLog("info", fmt.Sprintf("Creating lobby '%s' (region: %d, mode: %d)", lobby.GameName, lobby.ServerRegion, lobby.GameMode))
 
 	err := lobby.Bot.CreatePracticeLobby(lobby.GameName, lobby.Password, bot.LobbyOptions{
 		ServerRegion:      lobby.ServerRegion,
@@ -227,7 +229,7 @@ func (m *Manager) runLobby(ctx context.Context, lobby *Lobby) {
 		DireName:          lobby.DireName,
 	})
 	if err != nil {
-		botLog(fmt.Sprintf("Failed to create lobby: %v", err))
+		botLog("error", fmt.Sprintf("Failed to create lobby: %v", err))
 		m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobby.ID, Error: err.Error()})
 		lobby.Bot.SetActiveLobbyID("")
 		lobby.Bot.SetBusy(false)
@@ -244,24 +246,23 @@ func (m *Manager) runLobby(ctx context.Context, lobby *Lobby) {
 	}
 
 	// Wait for GC to confirm lobby creation (up to 10s)
-	botLog("Waiting for GC to confirm lobby creation...")
+	botLog("info", "Waiting for GC to confirm lobby creation...")
 	time.Sleep(3 * time.Second)
 
-	botLog(fmt.Sprintf("Lobby created. Password: %s", lobby.Password))
+	botLog("info", fmt.Sprintf("Lobby created. Password: %s", lobby.Password))
 	lobby.Status = "waiting"
 	m.send("lobby_status", protocol.LobbyStatusEvent{LobbyID: lobby.ID, Status: "waiting"})
 
 	// Invite all players
-	botLog(fmt.Sprintf("Inviting %d players...", len(lobby.ExpectedPlayers)))
+	botLog("info", fmt.Sprintf("Inviting %d players...", len(lobby.ExpectedPlayers)))
 	for _, p := range lobby.ExpectedPlayers {
 		if p.SteamID != "" {
 			lobby.Bot.InvitePlayer(p.SteamID)
-			botLog(fmt.Sprintf("Invited %s (%s) to %s", p.Name, p.SteamID, p.Team))
+			botLog("info", fmt.Sprintf("Invited %s (%s) to %s", p.Name, p.SteamID, p.Team))
 		}
 	}
 
-	botLog("Lobby ready. Waiting for players to join...")
-	botLog("(Lobby state updates are tracked via GC events + cache polling fallback)")
+	botLog("info", "Lobby ready. Waiting for players to join...")
 
 	// Poll the lobby cache as a safety net: go-dota2 sometimes stops delivering
 	// cache subscription events mid-lobby, which means we'd miss the match-id
@@ -287,12 +288,12 @@ func (m *Manager) runLobby(ctx context.Context, lobby *Lobby) {
 	gameStarted := false
 	switch m.awaitGameStart(ctx, lobby.Bot, timeout, botLog) {
 	case gameWaitStarted:
-		botLog("Game started — leaving lobby and freeing bot")
+		botLog("info", "Game started — leaving lobby and freeing bot")
 		gameStarted = true
 	case gameWaitCancelled:
-		botLog("Lobby cancelled")
+		botLog("action", "Lobby cancelled")
 	case gameWaitTimeout:
-		botLog(fmt.Sprintf("Lobby timed out after %d minutes — destroying lobby", int(timeout.Minutes())))
+		botLog("error", fmt.Sprintf("Lobby timed out after %d minutes — destroying lobby", int(timeout.Minutes())))
 		m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobby.ID, Error: fmt.Sprintf("Lobby timed out (%d min)", int(timeout.Minutes()))})
 	}
 
@@ -348,11 +349,17 @@ func (m *Manager) RejoinLobby(cmd protocol.RejoinLobbyCmd) error {
 	b.SetExpectedTeams(cmd.Players)
 	b.SetEnforceTeams(cmd.AutoAssignTeams)
 
-	log.Printf("[Lobby %s] Rejoining — bot %s re-watching lobby", cmd.LobbyID, cmd.BotID)
-	m.send("bot_log", protocol.BotLogEvent{
-		BotID:   cmd.BotID,
-		Message: fmt.Sprintf("Rejoining lobby '%s' after reconnect — waiting for GC lobby cache", cmd.GameName),
-	})
+	botLog := func(level, msg string) {
+		m.send("bot_log", protocol.BotLogEvent{
+			BotID:   cmd.BotID,
+			Level:   level,
+			LobbyID: cmd.LobbyID,
+			Message: msg,
+		})
+		log.Printf("[Lobby %s] %s", cmd.LobbyID, msg)
+	}
+
+	botLog("info", fmt.Sprintf("Rejoining lobby '%s' after reconnect — waiting for GC lobby cache", cmd.GameName))
 
 	go func() {
 		defer func() {
@@ -380,10 +387,7 @@ func (m *Manager) RejoinLobby(cmd protocol.RejoinLobbyCmd) error {
 		}
 		if !inLobby {
 			// Bot really lost the lobby — report error
-			m.send("bot_log", protocol.BotLogEvent{
-				BotID:   cmd.BotID,
-				Message: fmt.Sprintf("Bot is NOT in Dota lobby anymore — lobby '%s' may need to be recreated", cmd.GameName),
-			})
+			botLog("error", fmt.Sprintf("Bot is NOT in Dota lobby anymore — lobby '%s' may need to be recreated", cmd.GameName))
 			m.send("lobby_error", protocol.LobbyErrorEvent{
 				LobbyID: cmd.LobbyID,
 				Error:   "Bot lost connection to lobby after reconnect",
@@ -392,10 +396,7 @@ func (m *Manager) RejoinLobby(cmd protocol.RejoinLobbyCmd) error {
 		}
 
 		// Bot is still in the Dota lobby — re-track it
-		m.send("bot_log", protocol.BotLogEvent{
-			BotID:   cmd.BotID,
-			Message: fmt.Sprintf("Lobby '%s' confirmed via GC cache — re-tracking", cmd.GameName),
-		})
+		botLog("info", fmt.Sprintf("Lobby '%s' confirmed via GC cache — re-tracking", cmd.GameName))
 		m.send("lobby_status", protocol.LobbyStatusEvent{
 			LobbyID: cmd.LobbyID,
 			Status:  "waiting",
@@ -419,23 +420,18 @@ func (m *Manager) RejoinLobby(cmd protocol.RejoinLobbyCmd) error {
 			}
 		}()
 
-		botLog := func(msg string) {
-			log.Printf("[Lobby %s] %s", cmd.LobbyID, msg)
-			m.send("bot_log", protocol.BotLogEvent{BotID: cmd.BotID, Message: msg})
-		}
-
 		switch m.awaitGameStart(ctx, b, timeout, botLog) {
 		case gameWaitStarted:
-			botLog("Game started after rejoin — leaving lobby and freeing bot")
+			botLog("info", "Game started after rejoin — leaving lobby and freeing bot")
 			b.AbandonAndLeaveLobby()
 		case gameWaitCancelled:
-			botLog("Lobby cancelled after rejoin — destroying")
+			botLog("action", "Lobby cancelled after rejoin — destroying")
 			destroyCtx, destroyCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			b.DestroyLobby(destroyCtx)
 			destroyCancel()
 			b.LeaveLobby()
 		case gameWaitTimeout:
-			botLog(fmt.Sprintf("Lobby timed out after rejoin (%d min) — destroying", int(timeout.Minutes())))
+			botLog("error", fmt.Sprintf("Lobby timed out after rejoin (%d min) — destroying", int(timeout.Minutes())))
 			m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: cmd.LobbyID, Error: fmt.Sprintf("Lobby timed out (%d min)", int(timeout.Minutes()))})
 			destroyCtx, destroyCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			b.DestroyLobby(destroyCtx)
@@ -460,6 +456,8 @@ func (m *Manager) CancelLobby(lobbyID string) error {
 	if lobby.Bot != nil {
 		m.send("bot_log", protocol.BotLogEvent{
 			BotID:   lobby.Bot.ID,
+			Level:   "action",
+			LobbyID: lobbyID,
 			Message: fmt.Sprintf("ACTION: CancelLobby(%s)", lobbyID),
 		})
 	}
@@ -499,6 +497,8 @@ func (m *Manager) ForceLaunch(lobbyID string, skipValidation bool) error {
 	log.Printf("[Lobby %s] Force launching", lobbyID)
 	m.send("bot_log", protocol.BotLogEvent{
 		BotID:   lobby.Bot.ID,
+		Level:   "action",
+		LobbyID: lobbyID,
 		Message: fmt.Sprintf("ACTION: ForceLaunch(%s, skipValidation=%v)", lobbyID, skipValidation),
 	})
 
@@ -530,6 +530,8 @@ func (m *Manager) ForceLaunch(lobbyID string, skipValidation bool) error {
 
 	m.send("bot_log", protocol.BotLogEvent{
 		BotID:   lobby.Bot.ID,
+		Level:   "action",
+		LobbyID: lobbyID,
 		Message: "Force launching game...",
 	})
 	lobby.Bot.LaunchLobby()

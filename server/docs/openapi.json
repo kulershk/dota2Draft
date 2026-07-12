@@ -541,14 +541,14 @@
     "/api/admin/bots/{botId}/logs": {
       "get": {
         "tags": ["Admin"],
-        "summary": "Get recent in-memory log lines for a bot",
-        "description": "Requires the `manage_bots` permission. Returns the recent log buffer maintained in memory for the bot (not persisted).",
+        "summary": "Get recent log lines for a bot",
+        "description": "Requires the `manage_bots` permission. Returns the bot's persisted log history (last 500 lines, oldest first) from the `bot_logs` table — survives server restarts. Live lines stream via the `bot:log` socket event.",
         "security": [{ "bearerAuth": [] }],
         "parameters": [{ "name": "botId", "in": "path", "required": true, "schema": { "type": "integer" } }],
         "responses": {
           "200": {
-            "description": "Log lines",
-            "content": { "application/json": { "schema": { "type": "array", "items": { "type": "object", "properties": { "time": { "type": "string", "format": "date-time" }, "message": { "type": "string" } } } } } }
+            "description": "Log lines, oldest first",
+            "content": { "application/json": { "schema": { "type": "array", "items": { "type": "object", "properties": { "time": { "type": "string", "format": "date-time" }, "level": { "type": "string", "enum": ["info", "action", "warn", "error"] }, "lobbyId": { "type": "integer", "nullable": true, "description": "match_lobbies id the line relates to, when known" }, "message": { "type": "string" } } } } } }
           },
           "403": { "description": "Missing manage_bots permission" },
           "500": { "description": "Server error" }

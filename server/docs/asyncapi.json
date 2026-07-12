@@ -1489,17 +1489,18 @@
     },
     "bot:log": {
       "subscribe": {
-        "summary": "Stdout/stderr line from a lobby bot (PRIVATE — sent only to sockets in the `perm:manage_bots` room). May include Steam IDs, lobby IDs, and operational error text — never broadcast to non-admins.",
+        "summary": "Operational log line from a lobby bot (PRIVATE — sent only to sockets in the `perm:manage_bots` room). May include Steam IDs, lobby IDs, and operational error text — never broadcast to non-admins. Also persisted to the `bot_logs` table (last 500 per bot), served by GET /api/admin/bots/{botId}/logs.",
         "message": {
           "payload": {
             "type": "object",
             "properties": {
               "botId": { "type": "integer" },
-              "ts": { "type": "integer", "description": "Server epoch ms" },
-              "level": { "type": "string", "enum": ["info", "warn", "error"] },
+              "time": { "type": "string", "format": "date-time", "description": "Server receive time (ISO, UTC)" },
+              "level": { "type": "string", "enum": ["info", "action", "warn", "error"], "description": "info = narration, action = something the bot/an operator did, warn = recoverable trouble, error = failure" },
+              "lobbyId": { "type": "integer", "nullable": true, "description": "match_lobbies id the line relates to, when known" },
               "message": { "type": "string" }
             },
-            "required": ["botId", "message"]
+            "required": ["botId", "time", "level", "message"]
           }
         }
       }

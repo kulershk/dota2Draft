@@ -24,7 +24,6 @@ class BotPool {
   constructor() {
     this.io = null
     this.goWs = null
-    this.botLogs = new Map() // botId -> [{ time, message }]
     this.lobbyTeamIds = new Map() // lobbyId -> { radiant, dire }
     this._matchDetailsPending = new Map() // matchId -> { resolve, reject, timer }
     this._botsListPending = null // single resolver for an in-flight list_bots request
@@ -111,7 +110,7 @@ class BotPool {
           break
 
         case 'bot_log':
-          this._onBotLog(data)
+          await this._onBotLog(data)
           break
 
         case 'lobby_status':
@@ -438,14 +437,20 @@ class BotPool {
     })
   }
 
-  _onBotLog(data) {
+  async _onBotLog(data) {
     const botId = Number(data.botId)
-    const entry = { time: new Date().toISOString(), message: data.message }
-    if (!this.botLogs.has(botId)) this.botLogs.set(botId, [])
-    const logs = this.botLogs.get(botId)
-    logs.push(entry)
-    if (logs.length > 500) logs.shift()
+    const level = ['info', 'action', 'warn', 'error'].includes(data.level) ? data.level : 'info'
+    const lobbyId = data.lobbyId ? Number(data.lobbyId) : null
+    const entry = { time: new Date().toISOString(), level, lobbyId, message: data.message }
     console.log(`[Bot ${botId}] ${data.message}`)
+    // Persist so the admin log viewer survives restarts. A log for a bot that
+    // was just removed trips the FK — drop it silently rather than erroring.
+    try {
+      await execute(
+        'INSERT INTO bot_logs (bot_id, level, lobby_id, message) VALUES ($1, $2, $3, $4)',
+        [botId, level, lobbyId, data.message]
+      )
+    } catch {}
     if (this.io) {
       this.io.to('perm:manage_bots').emit('bot:log', { botId, ...entry })
     }
@@ -567,7 +572,7 @@ class BotPool {
     // Free the bot
     if (lobby.bot_id) {
       await execute("UPDATE lobby_bots SET status = 'available', last_used_at = NOW() WHERE id = $1", [lobby.bot_id])
-      this._onBotLog({ botId: String(lobby.bot_id), message: `Match ID ${dotaMatchId} captured. Bot available.` })
+      await this._onBotLog({ botId: String(lobby.bot_id), lobbyId: String(lobbyId), message: `Match ID ${dotaMatchId} captured. Bot available.` })
     }
 
     // Broadcast
@@ -1651,8 +1656,22 @@ class BotPool {
 
   // ── Public API (called by lobby.js routes) ──
 
-  getBotLogs(botId) {
-    return this.botLogs.get(botId) || []
+  async getBotLogs(botId, limit = 500) {
+    const rows = await query(
+      `SELECT level, lobby_id, message, created_at
+         FROM bot_logs
+        WHERE bot_id = $1
+        ORDER BY id DESC
+        LIMIT $2`,
+      [botId, limit]
+    )
+    // Oldest-first for the log console (it renders top-down and follows the tail)
+    return rows.reverse().map(r => ({
+      time: r.created_at,
+      level: r.level,
+      lobbyId: r.lobby_id,
+      message: r.message,
+    }))
   }
 
   async getBotStatusHistory(botId, limit = 100) {

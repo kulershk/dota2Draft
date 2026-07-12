@@ -184,14 +184,28 @@ function isLogAtBottom() {
   return el.scrollHeight - el.scrollTop - el.clientHeight < 60
 }
 
-// Color a log line by what it's telling us — errors red, good news green,
-// in-progress/waiting blue, everything else neutral.
-function logColor(message = '') {
-  const m = message.toLowerCase()
+// Color a log line by its level (sent by the Go bot service). For plain info
+// lines (and legacy entries without a level) fall back to keyword coloring so
+// good news still reads green and in-progress blue.
+function logColor(log: any) {
+  if (log.level === 'error') return 'text-red-400'
+  if (log.level === 'warn') return 'text-amber-400'
+  if (log.level === 'action') return 'text-purple-300'
+  const m = (log.message || '').toLowerCase()
   if (m.includes('error') || m.includes('failed') || m.includes('reject') || m.includes('lost') || m.includes('timed out')) return 'text-red-400'
   if (m.includes('ready') || m.includes('available') || m.includes('created') || m.includes('connected') || m.includes('welcomed') || m.includes('captured')) return 'text-green-400'
   if (m.includes('waiting') || m.includes('invit') || m.includes('connecting') || m.includes('reconnect') || m.includes('logging in')) return 'text-blue-400'
   return 'text-gray-300'
+}
+
+// Timestamp in the viewer's local time; prefix the date when the line is not
+// from today so older history (logs persist across deploys now) stays legible.
+function fmtLogTime(iso?: string) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const hms = d.toLocaleTimeString([], { hour12: false })
+  if (d.toDateString() === new Date().toDateString()) return hms
+  return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${hms}`
 }
 
 async function toggleTimeline(botId: number) {
@@ -318,7 +332,7 @@ function onBotLog(data: any) {
   // Measure stickiness BEFORE appending — once the new row renders, scrollHeight
   // changes and we can no longer tell whether we were at the tail.
   const stick = expandedBotId.value === data.botId && isLogAtBottom()
-  botLogs.value[data.botId].push({ time: data.time, message: data.message })
+  botLogs.value[data.botId].push({ time: data.time, level: data.level, lobbyId: data.lobbyId, message: data.message })
   if (botLogs.value[data.botId].length > 500) botLogs.value[data.botId].shift()
   if (stick) nextTick(scrollLogsToBottom)
 }
@@ -619,8 +633,13 @@ onUnmounted(() => {
             v-for="(log, idx) in botLogs[bot.id]" :key="idx"
             class="flex gap-3 px-2 py-[3px] rounded hover:bg-white/[0.04] transition-colors"
           >
-            <span class="text-gray-500 shrink-0 select-none tabular-nums">{{ log.time?.slice(11, 19) }}</span>
-            <span class="min-w-0 break-words whitespace-pre-wrap leading-relaxed" :class="logColor(log.message)">{{ log.message }}</span>
+            <span class="text-gray-500 shrink-0 select-none tabular-nums">{{ fmtLogTime(log.time) }}</span>
+            <span
+              v-if="log.lobbyId"
+              class="shrink-0 select-none text-[10px] leading-5 px-1.5 rounded bg-white/[0.07] text-gray-400"
+              :title="`Lobby #${log.lobbyId}`"
+            >#{{ log.lobbyId }}</span>
+            <span class="min-w-0 break-words whitespace-pre-wrap leading-relaxed" :class="logColor(log)">{{ log.message }}</span>
           </div>
         </div>
       </div>

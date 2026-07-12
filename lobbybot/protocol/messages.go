@@ -156,7 +156,14 @@ type BotStatusEvent struct {
 }
 
 type BotLogEvent struct {
-	BotID   string `json:"botId"`
+	BotID string `json:"botId"`
+	// Level classifies the line for the admin log viewer:
+	// "info" (default), "action" (something the bot/an operator did),
+	// "warn" (recoverable trouble), "error" (something failed).
+	Level string `json:"level,omitempty"`
+	// LobbyID is the match_lobbies id the line relates to, when known —
+	// lets the admin UI tie bot chatter to a specific lobby.
+	LobbyID string `json:"lobbyId,omitempty"`
 	Message string `json:"message"`
 }
 
