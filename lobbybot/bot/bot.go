@@ -73,6 +73,24 @@ type Bot struct {
 	lastMatchIDSent       uint64 // last match id sent via game_started (0 = none; reset per lobby in SetActiveLobbyID). A relaunch after a failed start gets a new id and re-fires.
 	gcReady               bool   // GC session is live (welcomed / HAVE_SESSION); gates going back to 'available'
 	enforceTeams          bool   // kick players onto their expected team (lobbyAutoAssignTeams); off = free team pick
+
+	// Session bookkeeping (guarded by mu):
+	// sessionGen increments on every Connect()/reconnect; each event loop
+	// carries the generation it was spawned with, and a loop whose generation
+	// is no longer current disconnects its client and exits. This makes two
+	// concurrent Steam logins from this process structurally impossible — the
+	// failure mode behind login ping-pong (each login kicks the other session,
+	// which reconnects and kicks back, forever).
+	sessionGen uint64
+	// sessionUpAt is when the current session logged on (zero = not logged on).
+	sessionUpAt time.Time
+	// consecutiveDrops counts sessions that died young — dropped within 60s of
+	// logon, or before logging on at all (dial failures). Drives exponential
+	// reconnect backoff so a kick war or CM outage can't churn logins every
+	// few seconds and trip Steam's rate limits. NOT reset on logon/GC welcome:
+	// ping-pong sessions get all the way to 'welcomed' before being kicked,
+	// so only a session that survives 60s counts as healthy.
+	consecutiveDrops int
 }
 
 func NewBot(id, username, password, refreshToken string, send SendFunc) *Bot {
@@ -149,6 +167,10 @@ func (b *Bot) Connect() {
 	// session closed the previous channel and can't affect this one.
 	cancel := make(chan struct{})
 	b.cancelCh = cancel
+	// Claim a new session generation; any still-running loop from an older
+	// session sees the change and exits instead of keeping a second login alive.
+	b.sessionGen++
+	gen := b.sessionGen
 	b.mu.Unlock()
 
 	b.log(fmt.Sprintf("Connecting as %s...", b.Username))
@@ -159,14 +181,26 @@ func (b *Bot) Connect() {
 	b.steamClient.ConnectionTimeout = 30 * time.Second
 	sc := b.steamClient
 	b.mu.Unlock()
-	go b.handleSteamEvents(sc, cancel)
+	go b.handleSteamEvents(sc, gen, cancel)
 
 	b.log("Connecting to Steam network...")
 	sc.Connect()
 }
 
-func (b *Bot) handleSteamEvents(sc *steam.Client, cancel <-chan struct{}) {
+func (b *Bot) handleSteamEvents(sc *steam.Client, gen uint64, cancel <-chan struct{}) {
 	for event := range sc.Events() {
+		// A newer session owns this bot now. This loop's client must not stay
+		// logged in (it would kick the new session off the account), so
+		// disconnect it and exit.
+		b.mu.Lock()
+		cur := b.sessionGen
+		b.mu.Unlock()
+		if cur != gen {
+			log.Printf("[Bot %s] Stale session loop (gen %d, current %d) — disconnecting old client and exiting", b.ID, gen, cur)
+			sc.Disconnect()
+			return
+		}
+
 		switch e := event.(type) {
 		case *steam.ConnectedEvent:
 			// Snapshot credentials under the lock — the guard-code goroutine and
@@ -215,6 +249,7 @@ func (b *Bot) handleSteamEvents(sc *steam.Client, cancel <-chan struct{}) {
 			steamID := sc.SteamId().String()
 			b.mu.Lock()
 			b.SteamID = steamID
+			b.sessionUpAt = time.Now()
 			loginKey := b.loginKey
 			sentryLen := len(b.sentryHash)
 			b.mu.Unlock()
@@ -410,7 +445,30 @@ func (b *Bot) handleSteamEvents(sc *steam.Client, cancel <-chan struct{}) {
 			}
 
 		case *devents.UnhandledGCPacket:
-			b.log(fmt.Sprintf("Unhandled GC packet: msgType=%d", e.Packet.MsgType))
+			// Console-only: routine GC broadcasts (rank updates, live league
+			// ticks, …) arrive constantly and would flood the admin feed.
+			log.Printf("[Bot %s] Unhandled GC packet: msgType=%d", b.ID, e.Packet.MsgType)
+
+		case *steam.LoggedOffEvent:
+			if e.Result == steamlang.EResult_LoggedInElsewhere ||
+				e.Result == steamlang.EResult_LogonSessionReplaced ||
+				e.Result == steamlang.EResult_AlreadyLoggedInElsewhere {
+				// Another session logged into this account and Steam kicked
+				// ours. Auto-reconnecting would start a login ping-pong: our
+				// re-logon kicks the other session, its auto-reconnect kicks
+				// ours back, every few seconds forever — and the churn trips
+				// Steam CM rate limits. Stop instead and surface the conflict;
+				// Node's auto-reconnect retries with a long backoff, which
+				// recovers cleanly once the other session is gone.
+				errMsg := fmt.Sprintf("Kicked by another login session (%v) — is this account also used by another service instance or environment?", e.Result)
+				b.logAt("error", errMsg)
+				b.mu.Lock()
+				b.loginFailedHard = true // suppress auto-reconnect on the DisconnectedEvent that follows
+				b.mu.Unlock()
+				b.setStatus(StatusError, errMsg)
+			} else {
+				b.logAt("warn", fmt.Sprintf("Logged off by Steam: %v", e.Result))
+			}
 
 		case *steam.DisconnectedEvent:
 			b.mu.Lock()
@@ -423,16 +481,18 @@ func (b *Bot) handleSteamEvents(sc *steam.Client, cancel <-chan struct{}) {
 				continue // don't exit the event loop, we'll reconnect after code
 			}
 			if failedHard {
-				// Steam rejected our credentials outright — retrying with the
-				// same ones is pointless and risks rate-limiting. Node retries
-				// after refreshing the token, or an admin reconnects manually.
-				b.logAt("error", "Not auto-reconnecting after login rejection")
+				// Hard failure (credentials rejected, or kicked by another
+				// login session) — retrying immediately is pointless or
+				// harmful. Node retries later with a long backoff, or an
+				// admin reconnects manually.
+				b.logAt("error", "Not auto-reconnecting (hard failure — see previous error)")
 				return
 			}
 			// If we were online or connecting, auto-reconnect with a fresh client.
-			// Add jitter (3-8s) so multiple bots on the same IP don't all hit
-			// Steam simultaneously after a mass disconnect.
+			// Base delay is 3-8s jitter, escalating while sessions keep dying
+			// young (see reconnectDelay).
 			if status != StatusOffline {
+				b.noteSessionDrop()
 				delay := b.reconnectDelay()
 				b.logAt("warn", fmt.Sprintf("Disconnected from Steam — reconnecting in %s...", delay))
 				b.setStatus(StatusConnecting)
@@ -442,12 +502,16 @@ func (b *Bot) handleSteamEvents(sc *steam.Client, cancel <-chan struct{}) {
 					return
 				case <-time.After(delay):
 				}
-				b.reconnect(cancel)
+				if !b.claimNextSession(&gen) {
+					return
+				}
+				b.reconnect(gen, cancel)
 				return // exit this event loop; reconnect starts a new one
 			}
 			return
 
 		case error:
+			b.noteSessionDrop()
 			delay := b.reconnectDelay()
 			b.logAt("warn", fmt.Sprintf("Steam error: %v — reconnecting in %s...", e, delay))
 			b.setStatus(StatusConnecting)
@@ -457,26 +521,70 @@ func (b *Bot) handleSteamEvents(sc *steam.Client, cancel <-chan struct{}) {
 				return
 			case <-time.After(delay):
 			}
-			b.reconnect(cancel)
+			if !b.claimNextSession(&gen) {
+				return
+			}
+			b.reconnect(gen, cancel)
 			return // exit this event loop; reconnect starts a new one
 		}
 	}
 }
 
-// reconnectDelay returns 3-8s of jitter so multiple bots on the same IP
-// don't all slam Steam at the same instant after a mass disconnect.
+// noteSessionDrop updates the consecutive-drop counter behind reconnect
+// backoff. A session that survived ≥60s after logon counts as healthy and
+// resets the counter; anything shorter — including dial failures that never
+// logged on — escalates it.
+func (b *Bot) noteSessionDrop() {
+	b.mu.Lock()
+	if !b.sessionUpAt.IsZero() && time.Since(b.sessionUpAt) >= 60*time.Second {
+		b.consecutiveDrops = 0
+	} else {
+		b.consecutiveDrops++
+	}
+	b.sessionUpAt = time.Time{}
+	b.mu.Unlock()
+}
+
+// claimNextSession atomically advances the session generation so this loop's
+// successor becomes the one true session. Returns false when another loop
+// already took over — the caller must exit instead of double-connecting.
+func (b *Bot) claimNextSession(gen *uint64) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.sessionGen != *gen {
+		log.Printf("[Bot %s] Newer session active (gen %d, current %d) — not reconnecting from this loop", b.ID, *gen, b.sessionGen)
+		return false
+	}
+	b.sessionGen++
+	*gen = b.sessionGen
+	return true
+}
+
+// reconnectDelay returns the base 3-8s jitter (per-bot offset so multiple
+// bots on one IP don't all slam Steam at the same instant), doubled for each
+// consecutive young-session drop and capped at 5 minutes. A login ping-pong
+// (another session kicking ours every logon) or a CM outage therefore slows
+// to a crawl instead of churning logins every few seconds.
 func (b *Bot) reconnectDelay() time.Duration {
-	// Use bot ID hash as a simple per-bot offset so each bot gets a
-	// different delay even if called at the exact same moment.
 	h := 0
 	for _, c := range b.ID {
 		h += int(c)
 	}
-	base := 3 + (h % 6) // 3-8 seconds
-	return time.Duration(base) * time.Second
+	base := time.Duration(3+(h%6)) * time.Second // 3-8 seconds
+	b.mu.Lock()
+	drops := b.consecutiveDrops
+	b.mu.Unlock()
+	if drops > 6 {
+		drops = 6
+	}
+	delay := base << uint(drops)
+	if delay > 5*time.Minute {
+		delay = 5 * time.Minute
+	}
+	return delay
 }
 
-func (b *Bot) reconnect(cancel <-chan struct{}) {
+func (b *Bot) reconnect(gen uint64, cancel <-chan struct{}) {
 	b.log("Creating fresh Steam client for reconnect...")
 	// Detach the old dota client + cache watcher under the lock so any concurrent
 	// reader (processLobbyUpdate, the SayHello goroutine) snapshots either the
@@ -501,7 +609,7 @@ func (b *Bot) reconnect(cancel <-chan struct{}) {
 	b.steamClient.ConnectionTimeout = 30 * time.Second
 	sc := b.steamClient
 	b.mu.Unlock()
-	go b.handleSteamEvents(sc, cancel)
+	go b.handleSteamEvents(sc, gen, cancel)
 	b.log("Reconnecting to Steam network...")
 	sc.Connect()
 }
