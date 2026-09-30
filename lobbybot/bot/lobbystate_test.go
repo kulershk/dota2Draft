@@ -1,11 +1,17 @@
 package bot
 
 import (
+	"context"
+	"strings"
 	"testing"
+	"time"
 
 	"lobbybot/protocol"
 
+	"github.com/paralin/go-dota2"
 	gcccm "github.com/paralin/go-dota2/protocol"
+	"github.com/paralin/go-steam"
+	"github.com/sirupsen/logrus"
 )
 
 func TestLiveMembersUsesMemberIndices(t *testing.T) {
@@ -203,5 +209,137 @@ func TestShouldDestroyStale(t *testing.T) {
 	run.LeaderId = &self
 	if shouldDestroyStale(run, self) {
 		t.Error("never destroy a running game")
+	}
+}
+
+func TestEnsureAbortReported(t *testing.T) {
+	b, r := newTestBot()
+	b.activeLobbyID = "7"
+	b.lastMatchIDSent = 111
+	b.launchSent = true
+
+	// The RUN→UI edge was missed (watcher replaced): report it now.
+	b.EnsureAbortReported()
+	ga := r.ofType("game_aborted")
+	if len(ga) != 1 {
+		t.Fatalf("want exactly one game_aborted, got %d", len(ga))
+	}
+	if ev := ga[0].Data.(protocol.GameAbortedEvent); ev.LobbyID != "7" || ev.MatchID != "111" {
+		t.Fatalf("bad game_aborted payload %+v", ev)
+	}
+	if b.launchSent || b.abortedMatchID != 111 {
+		t.Fatalf("want launch re-armed and abortedMatchID=111, got launchSent=%v aborted=%d", b.launchSent, b.abortedMatchID)
+	}
+	// Second call: already reported.
+	b.EnsureAbortReported()
+	if n := len(r.ofType("game_aborted")); n != 1 {
+		t.Fatalf("repeat call must not re-send, got %d", n)
+	}
+
+	// Edge path already reported this abort → nothing to do.
+	b2, r2 := newTestBot()
+	b2.activeLobbyID = "7"
+	b2.lastMatchIDSent = 111
+	b2.processLobbyUpdate(mkLobby(gcccm.CSODOTALobby_RUN, 111), mkLobby(gcccm.CSODOTALobby_UI, 111))
+	b2.EnsureAbortReported()
+	if n := len(r2.ofType("game_aborted")); n != 1 {
+		t.Fatalf("abort already reported by the edge path must not repeat, got %d", n)
+	}
+
+	// No lobby / no match id → nothing.
+	b3, r3 := newTestBot()
+	b3.lastMatchIDSent = 111
+	b3.EnsureAbortReported()
+	b4, r4 := newTestBot()
+	b4.activeLobbyID = "7"
+	b4.EnsureAbortReported()
+	if len(r3.ofType("game_aborted"))+len(r4.ofType("game_aborted")) != 0 {
+		t.Fatal("no active lobby or no match id → no game_aborted")
+	}
+}
+
+func TestRunToNonLobbyStateIsNotAbort(t *testing.T) {
+	for _, st := range []gcccm.CSODOTALobby_State{
+		gcccm.CSODOTALobby_POSTGAME,
+		gcccm.CSODOTALobby_SERVERSETUP,
+		gcccm.CSODOTALobby_SERVERASSIGN,
+	} {
+		b, r := newTestBot()
+		b.activeLobbyID = "7"
+		b.lastMatchIDSent = 111
+		b.launchSent = true
+		b.processLobbyUpdate(mkLobby(gcccm.CSODOTALobby_RUN, 111), mkLobby(st, 111))
+		if n := len(r.ofType("game_aborted")); n != 0 {
+			t.Errorf("RUN→%s: game_aborted sent %d times, want 0", st, n)
+		}
+		if n := len(r.ofType("game_started")); n != 0 {
+			t.Errorf("RUN→%s: extra game_started sent %d times, want 0", st, n)
+		}
+	}
+}
+
+func TestRunToReadyUpIsAbort(t *testing.T) {
+	for _, st := range []gcccm.CSODOTALobby_State{gcccm.CSODOTALobby_READYUP, gcccm.CSODOTALobby_NOTREADY} {
+		b, r := newTestBot()
+		b.activeLobbyID = "7"
+		b.lastMatchIDSent = 111
+		b.processLobbyUpdate(mkLobby(gcccm.CSODOTALobby_RUN, 111), mkLobby(st, 111))
+		if n := len(r.ofType("game_aborted")); n != 1 {
+			t.Errorf("RUN→%s: game_aborted sent %d times, want 1", st, n)
+		}
+	}
+}
+
+func TestNoAutoLaunchInAbortUpdate(t *testing.T) {
+	b, r := newTestBot()
+	// A real but disconnected Dota client: dc() != nil so the auto-launch block
+	// is reachable, while LaunchLobby's GC write is a no-op (no connection).
+	b.dotaClient = dota2.New(steam.NewClient(), logrus.New())
+	b.activeLobbyID = "7"
+	b.lastMatchIDSent = 111
+
+	b.processLobbyUpdate(mkLobby(gcccm.CSODOTALobby_RUN, 111), mkLobby(gcccm.CSODOTALobby_UI, 222))
+
+	if n := len(r.ofType("game_aborted")); n != 1 {
+		t.Fatalf("want game_aborted, got %d", n)
+	}
+	gs := r.ofType("game_started")
+	if len(gs) != 1 || gs[0].Data.(protocol.GameStartedEvent).MatchID != "222" {
+		t.Fatalf("want game_started(222), got %+v", gs)
+	}
+	if b.launchSent {
+		t.Fatal("must not arm/launch in the same update that detected the abort")
+	}
+	for _, m := range r.ofType("bot_log") {
+		msg := m.Data.(protocol.BotLogEvent).Message
+		if strings.Contains(msg, "Auto-launching after match ID assigned") || strings.Contains(msg, "ACTION: LaunchLobby") {
+			t.Fatalf("unexpected launch: %q", msg)
+		}
+	}
+}
+
+func TestWaitForDraftLobbyGone(t *testing.T) {
+	b, _ := newTestBot()
+	if got := b.WaitForDraft(context.Background(), time.Minute); got != DraftLobbyGone {
+		t.Fatalf("lobby missing from cache → DraftLobbyGone, got %v", got)
+	}
+}
+
+// WaitForDraft's level check must agree with the edge path (E2): only a return
+// to a lobby state is an abort — otherwise EnsureAbortReported would report a
+// finished game (seen as POSTGAME after a reconnect gap) as aborted.
+func TestWaitForDraftAbortOnlyOnLobbyState(t *testing.T) {
+	b, _ := newTestBot()
+	b.lastLobby = mkLobby(gcccm.CSODOTALobby_POSTGAME, 111)
+	if got := b.WaitForDraft(context.Background(), time.Minute); got != DraftStarted {
+		t.Fatalf("POSTGAME → DraftStarted, got %v", got)
+	}
+	b.lastLobby = mkLobby(gcccm.CSODOTALobby_SERVERSETUP, 111)
+	if got := b.WaitForDraft(context.Background(), time.Millisecond); got != DraftWaitExpired {
+		t.Fatalf("SERVERSETUP is not an abort → keep waiting until the failsafe, got %v", got)
+	}
+	b.lastLobby = mkLobby(gcccm.CSODOTALobby_UI, 111)
+	if got := b.WaitForDraft(context.Background(), time.Minute); got != DraftAborted {
+		t.Fatalf("UI → DraftAborted, got %v", got)
 	}
 }

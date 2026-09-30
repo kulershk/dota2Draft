@@ -49,6 +49,16 @@ func lobbyStatusFor(s gcccm.CSODOTALobby_State) string {
 	}
 }
 
+// isLobbyState reports whether s means the players are sitting in the lobby
+// (not yet launched, or dumped back after a failed start).
+func isLobbyState(s gcccm.CSODOTALobby_State) bool {
+	switch s {
+	case gcccm.CSODOTALobby_UI, gcccm.CSODOTALobby_READYUP, gcccm.CSODOTALobby_NOTREADY:
+		return true
+	}
+	return false
+}
+
 // slottedPlayers is the Radiant/Dire roster Node uses for "in lobby" badges
 // and the queue all-seated auto-launch check.
 func slottedPlayers(members []*gcccm.CSODOTALobbyMember) []protocol.LobbyPlayer {

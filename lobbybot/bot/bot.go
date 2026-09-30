@@ -920,20 +920,18 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 		}
 	}
 
-	// Send full player list update to Node so it stays in sync. Report the
-	// *current* lobby state via lobbyStatusFor, not a hardcoded "waiting" —
-	// this handler runs on every SO-cache update, including during
-	// SERVERSETUP and RUN, so hardcoding "waiting" clobbered the real
-	// cointoss/active status back to "waiting" on every in-game cache tick.
-	//
 	// A launched game fell back to the lobby (players failed to load). Tell Node
 	// BEFORE the 'waiting' status so it clears the match id first. Re-arm the
 	// launch guard, and remember the aborted id: the GC keeps it on the lobby,
 	// so it must not be re-reported while the lobby sits in UI — only once a
 	// relaunch is underway (a relaunch with a NEW id reports by the normal
-	// "id changed" rule).
+	// "id changed" rule). Only a return to a lobby state counts: RUN→POSTGAME
+	// is a finished game, and RUN→SERVERSETUP/SERVERASSIGN never means the
+	// players were dumped back.
+	aborted := false
 	if oldLobby != nil && oldLobby.GetState() == gcccm.CSODOTALobby_RUN &&
-		newLobby.GetState() != gcccm.CSODOTALobby_RUN {
+		isLobbyState(newLobby.GetState()) {
+		aborted = true
 		b.mu.Lock()
 		b.launchSent = false
 		b.abortedMatchID = oldLobby.GetMatchId()
@@ -944,6 +942,12 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 			MatchID: fmt.Sprintf("%d", oldLobby.GetMatchId()),
 		})
 	}
+
+	// Send full player list update to Node so it stays in sync. Report the
+	// *current* lobby state via lobbyStatusFor, not a hardcoded "waiting" —
+	// this handler runs on every SO-cache update, including during
+	// SERVERSETUP and RUN, so hardcoding "waiting" clobbered the real
+	// cointoss/active status back to "waiting" on every in-game cache tick.
 	b.send("lobby_status", protocol.LobbyStatusEvent{
 		LobbyID:       lobbyID,
 		Status:        lobbyStatusFor(newLobby.GetState()),
@@ -1016,8 +1020,11 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 			LobbyID: lobbyID,
 			MatchID: fmt.Sprintf("%d", matchID),
 		})
-		// Auto-launch immediately since we have a match ID but lobby is still in UI
-		if lobbyState == gcccm.CSODOTALobby_UI && b.dc() != nil {
+		// Auto-launch immediately since we have a match ID but lobby is still in UI.
+		// Not in the update that detected an abort: the GC can hand out a new id
+		// while the players are back in the lobby, and launching straight away
+		// would loop launch → fail to load → launch.
+		if lobbyState == gcccm.CSODOTALobby_UI && !aborted && b.dc() != nil {
 			b.mu.Lock()
 			doLaunch := !b.launchSent
 			if doLaunch {
@@ -1332,6 +1339,32 @@ func (b *Bot) LastMatchID() string {
 	return fmt.Sprintf("%d", b.lastMatchIDSent)
 }
 
+// EnsureAbortReported sends game_aborted for the last reported match id if the
+// RUN→lobby edge in processLobbyUpdate never reported it — the edge is lost
+// when it happens while the cache watcher is being replaced, which would leave
+// Node holding the dead match id (row pinned to 'active'). Called when
+// WaitForDraft's level check reports DraftAborted; a no-op if the edge path
+// already reported this id.
+func (b *Bot) EnsureAbortReported() {
+	b.mu.Lock()
+	lobbyID := b.activeLobbyID
+	matchID := b.lastMatchIDSent
+	report := lobbyID != "" && matchID != 0 && b.abortedMatchID != matchID
+	if report {
+		b.abortedMatchID = matchID
+		b.launchSent = false
+	}
+	b.mu.Unlock()
+	if !report {
+		return
+	}
+	b.logCtx("warn", lobbyID, fmt.Sprintf("Game abort for match %d was not reported (missed across a reconnect) — reporting now", matchID))
+	b.send("game_aborted", protocol.GameAbortedEvent{
+		LobbyID: lobbyID,
+		MatchID: fmt.Sprintf("%d", matchID),
+	})
+}
+
 // DraftWaitOutcome is the result of WaitForDraft.
 type DraftWaitOutcome int
 
@@ -1339,15 +1372,17 @@ const (
 	// DraftStarted — the draft (or a later game phase) is underway: every
 	// player made it through the loading screen, so it's safe to leave.
 	DraftStarted DraftWaitOutcome = iota
-	// DraftWaitExpired — the failsafe elapsed without draft confirmation, or
-	// the lobby vanished from the cache (unconfirmed either way).
+	// DraftWaitExpired — the failsafe elapsed without draft confirmation.
 	DraftWaitExpired
-	// DraftAborted — the lobby left the RUN state before the draft started:
-	// the game was aborted (players failed to load) and everyone was dumped
-	// back into the lobby.
+	// DraftAborted — the lobby returned to a lobby state (UI/READYUP/NOTREADY)
+	// before the draft started: the game was aborted (players failed to load)
+	// and everyone was dumped back into the lobby.
 	DraftAborted
 	// DraftCancelled — the watcher context was cancelled.
 	DraftCancelled
+	// DraftLobbyGone — the lobby vanished from the GC cache before the draft
+	// was confirmed.
+	DraftLobbyGone
 )
 
 // WaitForDraft blocks after a game launch until it is safe to leave the
@@ -1368,14 +1403,19 @@ func (b *Bot) WaitForDraft(ctx context.Context, failsafe time.Duration) DraftWai
 		lob := b.getLastLobby()
 		if lob == nil {
 			// Lobby object vanished from the cache — nothing left to manage.
-			b.logAt("warn", "Lobby gone from GC cache while waiting for draft — leaving")
-			return DraftWaitExpired
+			return DraftLobbyGone
 		}
-		if lob.GetState() != gcccm.CSODOTALobby_RUN {
+		// Same abort rule as processLobbyUpdate: only a return to the lobby is
+		// an abort. POSTGAME means the game finished (the draft happened, e.g.
+		// across a reconnect gap) — reporting it as aborted would make Node drop
+		// a finished match id.
+		st := lob.GetState()
+		if isLobbyState(st) {
 			return DraftAborted
 		}
-		if gameUnderway(lob.GetGameState()) {
-			b.log(fmt.Sprintf("Draft underway (game state: %s)", lob.GetGameState().String()))
+		if st == gcccm.CSODOTALobby_POSTGAME ||
+			(st == gcccm.CSODOTALobby_RUN && gameUnderway(lob.GetGameState())) {
+			b.log(fmt.Sprintf("Draft underway (lobby: %s, game state: %s)", st.String(), lob.GetGameState().String()))
 			return DraftStarted
 		}
 		if time.Now().After(deadline) {

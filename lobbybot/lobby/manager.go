@@ -114,8 +114,19 @@ func (m *Manager) awaitGameStart(ctx context.Context, b *bot.Bot, timeout time.D
 		case bot.DraftWaitExpired:
 			botLog("warn", fmt.Sprintf("Draft not confirmed within %d minutes — leaving lobby anyway", int(draftFailsafe.Minutes())))
 			return gameWaitStartedUnconfirmed
+		case bot.DraftLobbyGone:
+			botLog("warn", "Lobby gone from GC cache before the draft was confirmed — leaving")
+			return gameWaitStartedUnconfirmed
 		case bot.DraftAborted:
 			botLog("warn", "Game start aborted — players returned to the lobby; resuming watch")
+			// The RUN→lobby edge may have been missed across a watcher restart.
+			b.EnsureAbortReported()
+			// Drop a start token buffered by the aborted launch, or the next
+			// loop iteration would re-enter WaitForDraft straight away.
+			select {
+			case <-b.GameStartedCh():
+			default:
+			}
 			deadline.Reset(timeout) // players are back in the lobby: fresh wait window
 		case bot.DraftCancelled:
 			return gameWaitCancelled
