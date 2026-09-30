@@ -85,6 +85,13 @@ func main() {
 			}
 			botMgr.DisconnectBot(cmd.BotID)
 
+		case "remove_bot":
+			var cmd protocol.DisconnectBotCmd
+			if !decode(msgType, data, &cmd) {
+				return
+			}
+			botMgr.RemoveBot(cmd.BotID)
+
 		case "list_bots":
 			// Report every bot's live status so Node can reconcile its DB
 			// before picking a bot for a lobby.

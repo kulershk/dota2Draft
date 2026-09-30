@@ -9,7 +9,7 @@ import { botPool } from '../services/botPool.js'
 // A match participant = a captain of either side, or a player drafted onto
 // either side. Participants (and comp managers) may see the lobby password so
 // they can join the in-game lobby; nobody else may.
-async function isMatchParticipant(playerId, matchId) {
+export async function isMatchParticipant(playerId, matchId) {
   if (!playerId || !matchId) return false
   const row = await queryOne(
     `SELECT 1
@@ -21,7 +21,9 @@ async function isMatchParticipant(playerId, matchId) {
               OR EXISTS ( SELECT 1 FROM competition_players cp
                            WHERE cp.competition_id = m.competition_id
                              AND cp.player_id = $2
-                             AND cp.drafted_by IN (m.team1_captain_id, m.team2_captain_id) ) )
+                             AND cp.drafted_by IN (m.team1_captain_id, m.team2_captain_id) )
+              OR EXISTS ( SELECT 1 FROM match_standins ms
+                           WHERE ms.match_id = m.id AND ms.standin_player_id = $2 ) )
       LIMIT 1`,
     [matchId, playerId],
   )

@@ -54,6 +54,12 @@ export async function cleanupSeed({ comp, players = [], bots = [] }) {
   if (comp) {
     await execute("DELETE FROM jobs WHERE payload->>'matchId' IN (SELECT id::text FROM matches WHERE competition_id = $1)", [comp.id])
     await execute('DELETE FROM xp_log WHERE player_id = ANY($1::int[])', [players.map(p => p.id)])
+    // match_standins.captain_id has no ON DELETE CASCADE, so it must be
+    // cleared before the competition delete cascades into captains — leaving
+    // it to the cascade risks captains being removed first and tripping the
+    // FK (cascade ordering across sibling FKs on the same parent row isn't
+    // guaranteed to run matches-then-match_standins before captains).
+    await execute('DELETE FROM match_standins WHERE match_id IN (SELECT id FROM matches WHERE competition_id = $1)', [comp.id])
     await execute('DELETE FROM competitions WHERE id = $1', [comp.id]) // cascades matches, captains, lobbies
   }
   if (players.length) await execute('DELETE FROM players WHERE id = ANY($1::int[])', [players.map(p => p.id)])

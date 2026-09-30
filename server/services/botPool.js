@@ -20,16 +20,22 @@ import { LoginSession, EAuthTokenPlatformType } from 'steam-session'
 const GCOIN_QUEUE_WIN = 200
 const GCOIN_QUEUE_LOSS = 50
 
+// Every lobby status in which a bot is (or may still be) sitting in the Dota
+// lobby. One list so a new status (e.g. 'cointoss') can't be forgotten in some
+// of the ~10 queries that need it.
+const LIVE_LOBBY_STATUSES_SQL = "('creating', 'waiting', 'launching', 'cointoss', 'active')"
+
 class BotPool {
   constructor() {
     this.io = null
     this.goWs = null
     this.lobbyTeamIds = new Map() // lobbyId -> { radiant, dire }
-    this._matchDetailsPending = new Map() // matchId -> { resolve, reject, timer }
+    this._matchDetailsPending = new Map() // matchId -> [{ resolve, reject, timer }] waiters sharing one GC request
     this._botsListPending = null // single resolver for an in-flight list_bots request
     this._botsListInflight = null // coalesces concurrent _syncBotStatusesFromGo callers
     this._tokenRetryAt = new Map() // botId -> last automatic token-refresh reconnect (rate limit)
     this._autoReconnectBackoff = new Map() // botId -> { failures, nextAttemptAt } for auto-reconnect backoff
+    this._autoLaunchAt = new Map() // lobbyId -> last queue auto-launch attempt (de-dupe)
     this._goQueue = Promise.resolve()
   }
 
@@ -279,7 +285,7 @@ class BotPool {
       const activeLobby = await queryOne(
         `SELECT 1 FROM match_lobbies
          WHERE bot_id = $1
-           AND status IN ('creating', 'waiting', 'launching')
+           AND status IN ${LIVE_LOBBY_STATUSES_SQL}
            AND dota_match_id IS NULL`,
         [botId]
       )
@@ -307,7 +313,7 @@ class BotPool {
         const activeLobbies = await query(
           `SELECT * FROM match_lobbies
            WHERE bot_id = $1
-             AND status IN ('creating', 'waiting', 'launching')
+             AND status IN ${LIVE_LOBBY_STATUSES_SQL}
              AND dota_match_id IS NULL`,
           [botId]
         )
@@ -430,14 +436,13 @@ class BotPool {
 
   _onMatchDetails(data) {
     const matchId = data.matchId || data.matchID
-    const pending = this._matchDetailsPending.get(matchId)
-    if (!pending) return
+    const waiters = this._matchDetailsPending.get(matchId)
+    if (!waiters) return
     this._matchDetailsPending.delete(matchId)
-    clearTimeout(pending.timer)
-    if (data.error) {
-      pending.reject(new Error(data.error))
-    } else {
-      pending.resolve(data)
+    for (const w of waiters) {
+      clearTimeout(w.timer)
+      if (data.error) w.reject(new Error(data.error))
+      else w.resolve(data)
     }
   }
 
@@ -454,13 +459,20 @@ class BotPool {
     if (!bot) throw new Error('No bot available for GC request')
 
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this._matchDetailsPending.delete(matchIdStr)
+      const waiters = this._matchDetailsPending.get(matchIdStr) || []
+      const waiter = { resolve, reject, timer: null }
+      waiter.timer = setTimeout(() => {
+        const list = (this._matchDetailsPending.get(matchIdStr) || []).filter(w => w !== waiter)
+        if (list.length) this._matchDetailsPending.set(matchIdStr, list)
+        else this._matchDetailsPending.delete(matchIdStr)
         reject(new Error('GC match details request timed out (15s)'))
       }, 15_000)
-
-      this._matchDetailsPending.set(matchIdStr, { resolve, reject, timer })
-      this._sendToGo('request_match_details', { matchId: matchIdStr, botId: String(bot.id) })
+      waiters.push(waiter)
+      this._matchDetailsPending.set(matchIdStr, waiters)
+      // One GC request per match id — later callers just wait on the same answer.
+      if (waiters.length === 1) {
+        this._sendToGo('request_match_details', { matchId: matchIdStr, botId: String(bot.id) })
+      }
     })
   }
 
@@ -480,6 +492,21 @@ class BotPool {
     } catch {}
     if (this.io) {
       this.io.to('perm:manage_bots').emit('bot:log', { botId, ...entry })
+    }
+  }
+
+  // Queue lobbies launch themselves once everyone is seated. lobby_status and
+  // lobby_team_ids both trigger the check on every GC tick, so de-dupe here
+  // (Go also ignores repeats within 15s). Validation failures come back as an
+  // async lobby_error, so there is no synchronous retry to make.
+  async _autoLaunchQueueLobby(lobbyId) {
+    const last = this._autoLaunchAt.get(lobbyId) || 0
+    if (Date.now() - last < 30_000) return
+    this._autoLaunchAt.set(lobbyId, Date.now())
+    try {
+      await this.forceLaunch(lobbyId, { skipValidation: false })
+    } catch (e) {
+      console.error(`[Queue] Auto force-launch failed for lobby ${lobbyId}:`, e.message)
     }
   }
 
@@ -523,17 +550,7 @@ class BotPool {
       const slotted = this._countExpectedInSlots(expectedList, data.playersJoined || [])
       if (expectedList.length > 0 && slotted === expectedList.length && teamIds?.radiant && teamIds?.dire) {
         console.log(`[Queue] All ${slotted}/${expectedList.length} expected players in team slots + both teams set — auto force-launching lobby ${lobbyId}`)
-        try {
-          await this.forceLaunch(lobbyId, { skipValidation: false })
-        } catch (e) {
-          console.error(`[Queue] Auto force-launch failed for lobby ${lobbyId}:`, e.message)
-          // Retry with skip validation if team validation fails
-          try {
-            await this.forceLaunch(lobbyId, { skipValidation: true })
-          } catch (e2) {
-            console.error(`[Queue] Auto force-launch retry failed:`, e2.message)
-          }
-        }
+        await this._autoLaunchQueueLobby(lobbyId)
       }
     }
   }
@@ -755,12 +772,7 @@ class BotPool {
       const slotted = this._countExpectedInSlots(expectedList, lobby.players_joined || [])
       if (expectedList.length > 0 && slotted === expectedList.length) {
         console.log(`[Queue] Both teams set + all ${slotted}/${expectedList.length} expected players in team slots — auto force-launching lobby ${lobbyId}`)
-        try {
-          await this.forceLaunch(lobbyId, { skipValidation: false })
-        } catch (e) {
-          console.error(`[Queue] Auto force-launch failed:`, e.message)
-          try { await this.forceLaunch(lobbyId, { skipValidation: true }) } catch {}
-        }
+        await this._autoLaunchQueueLobby(lobbyId)
       }
     }
   }
@@ -1108,14 +1120,16 @@ class BotPool {
     }
   }
 
-  // Clean up zombie lobbies: match_lobbies still 'creating'/'waiting'/'launching'/'active'
-  // but their queue_match (or match) is already completed/cancelled. Free the bot.
+  // Clean up zombie lobbies: match_lobbies still live (creating/waiting/
+  // launching/cointoss/active) but their queue_match (or match) is already
+  // completed/cancelled. Tell Go to tear the lobby down; Go reports the bot
+  // available again once it's actually out of the Dota lobby.
   async _cleanupZombieLobbies() {
     try {
       const zombies = await query(`
         SELECT ml.id, ml.bot_id, ml.match_id, ml.game_name
           FROM match_lobbies ml
-         WHERE ml.status IN ('creating', 'waiting', 'launching', 'active')
+         WHERE ml.status IN ${LIVE_LOBBY_STATUSES_SQL}
            AND (
              -- Queue match already finished
              EXISTS (
@@ -1136,13 +1150,13 @@ class BotPool {
       if (zombies.length === 0) return
       console.log(`[Lobby] Cleaning up ${zombies.length} zombie lobby(ies)`)
       for (const z of zombies) {
+        try { this._sendToGo('cancel_lobby', { lobbyId: String(z.id) }) } catch {}
         await execute(
           "UPDATE match_lobbies SET status = 'cancelled', error_message = 'Auto-cleaned: match already finished', updated_at = NOW() WHERE id = $1",
           [z.id]
         )
         if (z.bot_id) {
-          await execute("UPDATE lobby_bots SET status = 'available' WHERE id = $1 AND status = 'busy'", [z.bot_id])
-          console.log(`[Lobby] Freed bot ${z.bot_id} from zombie lobby ${z.id} (${z.game_name})`)
+          console.log(`[Lobby] Cancelled zombie lobby ${z.id} (${z.game_name}), bot ${z.bot_id}`)
         }
       }
     } catch (e) {
@@ -1252,7 +1266,7 @@ class BotPool {
            AND NOT EXISTS (
              SELECT 1 FROM match_lobbies ml
               WHERE ml.bot_id = b.id
-                AND ml.status IN ('creating', 'waiting', 'launching', 'active')
+                AND ml.status IN ${LIVE_LOBBY_STATUSES_SQL}
                 AND ml.dota_match_id IS NULL
            )
       `)
@@ -1270,7 +1284,7 @@ class BotPool {
             const inUse = await queryOne(
               `SELECT 1 FROM match_lobbies
                 WHERE bot_id = $1
-                  AND status IN ('creating', 'waiting', 'launching', 'active')
+                  AND status IN ${LIVE_LOBBY_STATUSES_SQL}
                   AND dota_match_id IS NULL`,
               [bot.id]
             )
@@ -1316,7 +1330,7 @@ class BotPool {
            AND NOT EXISTS (
              SELECT 1 FROM match_lobbies ml
               WHERE ml.bot_id = b.id
-                AND ml.status IN ('creating', 'waiting', 'launching', 'active')
+                AND ml.status IN ${LIVE_LOBBY_STATUSES_SQL}
                 AND ml.dota_match_id IS NULL
            )
          ORDER BY b.id
@@ -1814,7 +1828,7 @@ class BotPool {
         SELECT match_id, competition_id, game_name, status
           FROM match_lobbies
          WHERE bot_id = b.id
-           AND status IN ('creating', 'waiting', 'launching', 'active')
+           AND status IN ${LIVE_LOBBY_STATUSES_SQL}
          ORDER BY id DESC LIMIT 1
       ) ml ON TRUE
       LEFT JOIN competitions c ON c.id = ml.competition_id
@@ -1839,7 +1853,7 @@ class BotPool {
 
   async removeBot(botId) {
     try {
-      this._sendToGo('disconnect_bot', { botId: String(botId) })
+      this._sendToGo('remove_bot', { botId: String(botId) })
     } catch {}
     await execute('DELETE FROM lobby_bots WHERE id = $1', [botId])
   }

@@ -26,6 +26,10 @@ const MAX_BOOTSTRAP_ATTEMPTS = 75   // 75 × 12s = 15 min
 
 // matchId -> { intervalId, snapshot, attempts, serverSteamId, queueMatchId }
 const active = new Map()
+// matchId -> true while startPolling is mid-setup (claimed before the first
+// await, before it lands in `active`). game_started and lobby_server_id
+// arrive close together and both call startPolling.
+const starting = new Set()
 let ioRef = null
 
 export function setLivePollerIo(io) { ioRef = io }
@@ -106,124 +110,131 @@ export async function startPolling(matchId) {
     console.warn(`[livePoller] STEAM_API_KEY not set — skipping match ${matchId}`)
     return
   }
-  if (active.has(matchId)) {
+  // Claim the slot before the first await — game_started and lobby_server_id
+  // arrive close together and both call startPolling.
+  if (active.has(matchId) || starting.has(matchId)) {
     console.log(`[livePoller] already polling match ${matchId}`)
     return
   }
-  const { steamIds, serverSteamId } = await fetchSteamIdsForMatch(matchId)
-  const queueMatchId = await findQueueMatchId(matchId)
+  starting.add(matchId)
+  try {
+    const { steamIds, serverSteamId } = await fetchSteamIdsForMatch(matchId)
+    const queueMatchId = await findQueueMatchId(matchId)
 
-  console.log(`[livePoller] starting match ${matchId} — ${steamIds.length} steam ids, server_steam_id=${serverSteamId || 'pending'}, queueMatchId=${queueMatchId || 'none'}`)
+    console.log(`[livePoller] starting match ${matchId} — ${steamIds.length} steam ids, server_steam_id=${serverSteamId || 'pending'}, queueMatchId=${queueMatchId || 'none'}`)
 
-  const ctx = {
-    matchId,
-    queueMatchId,
-    serverSteamId,
-    steamIds,
-    snapshot: null,
-    attempts: 0,
-    intervalId: null,
-  }
-  active.set(matchId, ctx)
-
-  const tick = async () => {
-    try {
-      // 1. Bootstrap server_steam_id if missing
-      if (!ctx.serverSteamId) {
-        ctx.attempts++
-        if (ctx.attempts > MAX_BOOTSTRAP_ATTEMPTS) {
-          console.warn(`[livePoller] giving up on match ${matchId} — no server_steam_id after ${ctx.attempts} attempts`)
-          return stopPolling(matchId)
-        }
-        const result = await deriveServerSteamId(ctx.steamIds)
-        if (result.serverSteamId) {
-          ctx.serverSteamId = result.serverSteamId
-          console.log(`[livePoller] match ${matchId} — captured server_steam_id ${ctx.serverSteamId} from player ${result.fromSteamId}`)
-          // Persist on the most-recent match_lobbies row so resume can use it.
-          try {
-            await execute(
-              `UPDATE match_lobbies SET server_steam_id = $1
-                WHERE id = (SELECT id FROM match_lobbies WHERE match_id = $2 ORDER BY id DESC LIMIT 1)`,
-              [ctx.serverSteamId, matchId]
-            )
-          } catch (e) { console.error('[livePoller] persist server_steam_id failed:', e.message) }
-          // Mirror onto queue_matches.server_steam_id when applicable so older
-          // queue-match queries that read from there still work.
-          if (ctx.queueMatchId) {
-            try { await execute('UPDATE queue_matches SET server_steam_id = $1 WHERE id = $2', [ctx.serverSteamId, ctx.queueMatchId]) } catch {}
-          }
-        } else {
-          console.log(`[livePoller] match ${matchId} attempt ${ctx.attempts}/${MAX_BOOTSTRAP_ATTEMPTS} — no player in-game yet (${result.diagnostic})`)
-          return // try again next tick
-        }
-      }
-
-      // 2. Pull realtime stats
-      const stats = await fetchRealtimeStats(ctx.serverSteamId)
-      if (!stats) {
-        console.log(`[livePoller] match ${matchId} — GetRealtimeStats returned no data`)
-        return
-      }
-
-      // Flatten per-player rows from both teams. team_number 0 = radiant, 1 = dire
-      // per the GetRealtimeStats schema. Items array can be missing on early ticks.
-      const players = []
-      const teams = stats.teams || []
-      for (let i = 0; i < teams.length; i++) {
-        const team = i === 0 ? 'radiant' : 'dire'
-        for (const p of (teams[i].players || [])) {
-          players.push({
-            account_id:  p.accountid ?? null,
-            team,
-            hero_id:     p.heroid ?? 0,
-            level:       p.level ?? 0,
-            kills:       p.kill_count ?? 0,
-            deaths:      p.death_count ?? 0,
-            assists:     p.assists_count ?? 0,
-            last_hits:   p.lh_count ?? 0,
-            denies:      p.denies_count ?? 0,
-            net_worth:   p.net_worth ?? 0,
-            gold:        p.gold ?? 0,
-            items:       Array.isArray(p.items) ? p.items.slice(0, 6) : [],
-          })
-        }
-      }
-
-      ctx.snapshot = {
-        radiant_score: stats.teams?.[0]?.score ?? null,
-        dire_score:    stats.teams?.[1]?.score ?? null,
-        game_time:     stats.match?.game_time ?? null,
-        game_state:    stats.match?.game_state ?? null,
-        players,
-        updated_at:    Date.now(),
-      }
-
-      // 3. Broadcast to anyone watching. matchId is the new canonical id;
-      // queueMatchId is included when applicable for backwards-compat.
-      if (ioRef) {
-        const payload = {
-          matchId,
-          queueMatchId: ctx.queueMatchId,
-          ...ctx.snapshot,
-        }
-        ioRef.emit('home:liveStats', payload)
-        // Per-room broadcasts: tournament rooms hang off comp:${compId} but
-        // are too broad for live-stats; instead use a match-scoped room and
-        // a queue-match room for the existing queue page.
-        ioRef.to(`match:${matchId}`).emit('match:liveStats', payload)
-        if (ctx.queueMatchId) {
-          ioRef.to(`queue-match:${ctx.queueMatchId}`).emit('queue:liveStats', payload)
-        }
-      }
-    } catch (e) {
-      // Don't kill the poller on transient API errors — just log.
-      console.error(`[livePoller] tick failed for match ${matchId}:`, e.message)
+    const ctx = {
+      matchId,
+      queueMatchId,
+      serverSteamId,
+      steamIds,
+      snapshot: null,
+      attempts: 0,
+      intervalId: null,
     }
-  }
+    active.set(matchId, ctx)
 
-  // Kick off immediately, then on interval
-  tick()
-  ctx.intervalId = setInterval(tick, POLL_MS)
+    const tick = async () => {
+      try {
+        // 1. Bootstrap server_steam_id if missing
+        if (!ctx.serverSteamId) {
+          ctx.attempts++
+          if (ctx.attempts > MAX_BOOTSTRAP_ATTEMPTS) {
+            console.warn(`[livePoller] giving up on match ${matchId} — no server_steam_id after ${ctx.attempts} attempts`)
+            return stopPolling(matchId)
+          }
+          const result = await deriveServerSteamId(ctx.steamIds)
+          if (result.serverSteamId) {
+            ctx.serverSteamId = result.serverSteamId
+            console.log(`[livePoller] match ${matchId} — captured server_steam_id ${ctx.serverSteamId} from player ${result.fromSteamId}`)
+            // Persist on the most-recent match_lobbies row so resume can use it.
+            try {
+              await execute(
+                `UPDATE match_lobbies SET server_steam_id = $1
+                  WHERE id = (SELECT id FROM match_lobbies WHERE match_id = $2 ORDER BY id DESC LIMIT 1)`,
+                [ctx.serverSteamId, matchId]
+              )
+            } catch (e) { console.error('[livePoller] persist server_steam_id failed:', e.message) }
+            // Mirror onto queue_matches.server_steam_id when applicable so older
+            // queue-match queries that read from there still work.
+            if (ctx.queueMatchId) {
+              try { await execute('UPDATE queue_matches SET server_steam_id = $1 WHERE id = $2', [ctx.serverSteamId, ctx.queueMatchId]) } catch {}
+            }
+          } else {
+            console.log(`[livePoller] match ${matchId} attempt ${ctx.attempts}/${MAX_BOOTSTRAP_ATTEMPTS} — no player in-game yet (${result.diagnostic})`)
+            return // try again next tick
+          }
+        }
+
+        // 2. Pull realtime stats
+        const stats = await fetchRealtimeStats(ctx.serverSteamId)
+        if (!stats) {
+          console.log(`[livePoller] match ${matchId} — GetRealtimeStats returned no data`)
+          return
+        }
+
+        // Flatten per-player rows from both teams. team_number 0 = radiant, 1 = dire
+        // per the GetRealtimeStats schema. Items array can be missing on early ticks.
+        const players = []
+        const teams = stats.teams || []
+        for (let i = 0; i < teams.length; i++) {
+          const team = i === 0 ? 'radiant' : 'dire'
+          for (const p of (teams[i].players || [])) {
+            players.push({
+              account_id:  p.accountid ?? null,
+              team,
+              hero_id:     p.heroid ?? 0,
+              level:       p.level ?? 0,
+              kills:       p.kill_count ?? 0,
+              deaths:      p.death_count ?? 0,
+              assists:     p.assists_count ?? 0,
+              last_hits:   p.lh_count ?? 0,
+              denies:      p.denies_count ?? 0,
+              net_worth:   p.net_worth ?? 0,
+              gold:        p.gold ?? 0,
+              items:       Array.isArray(p.items) ? p.items.slice(0, 6) : [],
+            })
+          }
+        }
+
+        ctx.snapshot = {
+          radiant_score: stats.teams?.[0]?.score ?? null,
+          dire_score:    stats.teams?.[1]?.score ?? null,
+          game_time:     stats.match?.game_time ?? null,
+          game_state:    stats.match?.game_state ?? null,
+          players,
+          updated_at:    Date.now(),
+        }
+
+        // 3. Broadcast to anyone watching. matchId is the new canonical id;
+        // queueMatchId is included when applicable for backwards-compat.
+        if (ioRef) {
+          const payload = {
+            matchId,
+            queueMatchId: ctx.queueMatchId,
+            ...ctx.snapshot,
+          }
+          ioRef.emit('home:liveStats', payload)
+          // Per-room broadcasts: tournament rooms hang off comp:${compId} but
+          // are too broad for live-stats; instead use a match-scoped room and
+          // a queue-match room for the existing queue page.
+          ioRef.to(`match:${matchId}`).emit('match:liveStats', payload)
+          if (ctx.queueMatchId) {
+            ioRef.to(`queue-match:${ctx.queueMatchId}`).emit('queue:liveStats', payload)
+          }
+        }
+      } catch (e) {
+        // Don't kill the poller on transient API errors — just log.
+        console.error(`[livePoller] tick failed for match ${matchId}:`, e.message)
+      }
+    }
+
+    // Kick off immediately, then on interval
+    tick()
+    ctx.intervalId = setInterval(tick, POLL_MS)
+  } finally {
+    starting.delete(matchId)
+  }
 }
 
 export function stopPolling(matchId) {
