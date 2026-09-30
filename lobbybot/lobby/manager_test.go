@@ -1,9 +1,11 @@
 package lobby
 
 import (
+	"context"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"lobbybot/bot"
 	"lobbybot/protocol"
@@ -125,5 +127,29 @@ func TestReleaseLobbyClearsBotAndLobby(t *testing.T) {
 	m.mu.RUnlock()
 	if tracked {
 		t.Error("lobby still tracked after releaseLobby")
+	}
+}
+
+// A timeout while the bot's GC session is down is not a player no-show: the
+// error text must not match Node's /timed out/i (which bans the roster).
+func TestTimeoutErrorText(t *testing.T) {
+	if s := timeoutErrorText(true, 10); !strings.Contains(strings.ToLower(s), "timed out") {
+		t.Errorf("GC ready: %q must report a timeout", s)
+	}
+	if s := timeoutErrorText(false, 10); strings.Contains(strings.ToLower(s), "timed out") {
+		t.Errorf("GC down: %q must not look like a player timeout", s)
+	}
+}
+
+func TestFinishLobbyTimeoutWithoutGCIsNotNoShow(t *testing.T) {
+	r := &rec{}
+	b := bot.NewBot("1", "u", "p", "t", r.send) // fresh bot: no GC session
+	m := NewManager(bot.NewManager(r.send), r.send)
+	m.finishLobby(context.Background(), "9", b, 10*time.Millisecond, func(string, string) {})
+	if len(r.lobbyErrors) != 1 {
+		t.Fatalf("lobby errors = %+v, want 1", r.lobbyErrors)
+	}
+	if e := r.lobbyErrors[0].Error; strings.Contains(strings.ToLower(e), "timed out") {
+		t.Errorf("lobby_error %q would be treated as a no-show timeout", e)
 	}
 }

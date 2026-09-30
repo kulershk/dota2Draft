@@ -299,3 +299,57 @@ func TestDisconnectAllMarksOffline(t *testing.T) {
 		}
 	}
 }
+
+// A lobby ending after the bot was kicked (LoggedInElsewhere → error) or taken
+// offline must not overwrite that status with connecting_gc — Node's watchdog
+// would restart it and bypass the backoff.
+func TestSetBusyFalseKeepsErrorAndOffline(t *testing.T) {
+	for _, st := range []string{StatusError, StatusOffline} {
+		b, r := newTestBot()
+		b.Status = st
+		b.SetBusy(false)
+		if got := lastStatus(r); got != st {
+			t.Errorf("status %s: SetBusy(false) sent %q, want %q", st, got, st)
+		}
+		if b.Status != st {
+			t.Errorf("status %s: SetBusy(false) set Status %q", st, b.Status)
+		}
+	}
+}
+
+func TestSetBusyFalseAfterHardFailureReportsError(t *testing.T) {
+	b, r := newTestBot()
+	b.Status = StatusBusy
+	b.loginFailedHard = true
+	b.SetBusy(false)
+	if got := lastStatus(r); got != StatusError {
+		t.Errorf("SetBusy(false) after a hard login failure sent %q, want error", got)
+	}
+}
+
+func TestSetBusyFalseStillFreesHealthyBot(t *testing.T) {
+	b, r := newTestBot()
+	b.Status = StatusBusy
+	b.gcReady = true
+	b.SetBusy(false)
+	if got := lastStatus(r); got != StatusAvailable {
+		t.Errorf("got %q, want available", got)
+	}
+	b.Status = StatusBusy
+	b.gcReady = false
+	b.SetBusy(false)
+	if got := lastStatus(r); got != StatusConnectingGC {
+		t.Errorf("got %q, want connecting_gc", got)
+	}
+}
+
+func TestGCReady(t *testing.T) {
+	b, _ := newTestBot()
+	if b.GCReady() {
+		t.Fatal("a fresh bot has no GC session")
+	}
+	b.gcReady = true
+	if !b.GCReady() {
+		t.Fatal("GCReady must report gcReady")
+	}
+}

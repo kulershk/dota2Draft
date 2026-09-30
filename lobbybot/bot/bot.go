@@ -1305,6 +1305,24 @@ func (b *Bot) getLastLobby() *gcccm.CSODOTALobby {
 	return b.lastLobby
 }
 
+// CurrentLobbyStatus reports the last known lobby's Node-facing status and
+// slotted roster (ok=false when the bot isn't in a lobby). Used by rejoin so
+// re-tracking reports the real state instead of a blanket "waiting".
+func (b *Bot) CurrentLobbyStatus() (status string, players []protocol.LobbyPlayer, ok bool) {
+	l := b.getLastLobby()
+	if l == nil {
+		return "", nil, false
+	}
+	return lobbyStatusFor(l.GetState()), slottedPlayers(liveMembers(l)), true
+}
+
+// GCReady reports whether the bot's GC session is live.
+func (b *Bot) GCReady() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.gcReady
+}
+
 func (b *Bot) setLastLobby(l *gcccm.CSODOTALobby) {
 	b.mu.Lock()
 	b.lastLobby = l
@@ -1370,11 +1388,20 @@ func (b *Bot) ResendStatus() {
 
 func (b *Bot) SetBusy(busy bool) {
 	b.mu.Lock()
-	if busy {
+	switch {
+	case busy:
 		b.Status = StatusBusy
-	} else if b.gcReady {
+	case b.loginFailedHard:
+		// Kicked by another login / bad credentials mid-lobby: the bot is not
+		// coming back on its own, so report 'error' rather than connecting_gc.
+		b.Status = StatusError
+	case b.Status == StatusOffline || b.Status == StatusError:
+		// Freed after an admin disconnect or a hard failure — keep that status.
+		// Demoting to connecting_gc would make Node's watchdog restart the bot,
+		// bypassing its reconnect backoff.
+	case b.gcReady:
 		b.Status = StatusAvailable
-	} else {
+	default:
 		// Freeing the bot, but the GC session isn't live (dropped mid-lobby, or
 		// Steam is mid-reconnect) — don't advertise 'available' or Node would
 		// hand it a match it can't host. Demote to connecting_gc; ClientWelcomed

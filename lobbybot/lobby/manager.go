@@ -151,10 +151,27 @@ func (m *Manager) finishLobby(ctx context.Context, lobbyID string, b *bot.Bot, t
 		botLog("action", "Lobby cancelled — destroying")
 		m.destroyAndLeave(b)
 	case gameWaitTimeout:
-		botLog("error", fmt.Sprintf("Lobby timed out after %d minutes — destroying lobby", int(timeout.Minutes())))
-		m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobbyID, Error: fmt.Sprintf("Lobby timed out (%d min)", int(timeout.Minutes()))})
+		gcReady := b.GCReady()
+		if gcReady {
+			botLog("error", fmt.Sprintf("Lobby timed out after %d minutes — destroying lobby", int(timeout.Minutes())))
+		} else {
+			botLog("error", fmt.Sprintf("Lobby wait expired after %d minutes with no GC session — reporting as a bot failure, not a no-show", int(timeout.Minutes())))
+		}
+		m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobbyID, Error: timeoutErrorText(gcReady, int(timeout.Minutes()))})
 		m.destroyAndLeave(b)
 	}
+}
+
+// timeoutErrorText is the lobby_error sent when the player-wait timeout
+// elapses. If the bot's GC session is down at that point the lobby couldn't be
+// managed (and the roster it last saw is stale), so it must NOT read as a
+// timeout — Node treats /timed out/i as a no-show and bans the missing players;
+// any other error retries the lobby on another bot instead.
+func timeoutErrorText(gcReady bool, minutes int) string {
+	if !gcReady {
+		return "Bot lost its Steam/GC session — lobby could not be managed"
+	}
+	return fmt.Sprintf("Lobby timed out (%d min)", minutes)
 }
 
 func (m *Manager) destroyAndLeave(b *bot.Bot) {
@@ -344,6 +361,7 @@ func (m *Manager) runLobby(ctx context.Context, lobby *Lobby) {
 	// triggers gameStartedCh even when the subscriber channel goes quiet.
 	pollCtx, pollCancel := context.WithCancel(ctx)
 	go func() {
+		defer safe.Recover("poll " + lobby.ID)
 		ticker := time.NewTicker(15 * time.Second)
 		defer ticker.Stop()
 		for {
@@ -470,10 +488,16 @@ func (m *Manager) RejoinLobby(cmd protocol.RejoinLobbyCmd) error {
 
 		// Bot is still in the Dota lobby — re-track it
 		botLog("info", fmt.Sprintf("Lobby '%s' confirmed via GC cache — re-tracking", cmd.GameName))
-		m.send("lobby_status", protocol.LobbyStatusEvent{
-			LobbyID: cmd.LobbyID,
-			Status:  "waiting",
-		})
+		// Report the lobby's real state + roster: a blanket "waiting" with no
+		// players would wipe Node's players_joined and knock a launching/
+		// cointoss row back to waiting.
+		if status, players, ok := b.CurrentLobbyStatus(); ok {
+			m.send("lobby_status", protocol.LobbyStatusEvent{
+				LobbyID:       cmd.LobbyID,
+				Status:        status,
+				PlayersJoined: players,
+			})
+		}
 
 		timeout := lobby.timeoutDuration()
 
@@ -481,6 +505,7 @@ func (m *Manager) RejoinLobby(cmd protocol.RejoinLobbyCmd) error {
 		pollCtx, pollCancel := context.WithCancel(ctx)
 		defer pollCancel()
 		go func() {
+			defer safe.Recover("poll " + cmd.LobbyID)
 			ticker := time.NewTicker(15 * time.Second)
 			defer ticker.Stop()
 			for {
