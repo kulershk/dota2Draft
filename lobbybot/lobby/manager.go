@@ -249,7 +249,7 @@ func (m *Manager) runLobby(ctx context.Context, lobby *Lobby) {
 	botLog("info", "Waiting for GC to confirm lobby creation...")
 	time.Sleep(3 * time.Second)
 
-	botLog("info", fmt.Sprintf("Lobby created. Password: %s", lobby.Password))
+	botLog("info", "Lobby created.")
 	lobby.Status = "waiting"
 	m.send("lobby_status", protocol.LobbyStatusEvent{LobbyID: lobby.ID, Status: "waiting"})
 

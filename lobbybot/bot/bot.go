@@ -345,24 +345,31 @@ func (b *Bot) handleSteamEvents(sc *steam.Client, gen uint64, cancel <-chan stru
 					}
 				}()
 			} else {
-				b.logAt("error", fmt.Sprintf("Login failed: %v", result))
-				b.mu.Lock()
-				b.loginFailedHard = true
-				b.mu.Unlock()
-				if b.usedTokenLogin {
-					// Token rejected (expired/revoked). Tell Node so it wipes
-					// the stored token and mints a fresh one before retrying.
+				kind := classifyLogonFailure(result)
+				switch kind {
+				case logonTransient:
+					// Credentials are fine — Steam is throttling or hiccuping.
+					// Don't flag the token; escalate the backoff so the reconnect
+					// driven by the DisconnectedEvent that follows waits minutes,
+					// not seconds.
+					b.logAt("warn", fmt.Sprintf("Login rejected temporarily (%v) — backing off", result))
+					b.mu.Lock()
+					if b.consecutiveDrops < 4 {
+						b.consecutiveDrops = 4
+					}
+					b.mu.Unlock()
+				default:
+					b.logAt("error", fmt.Sprintf("Login failed: %v (%s)", result, kind))
+					b.mu.Lock()
+					b.loginFailedHard = true
+					b.Status = StatusError
+					b.mu.Unlock()
 					b.send("bot_status", protocol.BotStatusEvent{
 						BotID:        b.ID,
 						Status:       StatusError,
-						Error:        fmt.Sprintf("Login failed: %v (refresh token rejected)", result),
-						TokenInvalid: true,
+						Error:        fmt.Sprintf("Login failed: %v", result),
+						TokenInvalid: kind == logonBadCredentials && b.usedTokenLogin,
 					})
-					b.mu.Lock()
-					b.Status = StatusError
-					b.mu.Unlock()
-				} else {
-					b.setStatus(StatusError, fmt.Sprintf("Login failed: %v", result))
 				}
 			}
 
@@ -471,61 +478,24 @@ func (b *Bot) handleSteamEvents(sc *steam.Client, gen uint64, cancel <-chan stru
 			}
 
 		case *steam.DisconnectedEvent:
-			b.mu.Lock()
-			waiting := b.pendingAuth
-			status := b.Status
-			failedHard := b.loginFailedHard
-			b.mu.Unlock()
-			if waiting {
-				b.log("Disconnected (waiting for Steam Guard code)")
-				continue // don't exit the event loop, we'll reconnect after code
-			}
-			if failedHard {
-				// Hard failure (credentials rejected, or kicked by another
-				// login session) — retrying immediately is pointless or
-				// harmful. Node retries later with a long backoff, or an
-				// admin reconnects manually.
-				b.logAt("error", "Not auto-reconnecting (hard failure — see previous error)")
+			if b.handleDrop(gen, cancel, "Disconnected from Steam") {
 				return
 			}
-			// If we were online or connecting, auto-reconnect with a fresh client.
-			// Base delay is 3-8s jitter, escalating while sessions keep dying
-			// young (see reconnectDelay).
-			if status != StatusOffline {
-				b.noteSessionDrop()
-				delay := b.reconnectDelay()
-				b.logAt("warn", fmt.Sprintf("Disconnected from Steam — reconnecting in %s...", delay))
-				b.setStatus(StatusConnecting)
-				select {
-				case <-cancel:
-					b.setStatus(StatusOffline)
-					return
-				case <-time.After(delay):
-				}
-				if !b.claimNextSession(&gen) {
-					return
-				}
-				b.reconnect(gen, cancel)
-				return // exit this event loop; reconnect starts a new one
-			}
-			return
 
 		case error:
-			b.noteSessionDrop()
-			delay := b.reconnectDelay()
-			b.logAt("warn", fmt.Sprintf("Steam error: %v — reconnecting in %s...", e, delay))
-			b.setStatus(StatusConnecting)
-			select {
-			case <-cancel:
-				b.setStatus(StatusOffline)
-				return
-			case <-time.After(delay):
+			// go-steam's FatalErrorEvent is an interface alias of error, so fatal
+			// and non-fatal errors are indistinguishable by type. A fatal one is
+			// followed by Disconnect() (or, for a dial failure, the client never
+			// connected at all) — give that a moment, then decide by the actual
+			// connection state instead of reconnecting on every error.
+			time.Sleep(500 * time.Millisecond)
+			if sc.Connected() {
+				b.logAt("warn", fmt.Sprintf("Steam error (connection still up): %v", e))
+				continue
 			}
-			if !b.claimNextSession(&gen) {
+			if b.handleDrop(gen, cancel, fmt.Sprintf("Steam error: %v", e)) {
 				return
 			}
-			b.reconnect(gen, cancel)
-			return // exit this event loop; reconnect starts a new one
 		}
 	}
 }
@@ -584,7 +554,10 @@ func (b *Bot) reconnectDelay() time.Duration {
 	return delay
 }
 
-func (b *Bot) reconnect(gen uint64, cancel <-chan struct{}) {
+func (b *Bot) reconnect(old *steam.Client, gen uint64, cancel <-chan struct{}) {
+	if old != nil {
+		old.Disconnect() // no-op if already closed; never leave two live logins
+	}
 	b.log("Creating fresh Steam client for reconnect...")
 	// Detach the old dota client + cache watcher under the lock so any concurrent
 	// reader (processLobbyUpdate, the SayHello goroutine) snapshots either the
