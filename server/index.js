@@ -51,6 +51,7 @@ import { blockBanned } from './middleware/blockBanned.js'
 import { startJobWorker, registerHandler, registerSchedule, enqueueJob } from './services/jobs.js'
 import { fetchSteamMatchDetails } from './helpers/steam.js'
 import { fetchOpenDotaMatch, saveMatchGameStats, requestOpenDotaParse } from './helpers/opendota.js'
+import { statsJobSuperseded } from './helpers/statsJobs.js'
 import { queryOne } from './db.js'
 
 // Socket
@@ -290,10 +291,13 @@ initDb().then(async () => {
     if (!matchGameId || !dotabuffId) throw new Error('Missing matchGameId or dotabuffId')
 
     const game = await queryOne(
-      'SELECT id, winner_captain_id, parsed, created_at FROM match_games WHERE id = $1',
+      'SELECT id, winner_captain_id, parsed, created_at, dotabuff_id FROM match_games WHERE id = $1',
       [matchGameId]
     )
     if (!game) throw new Error(`match_games #${matchGameId} not found`)
+    if (statsJobSuperseded(game, dotabuffId)) {
+      return { status: 'superseded', current: game.dotabuff_id || null }
+    }
     if (game.winner_captain_id) {
       // Winner already resolved (maybe by manual entry) — skip to enrichment
       if (!game.parsed) {
