@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	"lobbybot/safe"
+
 	"github.com/paralin/go-steam/protocol/steamlang"
 )
 
@@ -122,6 +124,9 @@ func helloInterval(attempt int) time.Duration {
 // channel, so the stale loop only notices when its sleep ends — up to 60s —
 // and must not block the new session's hellos meanwhile).
 func (b *Bot) helloLoop(gen uint64, cancel <-chan struct{}, say func()) {
+	// Registered before the helloRunning cleanup defer below so it runs last
+	// (LIFO): a panic must not skip that cleanup and leave helloRunning stuck.
+	defer safe.Recover("helloLoop bot " + b.ID)
 	b.mu.Lock()
 	// An older-generation loop must never take the running flag from a newer
 	// one — bail before claiming anything.

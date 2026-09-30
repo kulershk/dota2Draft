@@ -49,6 +49,9 @@ services:
     depends_on:
       - draft-app
     restart: unless-stopped
+    # Longer than DisconnectAll's 10s budget so Docker doesn't SIGKILL the
+    # process mid-logoff and leave a ghost Steam session behind.
+    stop_grace_period: 20s
 
   draft-discordbot:
     container_name: draft-dev-discordbot

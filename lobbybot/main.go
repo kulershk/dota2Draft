@@ -1,14 +1,20 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"lobbybot/bot"
 	"lobbybot/config"
 	"lobbybot/lobby"
 	"lobbybot/protocol"
+	"lobbybot/safe"
 	"lobbybot/ws"
 	"log"
+	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
+	"time"
 )
 
 func main() {
@@ -142,6 +148,7 @@ func main() {
 				return
 			}
 			go func() {
+				defer safe.Recover("match-details")
 				matchID, err := strconv.ParseUint(cmd.MatchID, 10, 64)
 				if err != nil {
 					log.Printf("Invalid match ID: %s", cmd.MatchID)
@@ -190,6 +197,11 @@ func main() {
 	wsClient.WaitConnected()
 	log.Println("Connected to Node.js. Lobby bot service ready.")
 
-	// Block forever
-	select {}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	<-ctx.Done()
+	log.Println("Shutting down — logging bots off Steam...")
+	botMgr.DisconnectAll(10 * time.Second)
+	wsClient.Close()
+	log.Println("Bye")
 }

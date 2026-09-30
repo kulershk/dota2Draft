@@ -284,3 +284,18 @@ func TestShouldDropForLogonTimeout(t *testing.T) {
 		})
 	}
 }
+
+func TestDisconnectAllMarksOffline(t *testing.T) {
+	r := &recorder{}
+	m := NewManager(r.send)
+	m.AddBot("1", "u", "p", "t")
+	m.AddBot("2", "u2", "p", "t")
+	m.GetBot("1").Status = StatusAvailable
+	m.GetBot("2").Status = StatusBusy
+	m.DisconnectAll(time.Second)
+	for _, id := range []string{"1", "2"} {
+		if s := m.GetBot(id).Status; s != StatusOffline {
+			t.Errorf("bot %s status %q, want offline", id, s)
+		}
+	}
+}

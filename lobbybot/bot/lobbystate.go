@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"lobbybot/protocol"
+	"lobbybot/safe"
 
 	gcccm "github.com/paralin/go-dota2/protocol"
 )
@@ -106,6 +107,7 @@ func staleSweepAction(cur *gcccm.CSODOTALobby, selfID uint64) sweepAction {
 // decision reads the current lobby after the wait: in 5s it may have been
 // destroyed, launched, or had its leader change.
 func (b *Bot) sweepIfUnassigned(l *gcccm.CSODOTALobby) {
+	defer safe.Recover("sweepIfUnassigned bot " + b.ID)
 	time.Sleep(5 * time.Second)
 	if b.GetActiveLobbyID() != "" {
 		b.log("CACHE: Rejoin received — keeping lobby")

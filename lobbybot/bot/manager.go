@@ -2,7 +2,9 @@ package bot
 
 import (
 	"fmt"
+	"log"
 	"sync"
+	"time"
 
 	"lobbybot/protocol"
 )
@@ -150,6 +152,30 @@ func (m *Manager) ResendAllBotStatus() {
 	m.mu.RUnlock()
 	for _, b := range bots {
 		b.ResendStatus()
+	}
+}
+
+// DisconnectAll logs every bot off Steam in parallel, waiting at most timeout.
+// Called on SIGTERM: a process killed without logging off leaves a ghost Steam
+// session that kicks the restarted service's logins (LoggedInElsewhere).
+func (m *Manager) DisconnectAll(timeout time.Duration) {
+	m.mu.RLock()
+	bots := make([]*Bot, 0, len(m.bots))
+	for _, b := range m.bots {
+		bots = append(bots, b)
+	}
+	m.mu.RUnlock()
+	var wg sync.WaitGroup
+	for _, b := range bots {
+		wg.Add(1)
+		go func(b *Bot) { defer wg.Done(); b.Disconnect() }(b)
+	}
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(timeout):
+		log.Printf("DisconnectAll: timed out after %s", timeout)
 	}
 }
 

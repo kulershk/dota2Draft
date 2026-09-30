@@ -69,6 +69,9 @@ services:
       dockerfile: Dockerfile
     image: draft_lobbybot_image
     restart: always
+    # Longer than DisconnectAll's 10s budget so Docker doesn't SIGKILL the
+    # process mid-logoff and leave a ghost Steam session behind.
+    stop_grace_period: 20s
     environment:
       - WS_URL=ws://draft:3001/ws/lobbybot
       - BOT_SERVICE_TOKEN=${BOT_SERVICE_TOKEN}

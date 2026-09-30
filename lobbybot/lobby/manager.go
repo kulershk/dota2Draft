@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"lobbybot/bot"
 	"lobbybot/protocol"
+	"lobbybot/safe"
 	"log"
 	"sync"
 	"time"
@@ -255,6 +256,7 @@ func (m *Manager) CreateLobby(cmd protocol.CreateLobbyCmd) error {
 }
 
 func (m *Manager) runLobby(ctx context.Context, lobby *Lobby) {
+	defer safe.Recover("runLobby " + lobby.ID)
 	botLog := func(level, msg string) {
 		m.send("bot_log", protocol.BotLogEvent{
 			BotID:   lobby.Bot.ID,
@@ -423,6 +425,9 @@ func (m *Manager) RejoinLobby(cmd protocol.RejoinLobbyCmd) error {
 	botLog("info", fmt.Sprintf("Rejoining lobby '%s' after reconnect — waiting for GC lobby cache", cmd.GameName))
 
 	go func() {
+		// Registered before the cleanup defer below so it runs last (LIFO): a
+		// panic must not skip that cleanup and leave the bot stuck busy.
+		defer safe.Recover("rejoin " + cmd.LobbyID)
 		defer func() {
 			b.SetActiveLobbyID("")
 			b.SetExpectedTeams(nil)

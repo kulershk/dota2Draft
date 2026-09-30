@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"lobbybot/protocol"
+	"lobbybot/safe"
 	"log"
 	"sync"
 	"time"
@@ -214,6 +215,7 @@ func (b *Bot) Connect() {
 }
 
 func (b *Bot) handleSteamEvents(sc *steam.Client, gen uint64, cancel <-chan struct{}) {
+	defer safe.Recover("steam-events bot " + b.ID)
 	loggedOn := make(chan struct{})
 	var loggedOnOnce sync.Once
 	logonTimer := time.AfterFunc(logonTimeout, func() {
@@ -838,6 +840,7 @@ func (b *Bot) startLobbyWatcher() {
 	b.log("Lobby cache watcher started")
 	go b.checkExistingLobby()
 	go func() {
+		defer safe.Recover("lobby-watcher bot " + b.ID)
 		for {
 			select {
 			case <-stopCh:
@@ -858,6 +861,7 @@ func (b *Bot) startLobbyWatcher() {
 // assigned one is processed through the normal diff (so a RUN state reached
 // across the reconnect isn't missed); an unassigned one is swept.
 func (b *Bot) checkExistingLobby() {
+	defer safe.Recover("checkExistingLobby bot " + b.ID)
 	time.Sleep(3 * time.Second) // give the cache time to populate
 	dc := b.dc()
 	if dc == nil {
