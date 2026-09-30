@@ -1234,9 +1234,6 @@ func (b *Bot) GetActiveLobbyID() string {
 	return b.activeLobbyID
 }
 
-// ResendLobbyState re-emits state Node may have missed if the WS was down
-// when the underlying GC event fired (most importantly server_steam_id).
-// Safe to call repeatedly; Node's handler de-dupes by current DB value.
 // ResendLobbyState re-emits everything Node needs to rebuild this bot's lobby
 // after a WS reconnect: the match id (game_started — Node de-dupes per id), the
 // current state + roster (lobby_status) and server_steam_id. The WS outbox

@@ -102,3 +102,26 @@ func TestResendLobbyStateNoLobbyNoop(t *testing.T) {
 		t.Fatalf("expected no messages, got %+v", r.all())
 	}
 }
+
+func TestResendLobbyStateNoMatchIDSkipsGameStarted(t *testing.T) {
+	b, r := newTestBot()
+	b.activeLobbyID = "7"
+	b.lastMatchIDSent = 0 // no match ID sent yet
+	server := uint64(90000)
+	l := mkLobby(gcccm.CSODOTALobby_RUN, 0, mkMember(76561198000000001, gcccm.DOTA_GC_TEAM_DOTA_GC_TEAM_GOOD_GUYS))
+	l.ServerId = &server
+	b.lastLobby = l
+
+	b.ResendLobbyState()
+
+	if len(r.ofType("game_started")) != 0 {
+		t.Fatal("expected game_started to NOT be replayed when matchID is 0")
+	}
+	st := r.ofType("lobby_status")
+	if len(st) != 1 || st[0].Data.(protocol.LobbyStatusEvent).Status != "active" {
+		t.Fatalf("expected lobby_status active even without match ID, got %+v", st)
+	}
+	if len(r.ofType("lobby_server_id")) != 1 {
+		t.Fatal("expected lobby_server_id replay")
+	}
+}
