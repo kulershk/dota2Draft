@@ -794,7 +794,7 @@
       "get": {
         "tags": ["Competitions"],
         "summary": "Get the current lobby for a tournament match game",
-        "description": "Requires an authenticated user (not admin-gated — players in the match read this to get the lobby password). Scoped to `compId`. The `password` field is included only for match participants (captains / drafted players) and competition managers; other authenticated users receive the lobby without it.",
+        "description": "Requires an authenticated user (not admin-gated — players in the match read this to get the lobby password). Scoped to `compId`. The `password` field is included only for match participants (captains, drafted players, and stand-ins registered for this match in `match_standins`) and competition managers; other authenticated users receive the lobby without it.",
         "security": [{ "bearerAuth": [] }],
         "parameters": [
           { "name": "compId", "in": "path", "required": true, "schema": { "type": "integer" } },

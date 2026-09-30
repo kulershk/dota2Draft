@@ -188,6 +188,8 @@ function onReadyState(data: any) {
   }
 }
 
+const LOBBY_PROGRESS_STATUSES = ['launching', 'cointoss', 'active', 'completed']
+
 function onLobbyStatusUpdate(data: any) {
   if (Number(data.matchId) !== Number(props.match.id)) return
   if (!data.status) {
@@ -195,7 +197,10 @@ function onLobbyStatusUpdate(data: any) {
     delete copy[data.gameNumber]
     lobbyStatuses.value = copy
   } else {
-    lobbyStatuses.value = { ...lobbyStatuses.value, [data.gameNumber]: { ...(lobbyStatuses.value[data.gameNumber] || {}), status: data.status, ...(data.playersJoined ? { players_joined: data.playersJoined } : {}), ...(data.errorMessage ? { error_message: data.errorMessage } : {}) } }
+    const prev = { ...(lobbyStatuses.value[data.gameNumber] || {}) }
+    // A relaunch that got going supersedes a stale error (e.g. "Game start aborted…").
+    if (!data.errorMessage && LOBBY_PROGRESS_STATUSES.includes(data.status)) delete prev.error_message
+    lobbyStatuses.value = { ...lobbyStatuses.value, [data.gameNumber]: { ...prev, status: data.status, ...(data.playersJoined ? { players_joined: data.playersJoined } : {}), ...(data.errorMessage ? { error_message: data.errorMessage } : {}) } }
     if (data.status !== 'waiting') {
       launchReadyState.value = { ...launchReadyState.value, [data.gameNumber]: [] }
     }
