@@ -5,7 +5,48 @@ on:
     branches: [main]
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: draft
+          POSTGRES_PASSWORD: draft
+          POSTGRES_DB: draft
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U draft"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # Only the bot suites run here, not the full `npm test`: 6 pre-existing
+      # failures in tests/rest.test.js / tests/socket.test.js (unrelated to
+      # the lobby-bot pipeline) already fail on main. Once those are fixed
+      # separately, switch this back to a plain `npm test`.
+      - run: npx vitest run tests/botPool.settlement.test.js tests/botPool.watchdog.test.js tests/botPool.queue.test.js tests/botPool.lifecycle.test.js tests/botPool.claim.test.js tests/botPool.lobbyError.test.js tests/botPool.misc.test.js tests/lobby.autoFix.test.js tests/statsJobs.test.js
+        env:
+          DATABASE_URL: postgresql://draft:draft@localhost:5432/draft
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: lobbybot/go.mod
+          cache-dependency-path: lobbybot/go.sum
+      - name: Go vet + race tests
+        working-directory: lobbybot
+        # go-steam and go-dota2 both register protobuf extension 50000; the
+        # compose files set the same env to downgrade the resulting panic to
+        # a warning.
+        env:
+          GOLANG_PROTOBUF_REGISTRATION_CONFLICT: warn
+        run: go vet ./... && go test -race ./...
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Deploy via SSH
