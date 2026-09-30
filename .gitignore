@@ -9,3 +9,6 @@ Thumbs.db
 uploads
 backup
 server/.version
+
+# Brainstorming companion mockups
+.superpowers/
