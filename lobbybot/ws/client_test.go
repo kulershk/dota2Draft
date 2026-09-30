@@ -48,6 +48,82 @@ func testServer(t *testing.T, closeFirst bool) (*httptest.Server, <-chan string)
 	return srv, got
 }
 
+// seqTestServer is like testServer but its close decision is a callback over
+// (connection index, message type) instead of a single "first connection,
+// after hello" rule — used to force a connection to die at an exact point in
+// a multi-message exchange (e.g. mid carry-flush).
+func seqTestServer(t *testing.T, closeAfter func(connIdx int, msgType string) bool) (*httptest.Server, <-chan string) {
+	t.Helper()
+	got := make(chan string, 100)
+	var conns atomic.Int32
+	up := websocket.Upgrader{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := up.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		idx := int(conns.Add(1)) - 1
+		for {
+			_, msg, err := c.ReadMessage()
+			if err != nil {
+				return
+			}
+			var e env
+			_ = json.Unmarshal(msg, &e)
+			got <- e.Type
+			if closeAfter(idx, e.Type) {
+				c.Close()
+				return
+			}
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv, got
+}
+
+// pongControlledServer is like testServer but gives the test explicit,
+// deterministic control over the client's heartbeat: onPing is invoked for
+// every Ping frame the server receives (bypassing gorilla's default
+// auto-reply), and returns whether to answer with a Pong (echoing the same
+// payload — Node's `ws` does this automatically in production) and whether
+// to close the connection right after handling it.
+func pongControlledServer(t *testing.T, onPing func(connIdx int, payload string) (ack, closeConn bool)) (*httptest.Server, <-chan string) {
+	t.Helper()
+	got := make(chan string, 100)
+	var conns atomic.Int32
+	up := websocket.Upgrader{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := up.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		idx := int(conns.Add(1)) - 1
+		c.SetPingHandler(func(payload string) error {
+			ack, closeConn := onPing(idx, payload)
+			if ack {
+				if err := c.WriteControl(websocket.PongMessage, []byte(payload), time.Now().Add(writeWait)); err != nil {
+					return err
+				}
+			}
+			if closeConn {
+				c.Close()
+			}
+			return nil
+		})
+		for {
+			_, msg, err := c.ReadMessage()
+			if err != nil {
+				return
+			}
+			var e env
+			_ = json.Unmarshal(msg, &e)
+			got <- e.Type
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv, got
+}
+
 func wsURL(s *httptest.Server) string { return "ws" + strings.TrimPrefix(s.URL, "http") }
 
 func expectTypes(t *testing.T, got <-chan string, want ...string) {
@@ -96,4 +172,84 @@ func TestSendOrderPreserved(t *testing.T) {
 		_ = c.Send(typ, nil)
 	}
 	expectTypes(t, got, "hello", "a", "b", "c")
+}
+
+// TestAckedMessageNotResent pins down the "confirm" half of the resend
+// contract: once a message's write is vouched for by a pong sequence ack,
+// it must not be resent after a later reconnect, even though the connection
+// it was acked on then dies.
+func TestAckedMessageNotResent(t *testing.T) {
+	srv, got := pongControlledServer(t, func(connIdx int, payload string) (ack, closeConn bool) {
+		// Ack conn1's first (and only) ping, then die right after — that
+		// ack is the sole proof acked_msg (written before the ping) was
+		// delivered.
+		return true, connIdx == 0
+	})
+	c := NewClient(wsURL(srv), "tok", func(string, json.RawMessage) {})
+	c.pingPeriod = 20 * time.Millisecond
+	go c.Run()
+	defer c.Close()
+	c.WaitConnected()
+	if err := c.Send("acked_msg", nil); err != nil {
+		t.Fatal(err)
+	}
+	expectTypes(t, got, "hello", "acked_msg")
+	// conn2: acked_msg was confirmed on conn1, so it must not reappear.
+	expectTypes(t, got, "hello")
+	select {
+	case typ := <-got:
+		t.Fatalf("acked message was resent after reconnect: %q", typ)
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
+// TestUnackedMessageResent is the mirror of TestAckedMessageNotResent: a
+// message whose ping never gets acked (Node/the peer never answers) must
+// still be resent after reconnect — the default, safe assumption.
+func TestUnackedMessageResent(t *testing.T) {
+	srv, got := pongControlledServer(t, func(connIdx int, payload string) (ack, closeConn bool) {
+		// Never ack — die right after the first ping regardless.
+		return false, connIdx == 0
+	})
+	c := NewClient(wsURL(srv), "tok", func(string, json.RawMessage) {})
+	c.pingPeriod = 20 * time.Millisecond
+	go c.Run()
+	defer c.Close()
+	c.WaitConnected()
+	if err := c.Send("unacked_msg", nil); err != nil {
+		t.Fatal(err)
+	}
+	expectTypes(t, got, "hello", "unacked_msg")
+	expectTypes(t, got, "hello", "unacked_msg") // resent on conn2 — never acked
+}
+
+// TestPartialCarryFlushKeepsTail is the regression test for the "partial
+// carry flush loses the tail" bug: if the connection resending a multi-message
+// carry list dies partway through, every message it never got to attempt
+// must still make it into the next carry, not just the ones already tracked
+// as unconfirmed.
+func TestPartialCarryFlushKeepsTail(t *testing.T) {
+	srv, got := seqTestServer(t, func(connIdx int, typ string) bool {
+		switch {
+		case connIdx == 0 && typ == "m2":
+			return true // conn1 dies right after m1 and m2 are both read — neither gets acked in time
+		case connIdx == 1 && typ == "m1":
+			return true // conn2 dies mid carry-flush, right after resending m1 — m2 must not be lost
+		default:
+			return false
+		}
+	})
+	c := NewClient(wsURL(srv), "tok", func(string, json.RawMessage) {})
+	go c.Run()
+	defer c.Close()
+	c.WaitConnected()
+	if err := c.Send("m1", nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Send("m2", nil); err != nil {
+		t.Fatal(err)
+	}
+	expectTypes(t, got, "hello", "m1", "m2") // conn1: both delivered, connection dies before either is acked
+	expectTypes(t, got, "hello", "m1")       // conn2: carry-flush resends m1, then dies before m2 is attempted
+	expectTypes(t, got, "hello", "m1", "m2") // conn3: nothing lost — m2 survives the interrupted flush
 }
