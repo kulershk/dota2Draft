@@ -44,3 +44,23 @@ func TestForceLaunchDeDupes(t *testing.T) {
 		t.Fatalf("launches sent = %d, want 1", n)
 	}
 }
+
+func TestRejoinRefusesBotBusyElsewhere(t *testing.T) {
+	r := &rec{}
+	bm := bot.NewManager(r.send)
+	bm.AddBot("1", "u", "p", "t")
+	bm.GetBot("1").SetActiveLobbyID("5")
+	m := NewManager(bm, r.send)
+	if err := m.RejoinLobby(protocol.RejoinLobbyCmd{LobbyID: "6", BotID: "1"}); err == nil {
+		t.Fatal("rejoin onto a bot already running lobby 5 must fail")
+	}
+	found := false
+	for _, typ := range r.all {
+		if typ == "lobby_error" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("expected lobby_error for the refused rejoin")
+	}
+}

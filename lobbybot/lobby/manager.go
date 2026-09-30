@@ -297,7 +297,19 @@ func (m *Manager) runLobby(ctx context.Context, lobby *Lobby) {
 
 	// Wait for GC to confirm lobby creation (up to 10s)
 	botLog("info", "Waiting for GC to confirm lobby creation...")
-	time.Sleep(3 * time.Second)
+	select {
+	case <-ctx.Done():
+		// Cancelled while the GC was confirming — don't invite anyone into a
+		// lobby that's about to be destroyed.
+		botLog("action", "Lobby cancelled during creation — destroying")
+		m.destroyAndLeave(lobby.Bot)
+		lobby.Bot.SetActiveLobbyID("")
+		lobby.Bot.SetExpectedTeams(nil)
+		lobby.Bot.SetBusy(false)
+		m.removeLobby(lobby.ID)
+		return
+	case <-time.After(3 * time.Second):
+	}
 
 	botLog("info", "Lobby created.")
 	lobby.Status = "waiting"
@@ -355,6 +367,14 @@ func (m *Manager) RejoinLobby(cmd protocol.RejoinLobbyCmd) error {
 		m.mu.Unlock()
 		log.Printf("[Lobby %s] Bot %s not found for rejoin", cmd.LobbyID, cmd.BotID)
 		return fmt.Errorf("bot %s not found", cmd.BotID)
+	}
+	if cur := b.GetActiveLobbyID(); cur != "" && cur != cmd.LobbyID {
+		m.mu.Unlock()
+		m.send("lobby_error", protocol.LobbyErrorEvent{
+			LobbyID: cmd.LobbyID,
+			Error:   fmt.Sprintf("Bot %s is already running lobby %s", cmd.BotID, cur),
+		})
+		return fmt.Errorf("bot %s busy with lobby %s", cmd.BotID, cur)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

@@ -803,19 +803,7 @@ func (b *Bot) watchLobbyCacheEvents() {
 		b.mu.Unlock()
 		if !assigned {
 			b.log("CACHE: Existing lobby with no assignment — waiting 5s for rejoin command...")
-			time.Sleep(5 * time.Second)
-			b.mu.Lock()
-			nowAssigned := b.activeLobbyID != ""
-			b.mu.Unlock()
-			if !nowAssigned {
-				b.logAt("warn", "CACHE: No rejoin received — leaving stale lobby")
-				b.LeaveLobby()
-				b.mu.Lock()
-				b.lastLobby = nil
-				b.mu.Unlock()
-			} else {
-				b.log("CACHE: Rejoin received — keeping lobby")
-			}
+			b.sweepIfUnassigned(lobby)
 		}
 	}()
 
@@ -853,18 +841,7 @@ func (b *Bot) handleLobbyCacheEvent(event *socache.CacheEvent) {
 		if !assigned {
 			b.log("CACHE: Found lobby with no active assignment — waiting 5s for rejoin command...")
 			b.setLastLobby(lobby)
-			go func() {
-				time.Sleep(5 * time.Second)
-				b.mu.Lock()
-				assigned := b.activeLobbyID != ""
-				b.mu.Unlock()
-				if !assigned {
-					b.logAt("warn", "CACHE: No rejoin received — leaving stale lobby")
-					b.LeaveLobby()
-				} else {
-					b.log("CACHE: Rejoin received — keeping lobby")
-				}
-			}()
+			go b.sweepIfUnassigned(lobby)
 			return
 		}
 		b.processLobbyUpdate(nil, lobby)

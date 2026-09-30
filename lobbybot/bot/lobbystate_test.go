@@ -186,3 +186,22 @@ func TestLobbyRunning(t *testing.T) {
 		t.Fatal("RUN → running")
 	}
 }
+
+func TestShouldDestroyStale(t *testing.T) {
+	self := uint64(76561198000000009)
+	other := uint64(76561198000000001)
+	ui := mkLobby(gcccm.CSODOTALobby_UI, 0)
+	ui.LeaderId = &self
+	if !shouldDestroyStale(ui, self) {
+		t.Error("bot leads a UI-state lobby → destroy")
+	}
+	ui.LeaderId = &other
+	if shouldDestroyStale(ui, self) {
+		t.Error("someone else leads → just leave")
+	}
+	run := mkLobby(gcccm.CSODOTALobby_RUN, 5)
+	run.LeaderId = &self
+	if shouldDestroyStale(run, self) {
+		t.Error("never destroy a running game")
+	}
+}

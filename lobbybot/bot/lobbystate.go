@@ -1,7 +1,9 @@
 package bot
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	"lobbybot/protocol"
 
@@ -57,4 +59,37 @@ func slottedPlayers(members []*gcccm.CSODOTALobbyMember) []protocol.LobbyPlayer 
 		}
 	}
 	return out
+}
+
+// shouldDestroyStale: a stale lobby (no assignment from Node) that this bot
+// leads and that hasn't launched must be destroyed, not just left — leaving
+// hands host to a random player who can then launch an unmanaged game.
+func shouldDestroyStale(l *gcccm.CSODOTALobby, selfID uint64) bool {
+	return l != nil && selfID != 0 && l.GetLeaderId() == selfID && l.GetState() == gcccm.CSODOTALobby_UI
+}
+
+// sweepIfUnassigned waits briefly for Node's rejoin_lobby; if none arrives the
+// lobby is stale and is torn down. Shared by the startup check and the cache
+// Create handler (previously two copies, and both only left the lobby).
+func (b *Bot) sweepIfUnassigned(l *gcccm.CSODOTALobby) {
+	time.Sleep(5 * time.Second)
+	if b.GetActiveLobbyID() != "" {
+		b.log("CACHE: Rejoin received — keeping lobby")
+		return
+	}
+	b.mu.Lock()
+	var self uint64
+	if b.steamClient != nil {
+		self = b.steamClient.SteamId().ToUint64()
+	}
+	b.mu.Unlock()
+	if shouldDestroyStale(l, self) {
+		b.logAt("warn", "CACHE: No rejoin received — destroying stale lobby we host")
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		b.DestroyLobby(ctx)
+		cancel()
+	} else {
+		b.logAt("warn", "CACHE: No rejoin received — leaving stale lobby")
+	}
+	b.LeaveLobby()
 }
