@@ -30,6 +30,7 @@ class BotPool {
     this._botsListInflight = null // coalesces concurrent _syncBotStatusesFromGo callers
     this._tokenRetryAt = new Map() // botId -> last automatic token-refresh reconnect (rate limit)
     this._autoReconnectBackoff = new Map() // botId -> { failures, nextAttemptAt } for auto-reconnect backoff
+    this._goQueue = Promise.resolve()
   }
 
   async init(io, wss) {
@@ -47,12 +48,14 @@ class BotPool {
         this.goWs = ws
 
         ws.on('message', (raw) => {
+          let msg
           try {
-            const msg = JSON.parse(raw.toString())
-            this._handleGoMessage(msg)
+            msg = JSON.parse(raw.toString())
           } catch (e) {
             console.error('Invalid message from Go service:', e.message)
+            return
           }
+          this._enqueueGoMessage(msg)
         })
 
         ws.on('close', () => {
@@ -90,6 +93,22 @@ class BotPool {
     const qm = await queryOne('SELECT id FROM queue_matches WHERE match_id = $1', [lobby.match_id])
     if (qm) return this.io.to(`queue-match:${qm.id}`)
     return this.io.to(`match:${lobby.match_id}`)
+  }
+
+  // Go events are applied strictly one at a time, in arrival order: each
+  // handler is several awaited queries, and letting two interleave (e.g. a
+  // lobby_error and the bot_status that follows it) produced phantom rejoins
+  // and bots stuck busy. Responses to Node's own requests (bots_list,
+  // match_details) resolve a pending promise synchronously and bypass the
+  // queue — a queued handler may be awaiting exactly that response.
+  _enqueueGoMessage(msg) {
+    if (msg?.type === 'bots_list' || msg?.type === 'match_details') {
+      this._handleGoMessage(msg)
+      return
+    }
+    this._goQueue = this._goQueue
+      .then(() => this._handleGoMessage(msg))
+      .catch((e) => console.error(`Error handling Go message ${msg?.type}:`, e?.message))
   }
 
   async _handleGoMessage(msg) {
