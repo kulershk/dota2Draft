@@ -1406,6 +1406,11 @@ class BotPool {
       // ── XP: game win/loss ──
       // Check if this is a queue match (reuse variable from winner detection, but fetch XP settings)
       const queueMatchXp = await queryOne('SELECT qm.*, qp.xp_win, qp.xp_participate, qp.name AS pool_name FROM queue_matches qm JOIN queue_pools qp ON qp.id = qm.pool_id WHERE qm.match_id = $1', [matchId])
+      // Competition context — loaded in the competition branch below and reused
+      // by the series-XP, bracket and stage-placement steps after it. Stays null
+      // for queue matches.
+      let comp = null
+      let settings = null
       if (queueMatchXp) {
         // Queue match XP
         const team1Ids = (queueMatchXp.team1_players || []).map(p => p.playerId)
@@ -1549,8 +1554,8 @@ class BotPool {
         }
       } else if (match.competition_id) {
         // Competition match XP
-        const comp = await getCompetition(match.competition_id)
-        const settings = parseCompSettings(comp)
+        comp = await getCompetition(match.competition_id)
+        settings = parseCompSettings(comp)
         const loserCaptainId = winnerCaptainId === match.team1_captain_id ? match.team2_captain_id : match.team1_captain_id
         const winPlayers = await getTeamPlayerIds(winnerCaptainId, match.competition_id)
         const losePlayers = loserCaptainId ? await getTeamPlayerIds(loserCaptainId, match.competition_id) : []
@@ -1608,7 +1613,7 @@ class BotPool {
       )
 
       // ── XP: match win (series) — competition only ──
-      if (matchWinner && newStatus === 'completed' && match.competition_id) {
+      if (matchWinner && newStatus === 'completed' && comp) {
         const matchWinPlayers = await getTeamPlayerIds(matchWinner, match.competition_id)
         const matchLoserId = matchWinner === match.team1_captain_id ? match.team2_captain_id : match.team1_captain_id
         const matchLoseCap = matchLoserId ? await queryOne('SELECT team FROM captains WHERE id = $1', [matchLoserId]) : null
@@ -1627,8 +1632,8 @@ class BotPool {
       }
 
       // ── XP: tournament placements (when stage completes) ──
-      const ts = comp.tournament_state || {}
-      if (ts.stages) {
+      const ts = comp?.tournament_state || {}
+      if (comp && ts.stages) {
         const stage = ts.stages.find(s => s.id === match.stage)
         if (stage) {
           const stageMatches = await query(
