@@ -1237,16 +1237,30 @@ func (b *Bot) GetActiveLobbyID() string {
 // ResendLobbyState re-emits state Node may have missed if the WS was down
 // when the underlying GC event fired (most importantly server_steam_id).
 // Safe to call repeatedly; Node's handler de-dupes by current DB value.
+// ResendLobbyState re-emits everything Node needs to rebuild this bot's lobby
+// after a WS reconnect: the match id (game_started — Node de-dupes per id), the
+// current state + roster (lobby_status) and server_steam_id. The WS outbox
+// already queues events across short outages; this covers a Node restart that
+// lost in-memory state and any event that overflowed the outbox.
 func (b *Bot) ResendLobbyState() {
 	b.mu.Lock()
 	lobbyID := b.activeLobbyID
 	lobby := b.lastLobby
+	matchID := b.lastMatchIDSent
 	b.mu.Unlock()
 	if lobbyID == "" || lobby == nil {
 		return
 	}
+	if matchID != 0 {
+		b.logCtx("info", lobbyID, fmt.Sprintf("Re-emitting game_started %d after WS reconnect", matchID))
+		b.send("game_started", protocol.GameStartedEvent{LobbyID: lobbyID, MatchID: fmt.Sprintf("%d", matchID)})
+	}
+	b.send("lobby_status", protocol.LobbyStatusEvent{
+		LobbyID:       lobbyID,
+		Status:        lobbyStatusFor(lobby.GetState()),
+		PlayersJoined: slottedPlayers(liveMembers(lobby)),
+	})
 	if serverID := lobby.GetServerId(); serverID != 0 {
-		b.logCtx("info", lobbyID, fmt.Sprintf("Re-emitting lobby_server_id %d after WS reconnect", serverID))
 		b.send("lobby_server_id", protocol.LobbyServerIDEvent{
 			LobbyID:       lobbyID,
 			ServerSteamID: fmt.Sprintf("%d", serverID),

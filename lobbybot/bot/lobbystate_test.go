@@ -70,3 +70,35 @@ func TestProcessLobbyUpdateIgnoresLeftMembers(t *testing.T) {
 		t.Fatalf("roster must exclude the member at a left index, got %+v", p)
 	}
 }
+
+func TestResendLobbyStateReplaysMatchID(t *testing.T) {
+	b, r := newTestBot()
+	b.activeLobbyID = "7"
+	b.lastMatchIDSent = 111
+	server := uint64(90000)
+	l := mkLobby(gcccm.CSODOTALobby_RUN, 111, mkMember(76561198000000001, gcccm.DOTA_GC_TEAM_DOTA_GC_TEAM_GOOD_GUYS))
+	l.ServerId = &server
+	b.lastLobby = l
+
+	b.ResendLobbyState()
+
+	gs := r.ofType("game_started")
+	if len(gs) != 1 || gs[0].Data.(protocol.GameStartedEvent).MatchID != "111" {
+		t.Fatalf("expected game_started 111 to be replayed, got %+v", gs)
+	}
+	st := r.ofType("lobby_status")
+	if len(st) != 1 || st[0].Data.(protocol.LobbyStatusEvent).Status != "active" {
+		t.Fatalf("expected lobby_status active, got %+v", st)
+	}
+	if len(r.ofType("lobby_server_id")) != 1 {
+		t.Fatal("expected lobby_server_id replay")
+	}
+}
+
+func TestResendLobbyStateNoLobbyNoop(t *testing.T) {
+	b, r := newTestBot()
+	b.ResendLobbyState()
+	if len(r.all()) != 0 {
+		t.Fatalf("expected no messages, got %+v", r.all())
+	}
+}
