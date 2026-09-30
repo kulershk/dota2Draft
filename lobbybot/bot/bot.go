@@ -92,18 +92,25 @@ type Bot struct {
 	// ping-pong sessions get all the way to 'welcomed' before being kicked,
 	// so only a session that survives 60s counts as healthy.
 	consecutiveDrops int
+
+	helloRunning    bool                            // a helloLoop is active (guarded by mu)
+	helloGen        uint64                          // session generation the running helloLoop serves (guarded by mu)
+	helloFirstDelay time.Duration                   // delay before the first hello (tests set 0)
+	helloIntervalFn func(attempt int) time.Duration // nil = helloInterval (tests override)
+	dotaFor         *steam.Client                   // the Steam client dotaClient was built on
 }
 
 func NewBot(id, username, password, refreshToken string, send SendFunc) *Bot {
 	return &Bot{
-		ID:            id,
-		Username:      username,
-		Password:      password,
-		RefreshToken:  refreshToken,
-		Status:        StatusOffline,
-		send:          send,
-		guardCh:       make(chan string, 1),
-		gameStartedCh: make(chan struct{}, 1),
+		ID:              id,
+		Username:        username,
+		Password:        password,
+		RefreshToken:    refreshToken,
+		Status:          StatusOffline,
+		send:            send,
+		guardCh:         make(chan string, 1),
+		gameStartedCh:   make(chan struct{}, 1),
+		helloFirstDelay: 2 * time.Second,
 	}
 }
 
@@ -268,40 +275,22 @@ func (b *Bot) handleSteamEvents(sc *steam.Client, gen uint64, cancel <-chan stru
 
 			sc.Social.SetPersonaState(steamlang.EPersonaState_Online)
 
-			logger := logrus.New()
-			logger.SetLevel(logrus.DebugLevel)
+			// One Dota client per Steam client: AccountInfoEvent can repeat on
+			// the same session, and each dota2.New registers another GC handler
+			// on sc — duplicate handlers mean duplicate cache/welcome events.
 			b.mu.Lock()
-			b.dotaClient = dota2.New(sc, logger)
 			dc := b.dotaClient
+			if dc == nil || b.dotaFor != sc {
+				logger := logrus.New()
+				logger.SetLevel(logrus.InfoLevel)
+				dc = dota2.New(sc, logger)
+				b.dotaClient = dc
+				b.dotaFor = sc
+			}
 			b.mu.Unlock()
 			dc.SetPlaying(true)
-
 			b.log("Connecting to Dota 2 Game Coordinator...")
-			// Give Steam a moment to register the game before saying hello
-			go func() {
-				time.Sleep(2 * time.Second)
-				// Snapshot under the lock — a concurrent Disconnect/reconnect can
-				// replace or clear dotaClient, and dereferencing a nil'd pointer
-				// here would panic the whole process.
-				b.mu.Lock()
-				gc := b.dotaClient
-				b.mu.Unlock()
-				if gc == nil {
-					return
-				}
-				b.log("Sending GC Hello...")
-				gc.SayHello()
-				// Retry hello if no response
-				time.Sleep(5 * time.Second)
-				b.mu.Lock()
-				status := b.Status
-				gc = b.dotaClient
-				b.mu.Unlock()
-				if gc != nil && status == StatusConnectingGC {
-					b.logAt("warn", "No GC response, retrying hello...")
-					gc.SayHello()
-				}
-			}()
+			go b.helloLoop(gen, cancel, func() { dc.SayHello() }) // SayHello is variadic — wrap it
 
 		case *steam.LogOnFailedEvent:
 			result := e.Result
@@ -403,8 +392,7 @@ func (b *Bot) handleSteamEvents(sc *steam.Client, gen uint64, cancel <-chan stru
 		case *devents.ClientWelcomed:
 			b.log("Dota 2 GC welcomed! Bot is ready.")
 			b.onGCReady()
-			// Start lobby cache watcher
-			go b.watchLobbyCacheEvents()
+			b.startLobbyWatcher()
 
 		case *devents.GCConnectionStatusChanged:
 			b.log(fmt.Sprintf("GC status: %s → %s", e.OldState.String(), e.NewState.String()))
@@ -427,6 +415,11 @@ func (b *Bot) handleSteamEvents(sc *steam.Client, gen uint64, cancel <-chan stru
 				if wasAvailable {
 					b.logAt("warn", "GC session lost while idle — no longer available until GC reconnects")
 					b.setStatus(StatusConnectingGC)
+				}
+				// The GC won't re-welcome us on its own — keep saying hello
+				// until the session is back.
+				if dc := b.dc(); dc != nil {
+					go b.helloLoop(gen, cancel, func() { dc.SayHello() }) // SayHello is variadic — wrap it
 				}
 			}
 
@@ -753,73 +746,78 @@ func (b *Bot) SetActiveLobbyID(id string) {
 	b.mu.Unlock()
 }
 
-func (b *Bot) watchLobbyCacheEvents() {
+// startLobbyWatcher (re)subscribes to lobby cache events. It subscribes
+// synchronously and swaps lobbyCacheCancel under the lock, so a GC re-welcome
+// cancels the previous watcher instead of leaking it (leaked watchers each
+// processed every cache event — duplicate lobby_status sends and kicks).
+func (b *Bot) startLobbyWatcher() {
 	dc := b.dc()
 	if dc == nil {
 		b.logAt("error", "Cannot watch lobby cache: dota client not connected")
 		return
 	}
-
 	eventCh, unsub, err := dc.GetCache().SubscribeType(cso.Lobby)
 	if err != nil {
 		b.logAt("error", fmt.Sprintf("Failed to subscribe to lobby cache: %v", err))
 		return
 	}
-
-	// Store cancel func so Disconnect can stop this goroutine
 	stopCh := make(chan struct{})
+	var once sync.Once
+	cancelFn := func() { once.Do(func() { unsub(); close(stopCh) }) }
 	b.mu.Lock()
-	b.lobbyCacheCancel = func() {
-		unsub()
-		close(stopCh)
-	}
+	old := b.lobbyCacheCancel
+	b.lobbyCacheCancel = cancelFn
 	b.mu.Unlock()
-
+	if old != nil {
+		old()
+	}
 	b.log("Lobby cache watcher started")
-
-	// Check if a lobby already exists in cache (e.g. bot was in a lobby before restart)
+	go b.checkExistingLobby()
 	go func() {
-		time.Sleep(3 * time.Second) // give cache time to populate
-		gc := b.dc()
-		if gc == nil {
-			return
-		}
-		container, err := gc.GetCache().GetContainerForTypeID(uint32(cso.Lobby))
-		if err != nil {
-			return
-		}
-		existing := container.GetOne()
-		if existing == nil {
-			return
-		}
-		lobby, ok := existing.(*gcccm.CSODOTALobby)
-		if !ok {
-			return
-		}
-		b.log(fmt.Sprintf("CACHE: Found existing lobby on startup (id: %d, state: %s)", lobby.GetLobbyId(), lobby.GetState().String()))
-		b.mu.Lock()
-		b.lastLobby = lobby
-		assigned := b.activeLobbyID != ""
-		b.mu.Unlock()
-		if !assigned {
-			b.log("CACHE: Existing lobby with no assignment — waiting 5s for rejoin command...")
-			b.sweepIfUnassigned(lobby)
+		for {
+			select {
+			case <-stopCh:
+				b.log("Lobby cache watcher stopped")
+				return
+			case event, ok := <-eventCh:
+				if !ok {
+					b.logAt("warn", "Lobby cache channel closed")
+					return
+				}
+				b.handleLobbyCacheEvent(event)
+			}
 		}
 	}()
+}
 
-	for {
-		select {
-		case <-stopCh:
-			b.log("Lobby cache watcher stopped")
-			return
-		case event, ok := <-eventCh:
-			if !ok {
-				b.logAt("warn", "Lobby cache channel closed")
-				return
-			}
-			b.handleLobbyCacheEvent(event)
-		}
+// checkExistingLobby handles a lobby already in the cache at (re)welcome: an
+// assigned one is processed through the normal diff (so a RUN state reached
+// across the reconnect isn't missed); an unassigned one is swept.
+func (b *Bot) checkExistingLobby() {
+	time.Sleep(3 * time.Second) // give the cache time to populate
+	dc := b.dc()
+	if dc == nil {
+		return
 	}
+	container, err := dc.GetCache().GetContainerForTypeID(uint32(cso.Lobby))
+	if err != nil {
+		return
+	}
+	lobby, ok := container.GetOne().(*gcccm.CSODOTALobby)
+	if !ok || lobby == nil {
+		return
+	}
+	b.log(fmt.Sprintf("CACHE: Found existing lobby on startup (id: %d, state: %s)", lobby.GetLobbyId(), lobby.GetState().String()))
+	if b.GetActiveLobbyID() == "" {
+		b.log("CACHE: Existing lobby with no assignment — waiting 5s for rejoin command...")
+		b.setLastLobby(lobby)
+		b.sweepIfUnassigned(lobby)
+		return
+	}
+	b.processMu.Lock()
+	b.processLobbyUpdate(b.getLastLobby(), lobby)
+	b.setLastLobby(lobby)
+	b.processMu.Unlock()
 }
 
 func (b *Bot) handleLobbyCacheEvent(event *socache.CacheEvent) {
