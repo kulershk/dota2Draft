@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Newspaper, Users, Trophy, ChevronRight, ChevronDown, Settings, ShieldCheck, Bot, Gamepad2, Star, Zap, Swords, Activity, Medal, Shield, BarChart3, Menu as MenuIcon, Award, Wrench, Crown, MessageSquare, Bell, Coins, Sparkles } from 'lucide-vue-next'
+import { Newspaper, Users, Trophy, ChevronRight, ChevronDown, Settings, ShieldCheck, Bot, Gamepad2, Star, Zap, Swords, Activity, Medal, Shield, BarChart3, Menu as MenuIcon, Award, Wrench, Crown, MessageSquare, Bell, Coins, Sparkles, ScrollText } from 'lucide-vue-next'
 import { computed, ref, onBeforeUnmount, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -168,6 +168,7 @@ const navGroups: NavGroup[] = [
     icon: Wrench,
     children: [
       { labelKey: 'lobbyBots', icon: Bot, path: '/admin/bots', permissions: ['manage_bots'] },
+      { labelKey: 'adminLobbies', icon: ScrollText, path: '/admin/lobbies', permissions: ['manage_bots'] },
       { labelKey: 'adminJobs', icon: Activity, path: '/admin/jobs', permissions: ['manage_jobs'] },
       { labelKey: 'adminXpLog', icon: Zap, path: '/admin/xp-log', permissions: ['manage_xp_log'] },
       { labelKey: 'adminRequestStats', icon: BarChart3, path: '/admin/request-stats', permissions: ['view_request_stats'] },

@@ -15,6 +15,7 @@ const adminChildren: RouteRecordRaw[] = [
   { path: 'discord', name: 'admin-discord', meta: { permissions: ['manage_discord_settings'] }, component: () => import('@/pages/admin/AdminDiscordSettingsPage.vue') },
   { path: 'permissions', name: 'admin-permissions', meta: { permissions: ['manage_permissions'] }, component: () => import('@/pages/admin/AdminPermissionsPage.vue') },
   { path: 'bots', name: 'admin-bots', meta: { permissions: ['manage_bots'] }, component: () => import('@/pages/admin/AdminBotsPage.vue') },
+  { path: 'lobbies/:lobbyId?', name: 'admin-lobbies', meta: { permissions: ['manage_bots'] }, component: () => import('@/pages/admin/AdminLobbiesPage.vue') },
   { path: 'games', name: 'admin-games', meta: { permissions: ['manage_games'] }, component: () => import('@/pages/admin/AdminGamesPage.vue') },
   { path: 'fantasy', name: 'admin-fantasy', meta: { permissions: ['manage_fantasy'] }, component: () => import('@/pages/admin/AdminFantasyPage.vue') },
   { path: 'xp-log', name: 'admin-xp-log', meta: { permissions: ['manage_xp_log'] }, component: () => import('@/pages/admin/AdminXpLogPage.vue') },

@@ -334,8 +334,25 @@ export function useApi() {
       return res.json()
     },
 
+    // Admin lobby history + kick (manage_bots)
+    getAdminLobbies: (params: { filter?: 'live' | 'recent' | 'all'; q?: string; before?: number | null; limit?: number } = {}) => {
+      const qs = new URLSearchParams()
+      if (params.filter) qs.set('filter', params.filter)
+      if (params.q) qs.set('q', params.q)
+      if (params.before) qs.set('before', String(params.before))
+      if (params.limit) qs.set('limit', String(params.limit))
+      const s = qs.toString()
+      return request(`/api/admin/lobbies${s ? `?${s}` : ''}`)
+    },
+    getAdminLobby: (id: number, opts?: { botLogs?: boolean }) =>
+      request(`/api/admin/lobbies/${id}${opts?.botLogs ? '?botLogs=1' : ''}`),
+    kickLobbyPlayer: (id: number, steamId: string, mode: 'kick' | 'unassign') =>
+      request(`/api/admin/lobbies/${id}/kick`, { method: 'POST', body: JSON.stringify({ steamId, mode }) }),
+    unblockLobbyPlayer: (id: number, steamId: string) =>
+      request(`/api/admin/lobbies/${id}/unblock`, { method: 'POST', body: JSON.stringify({ steamId }) }),
+
     // Lobby Management
-    createLobby: (compId: number, matchId: number, gameNumber: number, data?: Record<string, any>) =>
+    createLobby:(compId: number, matchId: number, gameNumber: number, data?: Record<string, any>) =>
       request(`/api/competitions/${compId}/tournament/matches/${matchId}/games/${gameNumber}/lobby`, { method: 'POST', body: JSON.stringify(data || {}) }),
     getLobbyStatus: (compId: number, matchId: number, gameNumber: number) =>
       request(`/api/competitions/${compId}/tournament/matches/${matchId}/games/${gameNumber}/lobby`),

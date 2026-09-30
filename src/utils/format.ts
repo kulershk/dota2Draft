@@ -7,6 +7,11 @@ export function fmtDateTime(d: Date): string {
   return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}. ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+/** Format Date object as DD.MM.YYYY. HH:MM:SS — for event timelines where seconds matter */
+export function fmtDateTimeSeconds(d: Date): string {
+  return `${fmtDateTime(d)}:${pad(d.getSeconds())}`
+}
+
 /** Format Date object as DD.MM.YYYY. */
 export function fmtDateOnly(d: Date): string {
   return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}.`

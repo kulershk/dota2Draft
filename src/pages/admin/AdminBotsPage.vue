@@ -497,7 +497,13 @@ onUnmounted(() => {
             </label>
           </div>
           <!-- Active lobby context: tournament match or queue match -->
-          <div v-if="bot.active_match_id" class="flex items-center gap-2 mt-1 text-[11px] text-muted-foreground flex-wrap">
+          <router-link
+            v-if="bot.active_match_id"
+            :to="bot.active_lobby_id
+              ? `/admin/lobbies/${bot.active_lobby_id}`
+              : { path: '/admin/lobbies', query: bot.active_game_name ? { q: bot.active_game_name } : {} }"
+            class="flex items-center gap-2 mt-1 text-[11px] text-muted-foreground flex-wrap hover:text-foreground hover:underline w-fit"
+          >
             <span v-if="bot.active_queue_match_id" class="flex items-center gap-1">
               <Swords class="w-3 h-3" />
               <span>Queue #{{ bot.active_queue_match_id }}</span>
@@ -510,7 +516,7 @@ onUnmounted(() => {
             <span class="font-mono text-muted-foreground/70">match #{{ bot.active_match_id }}</span>
             <span v-if="bot.active_game_name" class="font-mono truncate max-w-[320px]">· {{ bot.active_game_name }}</span>
             <span v-if="bot.active_lobby_status" class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-accent">{{ bot.active_lobby_status }}</span>
-          </div>
+          </router-link>
         </div>
 
         <!-- Actions -->
