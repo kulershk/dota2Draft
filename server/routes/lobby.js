@@ -4,7 +4,7 @@ import sharp from 'sharp'
 import { query, queryOne, execute } from '../db.js'
 import { requirePermission, requireCompPermission, playerCanManageComp } from '../middleware/permissions.js'
 import { getAuthPlayer } from '../middleware/auth.js'
-import { botPool } from '../services/botPool.js'
+import { botPool, LIVE_LOBBY_STATUSES_SQL, LobbyActionError, lobbyEventRow } from '../services/botPool.js'
 
 // A match participant = a captain of either side, or a player drafted onto
 // either side. Participants (and comp managers) may see the lobby password so
@@ -66,6 +66,100 @@ export function shouldMarkBotDisconnected(lobby, botStatus) {
   if (lobby.status !== 'waiting' && lobby.status !== 'launching') return false
   if (lobby.dota_match_id) return false
   return botStatus === 'available'
+}
+
+// ── Admin lobby history helpers ──
+
+// JSONB column that may be NULL / non-array on legacy rows → always an array.
+const jarr = (col) => `(CASE WHEN jsonb_typeof(${col}) = 'array' THEN ${col} ELSE '[]'::jsonb END)`
+
+const ADMIN_LOBBY_COLUMNS = `
+  ml.id, ml.status, ml.bot_id, COALESCE(NULLIF(b.display_name, ''), b.username) AS bot_name,
+  ml.match_id, ml.game_number, ml.competition_id, c.name AS competition_name, qm.id AS queue_match_id,
+  ml.game_name,
+  jsonb_array_length(${jarr('ml.players_joined')})::int AS players_joined_count,
+  jsonb_array_length(${jarr('ml.players_expected')})::int AS players_expected_count,
+  jsonb_array_length(${jarr('ml.members')})::int AS members_count,
+  ml.error_message, ml.dota_match_id, ml.created_at, ml.updated_at`
+
+// Soft-deleted competitions are joined away (their name must not leak), but
+// the lobby itself stays visible — it is still a record of what the bot did.
+const ADMIN_LOBBY_FROM = `
+  FROM match_lobbies ml
+  LEFT JOIN lobby_bots b ON b.id = ml.bot_id
+  LEFT JOIN competitions c ON c.id = ml.competition_id AND c.deleted_at IS NULL
+  LEFT JOIN LATERAL (
+    SELECT id FROM queue_matches WHERE match_id = ml.match_id AND ml.competition_id IS NULL ORDER BY id DESC LIMIT 1
+  ) qm ON TRUE`
+
+// Human label for a lobby row: "<comp> · Match #<id> G<n>" or "Queue #<id>".
+export function lobbyLabel(r) {
+  if (!r.competition_id && r.queue_match_id) return `Queue #${r.queue_match_id}`
+  const prefix = r.competition_name ? `${r.competition_name} · ` : ''
+  return `${prefix}Match #${r.match_id} G${r.game_number}`
+}
+
+const withLabel = (r) => ({ ...r, label: lobbyLabel(r) })
+
+// `q` search: lobby / match / queue-match id, dota match id, game name,
+// competition name, or a player name / steam id in members, players_expected
+// or players_joined. Returns [sqlFragment, params] starting at $<offset>.
+function lobbySearchClause(q, offset) {
+  const raw = String(q).trim()
+  const like = `%${raw.replace(/[\\%_]/g, (m) => `\\${m}`)}%`
+  const num = /^\d{1,9}$/.test(raw) ? Number(raw) : null
+  const L = `$${offset}`, R = `$${offset + 1}`, N = `$${offset + 2}::int`
+  const sql = `(
+    ml.game_name ILIKE ${L} OR c.name ILIKE ${L} OR ml.dota_match_id = ${R}
+    OR (${N} IS NOT NULL AND (ml.id = ${N} OR ml.match_id = ${N} OR qm.id = ${N}))
+    OR EXISTS (SELECT 1 FROM jsonb_array_elements(${jarr('ml.members')}) m
+                WHERE m->>'name' ILIKE ${L} OR m->>'steamId' = ${R})
+    OR EXISTS (SELECT 1 FROM jsonb_array_elements(${jarr('ml.players_expected')}) e
+                WHERE e->>'name' ILIKE ${L} OR COALESCE(e->>'steam_id', e->>'steamId') = ${R})
+    OR EXISTS (SELECT 1 FROM jsonb_array_elements(${jarr('ml.players_joined')}) j
+                WHERE j->>'name' ILIKE ${L} OR COALESCE(j->>'steamId', j->>'steam_id') = ${R})
+  )`
+  return [sql, [like, raw, num]]
+}
+
+// Keyset page (id DESC, id < before) of live or non-live lobbies. Fetches one
+// extra row to know whether another page exists.
+async function adminLobbyPage({ live, q, before, limit }) {
+  const params = []
+  const where = [`ml.status ${live ? '' : 'NOT '}IN ${LIVE_LOBBY_STATUSES_SQL}`]
+  if (before) { params.push(before); where.push(`ml.id < $${params.length}`) }
+  if (q) {
+    const [sql, p] = lobbySearchClause(q, params.length + 1)
+    params.push(...p)
+    where.push(sql)
+  }
+  params.push(limit === null ? null : limit + 1)
+  const rows = await query(
+    `SELECT ${ADMIN_LOBBY_COLUMNS} ${ADMIN_LOBBY_FROM}
+      WHERE ${where.join(' AND ')}
+      ORDER BY ml.id DESC
+      LIMIT $${params.length}`,
+    params
+  )
+  const hasMore = limit !== null && rows.length > limit
+  const page = hasMore ? rows.slice(0, limit) : rows
+  return { rows: page.map(withLabel), nextBefore: hasMore ? page[page.length - 1].id : null }
+}
+
+// Replace member names with the registered player's current name (Go never
+// knows persona names; rows stored before a rename keep the old one).
+async function resolveMemberNames(members) {
+  const list = Array.isArray(members) ? members : []
+  const ids = list.map(m => String(m?.steamId || '')).filter(Boolean)
+  if (ids.length === 0) return list
+  const rows = await query('SELECT steam_id, COALESCE(display_name, name) AS name FROM players WHERE steam_id = ANY($1::text[])', [ids])
+  const names = new Map(rows.map(r => [String(r.steam_id), r.name]))
+  return list.map(m => ({ ...m, name: names.get(String(m.steamId)) || m.name || String(m.steamId) }))
+}
+
+const parseLobbyId = (v) => {
+  const n = Number(v)
+  return Number.isInteger(n) && n > 0 && n <= 2147483647 ? n : null
 }
 
 const avatarUpload = multer({
@@ -182,7 +276,7 @@ export default function createLobbyRouter(io) {
         [botId]
       )
       for (const lobby of activeLobbies) {
-        await botPool.cancelLobby(lobby.id)
+        await botPool.cancelLobby(lobby.id, { actorId: admin.id })
       }
       // Force bot status to available
       await execute("UPDATE lobby_bots SET status = 'available' WHERE id = $1", [botId])
@@ -265,6 +359,121 @@ export default function createLobbyRouter(io) {
     }
   })
 
+  // ── Admin lobby history + kick (bot admins) ──
+
+  // Every bot-run lobby: live ones first (all of them, on the first page),
+  // then recent history newest-first with keyset pagination on id.
+  router.get('/api/admin/lobbies', async (req, res) => {
+    try {
+      const admin = await requirePermission(req, res, 'manage_bots')
+      if (!admin) return
+      const filter = ['live', 'recent', 'all'].includes(req.query.filter) ? req.query.filter : 'all'
+      const q = typeof req.query.q === 'string' && req.query.q.trim() ? req.query.q.trim() : null
+      const before = req.query.before ? parseLobbyId(req.query.before) : null
+      if (req.query.before && !before) return res.status(400).json({ error: 'Invalid before' })
+      const limitRaw = Number(req.query.limit)
+      const limit = Number.isInteger(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 200) : 50
+
+      let lobbies, nextBefore
+      if (filter === 'live') {
+        ({ rows: lobbies, nextBefore } = await adminLobbyPage({ live: true, q, before, limit }))
+      } else if (filter === 'recent') {
+        ({ rows: lobbies, nextBefore } = await adminLobbyPage({ live: false, q, before, limit }))
+      } else {
+        // Live lobbies are bounded by the bot count, so page 1 carries all of
+        // them; `before` / `limit` then page through the non-live history.
+        const live = before ? { rows: [] } : await adminLobbyPage({ live: true, q, before: null, limit: null })
+        const recent = await adminLobbyPage({ live: false, q, before, limit })
+        lobbies = [...live.rows, ...recent.rows]
+        nextBefore = recent.nextBefore
+      }
+      res.json({ lobbies, nextBefore, goConnected: botPool.isGoConnected() })
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  router.get('/api/admin/lobbies/:lobbyId', async (req, res) => {
+    try {
+      const admin = await requirePermission(req, res, 'manage_bots')
+      if (!admin) return
+      const lobbyId = parseLobbyId(req.params.lobbyId)
+      if (!lobbyId) return res.status(400).json({ error: 'Invalid lobby id' })
+      const row = await queryOne(
+        `SELECT ${ADMIN_LOBBY_COLUMNS},
+                ml.members, ml.players_expected, ml.players_joined, ml.blocked_steam_ids,
+                ml.team_ids, ml.server_region, b.steam_id AS bot_steam_id
+           ${ADMIN_LOBBY_FROM}
+          WHERE ml.id = $1`,
+        [lobbyId]
+      )
+      if (!row) return res.status(404).json({ error: 'Lobby not found' })
+      const lobby = withLabel({
+        ...row,
+        members: await resolveMemberNames(row.members),
+        players_expected: Array.isArray(row.players_expected) ? row.players_expected : [],
+        players_joined: Array.isArray(row.players_joined) ? row.players_joined : [],
+        blocked_steam_ids: Array.isArray(row.blocked_steam_ids) ? row.blocked_steam_ids : [],
+      })
+      const attempts = await query(
+        `SELECT id, status, created_at FROM match_lobbies
+          WHERE match_id = $1 AND game_number = $2 AND id <> $3
+          ORDER BY id`,
+        [row.match_id, row.game_number, lobbyId]
+      )
+      // Newest 1000 events, returned oldest → newest.
+      const events = await query(
+        `SELECT * FROM (
+           SELECT e.*, COALESCE(a.display_name, a.name) AS actor_name, COALESCE(p.display_name, p.name) AS player_name
+             FROM lobby_events e
+             LEFT JOIN players a ON a.id = e.actor_id
+             LEFT JOIN players p ON p.id = e.player_id
+            WHERE e.lobby_id = $1
+            ORDER BY e.id DESC
+            LIMIT 1000
+         ) x ORDER BY id`,
+        [lobbyId]
+      )
+      const body = { lobby, attempts, events: events.map(lobbyEventRow), goConnected: botPool.isGoConnected() }
+      if (req.query.botLogs === '1' || req.query.botLogs === 'true') {
+        body.botLogs = await query(
+          'SELECT id, bot_id, level, message, created_at FROM bot_logs WHERE lobby_id = $1 ORDER BY id',
+          [lobbyId]
+        )
+      }
+      res.json(body)
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  router.post('/api/admin/lobbies/:lobbyId/kick', async (req, res) => {
+    try {
+      const admin = await requirePermission(req, res, 'manage_bots')
+      if (!admin) return
+      const lobbyId = parseLobbyId(req.params.lobbyId)
+      if (!lobbyId) return res.status(400).json({ error: 'Invalid lobby id' })
+      const { steamId, mode } = req.body || {}
+      await botPool.kickPlayer(lobbyId, steamId, mode, admin.id)
+      res.status(202).json({ ok: true })
+    } catch (e) {
+      res.status(e instanceof LobbyActionError ? e.status : 500).json({ error: e.message })
+    }
+  })
+
+  router.post('/api/admin/lobbies/:lobbyId/unblock', async (req, res) => {
+    try {
+      const admin = await requirePermission(req, res, 'manage_bots')
+      if (!admin) return
+      const lobbyId = parseLobbyId(req.params.lobbyId)
+      if (!lobbyId) return res.status(400).json({ error: 'Invalid lobby id' })
+      const blockedSteamIds = await botPool.unblockPlayer(lobbyId, req.body?.steamId, admin.id)
+      res.json({ ok: true, blockedSteamIds })
+    } catch (e) {
+      res.status(e instanceof LobbyActionError ? e.status : 500).json({ error: e.message })
+    }
+  })
+
   // ── Lobby Management (competition-scoped) ──
 
   router.post('/api/competitions/:compId/tournament/matches/:matchId/games/:gameNumber/lobby', async (req, res) => {
@@ -299,7 +508,7 @@ export default function createLobbyRouter(io) {
       if (!player) return res.status(401).json({ error: 'Not authenticated' })
 
       const lobby = await queryOne(
-        "SELECT * FROM match_lobbies WHERE match_id = $1 AND game_number = $2 AND competition_id = $3 AND status NOT IN ('cancelled') ORDER BY id DESC LIMIT 1",
+        "SELECT * FROM match_lobbies WHERE match_id = $1 AND game_number = $2 AND competition_id = $3 AND status NOT IN ('cancelled') AND archived_at IS NULL ORDER BY id DESC LIMIT 1",
         [matchId, gameNumber, compId]
       )
       if (!lobby) return res.json({ lobby: null })
@@ -312,6 +521,9 @@ export default function createLobbyRouter(io) {
           lobby.status = 'error'
           lobby.error_message = 'Bot disconnected from lobby'
           await execute("UPDATE match_lobbies SET status = 'error', error_message = 'Bot disconnected from lobby' WHERE id = $1", [lobby.id])
+          await botPool._recordLobbyEvent(lobby.id, 'error', {
+            botId: lobby.bot_id, data: { kind: 'bot_disconnected', message: 'Bot disconnected from lobby' },
+          })
         }
       }
       // Only match participants (and comp managers) may see the lobby password.
@@ -334,12 +546,12 @@ export default function createLobbyRouter(io) {
       if (!admin) return
 
       const lobby = await queryOne(
-        "SELECT * FROM match_lobbies WHERE match_id = $1 AND game_number = $2 AND competition_id = $3 AND status = 'waiting'",
+        "SELECT * FROM match_lobbies WHERE match_id = $1 AND game_number = $2 AND competition_id = $3 AND status = 'waiting' AND archived_at IS NULL",
         [matchId, gameNumber, compId]
       )
       if (!lobby) return res.status(404).json({ error: 'No active lobby found' })
 
-      await botPool.forceLaunch(lobby.id, { skipValidation: true })
+      await botPool.forceLaunch(lobby.id, { skipValidation: true, actorId: admin.id })
       res.json({ ok: true })
     } catch (e) {
       res.status(400).json({ error: e.message })
@@ -356,12 +568,12 @@ export default function createLobbyRouter(io) {
       if (!admin) return
 
       const lobby = await queryOne(
-        "SELECT * FROM match_lobbies WHERE match_id = $1 AND game_number = $2 AND competition_id = $3 AND status NOT IN ('completed', 'cancelled')",
+        "SELECT * FROM match_lobbies WHERE match_id = $1 AND game_number = $2 AND competition_id = $3 AND status NOT IN ('completed', 'cancelled') AND archived_at IS NULL",
         [matchId, gameNumber, compId]
       )
       if (!lobby) return res.status(404).json({ error: 'No active lobby found' })
 
-      await botPool.cancelLobby(lobby.id)
+      await botPool.cancelLobby(lobby.id, { actorId: admin.id })
       res.json({ ok: true })
     } catch (e) {
       res.status(400).json({ error: e.message })
@@ -382,16 +594,22 @@ export default function createLobbyRouter(io) {
       // with an orphaned live lobby. Scope to this competition so a manager of
       // one comp can't reset another comp's (or a queue) lobby.
       const activeLobbies = await query(
-        "SELECT id FROM match_lobbies WHERE match_id = $1 AND game_number = $2 AND competition_id = $3 AND status NOT IN ('completed', 'cancelled')",
+        "SELECT id FROM match_lobbies WHERE match_id = $1 AND game_number = $2 AND competition_id = $3 AND status NOT IN ('completed', 'cancelled') AND archived_at IS NULL",
         [matchId, gameNumber, compId]
       )
       for (const l of activeLobbies) {
         await botPool.cancelLobby(l.id).catch((e) => console.error('[Lobby reset] cancel failed:', e.message))
       }
 
-      // Clear all lobby rows for this game (scoped to the competition)
+      // Clear all lobby rows for this game (scoped to the competition). Rows
+      // are archived, not deleted, so the admin lobby history survives; a row
+      // whose cancel failed above is force-marked cancelled so nothing treats
+      // it as live.
       await execute(
-        'DELETE FROM match_lobbies WHERE match_id = $1 AND game_number = $2 AND competition_id = $3',
+        `UPDATE match_lobbies
+            SET archived_at = NOW(),
+                status = CASE WHEN status IN ('completed', 'cancelled', 'error') THEN status ELSE 'cancelled' END
+          WHERE match_id = $1 AND game_number = $2 AND competition_id = $3 AND archived_at IS NULL`,
         [matchId, gameNumber, compId]
       )
 

@@ -23,7 +23,93 @@ const GCOIN_QUEUE_LOSS = 50
 // Every lobby status in which a bot is (or may still be) sitting in the Dota
 // lobby. One list so a new status (e.g. 'cointoss') can't be forgotten in some
 // of the ~10 queries that need it.
-const LIVE_LOBBY_STATUSES_SQL = "('creating', 'waiting', 'launching', 'cointoss', 'active')"
+export const LIVE_LOBBY_STATUSES_SQL = "('creating', 'waiting', 'launching', 'cointoss', 'active')"
+
+// lobby_events older than this are pruned by the periodic zombie cleanup.
+const LOBBY_EVENT_RETENTION_SQL = "INTERVAL '90 days'"
+
+// Team labels the Go bot reports per lobby member (lobby_status.members).
+const MEMBER_TEAMS = new Set(['radiant', 'dire', 'unassigned', 'pool', 'spectator', 'other'])
+
+// Thrown by the admin lobby actions (kickPlayer / unblockPlayer); `status` is
+// the HTTP status the route should answer with.
+export class LobbyActionError extends Error {
+  constructor(status, message) {
+    super(message)
+    this.status = status
+  }
+}
+
+// Normalise a lobby_events row (joined with actor/player names) into the shape
+// served by GET /api/admin/lobbies/:lobbyId and the admin:lobbyEvent socket
+// event. id is BIGSERIAL, which pg hands back as a string.
+export function lobbyEventRow(r) {
+  return {
+    id: Number(r.id),
+    lobby_id: r.lobby_id,
+    bot_id: r.bot_id,
+    type: r.type,
+    steam_id: r.steam_id,
+    player_id: r.player_id,
+    player_name: r.player_name ?? null,
+    actor_id: r.actor_id,
+    actor_name: r.actor_name ?? null,
+    data: r.data || {},
+    created_at: r.created_at,
+  }
+}
+
+// Clean up the roster Go reports: string steam ids, known team labels, integer
+// slot (Radiant/Dire only) or null, no duplicates, and never the bot itself (Go already excludes
+// it; this is the Node-side double check).
+function normalizeMembers(members, botSteamId) {
+  const out = []
+  const seen = new Set()
+  for (const m of members) {
+    const steamId = String(m?.steamId ?? m?.steam_id ?? '')
+    if (!steamId || steamId === '0' || seen.has(steamId)) continue
+    if (botSteamId && steamId === String(botSteamId)) continue
+    seen.add(steamId)
+    const team = MEMBER_TEAMS.has(m.team) ? m.team : 'other'
+    // Go sends slot as a plain int (0 for everyone off a team) — it only
+    // means something on Radiant/Dire, so null it elsewhere to keep pool
+    // shuffles from showing up as moves.
+    const slot = m.slot === null || m.slot === undefined || m.slot === '' ? null : Number(m.slot)
+    out.push({
+      steamId,
+      name: String(m.name ?? ''),
+      team,
+      slot: (team === 'radiant' || team === 'dire') && Number.isInteger(slot) ? slot : null,
+    })
+  }
+  return out
+}
+
+// Roster diff keyed by steamId → [{type, member, data}] in the order
+// left, moved, joined.
+function diffMembers(prev, next) {
+  const before = new Map((Array.isArray(prev) ? prev : []).filter(m => m?.steamId).map(m => [String(m.steamId), m]))
+  const after = new Map(next.map(m => [m.steamId, m]))
+  const changes = []
+  for (const [sid, m] of before) {
+    if (!after.has(sid)) changes.push({ type: 'player_left', steamId: sid, data: { name: m.name ?? '', team: m.team ?? 'other' } })
+  }
+  for (const [sid, m] of after) {
+    const old = before.get(sid)
+    if (!old) continue
+    const fromSlot = old.slot ?? null
+    if (old.team !== m.team || fromSlot !== m.slot) {
+      changes.push({
+        type: 'player_moved', steamId: sid,
+        data: { name: m.name, fromTeam: old.team ?? 'other', fromSlot, toTeam: m.team, toSlot: m.slot },
+      })
+    }
+  }
+  for (const [sid, m] of after) {
+    if (!before.has(sid)) changes.push({ type: 'player_joined', steamId: sid, data: { name: m.name, team: m.team, slot: m.slot } })
+  }
+  return changes
+}
 
 class BotPool {
   constructor() {
@@ -124,6 +210,9 @@ class BotPool {
         case 'hello':
           console.log('Go service hello:', data?.version)
           await this._sendSync()
+          // A restarted Go service has forgotten every admin block — restore
+          // them for all lobbies it may still be sitting in.
+          await this._resendBlocklists()
           break
 
         case 'bot_status':
@@ -173,6 +262,10 @@ class BotPool {
 
         case 'match_details':
           this._onMatchDetails(data)
+          break
+
+        case 'kick_result':
+          await this._onKickResult(data)
           break
 
         default:
@@ -349,6 +442,7 @@ class BotPool {
               autoAssignTeams,
               players: lobby.players_expected || [],
               timeoutMinutes,
+              blockedSteamIds: Array.isArray(lobby.blocked_steam_ids) ? lobby.blocked_steam_ids : [],
             })
           }
         }
@@ -495,6 +589,132 @@ class BotPool {
     }
   }
 
+  // ── Admin lobby history (lobby_events) ──
+
+  // Append one lobby_events row and push it to bot admins. History must never
+  // break lobby handling, so this logs and swallows every failure (returns
+  // null). bot_id defaults to the lobby's current bot; player_id is resolved
+  // from steamId unless the caller already did (pass null for "not a user").
+  // Callers only invoke this after a write that actually changed something, so
+  // Go's at-least-once replays never duplicate history.
+  async _recordLobbyEvent(lobbyId, type, { botId, steamId = null, playerId, actorId = null, data = {} } = {}) {
+    try {
+      const row = await queryOne(
+        `WITH ins AS (
+           INSERT INTO lobby_events (lobby_id, bot_id, type, steam_id, player_id, actor_id, data)
+           VALUES ($1,
+                   COALESCE($2::int, (SELECT bot_id FROM match_lobbies WHERE id = $1)),
+                   $3, $4::text,
+                   CASE WHEN $8 THEN $5::int ELSE (SELECT id FROM players WHERE steam_id = $4::text LIMIT 1) END,
+                   $6, $7)
+           RETURNING *
+         )
+         SELECT ins.*, COALESCE(a.display_name, a.name) AS actor_name, COALESCE(p.display_name, p.name) AS player_name
+           FROM ins
+           LEFT JOIN players a ON a.id = ins.actor_id
+           LEFT JOIN players p ON p.id = ins.player_id`,
+        [lobbyId, botId ?? null, type, steamId, playerId ?? null, actorId, JSON.stringify(data || {}), playerId !== undefined]
+      )
+      const event = lobbyEventRow(row)
+      this.io?.to('perm:manage_bots').emit('admin:lobbyEvent', { lobbyId: Number(lobbyId), event })
+      return event
+    } catch (e) {
+      console.error(`[LobbyEvents] Failed to record ${type} for lobby ${lobbyId}:`, e.message)
+      return null
+    }
+  }
+
+  // History for one applied lobby_status: the status change (if the row's
+  // status really moved) and the roster diff (only when the bot sent members;
+  // an empty array is a real empty roster). `registered` maps the current
+  // members' steam ids to site users; players who left are resolved here.
+  async _recordLobbyStatusDiff(lobbyId, updated, members, registered = new Map()) {
+    if (updated.prev_status !== updated.status) {
+      await this._recordLobbyEvent(lobbyId, 'status_changed', {
+        botId: updated.bot_id, data: { from: updated.prev_status, to: updated.status },
+      })
+    }
+    if (!members) return
+    const changes = diffMembers(updated.prev_members, members)
+    if (changes.length === 0) return
+    const unknown = changes.map(c => c.steamId).filter(sid => !registered.has(sid))
+    if (unknown.length > 0) {
+      try {
+        const rows = await query(
+          'SELECT id, steam_id, COALESCE(display_name, name) AS name FROM players WHERE steam_id = ANY($1::text[])',
+          [unknown]
+        )
+        registered = new Map(registered)
+        for (const r of rows) registered.set(String(r.steam_id), { id: r.id, name: r.name })
+      } catch {}
+    }
+    for (const c of changes) {
+      await this._recordLobbyEvent(lobbyId, c.type, {
+        botId: updated.bot_id, steamId: c.steamId, playerId: registered.get(c.steamId)?.id ?? null, data: c.data,
+      })
+    }
+  }
+
+  // Go's verdict on a kick_player (manual) or a block enforcement (auto).
+  // kick_result carries no id, so replays are filtered here: a manual result
+  // is only recorded while an admin_kick/admin_unassign for that player is
+  // still unanswered; an auto result is dropped if the same one landed in the
+  // last 15 s (the bot re-kicks a blocked player at most every 5 s, and each
+  // success needs the player to rejoin first).
+  async _onKickResult(data) {
+    const lobbyId = Number(data?.lobbyId)
+    const steamId = String(data?.steamId || '')
+    if (!lobbyId || !steamId) return
+    const lobby = await queryOne('SELECT id, bot_id FROM match_lobbies WHERE id = $1', [lobbyId])
+    if (!lobby) return
+    const auto = !!data.auto
+    const ok = !!data.ok
+    const mode = data.mode === 'unassign' ? 'unassign' : 'kick'
+    if (auto) {
+      const dup = await queryOne(
+        `SELECT 1 FROM lobby_events
+          WHERE lobby_id = $1 AND steam_id = $2 AND type = 'kick_result'
+            AND data->>'auto' = 'true' AND data->>'ok' = $3
+            AND created_at > NOW() - INTERVAL '15 seconds'
+          LIMIT 1`,
+        [lobbyId, steamId, String(ok)]
+      )
+      if (dup) return
+    } else {
+      const pending = await queryOne(
+        `SELECT COUNT(*) FILTER (WHERE type IN ('admin_kick', 'admin_unassign'))::int AS requested,
+                COUNT(*) FILTER (WHERE type = 'kick_result' AND data->>'auto' IS DISTINCT FROM 'true')::int AS answered
+           FROM lobby_events
+          WHERE lobby_id = $1 AND steam_id = $2`,
+        [lobbyId, steamId]
+      )
+      if (!pending || pending.requested <= pending.answered) return
+    }
+    await this._recordLobbyEvent(lobbyId, 'kick_result', {
+      botId: lobby.bot_id, steamId, data: { mode, ok, reason: String(data.reason || ''), auto },
+    })
+  }
+
+  _sendBlocklist(lobbyId, steamIds) {
+    this._sendToGo('set_lobby_blocklist', { lobbyId: String(lobbyId), steamIds: Array.isArray(steamIds) ? steamIds : [] })
+  }
+
+  // On Go (re)connect: restore every live lobby's admin block list. Go only
+  // keeps blocks in memory, so a restart would otherwise let kicked players
+  // straight back in.
+  async _resendBlocklists() {
+    const rows = await query(
+      `SELECT id, blocked_steam_ids FROM match_lobbies
+        WHERE status IN ${LIVE_LOBBY_STATUSES_SQL}
+          AND jsonb_typeof(blocked_steam_ids) = 'array' AND jsonb_array_length(blocked_steam_ids) > 0`
+    )
+    for (const r of rows) {
+      try { this._sendBlocklist(r.id, r.blocked_steam_ids) } catch (e) {
+        console.error(`[Lobby ${r.id}] set_lobby_blocklist resend failed:`, e.message)
+      }
+    }
+  }
+
   // Queue lobbies launch themselves once everyone is seated. lobby_status and
   // lobby_team_ids both trigger the check on every GC tick, so de-dupe here
   // (Go also ignores repeats within 15s). Validation failures come back as an
@@ -504,7 +724,7 @@ class BotPool {
     if (Date.now() - last < 30_000) return
     this._autoLaunchAt.set(lobbyId, Date.now())
     try {
-      await this.forceLaunch(lobbyId, { skipValidation: false })
+      await this.forceLaunch(lobbyId, { skipValidation: false, auto: true })
     } catch (e) {
       console.error(`[Queue] Auto force-launch failed for lobby ${lobbyId}:`, e.message)
     }
@@ -525,14 +745,45 @@ class BotPool {
     // the bot-side fix that makes per-cache-update sends report the real
     // state.) players_joined and updated_at still refresh so the roster stays
     // in sync.
-    await execute(
-      `UPDATE match_lobbies
-          SET status = CASE WHEN status = 'active' AND $1 = 'waiting' AND dota_match_id IS NOT NULL THEN status ELSE $1 END,
+    //
+    // `members` (full roster, admin lobby history) is only sent by newer bot
+    // builds — absent means "unknown", so the stored roster is kept and no
+    // roster diff is recorded. The self-join on `prev` returns the pre-update
+    // status/members so the history diff sees exactly what this write changed.
+    let members = null
+    let registered = new Map() // steamId -> { id, name } for members who are site users
+    if (Array.isArray(data.members)) {
+      const botRow = await queryOne(
+        'SELECT b.steam_id FROM match_lobbies ml JOIN lobby_bots b ON b.id = ml.bot_id WHERE ml.id = $1',
+        [lobbyId]
+      )
+      members = normalizeMembers(data.members, botRow?.steam_id)
+      // The GC lobby member carries no persona name, so Go always sends "".
+      // Resolve it from our players table (one batch per status); unregistered
+      // players fall back to their steam id.
+      if (members.length > 0) {
+        try {
+          const rows = await query(
+            'SELECT id, steam_id, COALESCE(display_name, name) AS name FROM players WHERE steam_id = ANY($1::text[])',
+            [members.map(m => m.steamId)]
+          )
+          registered = new Map(rows.map(r => [String(r.steam_id), { id: r.id, name: r.name }]))
+        } catch {}
+      }
+      for (const m of members) m.name = registered.get(m.steamId)?.name || m.name || m.steamId
+    }
+    const updated = await queryOne(
+      `UPDATE match_lobbies ml
+          SET status = CASE WHEN ml.status = 'active' AND $1 = 'waiting' AND ml.dota_match_id IS NOT NULL THEN ml.status ELSE $1 END,
               players_joined = $2,
+              members = COALESCE($4::jsonb, ml.members),
               updated_at = NOW()
-       WHERE id = $3 AND status NOT IN ('completed', 'error', 'cancelled')`,
-      [data.status, JSON.stringify(data.playersJoined || []), lobbyId]
+         FROM match_lobbies prev
+        WHERE ml.id = $3 AND prev.id = ml.id AND ml.status NOT IN ('completed', 'error', 'cancelled')
+       RETURNING ml.bot_id, ml.status, prev.status AS prev_status, prev.members AS prev_members`,
+      [data.status, JSON.stringify(data.playersJoined || []), lobbyId, members ? JSON.stringify(members) : null]
     )
+    if (updated) await this._recordLobbyStatusDiff(lobbyId, updated, members, registered)
     const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyId])
     if (lobby && this.io) {
       (await this._lobbyRooms(lobby)).emit('lobby:statusUpdate', {
@@ -591,6 +842,7 @@ class BotPool {
     )
     if (rowCount === 0) return
     console.log(`[Lobby] Match id assigned: lobbyId=${lobbyId}, matchId=${dotaMatchId}`)
+    await this._recordLobbyEvent(lobbyId, 'match_id_assigned', { data: { matchId: dotaMatchId } })
 
     const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyId])
     if (!lobby) return
@@ -651,6 +903,9 @@ class BotPool {
     if (rowCount === 0) return
     const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyId])
     if (!lobby) return
+    await this._recordLobbyEvent(lobbyId, 'draft_started', {
+      botId: lobby.bot_id, data: { matchId: lobby.dota_match_id, confirmed: !!data.confirmed },
+    })
     // Idempotent — also covers a Node restart mid-loading: the replayed
     // game_started returns early on the IS DISTINCT FROM guard (same match
     // id), so this is the only place polling gets (re)started for it, since
@@ -694,14 +949,22 @@ class BotPool {
     // current dota_match_id matches the aborted one (or has none) — a late
     // abort for a match id we've already moved past (relaunched, or a
     // completed row) must not clobber the newer state.
+    // The self-join on `prev` exposes the pre-update row so a replayed abort
+    // (row already rolled back) isn't recorded in the lobby history twice.
     const lobby = await queryOne(
-      `UPDATE match_lobbies SET dota_match_id = NULL, status = 'waiting', updated_at = NOW()
-        WHERE id = $1 AND status NOT IN ('completed', 'cancelled', 'error')
-          AND (dota_match_id = $2 OR dota_match_id IS NULL)
-        RETURNING *`,
+      `UPDATE match_lobbies ml SET dota_match_id = NULL, status = 'waiting', updated_at = NOW()
+         FROM match_lobbies prev
+        WHERE ml.id = $1 AND prev.id = ml.id AND ml.status NOT IN ('completed', 'cancelled', 'error')
+          AND (ml.dota_match_id = $2 OR ml.dota_match_id IS NULL)
+        RETURNING ml.*, prev.status AS prev_status, prev.dota_match_id AS prev_dota_match_id`,
       [lobbyId, dotaMatchId]
     )
     if (!lobby) return
+    if (lobby.prev_dota_match_id || lobby.prev_status !== 'waiting') {
+      await this._recordLobbyEvent(lobbyId, 'game_aborted', {
+        botId: lobby.bot_id, data: { matchId: dotaMatchId || lobby.prev_dota_match_id || null },
+      })
+    }
     // Give players ~30s back in the lobby before a queue auto-relaunch (Go
     // likewise never relaunches off the abort update itself).
     this._autoLaunchAt.set(lobbyId, Date.now())
@@ -844,6 +1107,7 @@ class BotPool {
           "UPDATE match_lobbies SET status = 'waiting', updated_at = NOW() WHERE id = $1",
           [lobbyId]
         )
+        await this._recordLobbyEvent(lobbyId, 'error', { botId: lobby.bot_id, data: { kind: data.kind, message: data.error ?? null } })
         if (this.io) {
           (await this._lobbyRooms(lobby)).emit('lobby:statusUpdate', {
             matchId: lobby.match_id,
@@ -875,6 +1139,7 @@ class BotPool {
         "UPDATE match_lobbies SET status = 'waiting', updated_at = NOW() WHERE id = $1",
         [lobbyId]
       )
+      await this._recordLobbyEvent(lobbyId, 'error', { botId: lobby.bot_id, data: { kind: data.kind || 'launch_rejected', message: data.error ?? null } })
       if (this.io) {
         (await this._lobbyRooms(lobby)).emit('lobby:statusUpdate', {
           matchId: lobby.match_id,
@@ -891,6 +1156,7 @@ class BotPool {
       "UPDATE match_lobbies SET status = 'error', error_message = $1, updated_at = NOW() WHERE id = $2",
       [data.error, lobbyId]
     )
+    await this._recordLobbyEvent(lobbyId, 'error', { botId: lobby.bot_id, data: { kind: data.kind || null, message: data.error ?? null } })
 
     // Go tears the Dota lobby down and reports the bot 'available' itself on
     // every teardown; reconcile now instead of racing that report with our
@@ -1109,6 +1375,9 @@ class BotPool {
             "UPDATE match_lobbies SET status = 'error', error_message = 'Timed out in creating (>2min, likely GC loss)', updated_at = NOW() WHERE id = $1",
             [lobby.id]
           )
+          await this._recordLobbyEvent(lobby.id, 'error', {
+            botId: lobby.bot_id, data: { kind: 'creating_timeout', message: 'Timed out in creating (>2min, likely GC loss)' },
+          })
           this._syncBotStatusesFromGo().catch(() => {})
           if (this.io) {
             (await this._lobbyRooms(lobby)).emit('lobby:statusUpdate', {
@@ -1142,6 +1411,12 @@ class BotPool {
   // completed/cancelled. Tell Go to tear the lobby down; Go reports the bot
   // available again once it's actually out of the Dota lobby.
   async _cleanupZombieLobbies() {
+    // Piggy-backed retention for the admin lobby history.
+    try {
+      await execute(`DELETE FROM lobby_events WHERE created_at < NOW() - ${LOBBY_EVENT_RETENTION_SQL}`)
+    } catch (e) {
+      console.error('[LobbyEvents] Retention cleanup error:', e.message)
+    }
     try {
       const zombies = await query(`
         SELECT ml.id, ml.bot_id, ml.match_id, ml.game_name
@@ -1172,6 +1447,7 @@ class BotPool {
           "UPDATE match_lobbies SET status = 'cancelled', error_message = 'Auto-cleaned: match already finished', updated_at = NOW() WHERE id = $1",
           [z.id]
         )
+        await this._recordLobbyEvent(z.id, 'cancelled', { botId: z.bot_id, data: { auto: true } })
         if (z.bot_id) {
           console.log(`[Lobby] Cancelled zombie lobby ${z.id} (${z.game_name}), bot ${z.bot_id}`)
         }
@@ -1833,6 +2109,7 @@ class BotPool {
     return await query(`
       SELECT b.id, b.username, b.display_name, b.steam_id, b.status, b.error_message, b.auto_connect, b.last_used_at, b.created_at,
         sh.created_at AS status_since,
+        ml.id AS active_lobby_id,
         ml.match_id AS active_match_id,
         ml.competition_id AS active_competition_id,
         ml.game_name AS active_game_name,
@@ -1848,7 +2125,7 @@ class BotPool {
          ORDER BY id DESC LIMIT 1
       ) sh ON TRUE
       LEFT JOIN LATERAL (
-        SELECT match_id, competition_id, game_name, status
+        SELECT id, match_id, competition_id, game_name, status
           FROM match_lobbies
          WHERE bot_id = b.id
            AND status IN ${LIVE_LOBBY_STATUSES_SQL}
@@ -2133,6 +2410,7 @@ class BotPool {
       expectedDireTeamId: match.team2_dota_id || 0,
       players: playersExpected.map(p => ({ steamId: p.steam_id || p.steamId, name: p.name, team: p.team })),
       timeoutMinutes: Number(compSettings.lobbyTimeoutMinutes) || 10,
+      blockedSteamIds: Array.isArray(lobby.blocked_steam_ids) ? lobby.blocked_steam_ids : [],
     }
   }
 
@@ -2144,9 +2422,10 @@ class BotPool {
     )
     if (activeLobby) throw new Error('A lobby already exists for this game')
 
-    // Clean up old finished lobbies so we can reuse the unique constraint
+    // Archive old finished lobbies (kept for admin lobby history; every
+    // match-keyed read skips archived rows, as if they were deleted)
     await execute(
-      "DELETE FROM match_lobbies WHERE match_id = $1 AND game_number = $2 AND status IN ('completed', 'cancelled', 'error')",
+      "UPDATE match_lobbies SET archived_at = NOW() WHERE match_id = $1 AND game_number = $2 AND status IN ('completed', 'cancelled', 'error') AND archived_at IS NULL",
       [matchId, gameNumber]
     )
 
@@ -2245,6 +2524,7 @@ class BotPool {
     })
     this._sendToGo('create_lobby', payload)
     lobbyHandedOff = true
+    await this._recordLobbyEvent(lobby.id, 'created', { botId: lobby.bot_id, data: { gameName: lobby.game_name } })
 
     return { ...lobby, players_expected: playersExpected }
     } catch (e) {
@@ -2260,7 +2540,9 @@ class BotPool {
     }
   }
 
-  async forceLaunch(lobbyDbId, { skipValidation = false } = {}) {
+  // `auto` marks the queue auto-launch; `actorId` the admin who pressed launch
+  // (both only feed the admin lobby history).
+  async forceLaunch(lobbyDbId, { skipValidation = false, auto = false, actorId = null } = {}) {
     // Only a lobby still waiting (or re-launching) can launch — never revive a
     // cancelled/completed/errored row or knock an active one back.
     const lobby = await queryOne(
@@ -2273,6 +2555,7 @@ class BotPool {
       console.warn(`[Lobby ${lobbyDbId}] force_launch skipped — lobby is not waiting/launching`)
       return
     }
+    await this._recordLobbyEvent(lobby.id, 'launch_requested', { botId: lobby.bot_id, actorId, data: { auto: !!auto } })
     if (this.io) {
       (await this._lobbyRooms(lobby)).emit('lobby:statusUpdate', {
         matchId: lobby.match_id,
@@ -2283,10 +2566,14 @@ class BotPool {
     this._sendToGo('force_launch', { lobbyId: String(lobbyDbId), skipValidation })
   }
 
-  async cancelLobby(lobbyDbId) {
+  async cancelLobby(lobbyDbId, { actorId = null } = {}) {
     const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyDbId])
     if (!lobby) throw new Error('Lobby not found')
-    await execute("UPDATE match_lobbies SET status = 'cancelled', updated_at = NOW() WHERE id = $1", [lobbyDbId])
+    const { rowCount } = await execute(
+      "UPDATE match_lobbies SET status = 'cancelled', updated_at = NOW() WHERE id = $1 AND status <> 'cancelled'",
+      [lobbyDbId]
+    )
+    if (rowCount > 0) await this._recordLobbyEvent(lobby.id, 'cancelled', { botId: lobby.bot_id, actorId, data: {} })
     // Go tears the Dota lobby down and reports the bot 'available' itself. If
     // Go is offline, its status is reconciled on reconnect (ResendAllBotStatus).
     try {
@@ -2294,6 +2581,86 @@ class BotPool {
     } catch (e) {
       console.warn(`[Lobby ${lobbyDbId}] cancel_lobby not delivered (Go unreachable): ${e.message} — the Dota lobby may linger until Go's own timeout`)
     }
+  }
+
+  // Admin action on a live pre-game lobby. mode 'unassign' moves the player
+  // out of their Radiant/Dire slot (they stay in the lobby); mode 'kick'
+  // removes them AND blocks them from rejoining this lobby (the bot re-kicks
+  // on sight until unblocked or the lobby ends). The outcome arrives later as
+  // a kick_result event. Throws LobbyActionError (404/409/400).
+  async kickPlayer(lobbyId, steamId, mode, actorId) {
+    const sid = String(steamId || '').trim()
+    if (mode !== 'kick' && mode !== 'unassign') throw new LobbyActionError(400, "mode must be 'kick' or 'unassign'")
+    if (!/^\d+$/.test(sid)) throw new LobbyActionError(400, 'Invalid steamId')
+    const lobby = await queryOne(
+      `SELECT ml.id, ml.status, ml.bot_id, ml.members, b.steam_id AS bot_steam_id
+         FROM match_lobbies ml LEFT JOIN lobby_bots b ON b.id = ml.bot_id
+        WHERE ml.id = $1`,
+      [lobbyId]
+    )
+    if (!lobby) throw new LobbyActionError(404, 'Lobby not found')
+    if (lobby.status !== 'waiting') throw new LobbyActionError(409, `Lobby is ${lobby.status} — players can only be moved while it is waiting`)
+    if (!this.isGoConnected()) throw new LobbyActionError(409, 'Lobby bot service not connected')
+    if (lobby.bot_steam_id && sid === String(lobby.bot_steam_id)) throw new LobbyActionError(400, 'Cannot target the lobby bot')
+    const member = (Array.isArray(lobby.members) ? lobby.members : []).find(m => String(m?.steamId) === sid)
+    if (!member) throw new LobbyActionError(400, 'Player is not in the lobby')
+    if (mode === 'unassign' && member.team !== 'radiant' && member.team !== 'dire') {
+      throw new LobbyActionError(400, 'Player is not in a team slot')
+    }
+
+    let blocked = null
+    if (mode === 'kick') {
+      // Atomic, duplicate-free append (a concurrent kick of the same player
+      // can't add it twice).
+      const row = await queryOne(
+        `UPDATE match_lobbies SET blocked_steam_ids = blocked_steam_ids || jsonb_build_array($2::text)
+          WHERE id = $1 AND NOT (blocked_steam_ids ? $2::text)
+          RETURNING blocked_steam_ids`,
+        [lobby.id, sid]
+      )
+      blocked = row?.blocked_steam_ids
+        ?? (await queryOne('SELECT blocked_steam_ids FROM match_lobbies WHERE id = $1', [lobby.id]))?.blocked_steam_ids
+        ?? []
+    }
+    try {
+      this._sendToGo('kick_player', { lobbyId: String(lobby.id), steamId: sid, mode })
+      if (blocked) this._sendBlocklist(lobby.id, blocked)
+    } catch (e) {
+      // The block (if any) stays stored — it is resent on the next Go hello.
+      throw new LobbyActionError(409, e.message)
+    }
+    await this._recordLobbyEvent(lobby.id, mode === 'kick' ? 'admin_kick' : 'admin_unassign', {
+      botId: lobby.bot_id, steamId: sid, actorId: actorId ?? null, data: {},
+    })
+  }
+
+  // Lift an admin block. Allowed in any live status; unblocking someone who
+  // isn't blocked is a no-op. Returns the remaining block list.
+  async unblockPlayer(lobbyId, steamId, actorId) {
+    const sid = String(steamId || '').trim()
+    if (!sid) throw new LobbyActionError(400, 'steamId required')
+    const lobby = await queryOne(
+      `SELECT id, bot_id, blocked_steam_ids, status IN ${LIVE_LOBBY_STATUSES_SQL} AS live FROM match_lobbies WHERE id = $1`,
+      [lobbyId]
+    )
+    if (!lobby) throw new LobbyActionError(404, 'Lobby not found')
+    if (!lobby.live) throw new LobbyActionError(409, 'Lobby has ended — its block list no longer applies')
+    const row = await queryOne(
+      `UPDATE match_lobbies SET blocked_steam_ids = blocked_steam_ids - $2::text
+        WHERE id = $1 AND blocked_steam_ids ? $2::text
+        RETURNING blocked_steam_ids`,
+      [lobby.id, sid]
+    )
+    if (!row) return Array.isArray(lobby.blocked_steam_ids) ? lobby.blocked_steam_ids : []
+    try {
+      this._sendBlocklist(lobby.id, row.blocked_steam_ids)
+    } catch (e) {
+      console.warn(`[Lobby ${lobby.id}] set_lobby_blocklist not delivered (Go unreachable): ${e.message} — resent on reconnect`)
+    }
+    await this._recordLobbyEvent(lobby.id, 'admin_unblock', {
+      botId: lobby.bot_id, steamId: sid, actorId: actorId ?? null, data: {},
+    })
+    return row.blocked_steam_ids
   }
   // Build the create_lobby payload for the Go bot service. Shared by the
   // initial createQueueLobby call and the retry path.
@@ -2322,6 +2689,7 @@ class BotPool {
       expectedDireTeamId: 0,
       players: playersExpected.map(p => ({ steamId: p.steam_id || p.steamId, name: p.name, team: p.team })),
       timeoutMinutes: pool.lobby_timeout_minutes || 10,
+      blockedSteamIds: Array.isArray(lobby.blocked_steam_ids) ? lobby.blocked_steam_ids : [],
     }
   }
 
@@ -2334,7 +2702,7 @@ class BotPool {
     if (activeLobby) throw new Error('A lobby already exists for this game')
 
     await execute(
-      "DELETE FROM match_lobbies WHERE match_id = $1 AND game_number = $2 AND status IN ('completed', 'cancelled', 'error')",
+      "UPDATE match_lobbies SET archived_at = NOW() WHERE match_id = $1 AND game_number = $2 AND status IN ('completed', 'cancelled', 'error') AND archived_at IS NULL",
       [matchId, gameNumber]
     )
 
@@ -2367,6 +2735,7 @@ class BotPool {
 
     this._sendToGo('create_lobby', this._buildGoLobbyPayload(lobby, pool, team1Name, team2Name, playersExpected, opts))
     lobbyHandedOff = true
+    await this._recordLobbyEvent(lobby.id, 'created', { botId: lobby.bot_id, data: { gameName: lobby.game_name } })
     return lobby
     } catch (e) {
       if (!lobbyHandedOff) {
@@ -2399,7 +2768,7 @@ class BotPool {
     }
 
     const latest = await queryOne(
-      "SELECT * FROM match_lobbies WHERE match_id = $1 AND game_number = 1 ORDER BY id DESC LIMIT 1",
+      "SELECT * FROM match_lobbies WHERE match_id = $1 AND game_number = 1 AND archived_at IS NULL ORDER BY id DESC LIMIT 1",
       [matchId]
     )
     if (!latest) throw new Error('No lobby found for this match')
@@ -2413,6 +2782,7 @@ class BotPool {
         "UPDATE match_lobbies SET status = 'error', error_message = 'Admin retry requested', updated_at = NOW() WHERE id = $1",
         [latest.id]
       )
+      await this._recordLobbyEvent(latest.id, 'error', { botId: latest.bot_id, data: { kind: 'admin_retry', message: 'Admin retry requested' } })
     }
 
     // Reload with updated status/error before delegating
@@ -2432,7 +2802,7 @@ class BotPool {
     const force = !!opts.force
 
     const countRow = await queryOne(
-      "SELECT COUNT(*)::int AS n FROM match_lobbies WHERE match_id = $1 AND game_number = $2 AND status = 'error'",
+      "SELECT COUNT(*)::int AS n FROM match_lobbies WHERE match_id = $1 AND game_number = $2 AND status = 'error' AND archived_at IS NULL",
       [erroredLobby.match_id, erroredLobby.game_number]
     )
     const prevErrors = countRow?.n || 0
@@ -2486,12 +2856,14 @@ class BotPool {
 
     let newLobby = null
     try {
+      // blocked_steam_ids carries over: an admin kick holds across the retry.
       newLobby = await queryOne(`
-        INSERT INTO match_lobbies (match_id, game_number, competition_id, bot_id, status, server_region, game_name, password, players_expected)
-        VALUES ($1, $2, NULL, $3, 'creating', $4, $5, $6, $7) RETURNING *
+        INSERT INTO match_lobbies (match_id, game_number, competition_id, bot_id, status, server_region, game_name, password, players_expected, blocked_steam_ids)
+        VALUES ($1, $2, NULL, $3, 'creating', $4, $5, $6, $7, $8) RETURNING *
       `, [
         erroredLobby.match_id, erroredLobby.game_number, nextBotId,
         (pool.lobby_server_region ?? 3), gameName, password, JSON.stringify(playersExpected),
+        JSON.stringify(Array.isArray(erroredLobby.blocked_steam_ids) ? erroredLobby.blocked_steam_ids : []),
       ])
 
       this._sendToGo('create_lobby', this._buildGoLobbyPayload(newLobby, pool, team1Name, team2Name, playersExpected, retryOpts))
@@ -2504,6 +2876,7 @@ class BotPool {
     }
 
     console.log(`[Queue] Retrying lobby for match ${erroredLobby.match_id} on bot ${nextBotId} (attempt ${prevErrors + 1}/${MAX_ATTEMPTS})`)
+    await this._recordLobbyEvent(newLobby.id, 'created', { botId: nextBotId, data: { gameName, attempt: prevErrors + 1 } })
 
     if (this.io) {
       (await this._lobbyRooms(newLobby)).emit('queue:lobbyRetrying', {
@@ -2541,7 +2914,7 @@ class BotPool {
     }
 
     const countRow = await queryOne(
-      "SELECT COUNT(*)::int AS n FROM match_lobbies WHERE match_id = $1 AND game_number = $2 AND status = 'error'",
+      "SELECT COUNT(*)::int AS n FROM match_lobbies WHERE match_id = $1 AND game_number = $2 AND status = 'error' AND archived_at IS NULL",
       [erroredLobby.match_id, erroredLobby.game_number]
     )
     const prevErrors = countRow?.n || 0
@@ -2587,12 +2960,14 @@ class BotPool {
 
     let newLobby = null
     try {
+      // blocked_steam_ids carries over: an admin kick holds across the retry.
       newLobby = await queryOne(`
-        INSERT INTO match_lobbies (match_id, game_number, competition_id, bot_id, status, server_region, game_name, password, players_expected)
-        VALUES ($1, $2, $3, $4, 'creating', $5, $6, $7, $8) RETURNING *
+        INSERT INTO match_lobbies (match_id, game_number, competition_id, bot_id, status, server_region, game_name, password, players_expected, blocked_steam_ids)
+        VALUES ($1, $2, $3, $4, 'creating', $5, $6, $7, $8, $9) RETURNING *
       `, [
         erroredLobby.match_id, erroredLobby.game_number, erroredLobby.competition_id, nextBotId,
         erroredLobby.server_region, gameName, password, JSON.stringify(playersExpected),
+        JSON.stringify(Array.isArray(erroredLobby.blocked_steam_ids) ? erroredLobby.blocked_steam_ids : []),
       ])
 
       this._sendToGo('create_lobby', this._buildCompLobbyPayload(newLobby, match, compSettings, playersExpected))
@@ -2605,6 +2980,7 @@ class BotPool {
     }
 
     console.log(`[Comp] Retrying lobby for match ${erroredLobby.match_id} on bot ${nextBotId} (attempt ${prevErrors + 1}/${MAX_ATTEMPTS})`)
+    await this._recordLobbyEvent(newLobby.id, 'created', { botId: nextBotId, data: { gameName, attempt: prevErrors + 1 } })
 
     if (this.io) {
       (await this._lobbyRooms(newLobby)).emit('lobby:statusUpdate', {

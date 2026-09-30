@@ -1505,6 +1505,37 @@
         }
       }
     },
+    "admin:lobbyEvent": {
+      "subscribe": {
+        "summary": "A new entry in a bot-run lobby's history timeline (PRIVATE — sent only to sockets in the `perm:manage_bots` room). Emitted for every lobby_events row as it is recorded (created, status changes, roster joins/moves/leaves, launch, match id, aborts, draft start, errors, cancels, admin kick/unassign/unblock, kick results). `event` has the same shape as the rows in GET /api/admin/lobbies/{lobbyId} `events` (see the AdminLobbyEvent schema in openapi.json). Clients showing that lobby append it and refetch the detail for the roster/status.",
+        "message": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "lobbyId": { "type": "integer", "description": "match_lobbies id" },
+              "event": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "integer" },
+                  "lobby_id": { "type": "integer" },
+                  "bot_id": { "type": "integer", "nullable": true },
+                  "type": { "type": "string", "enum": ["created", "status_changed", "player_joined", "player_moved", "player_left", "launch_requested", "match_id_assigned", "game_aborted", "draft_started", "error", "cancelled", "admin_unassign", "admin_kick", "admin_unblock", "kick_result"] },
+                  "steam_id": { "type": "string", "nullable": true },
+                  "player_id": { "type": "integer", "nullable": true },
+                  "player_name": { "type": "string", "nullable": true },
+                  "actor_id": { "type": "integer", "nullable": true },
+                  "actor_name": { "type": "string", "nullable": true },
+                  "data": { "type": "object", "description": "Type-specific payload, e.g. kick_result {mode, ok, reason, auto}, status_changed {from, to}" },
+                  "created_at": { "type": "string", "format": "date-time" }
+                },
+                "required": ["id", "lobby_id", "type", "data", "created_at"]
+              }
+            },
+            "required": ["lobbyId", "event"]
+          }
+        }
+      }
+    },
     "mmrVerification:new": {
       "subscribe": {
         "summary": "A user submitted a new MMR verification (PRIVATE — sent only to sockets in the `perm:manage_mmr_verifications` room).",

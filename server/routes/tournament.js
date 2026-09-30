@@ -66,7 +66,7 @@ export default function createTournamentRouter(io) {
     try {
       await execute(
         `UPDATE match_lobbies SET server_steam_id = $1
-          WHERE id = (SELECT id FROM match_lobbies WHERE match_id = $2 ORDER BY id DESC LIMIT 1)`,
+          WHERE id = (SELECT id FROM match_lobbies WHERE match_id = $2 AND archived_at IS NULL ORDER BY id DESC LIMIT 1)`,
         [sid, matchId]
       )
       const injected = updateLivePollerServerSteamId(matchId, sid)
@@ -116,7 +116,7 @@ export default function createTournamentRouter(io) {
     const lobby = await queryOne(
       `SELECT id, status, dota_match_id, server_steam_id, created_at, updated_at
          FROM match_lobbies
-        WHERE match_id = $1
+        WHERE match_id = $1 AND archived_at IS NULL
         ORDER BY id DESC
         LIMIT 1`,
       [matchId]
@@ -880,7 +880,7 @@ export default function createTournamentRouter(io) {
       // Block if the game already started (has dota_match_id)
       if (gameId) {
         const lobby = await queryOne(
-          "SELECT dota_match_id FROM match_lobbies WHERE match_id = $1 AND game_number = (SELECT game_number FROM match_games WHERE id = $2) AND dota_match_id IS NOT NULL",
+          "SELECT dota_match_id FROM match_lobbies WHERE match_id = $1 AND game_number = (SELECT game_number FROM match_games WHERE id = $2) AND dota_match_id IS NOT NULL AND archived_at IS NULL",
           [matchId, gameId]
         )
         if (lobby) return res.status(400).json({ error: 'Cannot change standins for a game that has already started' })
@@ -926,7 +926,7 @@ export default function createTournamentRouter(io) {
     // Block if the game already started (has dota_match_id)
     if (standinRow.match_game_id) {
       const lobby = await queryOne(
-        "SELECT dota_match_id FROM match_lobbies WHERE match_id = $1 AND game_number = (SELECT game_number FROM match_games WHERE id = $2) AND dota_match_id IS NOT NULL",
+        "SELECT dota_match_id FROM match_lobbies WHERE match_id = $1 AND game_number = (SELECT game_number FROM match_games WHERE id = $2) AND dota_match_id IS NOT NULL AND archived_at IS NULL",
         [matchId, standinRow.match_game_id]
       )
       if (lobby) return res.status(400).json({ error: 'Cannot change standins for a game that has already started' })

@@ -618,7 +618,7 @@ export default function createQueueRouter(io) {
           qp.name AS pool_name, qp.team_size AS pool_team_size,
           ml.game_name AS lobby_name, ml.password AS lobby_password, ml.status AS lobby_status,
           ml.error_message AS lobby_error, ml.bot_id AS lobby_bot_id,
-          (SELECT COUNT(*)::int FROM match_lobbies WHERE match_id = qm.match_id AND status = 'error') AS lobby_error_count
+          (SELECT COUNT(*)::int FROM match_lobbies WHERE match_id = qm.match_id AND status = 'error' AND archived_at IS NULL) AS lobby_error_count
         FROM queue_matches qm
         LEFT JOIN players p1 ON p1.id = qm.captain1_player_id
         LEFT JOIN players p2 ON p2.id = qm.captain2_player_id
@@ -626,7 +626,7 @@ export default function createQueueRouter(io) {
         LEFT JOIN LATERAL (
           SELECT game_name, password, status, error_message, bot_id
             FROM match_lobbies
-           WHERE match_id = qm.match_id AND game_number = 1
+           WHERE match_id = qm.match_id AND game_number = 1 AND archived_at IS NULL
            ORDER BY id DESC LIMIT 1
         ) ml ON TRUE
         WHERE qm.status IN ('picking', 'lobby_creating', 'live')
@@ -822,7 +822,7 @@ export default function createQueueRouter(io) {
       }
       if (qmRow?.match_id) {
         const latestLobby = await queryOne(
-          'SELECT status FROM match_lobbies WHERE match_id = $1 ORDER BY id DESC LIMIT 1',
+          'SELECT status FROM match_lobbies WHERE match_id = $1 AND archived_at IS NULL ORDER BY id DESC LIMIT 1',
           [qmRow.match_id]
         )
         if (latestLobby?.status === 'completed') {
@@ -973,7 +973,7 @@ export default function createQueueRouter(io) {
         return res.status(409).json({ error: `Queue match is ${qm.status}` })
       }
       const latestLobby = await queryOne(
-        'SELECT status FROM match_lobbies WHERE match_id = $1 ORDER BY id DESC LIMIT 1',
+        'SELECT status FROM match_lobbies WHERE match_id = $1 AND archived_at IS NULL ORDER BY id DESC LIMIT 1',
         [qm.match_id]
       )
       if (latestLobby?.status === 'completed') {
@@ -1019,7 +1019,7 @@ export default function createQueueRouter(io) {
       }
       if (oldQm.match_id) {
         const latestLobby = await queryOne(
-          'SELECT status FROM match_lobbies WHERE match_id = $1 ORDER BY id DESC LIMIT 1',
+          'SELECT status FROM match_lobbies WHERE match_id = $1 AND archived_at IS NULL ORDER BY id DESC LIMIT 1',
           [oldQm.match_id]
         )
         if (latestLobby?.status === 'completed') {

@@ -765,6 +765,40 @@ export async function initDb() {
       FOR EACH ROW EXECUTE FUNCTION cap_bot_logs()
   `)
 
+  // Admin lobby history + kick. blocked_steam_ids: steam ids an admin kicked
+  // from THIS lobby (the bot re-kicks them on rejoin; the block ends with the
+  // lobby). members: the bot's latest full roster [{steamId, name, team, slot}]
+  // including unassigned/pool/spectators — players_joined stays slotted-only
+  // because the auto-launch counting depends on it.
+  await execute(`ALTER TABLE match_lobbies ADD COLUMN IF NOT EXISTS blocked_steam_ids JSONB NOT NULL DEFAULT '[]'`)
+  await execute(`ALTER TABLE match_lobbies ADD COLUMN IF NOT EXISTS members JSONB NOT NULL DEFAULT '[]'`)
+  // archived_at: set instead of deleting finished rows when a game's lobby is
+  // re-created or reset, so their history stays viewable in the admin panel.
+  // Archived rows are ignored by every match-keyed read (retry caps, the match
+  // room lobby, latest-lobby lookups) — the same as when they were deleted.
+  await execute(`ALTER TABLE match_lobbies ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP DEFAULT NULL`)
+
+  // Structured per-lobby timeline (created, roster joins/moves/leaves, status
+  // changes, launch, match id, errors, admin actions, kick results). Written by
+  // botPool._recordLobbyEvent; read by GET /api/admin/lobbies/:lobbyId. bot_id
+  // has no FK on purpose — bots get deleted, their history should not.
+  // Pruned after 90 days by botPool's periodic zombie cleanup.
+  await execute(`
+    CREATE TABLE IF NOT EXISTS lobby_events (
+      id BIGSERIAL PRIMARY KEY,
+      lobby_id INTEGER NOT NULL REFERENCES match_lobbies(id) ON DELETE CASCADE,
+      bot_id INTEGER DEFAULT NULL,
+      type TEXT NOT NULL,
+      steam_id TEXT DEFAULT NULL,
+      player_id INTEGER DEFAULT NULL,
+      actor_id INTEGER DEFAULT NULL,
+      data JSONB NOT NULL DEFAULT '{}',
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `)
+  await execute(`CREATE INDEX IF NOT EXISTS idx_lobby_events_lobby ON lobby_events(lobby_id, id)`)
+  await execute(`CREATE INDEX IF NOT EXISTS idx_lobby_events_created ON lobby_events(created_at)`)
+
   // ─── Competition helpers ──────────────────────────────────────────────
   // Per-competition collaborators. A user listed here is treated by
   // requireCompPermission as if they were the competition's creator —

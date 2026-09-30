@@ -91,7 +91,7 @@ async function fetchSteamIdsForMatch(matchId) {
   const row = await queryOne(
     `SELECT players_expected, server_steam_id
        FROM match_lobbies
-      WHERE match_id = $1
+      WHERE match_id = $1 AND archived_at IS NULL
       ORDER BY id DESC
       LIMIT 1`,
     [matchId]
@@ -151,7 +151,7 @@ export async function startPolling(matchId) {
             try {
               await execute(
                 `UPDATE match_lobbies SET server_steam_id = $1
-                  WHERE id = (SELECT id FROM match_lobbies WHERE match_id = $2 ORDER BY id DESC LIMIT 1)`,
+                  WHERE id = (SELECT id FROM match_lobbies WHERE match_id = $2 AND archived_at IS NULL ORDER BY id DESC LIMIT 1)`,
                 [ctx.serverSteamId, matchId]
               )
             } catch (e) { console.error('[livePoller] persist server_steam_id failed:', e.message) }
@@ -306,6 +306,7 @@ export async function resumeActiveMatches() {
           ON mg.match_id = ml.match_id AND mg.game_number = ml.game_number
        WHERE ml.status = 'completed'
          AND ml.dota_match_id IS NOT NULL
+         AND ml.archived_at IS NULL
          AND ml.created_at > NOW() - INTERVAL '4 hours'
          AND (mg.winner_captain_id IS NULL)
     `)

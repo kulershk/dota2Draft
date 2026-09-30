@@ -543,7 +543,7 @@ export function registerQueueHandlers(socket, io) {
             const qm = await queryOne('SELECT match_id FROM queue_matches WHERE id = $1', [inMatchId])
             if (qm?.match_id) {
               const lobby = await queryOne(
-                "SELECT game_name, password, created_at, players_joined FROM match_lobbies WHERE match_id = $1 ORDER BY id DESC LIMIT 1",
+                "SELECT game_name, password, created_at, players_joined FROM match_lobbies WHERE match_id = $1 AND archived_at IS NULL ORDER BY id DESC LIMIT 1",
                 [qm.match_id]
               )
               if (lobby) {
@@ -718,7 +718,7 @@ export function registerQueueHandlers(socket, io) {
           const qm = await queryOne('SELECT match_id FROM queue_matches WHERE id = $1', [qmId])
           if (qm?.match_id) {
             const lobby = await queryOne(
-              "SELECT game_name, password, created_at, players_joined FROM match_lobbies WHERE match_id = $1 ORDER BY id DESC LIMIT 1",
+              "SELECT game_name, password, created_at, players_joined FROM match_lobbies WHERE match_id = $1 AND archived_at IS NULL ORDER BY id DESC LIMIT 1",
               [qm.match_id]
             )
             if (lobby) {
@@ -1526,7 +1526,7 @@ async function queueLiveDotaMatchId(queueMatchId) {
     `SELECT ml.dota_match_id
        FROM match_lobbies ml
        JOIN queue_matches qm ON qm.match_id = ml.match_id
-      WHERE qm.id = $1 AND ml.dota_match_id IS NOT NULL
+      WHERE qm.id = $1 AND ml.dota_match_id IS NOT NULL AND ml.archived_at IS NULL
       ORDER BY ml.id DESC LIMIT 1`,
     [queueMatchId]
   )

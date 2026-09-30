@@ -29,7 +29,7 @@ jobs:
       # failures in tests/rest.test.js / tests/socket.test.js (unrelated to
       # the lobby-bot pipeline) already fail on main. Once those are fixed
       # separately, switch this back to a plain `npm test`.
-      - run: npx vitest run tests/botPool.settlement.test.js tests/botPool.watchdog.test.js tests/botPool.queue.test.js tests/botPool.lifecycle.test.js tests/botPool.claim.test.js tests/botPool.lobbyError.test.js tests/botPool.misc.test.js tests/botPool.queueRelaunch.test.js tests/lobby.autoFix.test.js tests/statsJobs.test.js
+      - run: npx vitest run tests/botPool.settlement.test.js tests/botPool.watchdog.test.js tests/botPool.queue.test.js tests/botPool.lifecycle.test.js tests/botPool.claim.test.js tests/botPool.lobbyError.test.js tests/botPool.misc.test.js tests/botPool.queueRelaunch.test.js tests/lobby.autoFix.test.js tests/statsJobs.test.js tests/botPool.lobbyEvents.test.js tests/lobby.adminLobbies.test.js
         env:
           DATABASE_URL: postgresql://draft:draft@localhost:5432/draft
       - uses: actions/setup-go@v5

@@ -31,6 +31,7 @@
     { "name": "Admin Stats", "description": "Request and socket-event observability for admins" },
     { "name": "Search", "description": "Global search across players and matches" },
     { "name": "Nav Items", "description": "Customizable site navigation menu" },
+    { "name": "Bots", "description": "Lobby bot admin — bot-run Dota lobby history, roster and kick/unblock actions (manage_bots)" },
     { "name": "Subscription Plans", "description": "Tiered membership plans + manual user assignments. Pricing/perks placeholders today; future payment-provider webhooks will populate user_subscriptions with source != 'manual'." }
   ],
   "components": {
@@ -41,6 +42,56 @@
       }
     },
     "schemas": {
+      "LobbyMember": {
+        "type": "object",
+        "description": "One member of a bot-run Dota lobby as last reported by the bot (the bot itself excluded). `name` is resolved from `players` by steam id; unregistered players fall back to the steam id string.",
+        "properties": {
+          "steamId": { "type": "string", "description": "64-bit steam id" },
+          "name": { "type": "string" },
+          "team": { "type": "string", "enum": ["radiant", "dire", "unassigned", "pool", "spectator", "other"], "description": "`pool` is Dota's normal Unassigned Players list; `pool` and `unassigned` are both non-slotted" },
+          "slot": { "type": "integer", "nullable": true }
+        }
+      },
+      "AdminLobbyRow": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "status": { "type": "string", "description": "creating | waiting | launching | cointoss | active | completed | error | cancelled" },
+          "bot_id": { "type": "integer", "nullable": true },
+          "bot_name": { "type": "string", "nullable": true },
+          "match_id": { "type": "integer" },
+          "game_number": { "type": "integer" },
+          "competition_id": { "type": "integer", "nullable": true },
+          "competition_name": { "type": "string", "nullable": true, "description": "null for queue lobbies and soft-deleted competitions" },
+          "queue_match_id": { "type": "integer", "nullable": true },
+          "game_name": { "type": "string" },
+          "label": { "type": "string", "description": "\"<comp name> · Match #<match_id> G<n>\" or \"Queue #<queue_match_id>\"" },
+          "players_joined_count": { "type": "integer", "description": "Players in a Radiant/Dire slot" },
+          "players_expected_count": { "type": "integer" },
+          "members_count": { "type": "integer", "description": "Every member incl. unassigned/pool/spectators" },
+          "error_message": { "type": "string", "nullable": true },
+          "dota_match_id": { "type": "string", "nullable": true },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "AdminLobbyEvent": {
+        "type": "object",
+        "description": "A lobby_events row. `data` by type — created {gameName, attempt?} · status_changed {from, to} · player_joined {name, team, slot} · player_moved {name, fromTeam, fromSlot, toTeam, toSlot} · player_left {name, team} · launch_requested {auto} · match_id_assigned {matchId} · game_aborted {matchId} · draft_started {matchId, confirmed} · error {kind, message} · cancelled {} (auto: true when cleaned up automatically) · admin_unassign / admin_kick / admin_unblock {} · kick_result {mode, ok, reason, auto}.",
+        "properties": {
+          "id": { "type": "integer" },
+          "lobby_id": { "type": "integer" },
+          "bot_id": { "type": "integer", "nullable": true },
+          "type": { "type": "string", "enum": ["created", "status_changed", "player_joined", "player_moved", "player_left", "launch_requested", "match_id_assigned", "game_aborted", "draft_started", "error", "cancelled", "admin_unassign", "admin_kick", "admin_unblock", "kick_result"] },
+          "steam_id": { "type": "string", "nullable": true, "description": "Affected player" },
+          "player_id": { "type": "integer", "nullable": true, "description": "players.id when the steam id is a registered user" },
+          "player_name": { "type": "string", "nullable": true },
+          "actor_id": { "type": "integer", "nullable": true, "description": "Admin who performed an admin_* / launch / cancel action" },
+          "actor_name": { "type": "string", "nullable": true },
+          "data": { "type": "object" },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
       "DirectMessage": {
         "type": "object",
         "properties": {
@@ -456,6 +507,7 @@
                           "last_used_at": { "type": "string", "format": "date-time", "nullable": true },
                           "created_at": { "type": "string", "format": "date-time" },
                           "status_since": { "type": "string", "format": "date-time", "nullable": true },
+                          "active_lobby_id": { "type": "integer", "nullable": true, "description": "match_lobbies id of the bot's live lobby (deep link /admin/lobbies/{id})" },
                           "active_match_id": { "type": "integer", "nullable": true },
                           "active_competition_id": { "type": "integer", "nullable": true },
                           "active_game_name": { "type": "string", "nullable": true },
@@ -716,6 +768,148 @@
           },
           "400": { "description": "Operation failed" },
           "403": { "description": "Missing manage_bots permission" }
+        }
+      }
+    },
+    "/api/admin/lobbies": {
+      "get": {
+        "tags": ["Bots"],
+        "summary": "List bot-run lobbies (live first, then history)",
+        "description": "Requires the `manage_bots` permission. `filter=live` = creating/waiting/launching/cointoss/active; `recent` = every other status; `all` (default) = live first, then recent. Keyset pagination on id: pass the returned `nextBefore` as `before` for the next page. With `filter=all` the first page (no `before`) carries every live lobby plus up to `limit` recent ones; later pages are history only.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "filter", "in": "query", "schema": { "type": "string", "enum": ["live", "recent", "all"], "default": "all" } },
+          { "name": "q", "in": "query", "schema": { "type": "string" }, "description": "Matches lobby / match / queue-match id, dota match id, game name, competition name, or a player name / steam id in the lobby's members, expected or joined players" },
+          { "name": "before", "in": "query", "schema": { "type": "integer" }, "description": "Only lobbies with id < before" },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50, "maximum": 200 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lobby page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "lobbies": { "type": "array", "items": { "$ref": "#/components/schemas/AdminLobbyRow" } },
+                    "nextBefore": { "type": "integer", "nullable": true, "description": "null when there is no further page" },
+                    "goConnected": { "type": "boolean", "description": "Whether the Go lobby-bot service is connected (kick/unassign need it)" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid parameters", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "description": "Not authenticated" },
+          "403": { "description": "Missing manage_bots permission" }
+        }
+      }
+    },
+    "/api/admin/lobbies/{lobbyId}": {
+      "get": {
+        "tags": ["Bots"],
+        "summary": "Lobby detail: roster, block list, other attempts and the event timeline",
+        "description": "Requires the `manage_bots` permission. `events` are the newest 1000 lobby_events rows, returned oldest first. `attempts` are the other match_lobbies rows for the same match + game (retries / re-creates). `?botLogs=1` adds the persisted `bot_logs` lines tagged with this lobby (bot logs are capped at 500 per bot, so old ones may be gone). The lobby password is never returned.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "lobbyId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "botLogs", "in": "query", "schema": { "type": "string", "enum": ["1", "true"] } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lobby detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "lobby": {
+                      "allOf": [
+                        { "$ref": "#/components/schemas/AdminLobbyRow" },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "members": { "type": "array", "items": { "$ref": "#/components/schemas/LobbyMember" }, "description": "Latest full roster; empty for old bot builds (fall back to players_joined)" },
+                            "players_expected": { "type": "array", "items": { "type": "object", "properties": { "steam_id": { "type": "string" }, "steamId": { "type": "string" }, "name": { "type": "string" }, "team": { "type": "string" } } } },
+                            "players_joined": { "type": "array", "items": { "type": "object", "properties": { "steamId": { "type": "string" }, "name": { "type": "string" }, "team": { "type": "string" }, "slot": { "type": "integer" } } }, "description": "Slotted (Radiant/Dire) players only" },
+                            "blocked_steam_ids": { "type": "array", "items": { "type": "string" } },
+                            "team_ids": { "type": "object", "nullable": true },
+                            "server_region": { "type": "integer", "nullable": true },
+                            "bot_steam_id": { "type": "string", "nullable": true }
+                          }
+                        }
+                      ]
+                    },
+                    "attempts": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "integer" }, "status": { "type": "string" }, "created_at": { "type": "string", "format": "date-time" } } } },
+                    "events": { "type": "array", "items": { "$ref": "#/components/schemas/AdminLobbyEvent" } },
+                    "botLogs": { "type": "array", "description": "Only with ?botLogs=1", "items": { "type": "object", "properties": { "id": { "type": "integer" }, "bot_id": { "type": "integer" }, "level": { "type": "string", "enum": ["info", "action", "warn", "error"] }, "message": { "type": "string" }, "created_at": { "type": "string", "format": "date-time" } } } },
+                    "goConnected": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid parameters", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "description": "Not authenticated" },
+          "403": { "description": "Missing manage_bots permission" },
+          "404": { "description": "Lobby not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/admin/lobbies/{lobbyId}/kick": {
+      "post": {
+        "tags": ["Bots"],
+        "summary": "Unassign or kick a player from a live pre-game lobby",
+        "description": "Requires the `manage_bots` permission. `mode: unassign` moves the player out of their Radiant/Dire slot (they stay in the lobby). `mode: kick` removes them and adds them to the lobby's block list — the bot re-kicks them on rejoin until unblocked or the lobby ends (the block list carries over to retry lobbies). Only while the lobby is `waiting` and the Go bot service is connected; the target must be in the lobby's current `members` and not the bot itself. Accepted asynchronously: the outcome arrives as a `kick_result` lobby event (see the `admin:lobbyEvent` socket event). Records `admin_kick` / `admin_unassign`.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "lobbyId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["steamId", "mode"],
+                "properties": {
+                  "steamId": { "type": "string", "description": "64-bit steam id" },
+                  "mode": { "type": "string", "enum": ["unassign", "kick"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": { "description": "Sent to the bot", "content": { "application/json": { "schema": { "type": "object", "properties": { "ok": { "type": "boolean" } } } } } },
+          "400": { "description": "Bad mode / steam id, target not in the lobby, target is the bot, or unassign on a non-slotted player", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "description": "Not authenticated" },
+          "403": { "description": "Missing manage_bots permission" },
+          "404": { "description": "Lobby not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "409": { "description": "Lobby is not waiting, or the Go bot service is not connected", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/admin/lobbies/{lobbyId}/unblock": {
+      "post": {
+        "tags": ["Bots"],
+        "summary": "Remove a player from a lobby's block list",
+        "description": "Requires the `manage_bots` permission. Allowed while the lobby is live (creating/waiting/launching/cointoss/active). Sends the updated list to the bot and records `admin_unblock`; unblocking a steam id that isn't blocked is a no-op.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "lobbyId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "required": ["steamId"], "properties": { "steamId": { "type": "string" } } } } }
+        },
+        "responses": {
+          "200": { "description": "Remaining block list", "content": { "application/json": { "schema": { "type": "object", "properties": { "ok": { "type": "boolean" }, "blockedSteamIds": { "type": "array", "items": { "type": "string" } } } } } } },
+          "400": { "description": "Invalid parameters", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "description": "Not authenticated" },
+          "403": { "description": "Missing manage_bots permission" },
+          "404": { "description": "Lobby not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "409": { "description": "Lobby has ended", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
         }
       }
     },
