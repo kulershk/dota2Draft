@@ -804,6 +804,13 @@ class BotPool {
     const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyId])
     if (!lobby) return
 
+    // Go now delivers events at-least-once, so a lobby_error can be replayed
+    // after a reconnect. If we've already handled this lobby's failure
+    // ('error') or it was cancelled out from under us ('cancelled'), this is
+    // a duplicate — ignore it with no side effects (no status flip, no retry,
+    // no no-show bans).
+    if (lobby.status === 'error' || lobby.status === 'cancelled') return
+
     // If the game already started (dota_match_id set) the lobby is effectively
     // done and any error is late noise — most notably the spurious "Bot lost
     // connection to lobby after reconnect" that fires when a rejoin_lobby is
