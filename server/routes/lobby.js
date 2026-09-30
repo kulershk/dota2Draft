@@ -53,6 +53,19 @@ function publicBotFields(bot) {
   }
 }
 
+// Decides whether the GET-lobby route should auto-fix a row to 'error'
+// because its bot went back to 'available' while the row still thinks it's
+// waiting/launching for it. Skips lobbies with a dota_match_id set — that
+// means the game already launched and players are loading in; completion
+// and rollback for that state are owned by botPool._onDraftStarted /
+// _onGameAborted, not this route. Pure so it's unit-testable without a DB.
+export function shouldMarkBotDisconnected(lobby, botStatus) {
+  if (!lobby || !lobby.bot_id) return false
+  if (lobby.status !== 'waiting' && lobby.status !== 'launching') return false
+  if (lobby.dota_match_id) return false
+  return botStatus === 'available'
+}
+
 const avatarUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -288,15 +301,12 @@ export default function createLobbyRouter(io) {
         [matchId, gameNumber, compId]
       )
       if (!lobby) return res.json({ lobby: null })
-      // Auto-fix stale status: if we have a match ID, lobby is completed
-      if (lobby.dota_match_id && lobby.status !== 'completed') {
-        lobby.status = 'completed'
-        await execute("UPDATE match_lobbies SET status = 'completed' WHERE id = $1", [lobby.id])
-      }
-      // Auto-fix: if bot is no longer busy and lobby is still waiting/launching, mark as error
-      if ((lobby.status === 'waiting' || lobby.status === 'launching') && lobby.bot_id) {
+      // Auto-fix: if bot is no longer busy and lobby is still waiting/launching,
+      // mark as error. Skips loading lobbies (dota_match_id set) — see
+      // shouldMarkBotDisconnected.
+      if (lobby.bot_id && (lobby.status === 'waiting' || lobby.status === 'launching')) {
         const bot = await queryOne('SELECT status FROM lobby_bots WHERE id = $1', [lobby.bot_id])
-        if (bot && bot.status === 'available') {
+        if (shouldMarkBotDisconnected(lobby, bot?.status)) {
           lobby.status = 'error'
           lobby.error_message = 'Bot disconnected from lobby'
           await execute("UPDATE match_lobbies SET status = 'error', error_message = 'Bot disconnected from lobby' WHERE id = $1", [lobby.id])

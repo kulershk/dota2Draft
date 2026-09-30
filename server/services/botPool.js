@@ -629,6 +629,11 @@ class BotPool {
     if (rowCount === 0) return
     const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyId])
     if (!lobby) return
+    // Idempotent — also covers a Node restart mid-loading: the replayed
+    // game_started returns early on the IS DISTINCT FROM guard (same match
+    // id), so this is the only place polling gets (re)started for it, since
+    // liveMatchPoller.resumeActiveMatches only resumes 'completed' rows.
+    try { startLivePolling(lobby.match_id) } catch (e) { console.error('[livePoller] start failed:', e.message) }
     if (lobby.bot_id) {
       await this._onBotLog({
         botId: String(lobby.bot_id),
@@ -663,12 +668,18 @@ class BotPool {
   async _onGameAborted(data) {
     const lobbyId = Number(data.lobbyId)
     const dotaMatchId = String(data.matchId || '')
-    const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyId])
-    if (!lobby || ['completed', 'cancelled', 'error'].includes(lobby.status)) return
-    await execute(
-      "UPDATE match_lobbies SET dota_match_id = NULL, status = 'waiting', updated_at = NOW() WHERE id = $1",
-      [lobbyId]
+    // Atomic + id-guarded: only roll back a lobby that's still open AND whose
+    // current dota_match_id matches the aborted one (or has none) — a late
+    // abort for a match id we've already moved past (relaunched, or a
+    // completed row) must not clobber the newer state.
+    const lobby = await queryOne(
+      `UPDATE match_lobbies SET dota_match_id = NULL, status = 'waiting', updated_at = NOW()
+        WHERE id = $1 AND status NOT IN ('completed', 'cancelled', 'error')
+          AND (dota_match_id = $2 OR dota_match_id IS NULL)
+        RETURNING *`,
+      [lobbyId, dotaMatchId]
     )
+    if (!lobby) return
     if (dotaMatchId && dotaMatchId !== '0') {
       await execute(
         `UPDATE match_games SET dotabuff_id = NULL

@@ -1284,7 +1284,7 @@
                   }
                 }
               },
-              "errorMessage": { "type": "string", "nullable": true, "description": "Failure reason when status is 'error'; sent as null when an auto-retry re-enters 'creating'." },
+              "errorMessage": { "type": "string", "nullable": true, "description": "Failure reason when status is 'error'; sent as null when an auto-retry re-enters 'creating'. Also present when status is 'waiting' after a game_aborted rollback (players failed to load — lobby can be relaunched)." },
               "retry": {
                 "type": "object",
                 "nullable": true,
@@ -1301,7 +1301,7 @@
     },
     "lobby:matchIdCaptured": {
       "subscribe": {
-        "summary": "Broadcast to the lobby's rooms (comp+match or queue-match): the Go bot captured the Dota match ID for this game (the game has started). Clients use it to link to the match / begin polling results.",
+        "summary": "Broadcast to the lobby's rooms (comp+match or queue-match): the Go bot captured the Dota match ID for this game. This fires when the GC assigns the match id at launch — players are still loading in; the lobby is not complete yet (see lobby:statusUpdate status 'completed', emitted on draft_started, and the possibility of a game_aborted rollback if loading fails). Clients use it to link to the match / begin polling results.",
         "message": {
           "payload": {
             "type": "object",

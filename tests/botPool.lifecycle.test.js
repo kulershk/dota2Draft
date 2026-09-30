@@ -40,3 +40,32 @@ describe('lobby lifecycle', () => {
     expect(await row()).toEqual({ status: 'completed', dota_match_id: '222' })
   })
 })
+
+describe('game_aborted id guard', () => {
+  let lobby2
+  const row2 = () => queryOne('SELECT status, dota_match_id FROM match_lobbies WHERE id = $1', [lobby2.id])
+
+  beforeAll(async () => {
+    lobby2 = await seedLobby({ match: seed.match, botId: bot.id, status: 'launching', gameNumber: 2 })
+    await botPool._onGameStarted({ lobbyId: String(lobby2.id), matchId: '333' })
+  })
+
+  it('does nothing when the aborted matchId does not match the lobby\'s current dota_match_id', async () => {
+    await botPool._onGameAborted({ lobbyId: String(lobby2.id), matchId: '999' })
+    expect(await row2()).toEqual({ status: 'launching', dota_match_id: '333' })
+  })
+
+  it('replayed draft_started and game_aborted on an already-completed lobby do nothing', async () => {
+    await botPool._onDraftStarted({ lobbyId: String(lobby2.id), matchId: '333', confirmed: true })
+    const completed = await row2()
+    expect(completed).toEqual({ status: 'completed', dota_match_id: '333' })
+
+    // Replay draft_started — no-op (status already completed)
+    await botPool._onDraftStarted({ lobbyId: String(lobby2.id), matchId: '333', confirmed: true })
+    expect(await row2()).toEqual(completed)
+
+    // A late game_aborted for the now-completed lobby must not roll it back
+    await botPool._onGameAborted({ lobbyId: String(lobby2.id), matchId: '333' })
+    expect(await row2()).toEqual(completed)
+  })
+})
