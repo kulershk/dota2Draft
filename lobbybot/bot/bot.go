@@ -72,6 +72,7 @@ type Bot struct {
 	launchSent            bool   // prevent repeated LaunchLobby calls
 	lastMatchIDSent       uint64 // last match id sent via game_started (0 = none; reset per lobby in SetActiveLobbyID). A relaunch after a failed start gets a new id and re-fires.
 	abortedMatchID        uint64 // match id of a launch that aborted back to the lobby; re-reported only once a relaunch is underway
+	abortReported         bool   // the current launch's abort was reported; cleared when the lobby (re)enters RUN and per lobby
 	gcReady               bool   // GC session is live (welcomed / HAVE_SESSION); gates going back to 'available'
 	enforceTeams          bool   // kick players onto their expected team (lobbyAutoAssignTeams); off = free team pick
 
@@ -741,6 +742,7 @@ func (b *Bot) SetActiveLobbyID(id string) {
 		// Re-arm the per-lobby game_started guard.
 		b.lastMatchIDSent = 0
 		b.abortedMatchID = 0
+		b.abortReported = false
 	}
 	b.activeLobbyID = id
 	b.mu.Unlock()
@@ -933,6 +935,7 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 		b.mu.Lock()
 		b.launchSent = false
 		b.abortedMatchID = oldLobby.GetMatchId()
+		b.abortReported = true
 		b.mu.Unlock()
 		b.logCtx("warn", lobbyID, "Game aborted back to lobby — launch re-armed, waiting for re-launch")
 		b.send("game_aborted", protocol.GameAbortedEvent{
@@ -1085,6 +1088,10 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 	// aborted and everyone is dumped back into this lobby, which the bot must
 	// still be around to manage.
 	if lobbyState == gcccm.CSODOTALobby_RUN && oldState != gcccm.CSODOTALobby_RUN {
+		// A new launch is live: its abort (if any) hasn't been reported yet.
+		b.mu.Lock()
+		b.abortReported = false
+		b.mu.Unlock()
 		b.logCtx("info", lobbyID, "Game is now running — waiting for all players to load")
 		select {
 		case b.gameStartedCh <- struct{}{}:
@@ -1341,15 +1348,20 @@ func (b *Bot) LastMatchID() string {
 // RUN→lobby edge in processLobbyUpdate never reported it — the edge is lost
 // when it happens while the cache watcher is being replaced, which would leave
 // Node holding the dead match id (row pinned to 'active'). Called when
-// WaitForDraft's level check reports DraftAborted; a no-op if the edge path
-// already reported this id.
+// WaitForDraft's level check reports DraftAborted; a no-op if this launch's
+// abort was already reported (by the edge path or an earlier call — a new
+// match id handed out after the abort must not be reported as aborted too),
+// or if the lobby has already moved on (a relaunch is underway).
 func (b *Bot) EnsureAbortReported() {
 	b.mu.Lock()
 	lobbyID := b.activeLobbyID
 	matchID := b.lastMatchIDSent
-	report := lobbyID != "" && matchID != 0 && b.abortedMatchID != matchID
+	inLobby := b.lastLobby != nil && isLobbyState(b.lastLobby.GetState())
+	report := lobbyID != "" && matchID != 0 && !b.abortReported && inLobby &&
+		b.abortedMatchID != matchID
 	if report {
 		b.abortedMatchID = matchID
+		b.abortReported = true
 		b.launchSent = false
 	}
 	b.mu.Unlock()

@@ -217,6 +217,7 @@ func TestEnsureAbortReported(t *testing.T) {
 	b.activeLobbyID = "7"
 	b.lastMatchIDSent = 111
 	b.launchSent = true
+	b.lastLobby = mkLobby(gcccm.CSODOTALobby_UI, 111)
 
 	// The RUN→UI edge was missed (watcher replaced): report it now.
 	b.EnsureAbortReported()
@@ -241,6 +242,7 @@ func TestEnsureAbortReported(t *testing.T) {
 	b2.activeLobbyID = "7"
 	b2.lastMatchIDSent = 111
 	b2.processLobbyUpdate(mkLobby(gcccm.CSODOTALobby_RUN, 111), mkLobby(gcccm.CSODOTALobby_UI, 111))
+	b2.lastLobby = mkLobby(gcccm.CSODOTALobby_UI, 111)
 	b2.EnsureAbortReported()
 	if n := len(r2.ofType("game_aborted")); n != 1 {
 		t.Fatalf("abort already reported by the edge path must not repeat, got %d", n)
@@ -341,5 +343,71 @@ func TestWaitForDraftAbortOnlyOnLobbyState(t *testing.T) {
 	b.lastLobby = mkLobby(gcccm.CSODOTALobby_UI, 111)
 	if got := b.WaitForDraft(context.Background(), time.Minute); got != DraftAborted {
 		t.Fatalf("UI → DraftAborted, got %v", got)
+	}
+}
+
+// X1: an abort is reported once per launch. The edge path reports 111, the
+// GC's new id 222 then fires game_started (clearing abortedMatchID); the
+// level check that follows must not report 222 as aborted too — Node would
+// clear the fresh id.
+func TestAbortReportedOncePerLaunch(t *testing.T) {
+	b, r := newTestBot()
+	b.activeLobbyID = "7"
+	b.lastMatchIDSent = 111
+	ui := mkLobby(gcccm.CSODOTALobby_UI, 222)
+	b.processLobbyUpdate(mkLobby(gcccm.CSODOTALobby_RUN, 111), ui)
+	b.lastLobby = ui
+	b.EnsureAbortReported()
+	ga := r.ofType("game_aborted")
+	if len(ga) != 1 || ga[0].Data.(protocol.GameAbortedEvent).MatchID != "111" {
+		t.Fatalf("want exactly one game_aborted(111), got %+v", ga)
+	}
+
+	// The relaunch reaches RUN, then drops back with the edge missed →
+	// the level check reports this new launch's abort.
+	run := mkLobby(gcccm.CSODOTALobby_RUN, 222)
+	b.processLobbyUpdate(ui, run)
+	b.lastLobby = mkLobby(gcccm.CSODOTALobby_UI, 222)
+	b.EnsureAbortReported()
+	ga = r.ofType("game_aborted")
+	if len(ga) != 2 || ga[1].Data.(protocol.GameAbortedEvent).MatchID != "222" {
+		t.Fatalf("want a second game_aborted(222) after a new RUN, got %+v", ga)
+	}
+}
+
+// X2: the level check re-reads the current lobby under the lock — if a
+// relaunch is already underway, the abort is stale news.
+func TestEnsureAbortReportedSkipsWhenLobbyMovedOn(t *testing.T) {
+	b, r := newTestBot()
+	b.activeLobbyID = "7"
+	b.lastMatchIDSent = 111
+	b.lastLobby = mkLobby(gcccm.CSODOTALobby_SERVERSETUP, 111)
+	b.EnsureAbortReported()
+	if n := len(r.ofType("game_aborted")); n != 0 {
+		t.Fatalf("lobby already relaunching → no game_aborted, got %d", n)
+	}
+	b.lastLobby = nil
+	b.EnsureAbortReported()
+	if n := len(r.ofType("game_aborted")); n != 0 {
+		t.Fatalf("no lobby in cache → no game_aborted, got %d", n)
+	}
+}
+
+// X3: the stale sweep decides on the lobby as it is after the wait, not the
+// snapshot taken before it.
+func TestStaleSweepAction(t *testing.T) {
+	self := uint64(76561198000000009)
+	if got := staleSweepAction(nil, self); got != sweepNothing {
+		t.Errorf("lobby already gone → nothing to do, got %v", got)
+	}
+	ui := mkLobby(gcccm.CSODOTALobby_UI, 0)
+	ui.LeaderId = &self
+	if got := staleSweepAction(ui, self); got != sweepDestroy {
+		t.Errorf("we lead a UI lobby → destroy, got %v", got)
+	}
+	run := mkLobby(gcccm.CSODOTALobby_RUN, 5)
+	run.LeaderId = &self
+	if got := staleSweepAction(run, self); got != sweepLeave {
+		t.Errorf("lobby moved on to RUN → just leave, got %v", got)
 	}
 }

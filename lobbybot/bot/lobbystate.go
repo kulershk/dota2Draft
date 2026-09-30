@@ -78,9 +78,33 @@ func shouldDestroyStale(l *gcccm.CSODOTALobby, selfID uint64) bool {
 	return l != nil && selfID != 0 && l.GetLeaderId() == selfID && l.GetState() == gcccm.CSODOTALobby_UI
 }
 
+type sweepAction int
+
+const (
+	sweepNothing sweepAction = iota // lobby already gone — nothing to leave
+	sweepDestroy                    // we lead an unlaunched lobby — destroy it
+	sweepLeave                      // anything else — just leave
+)
+
+// staleSweepAction decides what to do with a stale lobby, judged on the lobby
+// as it is now (cur = the latest cache view), not as it was when the sweep
+// was scheduled.
+func staleSweepAction(cur *gcccm.CSODOTALobby, selfID uint64) sweepAction {
+	switch {
+	case cur == nil:
+		return sweepNothing
+	case shouldDestroyStale(cur, selfID):
+		return sweepDestroy
+	default:
+		return sweepLeave
+	}
+}
+
 // sweepIfUnassigned waits briefly for Node's rejoin_lobby; if none arrives the
 // lobby is stale and is torn down. Shared by the startup check and the cache
-// Create handler (previously two copies, and both only left the lobby).
+// Create handler (previously two copies, and both only left the lobby). The
+// decision reads the current lobby after the wait: in 5s it may have been
+// destroyed, launched, or had its leader change.
 func (b *Bot) sweepIfUnassigned(l *gcccm.CSODOTALobby) {
 	time.Sleep(5 * time.Second)
 	if b.GetActiveLobbyID() != "" {
@@ -92,13 +116,18 @@ func (b *Bot) sweepIfUnassigned(l *gcccm.CSODOTALobby) {
 	if b.steamClient != nil {
 		self = b.steamClient.SteamId().ToUint64()
 	}
+	cur := b.lastLobby
 	b.mu.Unlock()
-	if shouldDestroyStale(l, self) {
+	switch staleSweepAction(cur, self) {
+	case sweepNothing:
+		b.log(fmt.Sprintf("CACHE: Stale lobby %d already gone — nothing to leave", l.GetLobbyId()))
+		return
+	case sweepDestroy:
 		b.logAt("warn", "CACHE: No rejoin received — destroying stale lobby we host")
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		b.DestroyLobby(ctx)
 		cancel()
-	} else {
+	default:
 		b.logAt("warn", "CACHE: No rejoin received — leaving stale lobby")
 	}
 	b.LeaveLobby()
