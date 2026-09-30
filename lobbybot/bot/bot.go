@@ -30,6 +30,12 @@ const (
 	StatusError        = "error"
 )
 
+// logonTimeout bounds how long we wait for a LoggedOnEvent after Connect. A CM
+// can accept the TCP connection and simply never answer; go-steam ignores
+// steam.Client.ConnectionTimeout for that case, so without this the bot would
+// sit in 'connecting' until Node's 5-minute watchdog restarted it.
+const logonTimeout = 90 * time.Second
+
 type Bot struct {
 	ID           string
 	Username     string
@@ -187,7 +193,6 @@ func (b *Bot) Connect() {
 
 	b.mu.Lock()
 	b.steamClient = steam.NewClient()
-	b.steamClient.ConnectionTimeout = 30 * time.Second
 	sc := b.steamClient
 	b.mu.Unlock()
 	go b.handleSteamEvents(sc, gen, cancel)
@@ -197,6 +202,17 @@ func (b *Bot) Connect() {
 }
 
 func (b *Bot) handleSteamEvents(sc *steam.Client, gen uint64, cancel <-chan struct{}) {
+	loggedOn := make(chan struct{})
+	var loggedOnOnce sync.Once
+	logonTimer := time.AfterFunc(logonTimeout, func() {
+		select {
+		case <-loggedOn:
+		default:
+			b.logAt("warn", fmt.Sprintf("No Steam logon within %s — dropping connection", logonTimeout))
+			sc.Disconnect() // emits DisconnectedEvent → handleDrop reconnects with backoff
+		}
+	})
+	defer logonTimer.Stop()
 	for event := range sc.Events() {
 		// A newer session owns this bot now. This loop's client must not stay
 		// logged in (it would kick the new session off the account), so
@@ -255,6 +271,7 @@ func (b *Bot) handleSteamEvents(sc *steam.Client, gen uint64, cancel <-chan stru
 			sc.Auth.LogOn(details)
 
 		case *steam.LoggedOnEvent:
+			loggedOnOnce.Do(func() { close(loggedOn) })
 			steamID := sc.SteamId().String()
 			b.mu.Lock()
 			b.SteamID = steamID
@@ -531,6 +548,13 @@ func (b *Bot) reconnect(old *steam.Client, gen uint64, cancel <-chan struct{}) {
 	if old != nil {
 		old.Disconnect() // no-op if already closed; never leave two live logins
 	}
+	b.mu.Lock()
+	if b.sessionGen != gen {
+		b.mu.Unlock()
+		log.Printf("[Bot %s] reconnect for gen %d skipped — session %d is current", b.ID, gen, b.sessionGen)
+		return
+	}
+	b.mu.Unlock()
 	b.log("Creating fresh Steam client for reconnect...")
 	// Detach the old dota client + cache watcher under the lock so any concurrent
 	// reader (processLobbyUpdate, the SayHello goroutine) snapshots either the
@@ -552,7 +576,6 @@ func (b *Bot) reconnect(old *steam.Client, gen uint64, cancel <-chan struct{}) {
 	// Create fresh client and start new event loop
 	b.mu.Lock()
 	b.steamClient = steam.NewClient()
-	b.steamClient.ConnectionTimeout = 30 * time.Second
 	sc := b.steamClient
 	b.mu.Unlock()
 	go b.handleSteamEvents(sc, gen, cancel)
@@ -570,6 +593,8 @@ func (b *Bot) Disconnect() {
 	// later Connect() creates a fresh channel, so this close can't leak into
 	// the next session.
 	b.mu.Lock()
+	// Invalidate any reconnect already scheduled by the old session's loop.
+	b.sessionGen++
 	if b.cancelCh != nil {
 		close(b.cancelCh)
 		b.cancelCh = nil

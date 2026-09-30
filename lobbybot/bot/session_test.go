@@ -168,3 +168,21 @@ func TestHelloLoopNewSessionTakesOver(t *testing.T) {
 		t.Fatal("new session sent no hello while the stale loop was sleeping")
 	}
 }
+
+func TestDisconnectAdvancesSession(t *testing.T) {
+	b, _ := newTestBot()
+	b.sessionGen = 5
+	b.Disconnect()
+	if b.sessionGen != 6 {
+		t.Fatalf("sessionGen = %d, want 6 — a pending reconnect from gen 5 must be invalidated", b.sessionGen)
+	}
+}
+
+func TestReconnectStaleGenerationIsNoop(t *testing.T) {
+	b, _ := newTestBot()
+	b.sessionGen = 7
+	b.reconnect(nil, 6, make(chan struct{}))
+	if b.steamClient != nil {
+		t.Fatal("a reconnect for a superseded session must not create a Steam client")
+	}
+}
