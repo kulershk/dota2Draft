@@ -179,11 +179,19 @@ func TestSendOrderPreserved(t *testing.T) {
 // it must not be resent after a later reconnect, even though the connection
 // it was acked on then dies.
 func TestAckedMessageNotResent(t *testing.T) {
+	var ready atomic.Bool // set once the server has actually read acked_msg
 	srv, got := pongControlledServer(t, func(connIdx int, payload string) (ack, closeConn bool) {
-		// Ack conn1's first (and only) ping, then die right after — that
-		// ack is the sole proof acked_msg (written before the ping) was
+		if connIdx != 0 || !ready.Load() {
+			// Ignore any ping that might race ahead of Send — acking (or
+			// closing on) one of these could confirm nothing (acked_msg
+			// not written yet) or tear the connection down before it's
+			// even sent, which isn't what this test is about.
+			return false, false
+		}
+		// Ack this ping, then die right after — that ack is the sole proof
+		// acked_msg (written before it, per the ready gate above) was
 		// delivered.
-		return true, connIdx == 0
+		return true, true
 	})
 	c := NewClient(wsURL(srv), "tok", func(string, json.RawMessage) {})
 	c.pingPeriod = 20 * time.Millisecond
@@ -193,7 +201,8 @@ func TestAckedMessageNotResent(t *testing.T) {
 	if err := c.Send("acked_msg", nil); err != nil {
 		t.Fatal(err)
 	}
-	expectTypes(t, got, "hello", "acked_msg")
+	expectTypes(t, got, "hello", "acked_msg") // proof the server — and so the client's own write — already happened
+	ready.Store(true)
 	// conn2: acked_msg was confirmed on conn1, so it must not reappear.
 	expectTypes(t, got, "hello")
 	select {
@@ -207,9 +216,14 @@ func TestAckedMessageNotResent(t *testing.T) {
 // message whose ping never gets acked (Node/the peer never answers) must
 // still be resent after reconnect — the default, safe assumption.
 func TestUnackedMessageResent(t *testing.T) {
+	var ready atomic.Bool // set once the server has actually read unacked_msg
 	srv, got := pongControlledServer(t, func(connIdx int, payload string) (ack, closeConn bool) {
-		// Never ack — die right after the first ping regardless.
-		return false, connIdx == 0
+		if connIdx != 0 || !ready.Load() {
+			return false, false // ignore pings that might race ahead of Send
+		}
+		// Never ack — die right after the first ping once the message is
+		// definitely written.
+		return false, true
 	})
 	c := NewClient(wsURL(srv), "tok", func(string, json.RawMessage) {})
 	c.pingPeriod = 20 * time.Millisecond
@@ -220,14 +234,102 @@ func TestUnackedMessageResent(t *testing.T) {
 		t.Fatal(err)
 	}
 	expectTypes(t, got, "hello", "unacked_msg")
+	ready.Store(true)
 	expectTypes(t, got, "hello", "unacked_msg") // resent on conn2 — never acked
 }
 
-// TestPartialCarryFlushKeepsTail is the regression test for the "partial
-// carry flush loses the tail" bug: if the connection resending a multi-message
-// carry list dies partway through, every message it never got to attempt
-// must still make it into the next carry, not just the ones already tracked
-// as unconfirmed.
+// closedConn dials a real WS server and immediately closes the client side,
+// giving tests a *websocket.Conn whose WriteMessage deterministically fails
+// — no network race, since closing a socket makes every subsequent local
+// write on it error out immediately, every time.
+func closedConn(t *testing.T) *websocket.Conn {
+	t.Helper()
+	up := websocket.Upgrader{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := up.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		for {
+			if _, _, err := c.ReadMessage(); err != nil {
+				return
+			}
+		}
+	}))
+	t.Cleanup(srv.Close)
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL(srv), nil)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	if err := conn.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	return conn
+}
+
+// TestPartialCarryFlushOnWriteFailureKeepsTail calls writeLoop directly
+// (bypassing the network entirely) with a carry of 3 messages and a
+// connection whose first write is guaranteed to fail. This is the
+// deterministic regression test for the "partial carry flush loses the
+// tail" bug: the pre-fix code only ever carried `unconfirmed` (just the
+// message that failed) forward, silently dropping every message after it
+// that the flush loop hadn't gotten to yet.
+func TestPartialCarryFlushOnWriteFailureKeepsTail(t *testing.T) {
+	c := NewClient("ws://unused", "", func(string, json.RawMessage) {})
+	m1, _ := marshalEnvelope("m1", nil)
+	m2, _ := marshalEnvelope("m2", nil)
+	m3, _ := marshalEnvelope("m3", nil)
+	c.carry = [][]byte{m1, m2, m3}
+
+	conn := closedConn(t)
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	ackCh := make(chan uint64)
+	c.writeLoop(conn, stop, done, ackCh) // returns as soon as the first write fails
+	<-done
+
+	assertCarry(t, c.carry, m1, m2, m3)
+}
+
+// TestPartialCarryFlushOnStopKeepsTail covers the other early-exit path in
+// the same flush loop: the reader tearing the connection down (closing stop)
+// before the writer even attempts the next message. Every message not yet
+// attempted — the whole msgs[i:] slice, not just msgs[i+1:] — must survive.
+func TestPartialCarryFlushOnStopKeepsTail(t *testing.T) {
+	c := NewClient("ws://unused", "", func(string, json.RawMessage) {})
+	m1, _ := marshalEnvelope("m1", nil)
+	m2, _ := marshalEnvelope("m2", nil)
+	m3, _ := marshalEnvelope("m3", nil)
+	c.carry = [][]byte{m1, m2, m3}
+
+	conn := closedConn(t) // never actually written to: stop fires before any write is attempted
+	stop := make(chan struct{})
+	close(stop) // pre-closed, so the flush loop's very first stop-check fires
+	done := make(chan struct{})
+	ackCh := make(chan uint64)
+	c.writeLoop(conn, stop, done, ackCh)
+	<-done
+
+	assertCarry(t, c.carry, m1, m2, m3)
+}
+
+func assertCarry(t *testing.T, got [][]byte, want ...[]byte) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("carry = %d message(s), want %d", len(got), len(want))
+	}
+	for i := range want {
+		if string(got[i]) != string(want[i]) {
+			t.Fatalf("carry[%d] = %s, want %s", i, got[i], want[i])
+		}
+	}
+}
+
+// TestPartialCarryFlushKeepsTail is an end-to-end companion to the two
+// deterministic unit tests above: it exercises the same "partial flush"
+// scenario over a real reconnect sequence (server closes mid carry-flush),
+// verifying the fix holds up through connect()/writeLoop() wiring too, not
+// just the flush loop in isolation.
 func TestPartialCarryFlushKeepsTail(t *testing.T) {
 	srv, got := seqTestServer(t, func(connIdx int, typ string) bool {
 		switch {

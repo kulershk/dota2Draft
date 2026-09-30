@@ -328,6 +328,9 @@ func (c *Client) writeLoop(conn *websocket.Conn, stop <-chan struct{}, done chan
 	// giveUp hands everything still outstanding — unconfirmed writes plus
 	// tail, an explicit list of messages this writer never got to attempt —
 	// back to carry so the next connection resends it, in order, first.
+	// c.carry is always nil here: it was drained into the local `msgs` at
+	// the top of this writer's carry-flush (see below), and nothing else
+	// ever writes to it while this writer is the sole owner of the field.
 	giveUp := func(tail [][]byte) {
 		drainAck()
 		merged := unconfirmed
@@ -337,9 +340,6 @@ func (c *Client) writeLoop(conn *websocket.Conn, stop <-chan struct{}, done chan
 		unconfirmed = nil
 		if len(merged) == 0 {
 			return
-		}
-		if len(c.carry) > 0 {
-			merged = append(merged, c.carry...)
 		}
 		c.carry = c.capCarry(merged)
 	}
