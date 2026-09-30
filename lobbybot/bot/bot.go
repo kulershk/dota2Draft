@@ -261,7 +261,9 @@ func (b *Bot) handleSteamEvents(sc *steam.Client, gen uint64, cancel <-chan stru
 			b.DisplayName = e.PersonaName
 			b.mu.Unlock()
 			b.log(fmt.Sprintf("Account: %s (country: %s)", e.PersonaName, e.Country))
-			b.setStatus(StatusConnectingGC)
+			if b.GetActiveLobbyID() == "" {
+				b.setStatus(StatusConnectingGC)
+			}
 
 			sc.Social.SetPersonaState(steamlang.EPersonaState_Online)
 
@@ -399,38 +401,14 @@ func (b *Bot) handleSteamEvents(sc *steam.Client, gen uint64, cancel <-chan stru
 
 		case *devents.ClientWelcomed:
 			b.log("Dota 2 GC welcomed! Bot is ready.")
-			// Only advertise available if we're NOT mid-lobby. A GC re-welcome
-			// (reconnect) while busy would otherwise let Node hand this bot a
-			// second match — the same double-bot guard the
-			// GCConnectionStatusChanged handler applies below.
-			b.mu.Lock()
-			b.gcReady = true
-			busy := b.activeLobbyID != ""
-			b.mu.Unlock()
-			if busy {
-				b.log(fmt.Sprintf("GC welcomed but still busy with lobby %s — staying busy", b.activeLobbyID))
-			} else {
-				b.setStatus(StatusAvailable)
-			}
+			b.onGCReady()
 			// Start lobby cache watcher
 			go b.watchLobbyCacheEvents()
 
 		case *devents.GCConnectionStatusChanged:
 			b.log(fmt.Sprintf("GC status: %s → %s", e.OldState.String(), e.NewState.String()))
 			if e.NewState == gcccm.GCConnectionStatus_GCConnectionStatus_HAVE_SESSION {
-				// Only transition to available if we're NOT busy with an active
-				// lobby. GC session can flicker during lobby creation — blindly
-				// resetting to available would let Node reassign us to a second
-				// match, causing double-bot bugs.
-				b.mu.Lock()
-				b.gcReady = true
-				idle := b.activeLobbyID == ""
-				b.mu.Unlock()
-				if idle {
-					b.setStatus(StatusAvailable)
-				} else {
-					b.log("GC session restored but still busy with a lobby — staying busy")
-				}
+				b.onGCReady()
 			} else {
 				// GC session lost (GC_GOING_DOWN / NO_SESSION). A bot with no GC
 				// session can't create or manage lobbies, so it must stop

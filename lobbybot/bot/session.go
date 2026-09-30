@@ -84,3 +84,21 @@ func (b *Bot) handleDrop(gen uint64, cancel <-chan struct{}, reason string) bool
 	b.reconnect(old, gen, cancel)
 	return true
 }
+
+// onGCReady runs when the GC session is (re)established (ClientWelcomed or
+// HAVE_SESSION). A bot mid-lobby re-asserts 'busy' — never 'available', which
+// would let Node double-book it — so the 'connecting'/'connecting_gc' status
+// reported during the reconnect doesn't linger in Node, whose stuck-connecting
+// watchdog would otherwise restart the bot and pull it out of the lobby.
+func (b *Bot) onGCReady() {
+	b.mu.Lock()
+	b.gcReady = true
+	lobbyID := b.activeLobbyID
+	b.mu.Unlock()
+	if lobbyID != "" {
+		b.logCtx("info", lobbyID, "GC session ready while in a lobby — staying busy")
+		b.setStatus(StatusBusy)
+		return
+	}
+	b.setStatus(StatusAvailable)
+}

@@ -1110,6 +1110,15 @@ class BotPool {
           ) h ON TRUE
          WHERE b.status IN ('connecting', 'connecting_gc')
            AND h.created_at < NOW() - INTERVAL '5 minutes'
+           -- A bot reconnecting mid-lobby must not be force-restarted: that
+           -- pulls it out of the Dota lobby. Live lobbies refresh updated_at
+           -- on every GC cache tick, so a stale row doesn't block forever.
+           AND NOT EXISTS (
+             SELECT 1 FROM match_lobbies ml
+              WHERE ml.bot_id = b.id
+                AND ml.status IN ('creating', 'waiting', 'launching', 'cointoss', 'active')
+                AND ml.updated_at > NOW() - INTERVAL '30 minutes'
+           )
       `)
       if (stuck.length === 0) return
       console.log(`[Bot] Found ${stuck.length} bot(s) stuck connecting >5min, force-restarting`)

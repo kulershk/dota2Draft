@@ -64,3 +64,25 @@ func TestHandleDropOfflineExits(t *testing.T) {
 		t.Fatal("an offline bot must not reconnect")
 	}
 }
+
+func TestOnGCReadyKeepsBusyBotBusy(t *testing.T) {
+	b, r := newTestBot()
+	b.Status = StatusConnectingGC
+	b.activeLobbyID = "42"
+	b.onGCReady()
+	if got := lastStatus(r); got != StatusBusy {
+		t.Fatalf("busy bot after GC ready: got %q, want %q", got, StatusBusy)
+	}
+	if !b.gcReady {
+		t.Error("gcReady must be set")
+	}
+}
+
+func TestOnGCReadyIdleBotAvailable(t *testing.T) {
+	b, r := newTestBot()
+	b.Status = StatusConnectingGC
+	b.onGCReady()
+	if got := lastStatus(r); got != StatusAvailable {
+		t.Fatalf("idle bot after GC ready: got %q, want %q", got, StatusAvailable)
+	}
+}
