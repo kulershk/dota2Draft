@@ -36,6 +36,18 @@ const (
 // sit in 'connecting' until Node's 5-minute watchdog restarted it.
 const logonTimeout = 90 * time.Second
 
+// shouldDropForLogonTimeout decides whether the logon timer should disconnect
+// the client it was armed for. The timer fires unconditionally at logonTimeout
+// after Connect, but by then the situation it was guarding against may no
+// longer apply: the session already logged on, Steam itself already tore the
+// connection down (Steam Guard wait, a dead CM during handleDrop's backoff —
+// both already leave sc.Connected() false), or a newer session has since taken
+// over this bot. Only a still-connected, still-current, never-logged-on client
+// is a genuine stuck logon worth dropping.
+func shouldDropForLogonTimeout(loggedOn, connected, genCurrent bool) bool {
+	return !loggedOn && connected && genCurrent
+}
+
 type Bot struct {
 	ID           string
 	Username     string
@@ -205,12 +217,20 @@ func (b *Bot) handleSteamEvents(sc *steam.Client, gen uint64, cancel <-chan stru
 	loggedOn := make(chan struct{})
 	var loggedOnOnce sync.Once
 	logonTimer := time.AfterFunc(logonTimeout, func() {
+		isLoggedOn := false
 		select {
 		case <-loggedOn:
+			isLoggedOn = true
 		default:
-			b.logAt("warn", fmt.Sprintf("No Steam logon within %s — dropping connection", logonTimeout))
-			sc.Disconnect() // emits DisconnectedEvent → handleDrop reconnects with backoff
 		}
+		b.mu.Lock()
+		genCurrent := b.sessionGen == gen
+		b.mu.Unlock()
+		if !shouldDropForLogonTimeout(isLoggedOn, sc.Connected(), genCurrent) {
+			return
+		}
+		b.logAt("warn", fmt.Sprintf("No Steam logon within %s — dropping connection", logonTimeout))
+		sc.Disconnect() // emits DisconnectedEvent → handleDrop reconnects with backoff
 	})
 	defer logonTimer.Stop()
 	for event := range sc.Events() {
@@ -325,6 +345,10 @@ func (b *Bot) handleSteamEvents(sc *steam.Client, gen uint64, cancel <-chan stru
 				b.guardIsTwoFactor = twoFactor
 				b.pendingAuth = true
 				b.mu.Unlock()
+				// The wait for a code can take up to 5 minutes — far longer than
+				// logonTimeout — and there's nothing connected to drop while we
+				// wait, so pause the timer rather than let it fire a false warning.
+				logonTimer.Stop()
 
 				// Steam disconnects after failed login, so we need to wait for code
 				// then reconnect and login with it
@@ -336,6 +360,9 @@ func (b *Bot) handleSteamEvents(sc *steam.Client, gen uint64, cancel <-chan stru
 						b.pendingAuth = false
 						b.pendingGuardCode = code
 						b.mu.Unlock()
+						// Fresh window for this live logon attempt — the original
+						// timer was stopped entering the guard wait above.
+						logonTimer.Reset(logonTimeout)
 						// Reconnect — the ConnectedEvent handler will use the code
 						sc.Connect()
 					case <-time.After(5 * time.Minute):
@@ -574,8 +601,16 @@ func (b *Bot) reconnect(old *steam.Client, gen uint64, cancel <-chan struct{}) {
 		dc.SetPlaying(false)
 		dc.Close()
 	}
-	// Create fresh client and start new event loop
+	// Create fresh client and start new event loop. Re-check the generation —
+	// a Disconnect()/newer reconnect could have landed while we were detaching
+	// the old dota client above, and this critical section is the one that
+	// actually stands up a new Steam client, so it needs its own guard.
 	b.mu.Lock()
+	if b.sessionGen != gen {
+		b.mu.Unlock()
+		log.Printf("[Bot %s] reconnect for gen %d skipped — session %d is current", b.ID, gen, b.sessionGen)
+		return
+	}
 	b.steamClient = steam.NewClient()
 	sc := b.steamClient
 	b.mu.Unlock()

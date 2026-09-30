@@ -208,10 +208,17 @@ func TestHelloLoopStaleGenerationDoesNotClaimFlag(t *testing.T) {
 	}
 }
 
-// Y1: helloRunning must be cleared in the same critical section that decides
-// to exit, so a concurrent helloLoop(gen) call started right after this one
-// returns never sees a stale "already running" flag and skips starting a loop
-// of its own.
+// Y1 regression guard: helloRunning must be false once a loop has exited
+// ready. This does NOT prove the fix on its own — Go's defer runs to
+// completion before the function returns to its caller, so a single-goroutine
+// call like this one can't distinguish "cleared in the same critical section
+// as the exit decision" (the Y1 fix) from "cleared by the deferred cleanup"
+// (the pre-fix behavior); both leave helloRunning false by the time this
+// assertion runs. The actual race Y1 closes is cross-goroutine: a second
+// helloLoop(gen) call landing in the window between the old loop's
+// b.mu.Unlock() (after reading stale||ready) and its deferred clear actually
+// running, which isn't reproducible here without test-only hooks in
+// production code. Kept as a guard that the observable end state is correct.
 func TestHelloLoopClearsRunningFlagOnReadyExit(t *testing.T) {
 	b, _ := newTestBot()
 	b.sessionGen = 2
@@ -247,5 +254,33 @@ func TestHelloLoopPreClosedCancelSendsNoHello(t *testing.T) {
 		if calls != 0 {
 			t.Fatalf("say() called on iteration %d after cancel was already closed", i)
 		}
+	}
+}
+
+// shouldDropForLogonTimeout must only fire for a client that is still
+// connected, still on the current session generation, and never logged on —
+// every other combination means there's nothing live to drop (Steam already
+// tore the connection down for us, a newer session took over, or we already
+// logged on) and dropping it would just be a false warning.
+func TestShouldDropForLogonTimeout(t *testing.T) {
+	cases := []struct {
+		name                       string
+		loggedOn, connected, genOK bool
+		want                       bool
+	}{
+		{"stuck pre-logon connection — drop", false, true, true, true},
+		{"already logged on — no-op", true, true, true, false},
+		{"already logged on and disconnected — no-op", true, false, true, false},
+		{"Steam already disconnected (guard wait / dead CM) — no-op", false, false, true, false},
+		{"superseded by a newer session — no-op", false, true, false, false},
+		{"disconnected and superseded — no-op", false, false, false, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := shouldDropForLogonTimeout(c.loggedOn, c.connected, c.genOK); got != c.want {
+				t.Errorf("shouldDropForLogonTimeout(loggedOn=%v, connected=%v, genOK=%v) = %v, want %v",
+					c.loggedOn, c.connected, c.genOK, got, c.want)
+			}
+		})
 	}
 }
