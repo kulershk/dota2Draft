@@ -186,3 +186,66 @@ func TestReconnectStaleGenerationIsNoop(t *testing.T) {
 		t.Fatal("a reconnect for a superseded session must not create a Steam client")
 	}
 }
+
+// Y2: an older-generation loop must never take the running flag from a newer
+// one — it must bail before claiming anything.
+func TestHelloLoopStaleGenerationDoesNotClaimFlag(t *testing.T) {
+	b, _ := newTestBot()
+	b.sessionGen = 5
+	b.helloRunning = false
+	b.helloGen = 0
+	b.helloFirstDelay = 0
+	calls := 0
+	b.helloLoop(3, make(chan struct{}), func() { calls++ })
+	if calls != 0 {
+		t.Fatalf("stale-generation loop sent %d hellos", calls)
+	}
+	b.mu.Lock()
+	running, gen := b.helloRunning, b.helloGen
+	b.mu.Unlock()
+	if running || gen != 0 {
+		t.Fatalf("stale-generation loop must not claim the flag: helloRunning=%v helloGen=%d", running, gen)
+	}
+}
+
+// Y1: helloRunning must be cleared in the same critical section that decides
+// to exit, so a concurrent helloLoop(gen) call started right after this one
+// returns never sees a stale "already running" flag and skips starting a loop
+// of its own.
+func TestHelloLoopClearsRunningFlagOnReadyExit(t *testing.T) {
+	b, _ := newTestBot()
+	b.sessionGen = 2
+	b.helloFirstDelay = 0
+	b.gcReady = true
+	b.helloLoop(2, make(chan struct{}), func() {
+		t.Fatal("say() must not be called once the GC is already ready")
+	})
+	b.mu.Lock()
+	running := b.helloRunning
+	b.mu.Unlock()
+	if running {
+		t.Fatal("helloRunning must be false immediately after the loop exits ready")
+	}
+}
+
+// Y3: a cancel closed before (or racing) the first hello must never let a
+// hello through — checked again right before each say(), not just via the
+// initial/interval sleeps.
+func TestHelloLoopPreClosedCancelSendsNoHello(t *testing.T) {
+	b, _ := newTestBot()
+	b.sessionGen = 1
+	b.helloFirstDelay = 0
+	for i := 0; i < 200; i++ {
+		cancel := make(chan struct{})
+		close(cancel)
+		calls := 0
+		b.mu.Lock()
+		b.helloRunning = false
+		b.helloGen = 0
+		b.mu.Unlock()
+		b.helloLoop(1, cancel, func() { calls++ })
+		if calls != 0 {
+			t.Fatalf("say() called on iteration %d after cancel was already closed", i)
+		}
+	}
+}

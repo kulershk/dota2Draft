@@ -123,6 +123,12 @@ func helloInterval(attempt int) time.Duration {
 // and must not block the new session's hellos meanwhile).
 func (b *Bot) helloLoop(gen uint64, cancel <-chan struct{}, say func()) {
 	b.mu.Lock()
+	// An older-generation loop must never take the running flag from a newer
+	// one — bail before claiming anything.
+	if b.sessionGen != gen {
+		b.mu.Unlock()
+		return
+	}
 	if b.helloRunning && b.helloGen == gen {
 		b.mu.Unlock()
 		return
@@ -132,6 +138,9 @@ func (b *Bot) helloLoop(gen uint64, cancel <-chan struct{}, say func()) {
 	first := b.helloFirstDelay
 	next := b.helloIntervalFn
 	b.mu.Unlock()
+	// Safety net for the cancel-return paths below, which exit outside the
+	// locked section that owns the stale/ready decision. The stale/ready exit
+	// clears the flag itself (see below) so this is a no-op there.
 	defer func() {
 		b.mu.Lock()
 		if b.helloGen == gen { // a newer session's loop owns the flag otherwise
@@ -151,9 +160,23 @@ func (b *Bot) helloLoop(gen uint64, cancel <-chan struct{}, say func()) {
 		b.mu.Lock()
 		stale := b.sessionGen != gen
 		ready := b.gcReady
-		b.mu.Unlock()
 		if stale || ready {
+			// Clear the flag in the same critical section that decides to
+			// exit — otherwise a helloLoop(gen) call that starts right after
+			// we unlock (e.g. GC session lost again) can see helloRunning
+			// still set and bail, leaving no loop running at all.
+			if b.helloGen == gen {
+				b.helloRunning = false
+			}
+			b.mu.Unlock()
 			return
+		}
+		b.mu.Unlock()
+		// Disconnect closes cancel; don't SayHello on a closed client.
+		select {
+		case <-cancel:
+			return
+		default:
 		}
 		if attempt == 1 {
 			b.log("Sending GC Hello...")

@@ -563,6 +563,7 @@ func (b *Bot) reconnect(old *steam.Client, gen uint64, cancel <-chan struct{}) {
 	b.gcReady = false
 	dc := b.dotaClient
 	b.dotaClient = nil
+	b.dotaFor = nil
 	if b.lobbyCacheCancel != nil {
 		b.lobbyCacheCancel()
 		b.lobbyCacheCancel = nil
@@ -606,6 +607,7 @@ func (b *Bot) Disconnect() {
 	b.gcReady = false
 	dc := b.dotaClient
 	b.dotaClient = nil
+	b.dotaFor = nil
 	sc := b.steamClient
 	b.steamClient = nil
 	b.mu.Unlock()
@@ -826,22 +828,30 @@ func (b *Bot) checkExistingLobby() {
 	if dc == nil {
 		return
 	}
+	// Lock before reading the cache container (not just around the diff) so a
+	// concurrent cache-event watcher or safety poll can't advance lastLobby
+	// past this snapshot before we diff against it — that would diff an
+	// already-stale read against a newer lastLobby. Released before the
+	// (potentially long) sweep below, which doesn't need this serialization.
+	b.processMu.Lock()
 	container, err := dc.GetCache().GetContainerForTypeID(uint32(cso.Lobby))
 	if err != nil {
+		b.processMu.Unlock()
 		return
 	}
 	lobby, ok := container.GetOne().(*gcccm.CSODOTALobby)
 	if !ok || lobby == nil {
+		b.processMu.Unlock()
 		return
 	}
 	b.log(fmt.Sprintf("CACHE: Found existing lobby on startup (id: %d, state: %s)", lobby.GetLobbyId(), lobby.GetState().String()))
 	if b.GetActiveLobbyID() == "" {
-		b.log("CACHE: Existing lobby with no assignment — waiting 5s for rejoin command...")
 		b.setLastLobby(lobby)
+		b.processMu.Unlock()
+		b.log("CACHE: Existing lobby with no assignment — waiting 5s for rejoin command...")
 		b.sweepIfUnassigned(lobby)
 		return
 	}
-	b.processMu.Lock()
 	b.processLobbyUpdate(b.getLastLobby(), lobby)
 	b.setLastLobby(lobby)
 	b.processMu.Unlock()
@@ -1655,6 +1665,10 @@ func (b *Bot) PollLobbyFromCache() {
 	if dc == nil {
 		return
 	}
+	// Lock before reading the cache container — see checkExistingLobby. Serializes
+	// with the cache-event watcher — see handleLobbyCacheEvent.
+	b.processMu.Lock()
+	defer b.processMu.Unlock()
 	container, err := dc.GetCache().GetContainerForTypeID(uint32(cso.Lobby))
 	if err != nil {
 		return
@@ -1670,9 +1684,6 @@ func (b *Bot) PollLobbyFromCache() {
 	// Console-only: fires every 15s for the life of a lobby.
 	log.Printf("[Bot %s] POLL: Cache read — state: %s, matchID: %d, members: %d",
 		b.ID, lob.GetState().String(), lob.GetMatchId(), len(liveMembers(lob)))
-	// Serialize with the cache-event watcher — see handleLobbyCacheEvent.
-	b.processMu.Lock()
-	defer b.processMu.Unlock()
 	b.processLobbyUpdate(b.getLastLobby(), lob)
 	b.setLastLobby(lob)
 }
