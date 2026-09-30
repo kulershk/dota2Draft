@@ -402,6 +402,7 @@ class BotPool {
   // offline/errored bots ("restart") and fail this attempt with a clear message
   // — the next attempt picks them up once they're back.
   async _findAvailableBotId({ excludeBotId = null } = {}) {
+    if (!this.isGoConnected()) throw new Error('Lobby bot service is offline — try again in a moment')
     await this._syncBotStatusesFromGo().catch(() => {})
     // Atomically CLAIM a live-available bot: flip it to 'busy' in the same
     // statement so two concurrent lobby creates (e.g. queue + tournament firing
@@ -421,11 +422,10 @@ class BotPool {
            RETURNING id`
     const row = excludeBotId ? await queryOne(claimSql, [excludeBotId]) : await queryOne(claimSql)
     if (row) return row.id
-    let restarted = 0
-    try { restarted = (await this.connectAllBots()).count } catch {}
-    throw new Error(restarted > 0
-      ? `No bots available — restarting ${restarted} offline bot(s), try again in a moment`
-      : 'No bots available')
+    // Kick a background, backoff-respecting reconnect of offline auto-connect
+    // bots — never log bots in inline on a player's request.
+    this._reconnectAutoConnectBots().catch(() => {})
+    throw new Error('No bots available — reconnecting offline bots, try again shortly')
   }
 
   _onMatchDetails(data) {
@@ -812,9 +812,7 @@ class BotPool {
     // into a no-show ban on players who actually played.
     if (lobby.dota_match_id) {
       console.log(`[Lobby ${lobbyId}] Ignoring late error (match ${lobby.dota_match_id} already started): ${data.error}`)
-      if (lobby.bot_id) {
-        await execute("UPDATE lobby_bots SET status = 'available' WHERE id = $1", [lobby.bot_id])
-      }
+      this._syncBotStatusesFromGo().catch(() => {})
       return
     }
 
@@ -841,10 +839,10 @@ class BotPool {
       [data.error, lobbyId]
     )
 
-    // Free the bot
-    if (lobby.bot_id) {
-      await execute("UPDATE lobby_bots SET status = 'available' WHERE id = $1", [lobby.bot_id])
-    }
+    // Go tears the Dota lobby down and reports the bot 'available' itself on
+    // every teardown; reconcile now instead of racing that report with our
+    // own write.
+    this._syncBotStatusesFromGo().catch(() => {})
 
     if (this.io) {
       (await this._lobbyRooms(lobby)).emit('lobby:statusUpdate', {
@@ -1049,10 +1047,7 @@ class BotPool {
             "UPDATE match_lobbies SET status = 'error', error_message = 'Timed out in creating (>2min, likely GC loss)', updated_at = NOW() WHERE id = $1",
             [lobby.id]
           )
-          if (lobby.bot_id) {
-            await execute("UPDATE lobby_bots SET status = 'available' WHERE id = $1", [lobby.bot_id])
-            console.log(`[Lobby] Freed bot ${lobby.bot_id} from stuck lobby ${lobby.id}`)
-          }
+          this._syncBotStatusesFromGo().catch(() => {})
           if (this.io) {
             (await this._lobbyRooms(lobby)).emit('lobby:statusUpdate', {
               matchId: lobby.match_id,
@@ -2093,6 +2088,7 @@ class BotPool {
     // _findAvailableBotId already flipped this bot to 'busy'. If anything below
     // fails, release it so it isn't stranded busy with no lobby.
     let lobbyHandedOff = false
+    let lobby = null
     try {
     // Resolve players
     const match = await queryOne(`
@@ -2161,12 +2157,10 @@ class BotPool {
     const gameName = options.game_name || `${match.team1_name || 'Team 1'} vs ${match.team2_name || 'Team 2'} - Game ${gameNumber}`
     const password = options.password || Math.random().toString(36).slice(2, 8)
 
-    const lobby = await queryOne(`
+    lobby = await queryOne(`
       INSERT INTO match_lobbies (match_id, game_number, competition_id, bot_id, status, server_region, game_name, password, players_expected)
       VALUES ($1, $2, $3, $4, 'creating', $5, $6, $7, $8) RETURNING *
     `, [matchId, gameNumber, compId, availableBot.id, serverRegion, gameName, password, JSON.stringify(playersExpected)])
-
-    await execute("UPDATE lobby_bots SET status = 'busy', last_used_at = NOW() WHERE id = $1", [availableBot.id])
 
     // Auto-set match status to live when first lobby is created
     await execute("UPDATE matches SET status = 'live' WHERE id = $1 AND status = 'pending'", [matchId])
@@ -2187,6 +2181,9 @@ class BotPool {
       // A failure before the lobby was handed to Go means the bot we claimed
       // never got a lobby — release it so it isn't stranded 'busy'.
       if (!lobbyHandedOff) {
+        if (lobby) {
+          await execute("UPDATE match_lobbies SET status = 'error', error_message = $2, updated_at = NOW() WHERE id = $1", [lobby.id, e.message]).catch(() => {})
+        }
         await execute("UPDATE lobby_bots SET status = 'available' WHERE id = $1 AND status = 'busy'", [availableBot.id]).catch(() => {})
       }
       throw e
@@ -2209,13 +2206,10 @@ class BotPool {
   async cancelLobby(lobbyDbId) {
     const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyDbId])
     if (!lobby) throw new Error('Lobby not found')
-
-    this._sendToGo('cancel_lobby', { lobbyId: String(lobbyDbId) })
-
-    if (lobby.bot_id) {
-      await execute("UPDATE lobby_bots SET status = 'available' WHERE id = $1", [lobby.bot_id])
-    }
     await execute("UPDATE match_lobbies SET status = 'cancelled', updated_at = NOW() WHERE id = $1", [lobbyDbId])
+    // Go tears the Dota lobby down and reports the bot 'available' itself. If
+    // Go is offline, its status is reconciled on reconnect (ResendAllBotStatus).
+    try { this._sendToGo('cancel_lobby', { lobbyId: String(lobbyDbId) }) } catch {}
   }
   // Build the create_lobby payload for the Go bot service. Shared by the
   // initial createQueueLobby call and the retry path.
@@ -2268,6 +2262,7 @@ class BotPool {
     // _findAvailableBotId already flipped this bot to 'busy'; release it if we
     // fail before handing the lobby off to Go.
     let lobbyHandedOff = false
+    let lobby = null
     try {
     // Get pool settings
     const pool = await queryOne('SELECT * FROM queue_pools WHERE id = $1', [poolId])
@@ -2279,12 +2274,11 @@ class BotPool {
     const gameName = `${team1Name} vs ${team2Name} - Game ${gameNumber}`
     const password = Math.random().toString(36).slice(2, 8)
 
-    const lobby = await queryOne(`
+    lobby = await queryOne(`
       INSERT INTO match_lobbies (match_id, game_number, competition_id, bot_id, status, server_region, game_name, password, players_expected)
       VALUES ($1, $2, NULL, $3, 'creating', $4, $5, $6, $7) RETURNING *
     `, [matchId, gameNumber, availableBot.id, (pool.lobby_server_region ?? 3), gameName, password, JSON.stringify(playersExpected)])
 
-    await execute("UPDATE lobby_bots SET status = 'busy', last_used_at = NOW() WHERE id = $1", [availableBot.id])
     await execute("UPDATE matches SET status = 'live' WHERE id = $1 AND status = 'pending'", [matchId])
 
     this._sendToGo('create_lobby', this._buildGoLobbyPayload(lobby, pool, team1Name, team2Name, playersExpected, opts))
@@ -2292,6 +2286,9 @@ class BotPool {
     return lobby
     } catch (e) {
       if (!lobbyHandedOff) {
+        if (lobby) {
+          await execute("UPDATE match_lobbies SET status = 'error', error_message = $2, updated_at = NOW() WHERE id = $1", [lobby.id, e.message]).catch(() => {})
+        }
         await execute("UPDATE lobby_bots SET status = 'available' WHERE id = $1 AND status = 'busy'", [availableBot.id]).catch(() => {})
       }
       throw e
@@ -2331,9 +2328,6 @@ class BotPool {
         "UPDATE match_lobbies SET status = 'error', error_message = 'Admin retry requested', updated_at = NOW() WHERE id = $1",
         [latest.id]
       )
-      if (latest.bot_id) {
-        await execute("UPDATE lobby_bots SET status = 'available' WHERE id = $1", [latest.bot_id])
-      }
     }
 
     // Reload with updated status/error before delegating
@@ -2367,13 +2361,16 @@ class BotPool {
       return false
     }
 
-    // Pick a different available bot. Exclude the bot that just failed so we
-    // actually retry on fresh hardware.
-    const nextBot = await queryOne(
-      "SELECT id FROM lobby_bots WHERE status = 'available' AND id <> $1 ORDER BY last_used_at NULLS FIRST LIMIT 1",
-      [erroredLobby.bot_id || 0]
-    )
-    if (!nextBot) {
+    // Pick a different available bot, atomically claimed against Go's live
+    // state. Exclude the bot that just failed so we actually retry on fresh
+    // hardware.
+    let nextBotId = null
+    try {
+      nextBotId = await this._findAvailableBotId({ excludeBotId: erroredLobby.bot_id || null })
+    } catch (e) {
+      console.log(`[Retry] No alternate bot for match ${erroredLobby.match_id}: ${e.message}`)
+    }
+    if (!nextBotId) {
       console.log(`[Queue] No alternate bot available for match ${erroredLobby.match_id} retry`)
       if (this.io) {
         (await this._lobbyRooms(erroredLobby)).emit('queue:error', {
@@ -2400,19 +2397,26 @@ class BotPool {
     // (failed) lobby if it somehow came online late.
     const password = Math.random().toString(36).slice(2, 8)
 
-    const newLobby = await queryOne(`
-      INSERT INTO match_lobbies (match_id, game_number, competition_id, bot_id, status, server_region, game_name, password, players_expected)
-      VALUES ($1, $2, NULL, $3, 'creating', $4, $5, $6, $7) RETURNING *
-    `, [
-      erroredLobby.match_id, erroredLobby.game_number, nextBot.id,
-      (pool.lobby_server_region ?? 3), gameName, password, JSON.stringify(playersExpected),
-    ])
+    let newLobby = null
+    try {
+      newLobby = await queryOne(`
+        INSERT INTO match_lobbies (match_id, game_number, competition_id, bot_id, status, server_region, game_name, password, players_expected)
+        VALUES ($1, $2, NULL, $3, 'creating', $4, $5, $6, $7) RETURNING *
+      `, [
+        erroredLobby.match_id, erroredLobby.game_number, nextBotId,
+        (pool.lobby_server_region ?? 3), gameName, password, JSON.stringify(playersExpected),
+      ])
 
-    await execute("UPDATE lobby_bots SET status = 'busy', last_used_at = NOW() WHERE id = $1", [nextBot.id])
+      this._sendToGo('create_lobby', this._buildGoLobbyPayload(newLobby, pool, team1Name, team2Name, playersExpected, retryOpts))
+    } catch (e) {
+      if (newLobby) {
+        await execute("UPDATE match_lobbies SET status = 'error', error_message = $2, updated_at = NOW() WHERE id = $1", [newLobby.id, e.message]).catch(() => {})
+      }
+      await execute("UPDATE lobby_bots SET status = 'available' WHERE id = $1 AND status = 'busy'", [nextBotId]).catch(() => {})
+      throw e
+    }
 
-    this._sendToGo('create_lobby', this._buildGoLobbyPayload(newLobby, pool, team1Name, team2Name, playersExpected, retryOpts))
-
-    console.log(`[Queue] Retrying lobby for match ${erroredLobby.match_id} on bot ${nextBot.id} (attempt ${prevErrors + 1}/${MAX_ATTEMPTS})`)
+    console.log(`[Queue] Retrying lobby for match ${erroredLobby.match_id} on bot ${nextBotId} (attempt ${prevErrors + 1}/${MAX_ATTEMPTS})`)
 
     if (this.io) {
       (await this._lobbyRooms(newLobby)).emit('queue:lobbyRetrying', {
@@ -2460,12 +2464,15 @@ class BotPool {
       return false
     }
 
-    // Pick a different available bot so we actually retry on fresh hardware.
-    const nextBot = await queryOne(
-      "SELECT id FROM lobby_bots WHERE status = 'available' AND id <> $1 ORDER BY last_used_at NULLS FIRST LIMIT 1",
-      [erroredLobby.bot_id || 0]
-    )
-    if (!nextBot) {
+    // Pick a different available bot, atomically claimed against Go's live
+    // state, so we actually retry on fresh hardware.
+    let nextBotId = null
+    try {
+      nextBotId = await this._findAvailableBotId({ excludeBotId: erroredLobby.bot_id || null })
+    } catch (e) {
+      console.log(`[Retry] No alternate bot for match ${erroredLobby.match_id}: ${e.message}`)
+    }
+    if (!nextBotId) {
       console.log(`[Comp] No alternate bot available for match ${erroredLobby.match_id} retry`)
       await emitError('Lobby creation failed and no alternate bot is available. Please contact an admin.')
       return false
@@ -2489,19 +2496,26 @@ class BotPool {
     // Fresh password so a stale client can't accidentally land in the failed lobby.
     const password = Math.random().toString(36).slice(2, 8)
 
-    const newLobby = await queryOne(`
-      INSERT INTO match_lobbies (match_id, game_number, competition_id, bot_id, status, server_region, game_name, password, players_expected)
-      VALUES ($1, $2, $3, $4, 'creating', $5, $6, $7, $8) RETURNING *
-    `, [
-      erroredLobby.match_id, erroredLobby.game_number, erroredLobby.competition_id, nextBot.id,
-      erroredLobby.server_region, gameName, password, JSON.stringify(playersExpected),
-    ])
+    let newLobby = null
+    try {
+      newLobby = await queryOne(`
+        INSERT INTO match_lobbies (match_id, game_number, competition_id, bot_id, status, server_region, game_name, password, players_expected)
+        VALUES ($1, $2, $3, $4, 'creating', $5, $6, $7, $8) RETURNING *
+      `, [
+        erroredLobby.match_id, erroredLobby.game_number, erroredLobby.competition_id, nextBotId,
+        erroredLobby.server_region, gameName, password, JSON.stringify(playersExpected),
+      ])
 
-    await execute("UPDATE lobby_bots SET status = 'busy', last_used_at = NOW() WHERE id = $1", [nextBot.id])
+      this._sendToGo('create_lobby', this._buildCompLobbyPayload(newLobby, match, compSettings, playersExpected))
+    } catch (e) {
+      if (newLobby) {
+        await execute("UPDATE match_lobbies SET status = 'error', error_message = $2, updated_at = NOW() WHERE id = $1", [newLobby.id, e.message]).catch(() => {})
+      }
+      await execute("UPDATE lobby_bots SET status = 'available' WHERE id = $1 AND status = 'busy'", [nextBotId]).catch(() => {})
+      throw e
+    }
 
-    this._sendToGo('create_lobby', this._buildCompLobbyPayload(newLobby, match, compSettings, playersExpected))
-
-    console.log(`[Comp] Retrying lobby for match ${erroredLobby.match_id} on bot ${nextBot.id} (attempt ${prevErrors + 1}/${MAX_ATTEMPTS})`)
+    console.log(`[Comp] Retrying lobby for match ${erroredLobby.match_id} on bot ${nextBotId} (attempt ${prevErrors + 1}/${MAX_ATTEMPTS})`)
 
     if (this.io) {
       (await this._lobbyRooms(newLobby)).emit('lobby:statusUpdate', {
