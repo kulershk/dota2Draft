@@ -543,10 +543,15 @@ class BotPool {
       })
     }
 
-    // Auto force-launch for queue matches when all players joined + both teams set
-    if (lobby && !lobby.competition_id && data.status === 'waiting') {
+    // Auto force-launch for queue matches when all players joined + both teams set.
+    // Decide on the ROW status, not data.status: a late/replayed 'waiting' for
+    // a cancelled/completed/active row is skipped by the UPDATE above and must
+    // not relaunch it.
+    if (lobby && !lobby.competition_id && data.status === 'waiting' && lobby.status === 'waiting') {
       const expectedList = lobby.players_expected || []
-      const teamIds = this.lobbyTeamIds.get(lobbyId) || (lobby.team_ids ? JSON.parse(lobby.team_ids) : null)
+      // team_ids is JSONB — pg hands back an object (a string only for legacy rows).
+      const storedTeamIds = typeof lobby.team_ids === 'string' ? JSON.parse(lobby.team_ids) : lobby.team_ids
+      const teamIds = this.lobbyTeamIds.get(lobbyId) || storedTeamIds || null
       const slotted = this._countExpectedInSlots(expectedList, data.playersJoined || [])
       if (expectedList.length > 0 && slotted === expectedList.length && teamIds?.radiant && teamIds?.dire) {
         console.log(`[Queue] All ${slotted}/${expectedList.length} expected players in team slots + both teams set — auto force-launching lobby ${lobbyId}`)
@@ -697,6 +702,9 @@ class BotPool {
       [lobbyId, dotaMatchId]
     )
     if (!lobby) return
+    // Give players ~30s back in the lobby before a queue auto-relaunch (Go
+    // likewise never relaunches off the abort update itself).
+    this._autoLaunchAt.set(lobbyId, Date.now())
     if (dotaMatchId && dotaMatchId !== '0') {
       await execute(
         `UPDATE match_games SET dotabuff_id = NULL
@@ -1048,7 +1056,16 @@ class BotPool {
         'SELECT id FROM match_games WHERE match_id = $1 AND game_number = $2',
         [matchId, gameNumber]
       )
-      if (mg) {
+      // A same-id relaunch replays game_started — don't start a second job
+      // chain for a game whose fetch is already queued/running.
+      const existing = mg && await queryOne(
+        `SELECT 1 FROM jobs WHERE type = 'fetch_match_stats' AND status IN ('pending', 'running')
+           AND payload->>'matchGameId' = $1 AND payload->>'dotabuffId' = $2 LIMIT 1`,
+        [String(mg.id), String(dotaMatchId)]
+      )
+      if (existing) {
+        console.log(`[Stats] fetch_match_stats already queued for match ${matchId} game ${gameNumber} (dota: ${dotaMatchId}) — not enqueuing another`)
+      } else if (mg) {
         await enqueueJob({
           type: 'fetch_match_stats',
           payload: { matchGameId: mg.id, dotabuffId: String(dotaMatchId), matchId, gameNumber },
@@ -1512,11 +1529,17 @@ class BotPool {
 
       if (!winnerCaptainId) return
 
-      // Set game winner
-      await execute(
+      // Set game winner. Already settled (a second stats-job chain after a
+      // same-id relaunch, or a retry) → stop here so XP/gcoins/season/bracket
+      // aren't applied twice.
+      const { rowCount: settled } = await execute(
         'UPDATE match_games SET winner_captain_id = $1 WHERE match_id = $2 AND game_number = $3 AND winner_captain_id IS NULL',
         [winnerCaptainId, matchId, gameNumber]
       )
+      if (settled === 0) {
+        console.log(`[Auto] Game ${gameNumber} of match ${matchId} already has a winner — skipping settlement`)
+        return
+      }
       console.log(`[Auto] Game ${gameNumber} of match ${matchId} won by captain ${winnerCaptainId} (${radiantWin ? 'radiant' : 'dire'})`)
 
       // ── XP: game win/loss ──
@@ -2238,9 +2261,19 @@ class BotPool {
   }
 
   async forceLaunch(lobbyDbId, { skipValidation = false } = {}) {
-    await execute("UPDATE match_lobbies SET status = 'launching', updated_at = NOW() WHERE id = $1", [lobbyDbId])
-    const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyDbId])
-    if (lobby && this.io) {
+    // Only a lobby still waiting (or re-launching) can launch — never revive a
+    // cancelled/completed/errored row or knock an active one back.
+    const lobby = await queryOne(
+      `UPDATE match_lobbies SET status = 'launching', updated_at = NOW()
+        WHERE id = $1 AND status IN ('waiting', 'launching')
+        RETURNING *`,
+      [lobbyDbId]
+    )
+    if (!lobby) {
+      console.warn(`[Lobby ${lobbyDbId}] force_launch skipped — lobby is not waiting/launching`)
+      return
+    }
+    if (this.io) {
       (await this._lobbyRooms(lobby)).emit('lobby:statusUpdate', {
         matchId: lobby.match_id,
         gameNumber: lobby.game_number,

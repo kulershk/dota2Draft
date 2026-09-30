@@ -65,3 +65,52 @@ export async function cleanupSeed({ comp, players = [], bots = [] }) {
   if (players.length) await execute('DELETE FROM players WHERE id = ANY($1::int[])', [players.map(p => p.id)])
   if (bots.length) await execute('DELETE FROM lobby_bots WHERE id = ANY($1::int[])', [bots.map(b => b.id)])
 }
+
+// Queue match: pool + competition-less match + queue_matches row + one player
+// per side. Pair with cleanupQueueSeed (deletes exactly these rows).
+export async function seedQueueMatch() {
+  const tag = uniq()
+  const mkPlayer = (n) => queryOne(
+    'INSERT INTO players (name, steam_id, mmr, roles) VALUES ($1, $2, 3000, $3) RETURNING *',
+    [`Q${n}-${tag}`, `7656119${String(Math.floor(Math.random() * 1e10)).padStart(10, '0')}`, '["Mid"]'],
+  )
+  const p1 = await mkPlayer(1)
+  const p2 = await mkPlayer(2)
+  const pool = await queryOne('INSERT INTO queue_pools (name) VALUES ($1) RETURNING *', [`bot-test-pool-${tag}`])
+  const match = await queryOne(
+    "INSERT INTO matches (competition_id, best_of, status) VALUES (NULL, 1, 'live') RETURNING *",
+  )
+  const side = (p) => JSON.stringify([{ playerId: p.id, steamId: p.steam_id, name: p.name }])
+  const queueMatch = await queryOne(
+    `INSERT INTO queue_matches (pool_id, match_id, captain1_player_id, captain2_player_id, team1_players, team2_players, all_player_ids, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, 'live') RETURNING *`,
+    [pool.id, match.id, p1.id, p2.id, side(p1), side(p2), JSON.stringify([p1.id, p2.id])],
+  )
+  const playersExpected = [
+    { steam_id: p1.steam_id, name: p1.name, team: 'radiant' },
+    { steam_id: p2.steam_id, name: p2.name, team: 'dire' },
+  ]
+  return { tag, pool, match, queueMatch, players: [p1, p2], playersExpected }
+}
+
+export async function seedQueueLobby({ match, botId, playersExpected, status = 'waiting', gameNumber = 1 }) {
+  return queryOne(
+    `INSERT INTO match_lobbies (match_id, game_number, competition_id, bot_id, status, game_name, password, players_expected)
+     VALUES ($1, $2, NULL, $3, $4, 'test queue lobby', 'pw', $5) RETURNING *`,
+    [match.id, gameNumber, botId, status, JSON.stringify(playersExpected)],
+  )
+}
+
+export async function cleanupQueueSeed({ pool, match, players = [], bots = [] }) {
+  if (match) {
+    await execute("DELETE FROM jobs WHERE payload->>'matchId' = $1", [String(match.id)])
+    await execute('DELETE FROM match_lobbies WHERE match_id = $1', [match.id])
+    await execute('DELETE FROM matches WHERE id = $1', [match.id]) // cascades match_games
+  }
+  if (pool) await execute('DELETE FROM queue_pools WHERE id = $1', [pool.id]) // cascades queue_matches
+  if (players.length) {
+    await execute('DELETE FROM xp_log WHERE player_id = ANY($1::int[])', [players.map(p => p.id)])
+    await execute('DELETE FROM players WHERE id = ANY($1::int[])', [players.map(p => p.id)])
+  }
+  if (bots.length) await execute('DELETE FROM lobby_bots WHERE id = ANY($1::int[])', [bots.map(b => b.id)])
+}
