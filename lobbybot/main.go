@@ -142,6 +142,20 @@ func main() {
 			}
 			lobbyMgr.ForceLaunch(cmd.LobbyID, cmd.SkipValidation)
 
+		case "kick_player":
+			var cmd protocol.KickPlayerCmd
+			if !decode(msgType, data, &cmd) {
+				return
+			}
+			lobbyMgr.KickPlayer(cmd)
+
+		case "set_lobby_blocklist":
+			var cmd protocol.SetLobbyBlocklistCmd
+			if !decode(msgType, data, &cmd) {
+				return
+			}
+			lobbyMgr.SetLobbyBlocklist(cmd)
+
 		case "request_match_details":
 			var cmd protocol.RequestMatchDetailsCmd
 			if !decode(msgType, data, &cmd) {

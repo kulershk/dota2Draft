@@ -64,6 +64,9 @@ type CreateLobbyCmd struct {
 	ExpectedDireTeamId    int           `json:"expectedDireTeamId"`
 	Players               []LobbyPlayer `json:"players"`
 	TimeoutMinutes        int           `json:"timeoutMinutes,omitempty"`
+	// BlockedSteamIDs are steam64 ids an admin kicked from this lobby; the bot
+	// re-kicks them if they rejoin while the lobby is pre-launch.
+	BlockedSteamIDs []string `json:"blockedSteamIds,omitempty"`
 }
 
 type RejoinLobbyCmd struct {
@@ -74,6 +77,7 @@ type RejoinLobbyCmd struct {
 	AutoAssignTeams bool          `json:"autoAssignTeams"`
 	Players         []LobbyPlayer `json:"players"`
 	TimeoutMinutes  int           `json:"timeoutMinutes,omitempty"`
+	BlockedSteamIDs []string      `json:"blockedSteamIds,omitempty"`
 }
 
 type CancelLobbyCmd struct {
@@ -83,6 +87,24 @@ type CancelLobbyCmd struct {
 type ForceLaunchCmd struct {
 	LobbyID        string `json:"lobbyId"`
 	SkipValidation bool   `json:"skipValidation"`
+}
+
+// KickPlayerCmd ("kick_player") is an admin action on one lobby member.
+// Mode "unassign" moves them out of their Radiant/Dire slot (they stay in the
+// lobby); "kick" removes them from the lobby. The outcome is reported back as
+// kick_result. Blocking is separate — see SetLobbyBlocklistCmd.
+type KickPlayerCmd struct {
+	LobbyID string `json:"lobbyId"`
+	SteamID string `json:"steamId"`
+	Mode    string `json:"mode"` // "unassign" | "kick"
+}
+
+// SetLobbyBlocklistCmd ("set_lobby_blocklist") replaces the lobby's full set
+// of blocked steam ids (idempotent). Blocked members are auto-kicked while the
+// lobby is pre-launch.
+type SetLobbyBlocklistCmd struct {
+	LobbyID  string   `json:"lobbyId"`
+	SteamIDs []string `json:"steamIds"`
 }
 
 type RequestMatchDetailsCmd struct {
@@ -167,10 +189,39 @@ type BotLogEvent struct {
 	Message string `json:"message"`
 }
 
+// LobbyMember is one live lobby member as reported in lobby_status.members.
+// Team is "radiant" | "dire" | "unassigned" | "pool" | "spectator" | "other".
+type LobbyMember struct {
+	SteamID string `json:"steamId"`
+	Name    string `json:"name"`
+	Team    string `json:"team"`
+	Slot    int    `json:"slot"`
+}
+
 type LobbyStatusEvent struct {
 	LobbyID       string        `json:"lobbyId"`
 	Status        string        `json:"status"`
 	PlayersJoined []LobbyPlayer `json:"playersJoined,omitempty"`
+	// Members is the full live roster (every team, bot itself excluded).
+	// omitzero, not omitempty: a non-nil empty slice is sent as [] (a lobby
+	// with nobody in it yet), while nil — no roster observation behind this
+	// status, e.g. the synthetic "cancelled"/"launching" sends — omits the
+	// field so Node skips its roster diff instead of treating it as "everyone
+	// left". Old bot builds never send the field at all.
+	Members []LobbyMember `json:"members,omitzero"`
+}
+
+// KickResultEvent ("kick_result") reports the outcome of a kick_player command
+// (Auto=false) or of the bot re-kicking a blocked player who rejoined
+// (Auto=true, Mode "kick", sent once the player is observed gone).
+// Reason is "" on success, else "not_in_lobby" | "lobby_gone" | "timeout" | "no_gc".
+type KickResultEvent struct {
+	LobbyID string `json:"lobbyId"`
+	SteamID string `json:"steamId"`
+	Mode    string `json:"mode"`
+	OK      bool   `json:"ok"`
+	Reason  string `json:"reason"`
+	Auto    bool   `json:"auto"`
 }
 
 type PlayerJoinedEvent struct {

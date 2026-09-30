@@ -15,6 +15,7 @@ type rec struct {
 	mu          sync.Mutex
 	msgs        []protocol.BotLogEvent
 	lobbyErrors []protocol.LobbyErrorEvent
+	kickResults []protocol.KickResultEvent
 	all         []string
 }
 
@@ -27,6 +28,9 @@ func (r *rec) send(t string, d interface{}) error {
 	}
 	if e, ok := d.(protocol.LobbyErrorEvent); ok {
 		r.lobbyErrors = append(r.lobbyErrors, e)
+	}
+	if k, ok := d.(protocol.KickResultEvent); ok {
+		r.kickResults = append(r.kickResults, k)
 	}
 	return nil
 }
@@ -151,5 +155,31 @@ func TestFinishLobbyTimeoutWithoutGCIsNotNoShow(t *testing.T) {
 	}
 	if e := r.lobbyErrors[0].Error; strings.Contains(strings.ToLower(e), "timed out") {
 		t.Errorf("lobby_error %q would be treated as a no-show timeout", e)
+	}
+}
+
+// kick_player for a lobby Go no longer tracks (finished, or its bot died) must
+// still produce an outcome for the admin timeline.
+func TestKickPlayerUntrackedLobbyReportsGone(t *testing.T) {
+	r := &rec{}
+	m := NewManager(bot.NewManager(r.send), r.send)
+	m.KickPlayer(protocol.KickPlayerCmd{LobbyID: "9", SteamID: "76561198000000001", Mode: "kick"})
+	want := protocol.KickResultEvent{LobbyID: "9", SteamID: "76561198000000001", Mode: "kick", Reason: "lobby_gone"}
+	if len(r.kickResults) != 1 || r.kickResults[0] != want {
+		t.Fatalf("kick_result = %+v, want %+v", r.kickResults, want)
+	}
+	// set_lobby_blocklist for an untracked lobby is a silent no-op.
+	m.SetLobbyBlocklist(protocol.SetLobbyBlocklistCmd{LobbyID: "9", SteamIDs: []string{"76561198000000001"}})
+}
+
+func TestKickPlayerRoutesToLobbyBot(t *testing.T) {
+	r := &rec{}
+	b := bot.NewBot("1", "u", "p", "t", r.send) // no GC session
+	b.SetActiveLobbyID("9")
+	m := NewManager(bot.NewManager(r.send), r.send)
+	m.lobbies["9"] = &Lobby{ID: "9", Bot: b}
+	m.KickPlayer(protocol.KickPlayerCmd{LobbyID: "9", SteamID: "76561198000000001", Mode: "unassign"})
+	if len(r.kickResults) != 1 || r.kickResults[0].Reason != "no_gc" || r.kickResults[0].Mode != "unassign" {
+		t.Fatalf("kick_result = %+v, want the bot's no_gc rejection", r.kickResults)
 	}
 }

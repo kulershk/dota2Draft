@@ -95,6 +95,17 @@ type Bot struct {
 	gcReady               bool   // GC session is live (welcomed / HAVE_SESSION); gates going back to 'available'
 	enforceTeams          bool   // kick players onto their expected team (lobbyAutoAssignTeams); off = free team pick
 
+	// Admin block list for the active lobby (guarded by mu). blocked is
+	// replaced wholesale by SetBlocked, never mutated; blockedKickAt (last
+	// auto-kick per player, for the 5s rate limit) and blockedPending
+	// (auto-kicked, not yet seen gone) are mutated in place under mu.
+	blocked        map[uint64]struct{}
+	blockedKickAt  map[uint64]time.Time
+	blockedPending map[uint64]struct{}
+	// Manual-kick verifier cadence; zero = kickPollEvery/kickTimeout (tests override).
+	kickPollEvery time.Duration
+	kickTimeout   time.Duration
+
 	// Session bookkeeping (guarded by mu):
 	// sessionGen increments on every Connect()/reconnect; each event loop
 	// carries the generation it was spawned with, and a loop whose generation
@@ -962,6 +973,7 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 
 	newMembers := liveMembers(newLobby)
 	matchID := newLobby.GetMatchId()
+	selfID := b.selfSteamID()
 
 	// Build old members map for diffing
 	oldMembers := make(map[uint64]gcccm.DOTA_GC_TEAM)
@@ -1041,6 +1053,7 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 		LobbyID:       lobbyID,
 		Status:        lobbyStatusFor(newLobby.GetState()),
 		PlayersJoined: slottedPlayers(newMembers),
+		Members:       lobbyMembers(newLobby, selfID),
 	})
 
 	// Detect team IDs from lobby team details
@@ -1252,6 +1265,10 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 		}
 	}
 
+	// Admin-blocked players: re-kick them from the lobby while it's pre-launch
+	// (independent of team enforcement), and confirm removals to Node.
+	b.enforceBlocked(lobbyID, newLobby, newMembers, dc, selfID)
+
 	// NOTE: the authoritative lobby_status (with the derived cointoss/active/
 	// waiting state and the radiant/dire roster) was already sent above at the
 	// start of this handler. A second send here previously hardcoded
@@ -1305,15 +1322,16 @@ func (b *Bot) getLastLobby() *gcccm.CSODOTALobby {
 	return b.lastLobby
 }
 
-// CurrentLobbyStatus reports the last known lobby's Node-facing status and
-// slotted roster (ok=false when the bot isn't in a lobby). Used by rejoin so
-// re-tracking reports the real state instead of a blanket "waiting".
-func (b *Bot) CurrentLobbyStatus() (status string, players []protocol.LobbyPlayer, ok bool) {
+// CurrentLobbyStatus reports the last known lobby's Node-facing status,
+// slotted roster and full member list (ok=false when the bot isn't in a
+// lobby). Used by rejoin so re-tracking reports the real state instead of a
+// blanket "waiting".
+func (b *Bot) CurrentLobbyStatus() (status string, players []protocol.LobbyPlayer, members []protocol.LobbyMember, ok bool) {
 	l := b.getLastLobby()
 	if l == nil {
-		return "", nil, false
+		return "", nil, nil, false
 	}
-	return lobbyStatusFor(l.GetState()), slottedPlayers(liveMembers(l)), true
+	return lobbyStatusFor(l.GetState()), slottedPlayers(liveMembers(l)), lobbyMembers(l, b.selfSteamID()), true
 }
 
 // GCReady reports whether the bot's GC session is live.
@@ -1367,6 +1385,7 @@ func (b *Bot) ResendLobbyState() {
 		LobbyID:       lobbyID,
 		Status:        lobbyStatusFor(lobby.GetState()),
 		PlayersJoined: slottedPlayers(liveMembers(lobby)),
+		Members:       lobbyMembers(lobby, b.selfSteamID()),
 	})
 	if serverID := lobby.GetServerId(); serverID != 0 {
 		b.send("lobby_server_id", protocol.LobbyServerIDEvent{

@@ -414,7 +414,7 @@ func TestStaleSweepAction(t *testing.T) {
 
 func TestCurrentLobbyStatus(t *testing.T) {
 	b, _ := newTestBot()
-	if _, _, ok := b.CurrentLobbyStatus(); ok {
+	if _, _, _, ok := b.CurrentLobbyStatus(); ok {
 		t.Fatal("no lobby → ok must be false")
 	}
 	b.lastLobby = mkLobby(gcccm.CSODOTALobby_SERVERSETUP, 0,
@@ -422,11 +422,14 @@ func TestCurrentLobbyStatus(t *testing.T) {
 		mkMember(76561198000000002, gcccm.DOTA_GC_TEAM_DOTA_GC_TEAM_BAD_GUYS),
 		mkMember(76561198000000003, gcccm.DOTA_GC_TEAM_DOTA_GC_TEAM_SPECTATOR),
 	)
-	status, players, ok := b.CurrentLobbyStatus()
+	status, players, members, ok := b.CurrentLobbyStatus()
 	if !ok || status != "cointoss" {
 		t.Fatalf("got (%q, ok=%v), want cointoss", status, ok)
 	}
 	if len(players) != 2 || players[0].Team != "radiant" || players[1].Team != "dire" {
 		t.Fatalf("roster = %+v, want the two slotted players", players)
+	}
+	if len(members) != 3 || members[2].Team != "spectator" {
+		t.Fatalf("members = %+v, want all three live members", members)
 	}
 }

@@ -267,6 +267,9 @@ func (m *Manager) CreateLobby(cmd protocol.CreateLobbyCmd) error {
 
 	// Mark bot as busy
 	b.SetBusy(true)
+	// Set synchronously (not in runLobby) so a set_lobby_blocklist arriving
+	// right after create_lobby can't be overwritten by this older list.
+	b.SetBlocked(cmd.BlockedSteamIDs)
 
 	go m.runLobby(ctx, lobby)
 	return nil
@@ -387,6 +390,7 @@ func (m *Manager) runLobby(ctx context.Context, lobby *Lobby) {
 func (m *Manager) releaseLobby(lobby *Lobby) {
 	lobby.Bot.SetActiveLobbyID("")
 	lobby.Bot.SetExpectedTeams(nil)
+	lobby.Bot.SetBlocked(nil)
 	lobby.Bot.SetBusy(false)
 	m.removeLobby(lobby.ID)
 }
@@ -436,6 +440,7 @@ func (m *Manager) RejoinLobby(cmd protocol.RejoinLobbyCmd) error {
 	b.SetActiveLobbyID(cmd.LobbyID)
 	b.SetExpectedTeams(cmd.Players)
 	b.SetEnforceTeams(cmd.AutoAssignTeams)
+	b.SetBlocked(cmd.BlockedSteamIDs)
 
 	botLog := func(level, msg string) {
 		m.send("bot_log", protocol.BotLogEvent{
@@ -456,6 +461,7 @@ func (m *Manager) RejoinLobby(cmd protocol.RejoinLobbyCmd) error {
 		defer func() {
 			b.SetActiveLobbyID("")
 			b.SetExpectedTeams(nil)
+			b.SetBlocked(nil)
 			b.SetBusy(false)
 			m.removeLobby(cmd.LobbyID)
 		}()
@@ -491,11 +497,12 @@ func (m *Manager) RejoinLobby(cmd protocol.RejoinLobbyCmd) error {
 		// Report the lobby's real state + roster: a blanket "waiting" with no
 		// players would wipe Node's players_joined and knock a launching/
 		// cointoss row back to waiting.
-		if status, players, ok := b.CurrentLobbyStatus(); ok {
+		if status, players, members, ok := b.CurrentLobbyStatus(); ok {
 			m.send("lobby_status", protocol.LobbyStatusEvent{
 				LobbyID:       cmd.LobbyID,
 				Status:        status,
 				PlayersJoined: players,
+				Members:       members,
 			})
 		}
 
@@ -631,6 +638,41 @@ func (m *Manager) ForceLaunch(lobbyID string, skipValidation bool) error {
 		Status:  "launching",
 	})
 	return nil
+}
+
+// KickPlayer routes an admin kick_player to the bot running the lobby. An
+// untracked lobby (finished, cancelled, or its bot died) is reported straight
+// back as lobby_gone so the admin sees an outcome.
+func (m *Manager) KickPlayer(cmd protocol.KickPlayerCmd) {
+	m.mu.RLock()
+	lobby, ok := m.lobbies[cmd.LobbyID]
+	m.mu.RUnlock()
+	if !ok || lobby.Bot == nil {
+		log.Printf("[Lobby %s] kick_player for %s: lobby not tracked — reporting lobby_gone", cmd.LobbyID, cmd.SteamID)
+		m.send("kick_result", protocol.KickResultEvent{
+			LobbyID: cmd.LobbyID,
+			SteamID: cmd.SteamID,
+			Mode:    cmd.Mode,
+			OK:      false,
+			Reason:  "lobby_gone",
+		})
+		return
+	}
+	lobby.Bot.KickPlayer(cmd.LobbyID, cmd.SteamID, cmd.Mode)
+}
+
+// SetLobbyBlocklist replaces the blocked-player set on the bot running the
+// lobby. Untracked lobbies are ignored: create_lobby/rejoin_lobby carry the
+// list for lobbies that start later.
+func (m *Manager) SetLobbyBlocklist(cmd protocol.SetLobbyBlocklistCmd) {
+	m.mu.RLock()
+	lobby, ok := m.lobbies[cmd.LobbyID]
+	m.mu.RUnlock()
+	if !ok || lobby.Bot == nil {
+		log.Printf("[Lobby %s] set_lobby_blocklist (%d ids): lobby not tracked — ignoring", cmd.LobbyID, len(cmd.SteamIDs))
+		return
+	}
+	lobby.Bot.SetBlocked(cmd.SteamIDs)
 }
 
 func (m *Manager) removeLobby(lobbyID string) {
