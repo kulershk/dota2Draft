@@ -40,8 +40,15 @@ describe('_onLobbyError idempotency', () => {
     const rows = await query('SELECT * FROM match_lobbies WHERE match_id = $1 AND game_number = 1', [seed.match.id])
     expect(rows.length).toBe(1)
     expect(rows[0].status).toBe('error')
+    // The replayed error text must not overwrite whatever error_message the
+    // lobby already had — a duplicate delivery is a pure no-op.
+    expect(rows[0].error_message).toBe(errored.error_message)
     const createMsgs = sent.filter(m => m.type === 'create_lobby')
     expect(createMsgs.length).toBe(0)
+    // No reconcile round-trip either — an already-errored lobby is fully
+    // handled, so there's nothing to sync against Go for.
+    const listBotsMsgs = sent.filter(m => m.type === 'list_bots')
+    expect(listBotsMsgs.length).toBe(0)
   })
 
   it('a first lobby_error on a creating comp lobby still triggers exactly one retry', async () => {
@@ -59,5 +66,39 @@ describe('_onLobbyError idempotency', () => {
     expect(rows.length).toBe(2)
     expect(rows[0].status).toBe('error')
     expect(rows[1].status).toBe('creating')
+  })
+})
+
+describe('_onLobbyError launch_rejected', () => {
+  it('a launch_rejected lobby_error on a waiting lobby changes nothing and sends no create_lobby', async () => {
+    fakeGo(() => [
+      { botId: String(botA.id), status: 'available' },
+      { botId: String(botB.id), status: 'available' },
+    ])
+    // Simulates the replay scenario: the FIRST copy of this launch_rejected
+    // event already reverted the row from 'launching' to 'waiting'. A
+    // redelivered copy must be a total no-op.
+    const waiting = await seedLobby({ match: seed.match, botId: botA.id, status: 'waiting', gameNumber: 3 })
+
+    await botPool._onLobbyError({ lobbyId: waiting.id, error: 'Radiant has no team selected', kind: 'launch_rejected' })
+
+    const row = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [waiting.id])
+    expect(row.status).toBe('waiting')
+    expect(row.error_message).toBe(waiting.error_message)
+    expect(sent.filter(m => m.type === 'create_lobby').length).toBe(0)
+  })
+
+  it('a launch_rejected lobby_error on a launching lobby reverts to waiting', async () => {
+    fakeGo(() => [
+      { botId: String(botA.id), status: 'available' },
+      { botId: String(botB.id), status: 'available' },
+    ])
+    const launching = await seedLobby({ match: seed.match, botId: botA.id, status: 'launching', gameNumber: 4 })
+
+    await botPool._onLobbyError({ lobbyId: launching.id, error: 'Dire has no team selected', kind: 'launch_rejected' })
+
+    const row = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [launching.id])
+    expect(row.status).toBe('waiting')
+    expect(sent.filter(m => m.type === 'create_lobby').length).toBe(0)
   })
 })

@@ -48,4 +48,41 @@ describe('bot claiming', () => {
     const claimed = await queryOne('SELECT status FROM lobby_bots WHERE id = $1', [Number(create.data.botId)])
     expect(claimed.status).toBe('busy')
   })
+
+  it('comp retry whose match row is missing claims no bot', async () => {
+    // Dedicated bots (rather than the shared botA/botB) so an earlier test's
+    // successful claim in this file can't leave a 'busy' row that makes this
+    // assertion a false negative.
+    const botC = await seedBot({ status: 'available' })
+    const botD = await seedBot({ status: 'available' })
+    try {
+      fakeGo(() => [
+        { botId: String(botC.id), status: 'available' },
+        { botId: String(botD.id), status: 'available' },
+      ])
+      // Not seeded from the DB — match_id points at a match row that doesn't
+      // exist, so _retryCompLobby's `if (!match) return false` fires. The bot
+      // claim must happen AFTER that read, so this early-out never strands a
+      // bot 'busy' with nothing to release it.
+      const erroredLobby = {
+        match_id: 987654321,
+        game_number: 1,
+        competition_id: seed.comp.id,
+        bot_id: botC.id,
+        server_region: 3,
+        game_name: 'ghost lobby',
+        password: 'pw',
+        players_expected: [],
+      }
+      const ok = await botPool._retryCompLobby(erroredLobby)
+      expect(ok).toBe(false)
+      expect(sent.find(m => m.type === 'create_lobby')).toBeUndefined()
+      const c = await queryOne('SELECT status FROM lobby_bots WHERE id = $1', [botC.id])
+      const d = await queryOne('SELECT status FROM lobby_bots WHERE id = $1', [botD.id])
+      expect(c.status).toBe('available')
+      expect(d.status).toBe('available')
+    } finally {
+      await cleanupSeed({ bots: [botC, botD] })
+    }
+  })
 })

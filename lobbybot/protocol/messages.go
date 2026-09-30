@@ -211,6 +211,12 @@ type LobbyTeamIdsEvent struct {
 type LobbyErrorEvent struct {
 	LobbyID string `json:"lobbyId"`
 	Error   string `json:"error"`
+	// Kind classifies the error so Node can tell a terminal failure from a
+	// still-healthy lobby. "launch_rejected" = a ForceLaunch validation
+	// failure (e.g. missing team ids) — the lobby itself is fine and stays
+	// in 'waiting'; empty/unset means the lobby is dead and should be
+	// retried/errored as before.
+	Kind string `json:"kind,omitempty"`
 }
 
 // BotInfo / BotsListEvent are the response to ListBotsCmd: the live status of

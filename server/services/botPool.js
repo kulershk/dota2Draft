@@ -811,6 +811,32 @@ class BotPool {
     // no no-show bans).
     if (lobby.status === 'error' || lobby.status === 'cancelled') return
 
+    // A ForceLaunch validation failure — Go tags these `kind: 'launch_rejected'`
+    // at the source (see lobbybot/lobby/manager.go ForceLaunch). The lobby
+    // itself is still healthy, so this never terminal-errors / retries / bans
+    // it. Only the FIRST copy (row still 'launching') reverts it to 'waiting';
+    // a replay delivered after that revert already happened (row now
+    // 'waiting') is a no-op, closing the gap where a duplicate would otherwise
+    // pass the guard above and terminally error a lobby players are still in.
+    if (data.kind === 'launch_rejected') {
+      if (lobby.status === 'launching') {
+        await execute(
+          "UPDATE match_lobbies SET status = 'waiting', updated_at = NOW() WHERE id = $1",
+          [lobbyId]
+        )
+        if (this.io) {
+          (await this._lobbyRooms(lobby)).emit('lobby:statusUpdate', {
+            matchId: lobby.match_id,
+            gameNumber: lobby.game_number,
+            status: 'waiting',
+            errorMessage: data.error,
+          })
+        }
+        console.log(`[Lobby] Launch rejected: ${data.error} — reverted to waiting`)
+      }
+      return
+    }
+
     // If the game already started (dota_match_id set) the lobby is effectively
     // done and any error is late noise — most notably the spurious "Bot lost
     // connection to lobby after reconnect" that fires when a rejoin_lobby is
@@ -2216,7 +2242,11 @@ class BotPool {
     await execute("UPDATE match_lobbies SET status = 'cancelled', updated_at = NOW() WHERE id = $1", [lobbyDbId])
     // Go tears the Dota lobby down and reports the bot 'available' itself. If
     // Go is offline, its status is reconciled on reconnect (ResendAllBotStatus).
-    try { this._sendToGo('cancel_lobby', { lobbyId: String(lobbyDbId) }) } catch {}
+    try {
+      this._sendToGo('cancel_lobby', { lobbyId: String(lobbyDbId) })
+    } catch (e) {
+      console.warn(`[Lobby ${lobbyDbId}] cancel_lobby not delivered (Go unreachable): ${e.message} — the Dota lobby may linger until Go's own timeout`)
+    }
   }
   // Build the create_lobby payload for the Go bot service. Shared by the
   // initial createQueueLobby call and the retry path.
@@ -2327,8 +2357,9 @@ class BotPool {
     )
     if (!latest) throw new Error('No lobby found for this match')
 
-    // If there's an in-flight lobby, tell Go to drop it, mark it errored, and
-    // free its bot so the retry picks a different one.
+    // If there's an in-flight lobby, tell Go to drop it and mark it errored.
+    // Go reports the bot 'available' itself on teardown (or on reconnect if
+    // it's offline); the retry below excludes this lobby's bot regardless.
     if (latest.status !== 'error' && latest.status !== 'cancelled' && latest.status !== 'completed') {
       try { this._sendToGo('cancel_lobby', { lobbyId: String(latest.id) }) } catch {}
       await execute(
@@ -2368,25 +2399,6 @@ class BotPool {
       return false
     }
 
-    // Pick a different available bot, atomically claimed against Go's live
-    // state. Exclude the bot that just failed so we actually retry on fresh
-    // hardware.
-    let nextBotId = null
-    try {
-      nextBotId = await this._findAvailableBotId({ excludeBotId: erroredLobby.bot_id || null })
-    } catch (e) {
-      console.log(`[Retry] No alternate bot for match ${erroredLobby.match_id}: ${e.message}`)
-    }
-    if (!nextBotId) {
-      console.log(`[Queue] No alternate bot available for match ${erroredLobby.match_id} retry`)
-      if (this.io) {
-        (await this._lobbyRooms(erroredLobby)).emit('queue:error', {
-          message: 'Lobby creation failed and no alternate bot is available. Please contact an admin.',
-        })
-      }
-      return false
-    }
-
     const qm = await queryOne(
       'SELECT pool_id, team1_players, team2_players, game_mode_used FROM queue_matches WHERE match_id = $1',
       [erroredLobby.match_id]
@@ -2403,6 +2415,27 @@ class BotPool {
     // Fresh password so any stale clients can't accidentally join the previous
     // (failed) lobby if it somehow came online late.
     const password = Math.random().toString(36).slice(2, 8)
+
+    // Pick a different available bot, atomically claimed against Go's live
+    // state. Exclude the bot that just failed so we actually retry on fresh
+    // hardware. Claimed LAST, right before the INSERT+send, so an early
+    // return above (missing queue_matches/queue_pools row) never strands a
+    // claimed bot 'busy' with nothing to release it.
+    let nextBotId = null
+    try {
+      nextBotId = await this._findAvailableBotId({ excludeBotId: erroredLobby.bot_id || null })
+    } catch (e) {
+      console.log(`[Retry] No alternate bot for match ${erroredLobby.match_id}: ${e.message}`)
+    }
+    if (!nextBotId) {
+      console.log(`[Queue] No alternate bot available for match ${erroredLobby.match_id} retry`)
+      if (this.io) {
+        (await this._lobbyRooms(erroredLobby)).emit('queue:error', {
+          message: 'Lobby creation failed and no alternate bot is available. Please contact an admin.',
+        })
+      }
+      return false
+    }
 
     let newLobby = null
     try {
@@ -2471,20 +2504,6 @@ class BotPool {
       return false
     }
 
-    // Pick a different available bot, atomically claimed against Go's live
-    // state, so we actually retry on fresh hardware.
-    let nextBotId = null
-    try {
-      nextBotId = await this._findAvailableBotId({ excludeBotId: erroredLobby.bot_id || null })
-    } catch (e) {
-      console.log(`[Retry] No alternate bot for match ${erroredLobby.match_id}: ${e.message}`)
-    }
-    if (!nextBotId) {
-      console.log(`[Comp] No alternate bot available for match ${erroredLobby.match_id} retry`)
-      await emitError('Lobby creation failed and no alternate bot is available. Please contact an admin.')
-      return false
-    }
-
     // Re-read team names, dota_team_ids and per-match penalty overrides + comp settings.
     const match = await queryOne(`
       SELECT m.*, t1.team AS team1_name, t2.team AS team2_name,
@@ -2502,6 +2521,22 @@ class BotPool {
     const gameName = erroredLobby.game_name
     // Fresh password so a stale client can't accidentally land in the failed lobby.
     const password = Math.random().toString(36).slice(2, 8)
+
+    // Pick a different available bot, atomically claimed against Go's live
+    // state, so we actually retry on fresh hardware. Claimed LAST, right
+    // before the INSERT+send, so an early return above (missing match row)
+    // never strands a claimed bot 'busy' with nothing to release it.
+    let nextBotId = null
+    try {
+      nextBotId = await this._findAvailableBotId({ excludeBotId: erroredLobby.bot_id || null })
+    } catch (e) {
+      console.log(`[Retry] No alternate bot for match ${erroredLobby.match_id}: ${e.message}`)
+    }
+    if (!nextBotId) {
+      console.log(`[Comp] No alternate bot available for match ${erroredLobby.match_id} retry`)
+      await emitError('Lobby creation failed and no alternate bot is available. Please contact an admin.')
+      return false
+    }
 
     let newLobby = null
     try {

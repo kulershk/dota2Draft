@@ -560,23 +560,23 @@ func (m *Manager) ForceLaunch(lobbyID string, skipValidation bool) error {
 		detRadiant, detDire := lobby.Bot.GetDetectedTeamIds()
 		if detRadiant == 0 {
 			errMsg := "Radiant has no team selected"
-			m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobbyID, Error: errMsg})
+			m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobbyID, Error: errMsg, Kind: "launch_rejected"})
 			return errors.New(errMsg)
 		}
 		if detDire == 0 {
 			errMsg := "Dire has no team selected"
-			m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobbyID, Error: errMsg})
+			m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobbyID, Error: errMsg, Kind: "launch_rejected"})
 			return errors.New(errMsg)
 		}
 		// Validate against expected team IDs (saved from first game)
 		if lobby.ExpectedRadiantTeamId != 0 && detRadiant != lobby.ExpectedRadiantTeamId {
 			errMsg := fmt.Sprintf("Wrong Radiant team: expected %d, got %d", lobby.ExpectedRadiantTeamId, detRadiant)
-			m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobbyID, Error: errMsg})
+			m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobbyID, Error: errMsg, Kind: "launch_rejected"})
 			return errors.New(errMsg)
 		}
 		if lobby.ExpectedDireTeamId != 0 && detDire != lobby.ExpectedDireTeamId {
 			errMsg := fmt.Sprintf("Wrong Dire team: expected %d, got %d", lobby.ExpectedDireTeamId, detDire)
-			m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobbyID, Error: errMsg})
+			m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobbyID, Error: errMsg, Kind: "launch_rejected"})
 			return errors.New(errMsg)
 		}
 	}
