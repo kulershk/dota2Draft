@@ -1015,7 +1015,7 @@
     },
     "queue:gameStarted": {
       "subscribe": {
-        "summary": "Broadcast: Dota match ID captured for a queue match (queue-match:${queueMatchId}). Frontend should clear lobby banner.",
+        "summary": "Broadcast: the draft has started for a queue match (queue-match:${queueMatchId}) — all players loaded in, not just when the Dota match id was assigned. Frontend should clear lobby banner.",
         "message": {
           "payload": {
             "type": "object",
@@ -1271,7 +1271,7 @@
             "properties": {
               "matchId": { "type": "integer" },
               "gameNumber": { "type": "integer" },
-              "status": { "type": "string", "enum": ["creating", "waiting", "launching", "active", "completed", "error", "cancelled"] },
+              "status": { "type": "string", "enum": ["creating", "waiting", "launching", "active", "cointoss", "completed", "error", "cancelled"] },
               "playersJoined": {
                 "type": "array",
                 "description": "Players currently in the Dota lobby. Each entry is an object with steamId/name/team as reported by the Go bot.",

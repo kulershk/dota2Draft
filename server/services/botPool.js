@@ -145,6 +145,14 @@ class BotPool {
           await this._onGameStarted(data)
           break
 
+        case 'draft_started':
+          await this._onDraftStarted(data)
+          break
+
+        case 'game_aborted':
+          await this._onGameAborted(data)
+          break
+
         case 'lobby_team_ids':
           await this._onLobbyTeamIds(data)
           break
@@ -479,17 +487,20 @@ class BotPool {
     const lobbyId = Number(data.lobbyId)
     // Don't overwrite terminal states — the bot keeps sending lobby_status
     // "waiting" on every cache update, and a late event can race against
-    // _onGameStarted (which sets 'completed') and flip the row back, which
+    // _onDraftStarted (which sets 'completed') and flip the row back, which
     // then re-arms the rejoin-on-available path below and bans players.
     //
-    // Also never downgrade an already-'active' lobby back to 'waiting': a RUN
-    // game never reverts to the lobby room, so an out-of-order/late "waiting"
-    // is always spurious. (Belt-and-suspenders alongside the bot-side fix that
-    // makes per-cache-update sends report the real state.) players_joined and
-    // updated_at still refresh so the roster stays in sync.
+    // Also never downgrade an already-'active' lobby back to 'waiting' UNLESS
+    // game_aborted already cleared dota_match_id (players failed to load, GC
+    // sent everyone back to the lobby room) — that's the one legitimate
+    // active→waiting transition. Any other out-of-order/late "waiting" while
+    // dota_match_id is still set is spurious. (Belt-and-suspenders alongside
+    // the bot-side fix that makes per-cache-update sends report the real
+    // state.) players_joined and updated_at still refresh so the roster stays
+    // in sync.
     await execute(
       `UPDATE match_lobbies
-          SET status = CASE WHEN status = 'active' AND $1 = 'waiting' THEN status ELSE $1 END,
+          SET status = CASE WHEN status = 'active' AND $1 = 'waiting' AND dota_match_id IS NOT NULL THEN status ELSE $1 END,
               players_joined = $2,
               updated_at = NOW()
        WHERE id = $3 AND status NOT IN ('completed', 'error', 'cancelled')`,
@@ -541,21 +552,27 @@ class BotPool {
     }
   }
 
+  // The GC assigned a Dota match id. Record it and start result tracking — but
+  // do NOT complete the lobby or free the bot: the bot stays in the lobby until
+  // the draft starts, and a failed load sends everyone back (game_aborted).
+  // Completion happens on draft_started. Replays (Go re-emits after a WS
+  // reconnect) are no-ops thanks to the IS DISTINCT FROM guard.
   async _onGameStarted(data) {
     const lobbyId = Number(data.lobbyId)
-    const dotaMatchId = data.matchId
-    console.log(`[Lobby] Game started: lobbyId=${lobbyId}, matchId=${dotaMatchId}`)
-
-    // Update lobby
-    await execute(
-      "UPDATE match_lobbies SET status = 'completed', dota_match_id = $1, updated_at = NOW() WHERE id = $2",
+    const dotaMatchId = String(data.matchId || '')
+    if (!lobbyId || !dotaMatchId || dotaMatchId === '0') return
+    const { rowCount } = await execute(
+      `UPDATE match_lobbies SET dota_match_id = $1, updated_at = NOW()
+        WHERE id = $2 AND status NOT IN ('completed', 'cancelled', 'error')
+          AND dota_match_id IS DISTINCT FROM $1`,
       [dotaMatchId, lobbyId]
     )
+    if (rowCount === 0) return
+    console.log(`[Lobby] Match id assigned: lobbyId=${lobbyId}, matchId=${dotaMatchId}`)
 
     const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyId])
     if (!lobby) return
 
-    // Save to match_games
     await execute(
       `INSERT INTO match_games (match_id, game_number, dotabuff_id)
        VALUES ($1, $2, $3)
@@ -588,68 +605,86 @@ class BotPool {
       this.lobbyTeamIds.delete(lobbyId)
     }
 
-    // Free the bot
-    if (lobby.bot_id) {
-      await execute("UPDATE lobby_bots SET status = 'available', last_used_at = NOW() WHERE id = $1", [lobby.bot_id])
-      await this._onBotLog({ botId: String(lobby.bot_id), lobbyId: String(lobbyId), message: `Match ID ${dotaMatchId} captured. Bot available.` })
-    }
-
-    // Broadcast
     if (this.io) {
-      const rooms = await this._lobbyRooms(lobby)
-      rooms.emit('lobby:statusUpdate', {
-        matchId: lobby.match_id,
-        gameNumber: lobby.game_number,
-        status: 'completed',
-      })
-      rooms.emit('lobby:matchIdCaptured', {
+      (await this._lobbyRooms(lobby)).emit('lobby:matchIdCaptured', {
         matchId: lobby.match_id,
         gameNumber: lobby.game_number,
         dotaMatchId,
       })
-      // Persist server_steam_id from bot's game_started payload onto the
-      // match_lobbies row so livePoller can skip the bootstrap loop. Same
-      // path for tournament + queue matches.
-      const serverSteamId = data.serverSteamId || data.server_steamid || data.serverSteamID
-      if (serverSteamId) {
-        try {
-          await execute('UPDATE match_lobbies SET server_steam_id = $1 WHERE id = $2', [String(serverSteamId), lobby.id])
-          console.log(`[livePoller] match ${lobby.match_id} — server_steam_id ${serverSteamId} captured from bot game_started`)
-        } catch (e) { console.error('[livePoller] save server_steam_id failed:', e.message) }
-        // Also push into a poller that's already running for this match so
-        // it can call GetRealtimeStats on the next tick instead of looping
-        // in the player-summary bootstrap fallback.
-        try { updateLivePollerServerSteamId(lobby.match_id, String(serverSteamId)) } catch {}
-      }
-
-      if (lobby.competition_id) {
-        this.io.to(`comp:${lobby.competition_id}`).emit('tournament:updated')
-      } else {
-        // Queue match: notify queue-match room so the queue page clears the lobby banner
-        const qm = await queryOne('SELECT id FROM queue_matches WHERE match_id = $1', [lobby.match_id])
-        if (qm) {
-          this.io.to(`queue-match:${qm.id}`).emit('queue:gameStarted', {
-            queueMatchId: qm.id,
-            dotaMatchId,
-          })
-          // Drop in-memory match state so a page reload after the game launched
-          // does not restore the stale "lobby created" banner via queue:getState.
-          // playerInMatch stays set until _autoFillGameWinner runs (re-queue gating).
-          activeQueueMatches.delete(qm.id)
-          // Mirror onto queue_matches.server_steam_id for any legacy reader.
-          if (serverSteamId) {
-            try { await execute('UPDATE queue_matches SET server_steam_id = $1 WHERE id = $2', [String(serverSteamId), qm.id]) } catch {}
-          }
-        }
-      }
-
-      // Kick off live-stats polling for ALL matches (queue or tournament). The
-      // poller is keyed by matches.id and reads server_steam_id off match_lobbies.
-      try { startLivePolling(lobby.match_id) } catch (e) { console.error('[livePoller] start failed:', e.message) }
     }
-
-    // Schedule OpenDota stats fetch
+    try { startLivePolling(lobby.match_id) } catch (e) { console.error('[livePoller] start failed:', e.message) }
     this._scheduleStatsFetch(lobby.match_id, lobby.game_number, dotaMatchId)
+  }
+
+  // The bot is done with a lobby whose game launched (draft started, or it gave
+  // up waiting). Complete the row and tell clients the game is underway. The
+  // bot frees itself: Go reports bot_status after leaving the lobby.
+  async _onDraftStarted(data) {
+    const lobbyId = Number(data.lobbyId)
+    const { rowCount } = await execute(
+      `UPDATE match_lobbies SET status = 'completed', updated_at = NOW()
+        WHERE id = $1 AND status NOT IN ('completed', 'cancelled', 'error')`,
+      [lobbyId]
+    )
+    if (rowCount === 0) return
+    const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyId])
+    if (!lobby) return
+    if (lobby.bot_id) {
+      await this._onBotLog({
+        botId: String(lobby.bot_id),
+        lobbyId: String(lobbyId),
+        level: data.confirmed ? 'info' : 'warn',
+        message: data.confirmed
+          ? `Draft started (match ${lobby.dota_match_id}) — lobby complete`
+          : `Lobby done without draft confirmation (match ${lobby.dota_match_id || 'unknown'})`,
+      })
+    }
+    if (!this.io) return
+    ;(await this._lobbyRooms(lobby)).emit('lobby:statusUpdate', {
+      matchId: lobby.match_id,
+      gameNumber: lobby.game_number,
+      status: 'completed',
+    })
+    if (lobby.competition_id) {
+      this.io.to(`comp:${lobby.competition_id}`).emit('tournament:updated')
+    } else {
+      const qm = await queryOne('SELECT id FROM queue_matches WHERE match_id = $1', [lobby.match_id])
+      if (qm) {
+        this.io.to(`queue-match:${qm.id}`).emit('queue:gameStarted', { queueMatchId: qm.id, dotaMatchId: lobby.dota_match_id })
+        activeQueueMatches.delete(qm.id)
+      }
+    }
+  }
+
+  // A launched game fell back to the lobby (players failed to load). Clear the
+  // dead match id everywhere so the lobby can be relaunched and the stats job
+  // stops (it exits once match_games.dotabuff_id no longer matches — see
+  // statsJobSuperseded).
+  async _onGameAborted(data) {
+    const lobbyId = Number(data.lobbyId)
+    const dotaMatchId = String(data.matchId || '')
+    const lobby = await queryOne('SELECT * FROM match_lobbies WHERE id = $1', [lobbyId])
+    if (!lobby || ['completed', 'cancelled', 'error'].includes(lobby.status)) return
+    await execute(
+      "UPDATE match_lobbies SET dota_match_id = NULL, status = 'waiting', updated_at = NOW() WHERE id = $1",
+      [lobbyId]
+    )
+    if (dotaMatchId && dotaMatchId !== '0') {
+      await execute(
+        `UPDATE match_games SET dotabuff_id = NULL
+          WHERE match_id = $1 AND game_number = $2 AND dotabuff_id = $3 AND winner_captain_id IS NULL`,
+        [lobby.match_id, lobby.game_number, dotaMatchId]
+      )
+    }
+    try { stopLivePolling(lobby.match_id) } catch {}
+    if (this.io) {
+      (await this._lobbyRooms(lobby)).emit('lobby:statusUpdate', {
+        matchId: lobby.match_id,
+        gameNumber: lobby.game_number,
+        status: 'waiting',
+        errorMessage: 'Game start aborted (players failed to load) — launch again',
+      })
+    }
   }
 
   // Counts how many expected players are sitting in their correct team slot.
