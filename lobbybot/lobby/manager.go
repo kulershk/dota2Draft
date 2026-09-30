@@ -62,13 +62,14 @@ type gameWaitResult int
 
 const (
 	gameWaitStarted gameWaitResult = iota
+	gameWaitStartedUnconfirmed
 	gameWaitCancelled
 	gameWaitTimeout
 )
 
 // draftFailsafe caps how long the bot stays in the lobby after a game launch
 // waiting for the draft to be confirmed before leaving anyway.
-const draftFailsafe = 2 * time.Minute
+const draftFailsafe = 5 * time.Minute
 
 // forceLaunchCooldown drops repeat ForceLaunch commands for the same lobby —
 // Node's queue auto-launch can fire on consecutive lobby_status ticks, and a
@@ -84,28 +85,71 @@ const forceLaunchCooldown = 15 * time.Second
 // aborted start it resumes watching (the timeout restarts — players are
 // actively in the lobby at that point).
 func (m *Manager) awaitGameStart(ctx context.Context, b *bot.Bot, timeout time.Duration, botLog func(level, msg string)) gameWaitResult {
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	poll := time.NewTicker(2 * time.Second)
+	defer poll.Stop()
 	for {
+		started := false
 		select {
 		case <-b.GameStartedCh():
-			botLog("info", "Game launched — staying in lobby until the draft starts (players loading)")
-			switch b.WaitForDraft(ctx, draftFailsafe) {
-			case bot.DraftStarted:
-				botLog("info", "Draft started — all players loaded")
-				return gameWaitStarted
-			case bot.DraftWaitExpired:
-				botLog("warn", fmt.Sprintf("Draft not confirmed within %d minutes — leaving lobby anyway", int(draftFailsafe.Minutes())))
-				return gameWaitStarted
-			case bot.DraftAborted:
-				botLog("warn", "Game start aborted — players returned to the lobby; resuming watch")
-			case bot.DraftCancelled:
-				return gameWaitCancelled
-			}
+			started = true
+		case <-poll.C:
+			// Level check: the RUN edge is lost if it happened while the cache
+			// watcher was being replaced (Steam/GC reconnect, service restart).
+			started = b.LobbyRunning()
 		case <-ctx.Done():
 			return gameWaitCancelled
-		case <-time.After(timeout):
+		case <-deadline.C:
 			return gameWaitTimeout
 		}
+		if !started {
+			continue
+		}
+		botLog("info", "Game launched — staying in lobby until the draft starts (players loading)")
+		switch b.WaitForDraft(ctx, draftFailsafe) {
+		case bot.DraftStarted:
+			botLog("info", "Draft started — all players loaded")
+			return gameWaitStarted
+		case bot.DraftWaitExpired:
+			botLog("warn", fmt.Sprintf("Draft not confirmed within %d minutes — leaving lobby anyway", int(draftFailsafe.Minutes())))
+			return gameWaitStartedUnconfirmed
+		case bot.DraftAborted:
+			botLog("warn", "Game start aborted — players returned to the lobby; resuming watch")
+			deadline.Reset(timeout) // players are back in the lobby: fresh wait window
+		case bot.DraftCancelled:
+			return gameWaitCancelled
+		}
 	}
+}
+
+// finishLobby waits for the lobby's outcome, reports it to Node and tears the
+// Dota lobby down. The caller clears the bot's assignment and frees it.
+func (m *Manager) finishLobby(ctx context.Context, lobbyID string, b *bot.Bot, timeout time.Duration, botLog func(level, msg string)) {
+	switch res := m.awaitGameStart(ctx, b, timeout, botLog); res {
+	case gameWaitStarted, gameWaitStartedUnconfirmed:
+		m.send("draft_started", protocol.DraftStartedEvent{
+			LobbyID:   lobbyID,
+			MatchID:   b.LastMatchID(),
+			Confirmed: res == gameWaitStarted,
+		})
+		botLog("info", "Game underway — leaving lobby and freeing bot")
+		b.AbandonAndLeaveLobby()
+	case gameWaitCancelled:
+		botLog("action", "Lobby cancelled — destroying")
+		m.destroyAndLeave(b)
+	case gameWaitTimeout:
+		botLog("error", fmt.Sprintf("Lobby timed out after %d minutes — destroying lobby", int(timeout.Minutes())))
+		m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobbyID, Error: fmt.Sprintf("Lobby timed out (%d min)", int(timeout.Minutes()))})
+		m.destroyAndLeave(b)
+	}
+}
+
+func (m *Manager) destroyAndLeave(b *bot.Bot) {
+	destroyCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	b.DestroyLobby(destroyCtx)
+	b.LeaveLobby()
 }
 
 func NewManager(botMgr *bot.Manager, send SendFunc) *Manager {
@@ -290,27 +334,7 @@ func (m *Manager) runLobby(ctx context.Context, lobby *Lobby) {
 	defer pollCancel()
 
 	// Wait for the game to be safely underway, cancel, or timeout
-	timeout := lobby.timeoutDuration()
-	gameStarted := false
-	switch m.awaitGameStart(ctx, lobby.Bot, timeout, botLog) {
-	case gameWaitStarted:
-		botLog("info", "Game started — leaving lobby and freeing bot")
-		gameStarted = true
-	case gameWaitCancelled:
-		botLog("action", "Lobby cancelled")
-	case gameWaitTimeout:
-		botLog("error", fmt.Sprintf("Lobby timed out after %d minutes — destroying lobby", int(timeout.Minutes())))
-		m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobby.ID, Error: fmt.Sprintf("Lobby timed out (%d min)", int(timeout.Minutes()))})
-	}
-
-	if gameStarted {
-		lobby.Bot.AbandonAndLeaveLobby()
-	} else {
-		destroyCtx, destroyCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		lobby.Bot.DestroyLobby(destroyCtx)
-		destroyCancel()
-		lobby.Bot.LeaveLobby()
-	}
+	m.finishLobby(ctx, lobby.ID, lobby.Bot, lobby.timeoutDuration(), botLog)
 	lobby.Bot.SetActiveLobbyID("")
 	lobby.Bot.SetExpectedTeams(nil)
 	lobby.Bot.SetBusy(false)
@@ -426,24 +450,7 @@ func (m *Manager) RejoinLobby(cmd protocol.RejoinLobbyCmd) error {
 			}
 		}()
 
-		switch m.awaitGameStart(ctx, b, timeout, botLog) {
-		case gameWaitStarted:
-			botLog("info", "Game started after rejoin — leaving lobby and freeing bot")
-			b.AbandonAndLeaveLobby()
-		case gameWaitCancelled:
-			botLog("action", "Lobby cancelled after rejoin — destroying")
-			destroyCtx, destroyCancel := context.WithTimeout(context.Background(), 5*time.Second)
-			b.DestroyLobby(destroyCtx)
-			destroyCancel()
-			b.LeaveLobby()
-		case gameWaitTimeout:
-			botLog("error", fmt.Sprintf("Lobby timed out after rejoin (%d min) — destroying", int(timeout.Minutes())))
-			m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: cmd.LobbyID, Error: fmt.Sprintf("Lobby timed out (%d min)", int(timeout.Minutes()))})
-			destroyCtx, destroyCancel := context.WithTimeout(context.Background(), 5*time.Second)
-			b.DestroyLobby(destroyCtx)
-			destroyCancel()
-			b.LeaveLobby()
-		}
+		m.finishLobby(ctx, cmd.LobbyID, b, timeout, botLog)
 	}()
 
 	return nil

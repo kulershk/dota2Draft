@@ -223,3 +223,23 @@ type BotInfo struct {
 type BotsListEvent struct {
 	Bots []BotInfo `json:"bots"`
 }
+
+// DraftStartedEvent ("draft_started") marks the end of the bot's involvement
+// with a lobby whose game launched: every player loaded and the draft began
+// (Confirmed=true), or the bot gave up waiting / the lobby vanished
+// (Confirmed=false). Node completes the lobby row only on this event —
+// game_started just records the match id, because a failed load can still
+// dump everyone back into the lobby.
+type DraftStartedEvent struct {
+	LobbyID   string `json:"lobbyId"`
+	MatchID   string `json:"matchId"`
+	Confirmed bool   `json:"confirmed"`
+}
+
+// GameAbortedEvent ("game_aborted") — a launched game fell back to the lobby
+// (players failed to load). Node clears the match id so the lobby can be
+// relaunched and the dead match id is never polled for results.
+type GameAbortedEvent struct {
+	LobbyID string `json:"lobbyId"`
+	MatchID string `json:"matchId"`
+}

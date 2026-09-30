@@ -125,3 +125,64 @@ func TestResendLobbyStateNoMatchIDSkipsGameStarted(t *testing.T) {
 		t.Fatal("expected lobby_server_id replay")
 	}
 }
+
+func TestAbortSendsGameAbortedBeforeStatus(t *testing.T) {
+	b, r := newTestBot()
+	b.activeLobbyID = "7"
+	b.lastMatchIDSent = 111
+	b.launchSent = true
+	old := mkLobby(gcccm.CSODOTALobby_RUN, 111)
+	now := mkLobby(gcccm.CSODOTALobby_UI, 111)
+
+	b.processLobbyUpdate(old, now)
+
+	var order []string
+	for _, m := range r.all() {
+		if m.Type == "game_aborted" || m.Type == "lobby_status" {
+			order = append(order, m.Type)
+		}
+	}
+	if len(order) < 2 || order[0] != "game_aborted" || order[1] != "lobby_status" {
+		t.Fatalf("want game_aborted before lobby_status, got %v", order)
+	}
+	ga := r.ofType("game_aborted")[0].Data.(protocol.GameAbortedEvent)
+	if ga.LobbyID != "7" || ga.MatchID != "111" {
+		t.Fatalf("bad game_aborted payload %+v", ga)
+	}
+	if b.launchSent {
+		t.Fatal("abort must re-arm launch")
+	}
+	// The GC keeps match_id on the lobby after an abort. Re-reporting it while
+	// the lobby sits in UI would undo Node's rollback, so nothing is sent yet.
+	if n := len(r.ofType("game_started")); n != 0 {
+		t.Fatalf("game_started re-sent %d times while back in the lobby", n)
+	}
+	// Relaunch that reuses the same match id → re-reported once the launch is underway.
+	b.processLobbyUpdate(now, mkLobby(gcccm.CSODOTALobby_READYUP, 111))
+	if n := len(r.ofType("game_started")); n != 1 {
+		t.Fatalf("relaunch with the same match id must re-send game_started once, got %d", n)
+	}
+}
+
+func TestResendLobbyStateSkipsAbortedMatchID(t *testing.T) {
+	b, r := newTestBot()
+	b.activeLobbyID = "7"
+	b.lastMatchIDSent = 111
+	b.abortedMatchID = 111
+	b.lastLobby = mkLobby(gcccm.CSODOTALobby_UI, 111)
+	b.ResendLobbyState()
+	if n := len(r.ofType("game_started")); n != 0 {
+		t.Fatalf("aborted match id must not be replayed, got %d", n)
+	}
+}
+
+func TestLobbyRunning(t *testing.T) {
+	b, _ := newTestBot()
+	if b.LobbyRunning() {
+		t.Fatal("no lobby → not running")
+	}
+	b.lastLobby = mkLobby(gcccm.CSODOTALobby_RUN, 1)
+	if !b.LobbyRunning() {
+		t.Fatal("RUN → running")
+	}
+}

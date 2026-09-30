@@ -71,6 +71,7 @@ type Bot struct {
 	detectedDireTeamId    int
 	launchSent            bool   // prevent repeated LaunchLobby calls
 	lastMatchIDSent       uint64 // last match id sent via game_started (0 = none; reset per lobby in SetActiveLobbyID). A relaunch after a failed start gets a new id and re-fires.
+	abortedMatchID        uint64 // match id of a launch that aborted back to the lobby; re-reported only once a relaunch is underway
 	gcReady               bool   // GC session is live (welcomed / HAVE_SESSION); gates going back to 'available'
 	enforceTeams          bool   // kick players onto their expected team (lobbyAutoAssignTeams); off = free team pick
 
@@ -746,6 +747,7 @@ func (b *Bot) SetActiveLobbyID(id string) {
 	if id != "" {
 		// Re-arm the per-lobby game_started guard.
 		b.lastMatchIDSent = 0
+		b.abortedMatchID = 0
 	}
 	b.activeLobbyID = id
 	b.mu.Unlock()
@@ -946,6 +948,25 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 	// this handler runs on every SO-cache update, including during
 	// SERVERSETUP and RUN, so hardcoding "waiting" clobbered the real
 	// cointoss/active status back to "waiting" on every in-game cache tick.
+	//
+	// A launched game fell back to the lobby (players failed to load). Tell Node
+	// BEFORE the 'waiting' status so it clears the match id first. Re-arm the
+	// launch guard, and remember the aborted id: the GC keeps it on the lobby,
+	// so it must not be re-reported while the lobby sits in UI — only once a
+	// relaunch is underway (a relaunch with a NEW id reports by the normal
+	// "id changed" rule).
+	if oldLobby != nil && oldLobby.GetState() == gcccm.CSODOTALobby_RUN &&
+		newLobby.GetState() != gcccm.CSODOTALobby_RUN {
+		b.mu.Lock()
+		b.launchSent = false
+		b.abortedMatchID = oldLobby.GetMatchId()
+		b.mu.Unlock()
+		b.logCtx("warn", lobbyID, "Game aborted back to lobby — launch re-armed, waiting for re-launch")
+		b.send("game_aborted", protocol.GameAbortedEvent{
+			LobbyID: lobbyID,
+			MatchID: fmt.Sprintf("%d", oldLobby.GetMatchId()),
+		})
+	}
 	b.send("lobby_status", protocol.LobbyStatusEvent{
 		LobbyID:       lobbyID,
 		Status:        lobbyStatusFor(newLobby.GetState()),
@@ -1004,9 +1025,12 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 	// relaunch after a failed start — which gets a NEW match id from the GC —
 	// reaches Node. The server's game_started handler is idempotent per id.
 	b.mu.Lock()
-	fireGameStarted := matchID != 0 && matchID != b.lastMatchIDSent
+	relaunchSameID := matchID != 0 && matchID == b.abortedMatchID &&
+		newLobby.GetState() != gcccm.CSODOTALobby_UI
+	fireGameStarted := matchID != 0 && (matchID != b.lastMatchIDSent || relaunchSameID)
 	if fireGameStarted {
 		b.lastMatchIDSent = matchID
+		b.abortedMatchID = 0
 	}
 	b.mu.Unlock()
 	if fireGameStarted {
@@ -1084,15 +1108,6 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 		case b.gameStartedCh <- struct{}{}:
 		default:
 		}
-	}
-	// Game aborted back to the lobby before it got going (players failed to
-	// load). Re-arm the launch guard so the lobby can be launched again; the
-	// watcher's draft-wait sees the state change and resumes watching.
-	if oldState == gcccm.CSODOTALobby_RUN && lobbyState != gcccm.CSODOTALobby_RUN {
-		b.mu.Lock()
-		b.launchSent = false
-		b.mu.Unlock()
-		b.logCtx("warn", lobbyID, "Game aborted back to lobby — launch re-armed, waiting for re-launch")
 	}
 
 	// Log current lobby roster — console-only, it repeats on every cache tick.
@@ -1244,11 +1259,12 @@ func (b *Bot) ResendLobbyState() {
 	lobbyID := b.activeLobbyID
 	lobby := b.lastLobby
 	matchID := b.lastMatchIDSent
+	aborted := b.abortedMatchID
 	b.mu.Unlock()
 	if lobbyID == "" || lobby == nil {
 		return
 	}
-	if matchID != 0 {
+	if matchID != 0 && matchID != aborted {
 		b.logCtx("info", lobbyID, fmt.Sprintf("Re-emitting game_started %d after WS reconnect", matchID))
 		b.send("game_started", protocol.GameStartedEvent{LobbyID: lobbyID, MatchID: fmt.Sprintf("%d", matchID)})
 	}
@@ -1321,6 +1337,24 @@ func (b *Bot) GameStartedCh() <-chan struct{} {
 	return b.gameStartedCh
 }
 
+// LobbyRunning reports whether the cached lobby is in the RUN state. Used as a
+// level-triggered check next to the edge-triggered gameStartedCh, whose edge is
+// lost if the transition happened across a reconnect.
+func (b *Bot) LobbyRunning() bool {
+	l := b.getLastLobby()
+	return l != nil && l.GetState() == gcccm.CSODOTALobby_RUN
+}
+
+// LastMatchID is the match id last reported via game_started ("" if none).
+func (b *Bot) LastMatchID() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.lastMatchIDSent == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%d", b.lastMatchIDSent)
+}
+
 // DraftWaitOutcome is the result of WaitForDraft.
 type DraftWaitOutcome int
 
@@ -1328,7 +1362,8 @@ const (
 	// DraftStarted — the draft (or a later game phase) is underway: every
 	// player made it through the loading screen, so it's safe to leave.
 	DraftStarted DraftWaitOutcome = iota
-	// DraftWaitExpired — the failsafe elapsed without draft confirmation.
+	// DraftWaitExpired — the failsafe elapsed without draft confirmation, or
+	// the lobby vanished from the cache (unconfirmed either way).
 	DraftWaitExpired
 	// DraftAborted — the lobby left the RUN state before the draft started:
 	// the game was aborted (players failed to load) and everyone was dumped
@@ -1357,7 +1392,7 @@ func (b *Bot) WaitForDraft(ctx context.Context, failsafe time.Duration) DraftWai
 		if lob == nil {
 			// Lobby object vanished from the cache — nothing left to manage.
 			b.logAt("warn", "Lobby gone from GC cache while waiting for draft — leaving")
-			return DraftStarted
+			return DraftWaitExpired
 		}
 		if lob.GetState() != gcccm.CSODOTALobby_RUN {
 			return DraftAborted
