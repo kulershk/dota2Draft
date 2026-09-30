@@ -41,6 +41,7 @@ type Lobby struct {
 	MatchID               string
 	TimeoutMinutes        int
 	cancel                context.CancelFunc
+	lastForceLaunch       time.Time
 }
 
 type Manager struct {
@@ -68,6 +69,11 @@ const (
 // draftFailsafe caps how long the bot stays in the lobby after a game launch
 // waiting for the draft to be confirmed before leaving anyway.
 const draftFailsafe = 2 * time.Minute
+
+// forceLaunchCooldown drops repeat ForceLaunch commands for the same lobby —
+// Node's queue auto-launch can fire on consecutive lobby_status ticks, and a
+// second LaunchLobby mid-launch confuses the GC.
+const forceLaunchCooldown = 15 * time.Second
 
 // awaitGameStart blocks until the lobby's game is safely underway, the
 // context is cancelled, or the player-wait timeout elapses. When the game
@@ -493,6 +499,15 @@ func (m *Manager) ForceLaunch(lobbyID string, skipValidation bool) error {
 	if !ok {
 		return fmt.Errorf("lobby %s not found", lobbyID)
 	}
+
+	m.mu.Lock()
+	if time.Since(lobby.lastForceLaunch) < forceLaunchCooldown {
+		m.mu.Unlock()
+		log.Printf("[Lobby %s] ForceLaunch ignored — launched %s ago", lobbyID, time.Since(lobby.lastForceLaunch).Round(time.Second))
+		return nil
+	}
+	lobby.lastForceLaunch = time.Now()
+	m.mu.Unlock()
 
 	log.Printf("[Lobby %s] Force launching", lobbyID)
 	m.send("bot_log", protocol.BotLogEvent{

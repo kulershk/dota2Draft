@@ -893,13 +893,13 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 		return
 	}
 
-	newMembers := newLobby.GetAllMembers()
+	newMembers := liveMembers(newLobby)
 	matchID := newLobby.GetMatchId()
 
 	// Build old members map for diffing
 	oldMembers := make(map[uint64]gcccm.DOTA_GC_TEAM)
 	if oldLobby != nil {
-		for _, m := range oldLobby.GetAllMembers() {
+		for _, m := range liveMembers(oldLobby) {
 			oldMembers[m.GetId()] = m.GetTeam()
 		}
 	}
@@ -941,33 +941,15 @@ func (b *Bot) processLobbyUpdate(oldLobby, newLobby *gcccm.CSODOTALobby) {
 		}
 	}
 
-	// Send full player list update to Node so it stays in sync
-	var joinedPlayers []protocol.LobbyPlayer
-	for _, m := range newMembers {
-		team := teamName(m.GetTeam())
-		if team == "radiant" || team == "dire" {
-			joinedPlayers = append(joinedPlayers, protocol.LobbyPlayer{
-				SteamID: fmt.Sprintf("%d", m.GetId()),
-				Team:    team,
-			})
-		}
-	}
-	// Report the *current* lobby state, not a hardcoded "waiting". This handler
-	// runs on every SO-cache update — including during SERVERSETUP and RUN — so
-	// hardcoding "waiting" clobbered the real cointoss/active status back to
-	// "waiting" on every in-game cache tick, making the status flip-flop while
-	// the game was actually running.
-	lobbyStatus := "waiting"
-	switch newLobby.GetState() {
-	case gcccm.CSODOTALobby_SERVERSETUP:
-		lobbyStatus = "cointoss"
-	case gcccm.CSODOTALobby_RUN:
-		lobbyStatus = "active"
-	}
+	// Send full player list update to Node so it stays in sync. Report the
+	// *current* lobby state via lobbyStatusFor, not a hardcoded "waiting" —
+	// this handler runs on every SO-cache update, including during
+	// SERVERSETUP and RUN, so hardcoding "waiting" clobbered the real
+	// cointoss/active status back to "waiting" on every in-game cache tick.
 	b.send("lobby_status", protocol.LobbyStatusEvent{
 		LobbyID:       lobbyID,
-		Status:        lobbyStatus,
-		PlayersJoined: joinedPlayers,
+		Status:        lobbyStatusFor(newLobby.GetState()),
+		PlayersJoined: slottedPlayers(newMembers),
 	})
 
 	// Detect team IDs from lobby team details
@@ -1589,7 +1571,7 @@ func (b *Bot) PollLobbyFromCache() {
 	}
 	// Console-only: fires every 15s for the life of a lobby.
 	log.Printf("[Bot %s] POLL: Cache read — state: %s, matchID: %d, members: %d",
-		b.ID, lob.GetState().String(), lob.GetMatchId(), len(lob.GetAllMembers()))
+		b.ID, lob.GetState().String(), lob.GetMatchId(), len(liveMembers(lob)))
 	// Serialize with the cache-event watcher — see handleLobbyCacheEvent.
 	b.processMu.Lock()
 	defer b.processMu.Unlock()
