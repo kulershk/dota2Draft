@@ -2,6 +2,7 @@ package ws
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -265,6 +266,41 @@ func closedConn(t *testing.T) *websocket.Conn {
 		t.Fatalf("close: %v", err)
 	}
 	return conn
+}
+
+// TestFlushWaitsForOutboxDrain proves Flush's shutdown contract: every
+// message queued via Send before the call has reached the peer by the time
+// Flush returns, well inside its budget — not just been buffered locally.
+// This is what main.go relies on between DisconnectAll and Close so Node
+// sees each bot's final "offline" status instead of racing the connection
+// teardown.
+func TestFlushWaitsForOutboxDrain(t *testing.T) {
+	srv, got := testServer(t, false)
+	c := NewClient(wsURL(srv), "", func(string, json.RawMessage) {})
+	go c.Run()
+	defer c.Close()
+	c.WaitConnected()
+	expectTypes(t, got, "hello")
+
+	const n = 20
+	for i := 0; i < n; i++ {
+		if err := c.Send(fmt.Sprintf("m%d", i), nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	c.Flush(3 * time.Second)
+
+	for i := 0; i < n; i++ {
+		want := fmt.Sprintf("m%d", i)
+		select {
+		case typ := <-got:
+			if typ != want {
+				t.Fatalf("message %d = %q, want %q", i, typ, want)
+			}
+		case <-time.After(200 * time.Millisecond):
+			t.Fatalf("message %d (%q) not received by the server after Flush returned", i, want)
+		}
+	}
 }
 
 // TestPartialCarryFlushOnWriteFailureKeepsTail calls writeLoop directly

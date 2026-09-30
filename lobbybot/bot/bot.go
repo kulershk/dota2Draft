@@ -867,33 +867,47 @@ func (b *Bot) checkExistingLobby() {
 	if dc == nil {
 		return
 	}
+	lobby, needsSweep := b.snapshotExistingLobby(dc)
+	if lobby == nil {
+		return
+	}
+	if needsSweep {
+		b.log("CACHE: Existing lobby with no assignment — waiting 5s for rejoin command...")
+		b.sweepIfUnassigned(lobby)
+	}
+}
+
+// snapshotExistingLobby holds processMu only for the cache read + diff, via a
+// defer, so a panic mid-diff can't leave it held forever and deadlock every
+// later cache-event/poll handler for this bot. Returns the lobby found (nil
+// if none) and whether the caller must run sweepIfUnassigned — that call
+// sleeps 5s and must happen outside the lock, so it's left to the caller
+// rather than done here.
+func (b *Bot) snapshotExistingLobby(dc *dota2.Dota2) (lobby *gcccm.CSODOTALobby, needsSweep bool) {
 	// Lock before reading the cache container (not just around the diff) so a
 	// concurrent cache-event watcher or safety poll can't advance lastLobby
 	// past this snapshot before we diff against it — that would diff an
 	// already-stale read against a newer lastLobby. Released before the
-	// (potentially long) sweep below, which doesn't need this serialization.
+	// (potentially long) sweep the caller runs, which doesn't need this
+	// serialization.
 	b.processMu.Lock()
+	defer b.processMu.Unlock()
 	container, err := dc.GetCache().GetContainerForTypeID(uint32(cso.Lobby))
 	if err != nil {
-		b.processMu.Unlock()
-		return
+		return nil, false
 	}
-	lobby, ok := container.GetOne().(*gcccm.CSODOTALobby)
-	if !ok || lobby == nil {
-		b.processMu.Unlock()
-		return
+	l, ok := container.GetOne().(*gcccm.CSODOTALobby)
+	if !ok || l == nil {
+		return nil, false
 	}
-	b.log(fmt.Sprintf("CACHE: Found existing lobby on startup (id: %d, state: %s)", lobby.GetLobbyId(), lobby.GetState().String()))
+	b.log(fmt.Sprintf("CACHE: Found existing lobby on startup (id: %d, state: %s)", l.GetLobbyId(), l.GetState().String()))
 	if b.GetActiveLobbyID() == "" {
-		b.setLastLobby(lobby)
-		b.processMu.Unlock()
-		b.log("CACHE: Existing lobby with no assignment — waiting 5s for rejoin command...")
-		b.sweepIfUnassigned(lobby)
-		return
+		b.setLastLobby(l)
+		return l, true
 	}
-	b.processLobbyUpdate(b.getLastLobby(), lobby)
-	b.setLastLobby(lobby)
-	b.processMu.Unlock()
+	b.processLobbyUpdate(b.getLastLobby(), l)
+	b.setLastLobby(l)
+	return l, false
 }
 
 func (b *Bot) handleLobbyCacheEvent(event *socache.CacheEvent) {

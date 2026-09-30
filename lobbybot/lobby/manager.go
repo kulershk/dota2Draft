@@ -256,7 +256,11 @@ func (m *Manager) CreateLobby(cmd protocol.CreateLobbyCmd) error {
 }
 
 func (m *Manager) runLobby(ctx context.Context, lobby *Lobby) {
+	// Registered before releaseLobby below so it runs last (LIFO): a panic
+	// anywhere in this function must not skip releaseLobby and leave the bot
+	// stuck busy with a lobby Node no longer tracks.
 	defer safe.Recover("runLobby " + lobby.ID)
+	defer m.releaseLobby(lobby)
 	botLog := func(level, msg string) {
 		m.send("bot_log", protocol.BotLogEvent{
 			BotID:   lobby.Bot.ID,
@@ -294,9 +298,6 @@ func (m *Manager) runLobby(ctx context.Context, lobby *Lobby) {
 	if err != nil {
 		botLog("error", fmt.Sprintf("Failed to create lobby: %v", err))
 		m.send("lobby_error", protocol.LobbyErrorEvent{LobbyID: lobby.ID, Error: err.Error()})
-		lobby.Bot.SetActiveLobbyID("")
-		lobby.Bot.SetBusy(false)
-		m.removeLobby(lobby.ID)
 		// A context-deadline error means the GC never answered the create —
 		// the bot's GC session is almost certainly dead, and go-dota2 won't
 		// recover it on its own. Without this, every later create on this bot
@@ -305,6 +306,7 @@ func (m *Manager) runLobby(ctx context.Context, lobby *Lobby) {
 		if errors.Is(err, context.DeadlineExceeded) {
 			lobby.Bot.RecoverGCSession("create lobby timed out — GC not responding")
 		}
+		// Bot/lobby state release happens via the deferred releaseLobby above.
 		return
 	}
 
@@ -316,10 +318,7 @@ func (m *Manager) runLobby(ctx context.Context, lobby *Lobby) {
 		// lobby that's about to be destroyed.
 		botLog("action", "Lobby cancelled during creation — destroying")
 		m.destroyAndLeave(lobby.Bot)
-		lobby.Bot.SetActiveLobbyID("")
-		lobby.Bot.SetExpectedTeams(nil)
-		lobby.Bot.SetBusy(false)
-		m.removeLobby(lobby.ID)
+		// Bot/lobby state release happens via the deferred releaseLobby above.
 		return
 	case <-time.After(3 * time.Second):
 	}
@@ -360,6 +359,14 @@ func (m *Manager) runLobby(ctx context.Context, lobby *Lobby) {
 
 	// Wait for the game to be safely underway, cancel, or timeout
 	m.finishLobby(ctx, lobby.ID, lobby.Bot, lobby.timeoutDuration(), botLog)
+	// Bot/lobby state release happens via the deferred releaseLobby above.
+}
+
+// releaseLobby clears a bot's lobby assignment and forgets the lobby. Shared
+// by every runLobby exit path (via a single defer, including the panic-
+// recovery path) so a mid-function panic can't leave the bot stuck busy with
+// a lobby Node no longer knows about.
+func (m *Manager) releaseLobby(lobby *Lobby) {
 	lobby.Bot.SetActiveLobbyID("")
 	lobby.Bot.SetExpectedTeams(nil)
 	lobby.Bot.SetBusy(false)

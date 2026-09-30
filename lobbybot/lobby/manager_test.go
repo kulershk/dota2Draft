@@ -93,3 +93,37 @@ func TestRejoinRefusesBotBusyElsewhere(t *testing.T) {
 		t.Fatal("expected lobby_error for the refused rejoin")
 	}
 }
+
+// TestReleaseLobbyClearsBotAndLobby exercises the cleanup helper that
+// runLobby's `defer m.releaseLobby(lobby)` relies on for every exit path,
+// including an unwinding panic — a deferred function always runs during a
+// panic unwind, so proving this helper does the right thing is equivalent to
+// proving runLobby can't leak a busy bot / tracked lobby on panic. Triggering
+// an actual panic from inside CreatePracticeLobby would need a production
+// test hook (e.g. an injectable panic point) that isn't worth adding just for
+// this test, so this targets the shared helper directly instead.
+func TestReleaseLobbyClearsBotAndLobby(t *testing.T) {
+	r := &rec{}
+	b := bot.NewBot("1", "u", "p", "t", r.send)
+	b.SetActiveLobbyID("9")
+	b.SetExpectedTeams([]protocol.LobbyPlayer{{SteamID: "1"}})
+	b.SetBusy(true)
+	m := NewManager(bot.NewManager(r.send), r.send)
+	lobby := &Lobby{ID: "9", Bot: b}
+	m.lobbies["9"] = lobby
+
+	m.releaseLobby(lobby)
+
+	if id := b.GetActiveLobbyID(); id != "" {
+		t.Errorf("ActiveLobbyID = %q, want empty", id)
+	}
+	if b.Status == bot.StatusBusy {
+		t.Error("bot still busy after releaseLobby")
+	}
+	m.mu.RLock()
+	_, tracked := m.lobbies["9"]
+	m.mu.RUnlock()
+	if tracked {
+		t.Error("lobby still tracked after releaseLobby")
+	}
+}

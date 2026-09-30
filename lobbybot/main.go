@@ -202,6 +202,11 @@ func main() {
 	<-ctx.Done()
 	log.Println("Shutting down — logging bots off Steam...")
 	botMgr.DisconnectAll(10 * time.Second)
+	// DisconnectAll's per-bot Disconnect() only queues the final "offline"
+	// bot_status via Send — flush it to Node before Close tears the
+	// connection down, or the last thing Node hears about each bot is
+	// whatever status it had before shutdown.
+	wsClient.Flush(3 * time.Second)
 	wsClient.Close()
 	log.Println("Bye")
 }

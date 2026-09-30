@@ -420,6 +420,35 @@ func (c *Client) writeLoop(conn *websocket.Conn, stop <-chan struct{}, done chan
 	}
 }
 
+// Flush blocks until every message queued via Send before the call has been
+// handed off by the writer — i.e. the outbox is empty, plus a short grace
+// period for the in-flight WriteMessage of the last dequeued message to
+// finish — or timeout elapses, whichever comes first. Used on shutdown,
+// between DisconnectAll (which queues each bot's final offline bot_status via
+// Send) and Close, so Node sees the bots go offline instead of the write
+// racing the connection teardown.
+//
+// It deliberately does not wait for delivery *confirmation* (the pong-ack /
+// carry bookkeeping in writeLoop) — that needs a full ping/pong round trip
+// and can take up to pingPeriod, far longer than a graceful-shutdown budget
+// should block for. carry is owned by the single writer goroutine with no
+// lock protecting it (see its doc comment on Client), so reading it from here
+// would race; len() on a channel is safe for concurrent use, so polling
+// len(c.outbox) is the race-free signal available to a non-writer caller.
+func (c *Client) Flush(timeout time.Duration) {
+	deadline := time.Now().Add(timeout)
+	for len(c.outbox) > 0 && time.Now().Before(deadline) {
+		time.Sleep(15 * time.Millisecond)
+	}
+	const grace = 50 * time.Millisecond
+	if remaining := time.Until(deadline); remaining > 0 {
+		if remaining > grace {
+			remaining = grace
+		}
+		time.Sleep(remaining)
+	}
+}
+
 func (c *Client) IsConnected() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
