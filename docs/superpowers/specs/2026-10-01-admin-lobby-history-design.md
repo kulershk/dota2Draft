@@ -168,3 +168,11 @@ Roster diff: in `_onLobbyStatus`, compare the stored `members` with the incoming
 3. **Frontend** — `src/**` only.
 
 The protocol in §2 and the REST/socket shapes in §4 are the contract between them.
+
+## 8. As built — deviations from the above
+
+- **Member names:** go-dota2's `CSODOTALobbyMember` has no persona name, so Go always sends `name: ""`; Node resolves names from `players` (`display_name`, else `name`), falling back to the steam id.
+- **Team labels:** Dota's normal "Unassigned Players" column is `PLAYER_POOL` → `pool`; `unassigned` (NOTEAM) is rare. The UI labels both "Unassigned". Node stores `slot: null` for non-Radiant/Dire members (Go sends 0), so pool members don't log fake moves.
+- **`members` omitted vs empty:** manager-originated statuses (waiting-after-create, launching, cancelled) omit `members` → Node skips the diff; cache-driven statuses always include it (possibly `[]`).
+- **Archive instead of delete:** re-creating a game's lobby (`createLobby` / `createQueueLobby`) and the tournament lobby *reset* route used to `DELETE` old `match_lobbies` rows, which would cascade-delete their history. They now set `match_lobbies.archived_at` (reset also force-marks any still-live row `cancelled`). Every match-keyed read — retry caps, the match-room lobby, latest-lobby lookups, standin guards, live-poll resume — filters `archived_at IS NULL`, so behaviour matches the old delete.
+- **Extras:** list/detail responses include `goConnected`; `getBotStatuses` returns `active_lobby_id` (bot cards deep-link to the lobby); `kick_result` replay de-dupe (manual: only while admin requests outnumber manual results for that player; auto: drop identical within 15 s).
